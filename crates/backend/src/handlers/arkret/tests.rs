@@ -260,6 +260,7 @@ fn personal_node_did_web_config() -> ArkretConfig {
         ),
         // Session-grant audiences are Station core DIDs.
         admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
+        trust_domain: Some("ak:trust_domain:auth.example.com".to_owned()),
         // Introspection is a server-to-server surface: the caller must be the
         // Station that owns the grant's audience.
         stations: vec![StationConfig {
@@ -274,7 +275,7 @@ fn personal_node_did_web_config() -> ArkretConfig {
                 integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
             }),
             embedded_webvh_registration_bearer: None,
-            trust_domain: None,
+            trust_domain: Some("ak:trust_domain:principal.example.com".to_owned()),
         }],
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
@@ -336,6 +337,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
         runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth",
         ),
+        trust_domain: Some("ak:trust_domain:auth.example".to_owned()),
         stations: vec![StationConfig {
             name: "soland-dev".to_owned(),
             endpoint: "https://session-grant-static.test/".parse().unwrap(),
@@ -348,7 +350,7 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
                 integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
             }),
             embedded_webvh_registration_bearer: None,
-            trust_domain: None,
+            trust_domain: Some("ak:trust_domain:station.example".to_owned()),
         }],
         ..ArkretConfig::default()
     }
@@ -364,7 +366,7 @@ fn station_static_session_grant_bearer_matches_exact_token() {
 }
 
 #[test]
-fn shared_static_bearer_is_scoped_to_every_matching_server() {
+fn shared_static_bearer_is_rejected_as_ambiguous() {
     let mut config = config_with_static_session_grant_bearer("shared-cluster-token");
     config.stations.push(StationConfig {
         name: "soland-beta".to_owned(),
@@ -378,15 +380,9 @@ fn shared_static_bearer_is_scoped_to_every_matching_server() {
             integrity: coauth_config::InternalChannelIntegrityConfig::MtlsDirectProcess {},
         }),
         embedded_webvh_registration_bearer: None,
-        trust_domain: None,
+        trust_domain: Some("ak:trust_domain:station-beta.example".to_owned()),
     });
-    assert_eq!(
-        station_internal_channel_callers(&config, "shared-cluster-token"),
-        vec![
-            "ak:did_core:web:session-grant-static.test".to_owned(),
-            "ak:did_core:web:session-grant-static-beta.test".to_owned(),
-        ]
-    );
+    assert!(station_internal_channel_caller(&config, "shared-cluster-token").is_none());
 }
 
 #[test]
@@ -458,18 +454,18 @@ fn internal_channel_request_headers_are_bound_to_station_domain_and_operation() 
     );
     headers.insert("arkret-operation", operation.parse().unwrap());
     assert_eq!(
-        station_internal_channel_callers_for_request(
-            &config,
-            "channel-key",
-            &headers,
-            Some(operation),
-        ),
-        vec!["ak:did_core:web:session-grant-static.test".to_owned()]
+        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,),
+        Some("ak:did_core:web:session-grant-static.test".to_owned())
     );
 
     for (name, wrong) in [
         ("source-service-id", "ak:did_core:web:wrong-station.example"),
+        (
+            "destination-service-id",
+            "ak:did_core:web:wrong-authority.example",
+        ),
         ("source-trust-domain", "ak:trust_domain:wrong.example"),
+        ("destination-trust-domain", "ak:trust_domain:wrong.example"),
         (
             "arkret-operation",
             arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_LOGOUT_AUTH_SESSION_V1,
@@ -478,26 +474,35 @@ fn internal_channel_request_headers_are_bound_to_station_domain_and_operation() 
         let mut wrong_headers = headers.clone();
         wrong_headers.insert(name, wrong.parse().unwrap());
         assert!(
-            station_internal_channel_callers_for_request(
+            station_internal_channel_caller_for_request(
                 &config,
                 "channel-key",
                 &wrong_headers,
-                Some(operation),
+                operation,
             )
-            .is_empty(),
+            .is_none(),
             "{name} mismatch must reject the registered channel",
         );
     }
 
     config.stations[0].trust_domain = None;
     assert!(
-        station_internal_channel_callers_for_request(
-            &config,
-            "channel-key",
-            &headers,
-            Some(operation),
-        )
-        .is_empty()
+        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,)
+            .is_none()
+    );
+
+    let mut config = config_with_static_session_grant_bearer("channel-key");
+    config.trust_domain = None;
+    assert!(
+        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,)
+            .is_none()
+    );
+
+    let mut config = config_with_static_session_grant_bearer("channel-key");
+    config.stations[0].service_id = None;
+    assert!(
+        station_internal_channel_caller_for_request(&config, "channel-key", &headers, operation,)
+            .is_none()
     );
 }
 

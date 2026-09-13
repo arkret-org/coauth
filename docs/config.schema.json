@@ -1307,7 +1307,7 @@
       "type": "object",
       "properties": {
         "stations": {
-          "description": "Station audiences trusted to consume session grants and admin\ntokens emitted by coauth.",
+          "description": "Station audiences trusted to consume session grants and admin\ntokens emitted by coauth. Every Station that enables\n`internal_channel` must use a credential unique within this list.",
           "type": "array",
           "items": {
             "$ref": "#/definitions/StationConfig"
@@ -1420,14 +1420,14 @@
           "format": "uri"
         },
         "service_id": {
-          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed.",
+          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap` (or, under the strict\ndevelopment-mode gate, the automatic first enrollment). Describe\nmetadata may confirm a pin but can never discover or replace it; an\nendpoint URL or bearer token is never converted into an identity core.\nA configured value that conflicts with the persisted enrollment fails\nstartup closed. `internal_channel` requires this pin explicitly; a\npersisted or hostname-derived identity cannot complete that contract.",
           "type": [
             "string",
             "null"
           ]
         },
         "session_grant_introspection_bearer": {
-          "description": "Optional static bearer for the Account Authority / Station\ntrust edge. The Station presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.",
+          "description": "Optional static bearer for the Account Authority / Station\ntrust edge. The Station presents it to coauth introspection and\nAuth-side logout; coauth presents the same deployment credential when\nreading the standard agent projection for lifecycle authorization.\nIt is mandatory and unique across Station entries whenever\n`internal_channel` is present.",
           "type": [
             "string",
             "null"

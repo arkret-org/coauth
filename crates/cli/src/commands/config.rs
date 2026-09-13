@@ -17,6 +17,7 @@ use url::Url;
 const DEV_DATABASE_URI: &str = "postgresql://coauth:coauth@localhost/coauth";
 const DEV_PUBLIC_BASE: &str = "https://auth.local.host/";
 const DEV_SOLAND_URL: &str = "https://local.host/";
+const DEV_SOLAND_SERVICE_ID: &str = "ak:did_core:web:local.host";
 const DEV_SOLAND_IDENTITY_RESOLVER_URL: &str = "https://local.host/_arkret/root/identity/resolve";
 const DEV_SOLAND_SESSION_GRANT_BEARER: &str = "local-coauth-session-grant-introspection";
 const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registration";
@@ -24,6 +25,7 @@ const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registrat
 /// §2.2.3 binds the *target* service's domain, so it is a fact of the
 /// Station entry and is never derived from the endpoint host.
 const DEV_SOLAND_TRUST_DOMAIN: &str = "ak:trust_domain:local.host";
+const DEV_COAUTH_TRUST_DOMAIN: &str = "ak:trust_domain:auth.local.host";
 
 #[derive(Parser, Debug)]
 pub(super) struct Options {
@@ -172,10 +174,15 @@ fn apply_generated_config_options(
             .unwrap_or_else(|| DEV_PUBLIC_BASE.parse().expect("valid dev public base"));
         config.http.public_base_url = public_base_url.clone();
         config.http.issuer = Some(public_base_url);
+        config.arkret.trust_domain = Some(DEV_COAUTH_TRUST_DOMAIN.to_owned());
         config.arkret.stations = vec![StationConfig {
             name: "soland-dev".to_owned(),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
-            service_id: None,
+            service_id: Some(
+                DEV_SOLAND_SERVICE_ID
+                    .parse()
+                    .expect("valid dev Soland service ID"),
+            ),
             session_grant_introspection_bearer: Some(DEV_SOLAND_SESSION_GRANT_BEARER.to_owned()),
             internal_channel: Some(coauth_config::InternalChannelConfig {
                 integrity: coauth_config::InternalChannelIntegrityConfig::RegisteredTcb {
@@ -223,7 +230,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generated_dev_config_delegates_did_resolution_to_soland() {
+    fn generated_dev_config_closes_internal_channel_binding() {
         let mut config = RootConfig::test();
         let options = GenerateOptions {
             output: None,
@@ -242,9 +249,18 @@ mod tests {
             .expect("dev config should include Soland");
         assert_eq!(station.endpoint.as_str(), DEV_SOLAND_URL);
         assert_eq!(
+            station.service_id.as_ref().unwrap().as_str(),
+            DEV_SOLAND_SERVICE_ID
+        );
+        assert_eq!(
             station.trust_domain.as_deref(),
             Some(DEV_SOLAND_TRUST_DOMAIN)
         );
+        assert_eq!(
+            config.arkret.trust_domain.as_deref(),
+            Some(DEV_COAUTH_TRUST_DOMAIN)
+        );
+        assert!(station.internal_channel.is_some());
         let serialized = serde_json::to_value(&config).expect("dev config should serialize");
         let serialized_server = &serialized["arkret"]["stations"][0];
         assert!(serialized_server.get("audience").is_none());

@@ -238,39 +238,20 @@ fn authenticate_internal_channel_caller(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or_else(not_found)?;
-    let caller_station = config
-        .stations
-        .iter()
-        .find(|station| {
-            station.permits_unsigned_internal_channel()
-                && station
-                    .session_grant_introspection_bearer
-                    .as_deref()
-                    .is_some_and(|configured| {
-                        crate::util::constant_time_token_eq(configured, credential)
-                    })
-                && crate::services::station_trust::effective_audience_shared(station)
-                    .is_some_and(|audience| audience == request.agent_authority_id)
-        })
-        .ok_or_else(not_found)?;
-
-    let local_service_id = owning_station_id_for(&config);
-    // The trust domains are configured facts on both ends of this edge: the
-    // caller's is its `arkret.stations[].trust_domain` entry, ours is
-    // `arkret.trust_domain`. They are compared only as redundant inputs — an
-    // absent header is not a rejection, and neither header is ever an identity
-    // source — but a header that disagrees with the configuration is.
-    let caller_trust_domain = caller_station.trust_domain.as_deref();
-    validate_redundant_channel_headers(
+    let authenticated_caller = super::station_internal_channel_caller_for_request(
+        &config,
+        credential,
         req.headers(),
-        request.agent_authority_id.as_str(),
-        local_service_id.as_str(),
-        caller_trust_domain,
-        config.trust_domain.as_deref(),
-    )?;
+        GATE_OPERATION_ID,
+    )
+    .ok_or_else(not_found)?;
+    if authenticated_caller != request.agent_authority_id.as_str() {
+        return Err(not_found());
+    }
     Ok(())
 }
 
+#[cfg(test)]
 fn validate_redundant_channel_headers(
     headers: &http::HeaderMap,
     source_service_id: &str,

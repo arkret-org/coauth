@@ -117,7 +117,7 @@ arkret:
   # matches [a-z0-9._:-]{1,128}. Changing it invalidates existing recovery
   # proofs (see README "Trust domain rotation"). When omitted, replay
   # protection fails closed.
-  # trust_domain: ak:trust_domain:<scope>
+  trust_domain: ak:trust_domain:coauth.example
   # Lifetime, in seconds, of the DPoP-bound Arkret session-grant JWTs returned
   # by the REST auth bridge login/exchange paths and rotated through
   # /_arkret/gate/account/session-grants/refresh. Default: 28800 (8h). The grant
@@ -129,12 +129,11 @@ arkret:
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false
   stations:
-    # service_id is the optional explicit identity pin. When omitted, run
-    # `coauth station trust bootstrap --name <name>` once to verify
-    # the identity chain online and persist the pin before the server will
-    # accept this Station's audiences.
+    # service_id may be omitted only for Stations without internal_channel.
+    # An unsigned internal channel requires this explicit identity pin.
   - name: soland-example
     endpoint: https://local.host/
+    service_id: ak:did_core:web:local.host
     session_grant_introspection_bearer: ${SOLAND_SESSION_GRANT_INTROSPECTION_BEARER}
     # Required before this bearer may authorize an unsigned §2.2.3 internal
     # operation. Use mtls_direct_process only when mTLS terminates in the
@@ -146,6 +145,7 @@ arkret:
         decrypting_forwarding_proxies:
         - edge-proxy-1
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
+    trust_domain: ak:trust_domain:soland.example
   # Standalone identity Providers use the same standard operations. Configure
   # this instead of a registration-capable Station, or set
   # identity_provider when more than one candidate exists.

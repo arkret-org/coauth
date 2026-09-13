@@ -155,7 +155,8 @@ impl RuntimeOwningStationIdentity {
 #[serde(deny_unknown_fields)]
 pub struct ArkretConfig {
     /// Station audiences trusted to consume session grants and admin
-    /// tokens emitted by coauth.
+    /// tokens emitted by coauth. Every Station that enables
+    /// `internal_channel` must use a credential unique within this list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub stations: Vec<StationConfig>,
 
@@ -492,6 +493,7 @@ impl ConfigurationSection for ArkretConfig {
         }
 
         let mut station_names = std::collections::BTreeSet::new();
+        let mut internal_channel_bearers = std::collections::BTreeSet::new();
         for server in &self.stations {
             if server.name.trim().is_empty() {
                 return Err(
@@ -525,6 +527,39 @@ impl ConfigurationSection for ArkretConfig {
             }
             if let Some(internal_channel) = server.internal_channel.as_ref() {
                 internal_channel.validate().map_err(std::io::Error::other)?;
+                let bearer = server
+                    .session_grant_introspection_bearer
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or_else(|| {
+                        std::io::Error::other(
+                            "arkret.stations[].internal_channel requires a non-empty session_grant_introspection_bearer",
+                        )
+                    })?;
+                if server.service_id.is_none() {
+                    return Err(std::io::Error::other(
+                        "arkret.stations[].internal_channel requires an explicit service_id",
+                    )
+                    .into());
+                }
+                if server.trust_domain.is_none() {
+                    return Err(std::io::Error::other(
+                        "arkret.stations[].internal_channel requires an explicit Station trust_domain",
+                    )
+                    .into());
+                }
+                if self.trust_domain.is_none() {
+                    return Err(std::io::Error::other(
+                        "arkret.stations[].internal_channel requires an explicit arkret.trust_domain",
+                    )
+                    .into());
+                }
+                if !internal_channel_bearers.insert(bearer) {
+                    return Err(std::io::Error::other(
+                        "arkret.stations[].internal_channel bearer credentials must be unique across Stations",
+                    )
+                    .into());
+                }
             }
             if !station_names.insert(server.name.as_str()) {
                 return Err(std::io::Error::other("Station names must be unique").into());
@@ -568,7 +603,8 @@ pub struct StationConfig {
     /// metadata may confirm a pin but can never discover or replace it; an
     /// endpoint URL or bearer token is never converted into an identity core.
     /// A configured value that conflicts with the persisted enrollment fails
-    /// startup closed.
+    /// startup closed. `internal_channel` requires this pin explicitly; a
+    /// persisted or hostname-derived identity cannot complete that contract.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<String>")]
     pub service_id: Option<arkret_identifiers::DidCoreId>,
@@ -577,6 +613,8 @@ pub struct StationConfig {
     /// trust edge. The Station presents it to coauth introspection and
     /// Auth-side logout; coauth presents the same deployment credential when
     /// reading the standard agent projection for lifecycle authorization.
+    /// It is mandatory and unique across Station entries whenever
+    /// `internal_channel` is present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_grant_introspection_bearer: Option<String>,
 
@@ -617,9 +655,16 @@ impl StationConfig {
     /// for operations that omit their RFC 9421 request signature.
     #[must_use]
     pub fn permits_unsigned_internal_channel(&self) -> bool {
-        self.internal_channel
-            .as_ref()
-            .is_some_and(InternalChannelConfig::permits_unsigned_transport)
+        self.service_id.is_some()
+            && self.trust_domain.is_some()
+            && self
+                .session_grant_introspection_bearer
+                .as_deref()
+                .is_some_and(|bearer| !bearer.trim().is_empty())
+            && self
+                .internal_channel
+                .as_ref()
+                .is_some_and(InternalChannelConfig::permits_unsigned_transport)
     }
 }
 
@@ -872,9 +917,13 @@ mod tests {
     fn station_internal_channel_requires_the_canonical_integrity_shape() {
         let station = |internal_channel: serde_json::Value| {
             serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "trust_domain": "ak:trust_domain:authority.example",
                 "stations": [{
                     "name": "principal-a",
                     "endpoint": "https://principal.example/",
+                    "service_id": "ak:did_core:web:principal.example",
+                    "session_grant_introspection_bearer": "credential-a",
+                    "trust_domain": "ak:trust_domain:principal.example",
                     "internal_channel": internal_channel
                 }]
             }))
@@ -924,10 +973,16 @@ mod tests {
     #[test]
     fn registered_tcb_rejects_empty_blank_and_duplicate_proxy_members() {
         let config = |members: Vec<&str>| ArkretConfig {
+            trust_domain: Some("ak:trust_domain:authority.example".to_owned()),
             stations: vec![StationConfig {
                 name: "principal-a".to_owned(),
                 endpoint: "https://principal.example/".parse().unwrap(),
-                service_id: None,
+                service_id: Some(
+                    arkret_identifiers::DidCoreId::new(
+                        "ak:did_core:web:principal.example".to_owned(),
+                    )
+                    .unwrap(),
+                ),
                 session_grant_introspection_bearer: Some("credential".to_owned()),
                 internal_channel: Some(InternalChannelConfig {
                     integrity: InternalChannelIntegrityConfig::RegisteredTcb {
@@ -938,7 +993,7 @@ mod tests {
                     },
                 }),
                 embedded_webvh_registration_bearer: None,
-                trust_domain: None,
+                trust_domain: Some("ak:trust_domain:principal.example".to_owned()),
             }],
             ..ArkretConfig::default()
         };
@@ -951,6 +1006,72 @@ mod tests {
         let duplicate = config(vec!["edge-a", "edge-a"]);
         assert!(duplicate.validate(&figment::Figment::new()).is_err());
         assert!(!duplicate.stations[0].permits_unsigned_internal_channel());
+    }
+
+    #[test]
+    fn internal_channel_requires_complete_unique_station_binding() {
+        let complete = ArkretConfig {
+            trust_domain: Some("ak:trust_domain:authority.example".to_owned()),
+            stations: vec![StationConfig {
+                name: "principal-a".to_owned(),
+                endpoint: "https://principal-a.example/".parse().unwrap(),
+                service_id: Some(
+                    arkret_identifiers::DidCoreId::new(
+                        "ak:did_core:web:principal-a.example".to_owned(),
+                    )
+                    .unwrap(),
+                ),
+                session_grant_introspection_bearer: Some("credential-a".to_owned()),
+                internal_channel: Some(InternalChannelConfig {
+                    integrity: InternalChannelIntegrityConfig::MtlsDirectProcess {},
+                }),
+                embedded_webvh_registration_bearer: None,
+                trust_domain: Some("ak:trust_domain:principal-a.example".to_owned()),
+            }],
+            ..ArkretConfig::default()
+        };
+        assert!(complete.validate(&figment::Figment::new()).is_ok());
+
+        let mut missing_bearer = complete.clone();
+        missing_bearer.stations[0].session_grant_introspection_bearer = None;
+        assert!(missing_bearer.validate(&figment::Figment::new()).is_err());
+
+        let mut missing_service_id = complete.clone();
+        missing_service_id.stations[0].service_id = None;
+        assert!(
+            missing_service_id
+                .validate(&figment::Figment::new())
+                .is_err()
+        );
+
+        let mut missing_station_domain = complete.clone();
+        missing_station_domain.stations[0].trust_domain = None;
+        assert!(
+            missing_station_domain
+                .validate(&figment::Figment::new())
+                .is_err()
+        );
+
+        let mut missing_authority_domain = complete.clone();
+        missing_authority_domain.trust_domain = None;
+        assert!(
+            missing_authority_domain
+                .validate(&figment::Figment::new())
+                .is_err()
+        );
+
+        let mut duplicate_bearer = complete;
+        let mut second = duplicate_bearer.stations[0].clone();
+        second.name = "principal-b".to_owned();
+        second.endpoint = "https://principal-b.example/".parse().unwrap();
+        second.service_id = Some(
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:principal-b.example".to_owned())
+                .unwrap(),
+        );
+        second.trust_domain = Some("ak:trust_domain:principal-b.example".to_owned());
+        duplicate_bearer.stations.push(second);
+        duplicate_bearer.owning_station = Some("principal-a".to_owned());
+        assert!(duplicate_bearer.validate(&figment::Figment::new()).is_err());
     }
 
     #[test]
