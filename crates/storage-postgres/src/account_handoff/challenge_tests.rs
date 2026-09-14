@@ -53,10 +53,8 @@ async fn seed(
     ));
     repo.save().await.unwrap();
     // The storage boundary accepts an anchor already verified by the handler.
-    let anchor = crate::test_utils::principal_registration_anchor_fixture(
-        "challenge-holder",
-        [8; 32],
-    );
+    let anchor =
+        crate::test_utils::principal_registration_anchor_fixture("challenge-holder", [8; 32]);
     let validated = arkret_identity::validate_principal_registration_anchor(&anchor).unwrap();
     let reserved =
         arkret_models_identity::ReservedIdentityCreation::from_anchor(anchor.clone()).unwrap();

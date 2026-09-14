@@ -20,8 +20,7 @@ pub fn principal_registration_anchor_fixture(
     root_seed: [u8; 32],
 ) -> arkret_models_identity::PrincipalRegistrationAnchor {
     let endpoint = url::Url::parse("https://registration.example/").expect("fixture endpoint");
-    let next_root_public_key_multibase =
-        "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG";
+    let next_root_public_key_multibase = "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG";
     let inception = arkret_signatures::webvh::prepare_principal_inception(
         &arkret_signatures::webvh::PrincipalInceptionInput {
             provider_endpoint: &endpoint,
@@ -38,7 +37,7 @@ pub fn principal_registration_anchor_fixture(
     arkret_models_identity::PrincipalRegistrationAnchor::WebvhRegistration {
         registration_did_operation: Box::new(inception.submit_body),
         log_entries: vec![
-            serde_json::from_value(inception.log_entry.clone()).expect("typed log entry")
+            serde_json::from_value(inception.log_entry.clone()).expect("typed log entry"),
         ],
         witness_records: Vec::new(),
         normalized_did_document: serde_json::from_value(inception.log_entry["state"].clone())
