@@ -143,10 +143,10 @@
       ]
     },
     "secrets": {
-      "description": "Application secrets",
+      "description": "Durable runtime-key storage backend",
       "allOf": [
         {
-          "$ref": "#/definitions/SecretsConfig"
+          "$ref": "#/definitions/KeyStoreConfig"
         }
       ]
     },
@@ -1412,15 +1412,15 @@
           "type": "string",
           "format": "uri"
         },
-        "service_id": {
-          "description": "Stable service identity core for authenticated S2S authorization.\n\nOptional explicit authorization pin, highest priority. When omitted,\nthe effective pin comes from the persisted trust enrollment written by\n`coauth station trust bootstrap`. Describe metadata may confirm a pin\nbut can never discover or replace it; an endpoint URL or bearer token\nis never converted into an identity core. A configured value that\nconflicts with the persisted enrollment fails startup closed. An\ninternal authority bearer requires this pin explicitly; a persisted or\nhostname-derived identity cannot complete that contract.",
+        "internal_authority_shared_secret": {
+          "description": "Inline per-edge secret. Mutually exclusive with the file source.",
           "type": [
             "string",
             "null"
           ]
         },
-        "session_grant_introspection_bearer": {
-          "description": "Optional static bearer for only the registered deployment-internal\nAccount Authority / Station operations: session-grant introspection,\nAuth-side logout, controller grant gating, and device-revocation\ngating. Standard Agent resource and command operations use RFC 9421\nservice signatures instead. When present this bearer defines the\ninternal authority peer and must be unique across Station entries.",
+        "internal_authority_shared_secret_file": {
+          "description": "UTF-8 secret file read once during process startup. Mutually exclusive\nwith the inline source.",
           "type": [
             "string",
             "null"
@@ -1434,7 +1434,7 @@
           ]
         },
         "trust_domain": {
-          "description": "This Station's trust domain, as a registered deployment fact.\n\nThis is a fact of the Station peer entry, never something derived from\nthe endpoint URL, hostname or `arkret.trust_domain` (coauth's own\ndomain). When an internal authority bearer is present, this value is\nmandatory and is never repeated in request headers.\n\nWire form: `ak:trust_domain:<scope>`, validated by\n[`ArkretConfig::validate_trust_domain`].",
+          "description": "This Station's trust domain, as a registered deployment fact.\n\nThis is a fact of the Station peer entry, never something derived from\nthe endpoint URL, hostname or `arkret.trust_domain` (coauth's own\ndomain). When an internal authority shared secret is present, this\nvalue is mandatory and is never repeated in request headers.\n\nWire form: `ak:trust_domain:<scope>`, validated by\n[`ArkretConfig::validate_trust_domain`].",
           "type": [
             "string",
             "null"
@@ -2606,83 +2606,53 @@
         "secret"
       ]
     },
-    "SecretsConfig": {
-      "description": "Aggregates all cryptographic material: signing keys, encryption keys,\nand optional key directories",
+    "KeyStoreConfig": {
+      "description": "Durable backend configuration. There is deliberately no memory or disabled\nbackend in the serialized production configuration.",
       "type": "object",
       "properties": {
-        "encryption_file": {
-          "description": "File containing the hex-encoded encryption key for secure cookies.",
+        "backend": {
+          "$ref": "#/definitions/KeyStoreBackend"
+        },
+        "path": {
+          "description": "Encrypted KeyStore file; valid only with `encrypted_file`.",
           "type": [
             "string",
             "null"
           ]
         },
-        "encryption": {
-          "description": "Hex-encoded encryption key for secure cookies (64 hex characters = 32\nbytes).",
+        "master_key": {
+          "description": "Base64-encoded 32-byte master key. Prefer `master_key_file` in\nproduction so a config dump does not contain the wrapping key.",
           "type": [
             "string",
             "null"
-          ],
-          "examples": [
-            "0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff"
-          ],
-          "pattern": "[0-9a-fA-F]{64}"
+          ]
         },
-        "keys": {
-          "description": "List of private keys to use for signing and encrypting payloads.",
-          "type": [
-            "array",
-            "null"
-          ],
-          "items": {
-            "$ref": "#/definitions/KeyConfig"
-          }
-        },
-        "keys_dir": {
-          "description": "Directory of private keys to use for signing and encrypting payloads.",
+        "master_key_file": {
+          "description": "File containing the base64-encoded 32-byte master key.",
           "type": [
             "string",
             "null"
           ]
         }
-      }
+      },
+      "additionalProperties": false,
+      "required": [
+        "backend"
+      ]
     },
-    "KeyConfig": {
-      "description": "A single signing/encryption key entry, optionally protected by a password",
-      "type": "object",
-      "properties": {
-        "kid": {
-          "description": "The key ID (`kid`) as used in JWK headers.\n\nWhen omitted, the kid is derived as the key's RFC 7638 JWK Thumbprint.",
-          "type": [
-            "string",
-            "null"
-          ]
+    "KeyStoreBackend": {
+      "oneOf": [
+        {
+          "description": "Native operating-system credential storage for the current user.",
+          "type": "string",
+          "const": "platform"
         },
-        "password_file": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "password": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "key_file": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "key": {
-          "type": [
-            "string",
-            "null"
-          ]
+        {
+          "description": "Authenticated encrypted file with a separately custodied master key.",
+          "type": "string",
+          "const": "encrypted_file"
         }
-      }
+      ]
     },
     "PasswordsConfig": {
       "description": "Password authentication and hashing behaviour",

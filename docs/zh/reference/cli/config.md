@@ -10,6 +10,10 @@
 coauth config generate > config.yaml
 ```
 
+生成结果不包含私钥。配置好 durable KeyStore 后，使用一次
+`coauth server --first-provisioning` 将完整运行时密钥包写入存储；后续启动不再带此
+参数。
+
 ## `config check`
 
 验证配置文件的语法和语义正确性：

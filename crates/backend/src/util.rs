@@ -613,7 +613,7 @@ pub fn station_connection_from_config(
     repository_factory: BoxRepositoryFactory,
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
     url_builder: &UrlBuilder,
 ) -> Result<(Arc<dyn ConnectorAdmin>, ConnectorRegistry), anyhow::Error> {
     let source_trust_domain = arkret_identifiers::TrustDomainId::new(
@@ -628,7 +628,7 @@ pub fn station_connection_from_config(
             arkret_config,
             http_client,
         )
-        .with_peer_signing(key_store.clone(), source_trust_domain, url_builder.clone()),
+        .with_peer_signing(keyring.clone(), source_trust_domain, url_builder.clone()),
     );
     let admin: Arc<dyn ConnectorAdmin> = provider.clone();
     let mut registry = ConnectorRegistry::new();

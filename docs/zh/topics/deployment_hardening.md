@@ -20,7 +20,7 @@ IP 地址、User-Agent 与 schema 版本。管理审计的读取 / 导出接口�
 其它密钥就会悄悄改变签发密钥与 grant 头部的 kid。上线前必须配置该密钥；轮换时
 把退役公钥保留在 JWKS 中直到相关 grant 全部过期。
 
-审计行由 `secrets.keys` 中 kid 为 `coauth-audit-signing-v1` 的 Ed25519 密钥
+审计行由 durable runtime key bundle 中 kid 为 `coauth-audit-signing-v1` 的 Ed25519 密钥
 签名。它按名字选取，不按算法：密钥集按算法查找返回的是**最后一个**匹配项，
 按算法选会让审计签名者随任何一把 Ed25519 密钥的增删或重排而悄悄变化，
 而每一行签名里记录的 kid 也随之改变。没有配置这把密钥时，行按 fail-open

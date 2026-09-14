@@ -12,6 +12,7 @@ Options:
 - `--no-migrate`: Do not apply pending database migrations on start.
 - `--no-worker`: Do not start the background task worker (see [`worker`](./worker.md)).
 - `--no-sync`: Do not sync the configuration (OAuth clients and upstream providers) with the database.
+- `--first-provisioning`: Generate the runtime key bundle only when the durable KeyStore is empty. Use on exactly one initial production server.
 
 ```
 $ coauth server -c config.yaml
@@ -25,7 +26,7 @@ On startup, the server performs these steps in order:
 
 1. **Database migrations** — Applies any pending schema migrations (unless `--no-migrate`).
 2. **Configuration sync** — Syncs OAuth client registrations and upstream provider definitions from the config file to the database (unless `--no-sync`).
-3. **Key loading** — Loads signing keys from the configured secrets.
+3. **Key loading** — Loads the complete runtime key bundle from the configured durable KeyStore.
 4. **Template compilation** — Loads and compiles page templates.
 5. **Worker startup** — Starts the background task worker (unless `--no-worker`).
 6. **HTTP listener** — Begins accepting connections on the configured addresses.
@@ -41,7 +42,7 @@ The server supports graceful shutdown via `SIGTERM` or `SIGINT` (Ctrl+C):
 
 The server exposes `/health` and `/healthz` for liveness checks, and
 `/readyz` for readiness. `/readyz` verifies that Postgres is reachable, that
-the configured signing keys can produce a public JWKS, and that configured
+the KeyStore-backed signing keys can produce a public JWKS, and that configured
 Station trust is ready.
 
 ### Example: systemd service
@@ -69,7 +70,8 @@ services:
     command: server -c /config.yaml
     volumes:
       - ./config.yaml:/config.yaml:ro
-      - ./keys:/keys:ro
+      - coauth-keys:/var/lib/coauth
+      - ./secrets/coauth-runtime-keys-master-key:/run/secrets/coauth_runtime_keys_master_key:ro
     ports:
       - "8080:8080"
     depends_on:
@@ -79,15 +81,15 @@ services:
 
 The container image runs as the distroless non-root user (`uid=65532`,
 `gid=65532`).
-Any path referenced by the configuration file must therefore be readable by that
-user, not just present in the container.
-This is especially important for file-backed secrets such as
-`secrets.keys[*].key_file`, `secrets.keys[*].password_file`,
-`secrets.keys_dir`, and `secrets.encryption_file`.
+Any path referenced by the configuration file must therefore be accessible by
+that user. The encrypted KeyStore path must be writable; its separately mounted
+`secrets.master_key_file` must be readable.
 
-For example, if the config references `/keys/coauth-signing-key.pem`, the mounted
-file must be readable by the container process.
+For example, if the config references
+`/run/secrets/coauth_runtime_keys_master_key`, the mounted file must be readable by
+the container process.
 A host file with permissions like `0600 root:root` will fail at startup with
 `Permission denied (os error 13)`.
-Either make the file world-readable for the container mount (for example
-`chmod 0444`) or change ownership/ACLs so `uid=65532` can read it.
+Change ownership/ACLs so `uid=65532` can read the master-key file and write the
+KeyStore volume. Run one initial replica with `--first-provisioning`; ordinary
+replicas must omit it and share the same volume and master key.

@@ -99,7 +99,7 @@ pub async fn deactivate_user(
     let config = depot.site_config()?;
     let password_manager = depot.password_manager()?;
     let station = depot.station()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let arkret_config = depot.arkret_config()?;
     let service_id = crate::handlers::arkret::owning_station_id_for(&arkret_config);
     let clock = make_clock();
@@ -116,7 +116,7 @@ pub async fn deactivate_user(
         &config,
         &password_manager,
         station.as_ref(),
-        &key_store,
+        &keyring,
         service_id.as_str(),
         input.password,
         input.principal_erase,

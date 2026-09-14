@@ -173,9 +173,9 @@ pub async fn issue_recovery_completion_grant_endpoint(
     let now = truncate_to_seconds(clock.now());
     let config = depot.arkret_config()?;
     let expires_at = now + config.session_grant_ttl;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let (_, signing_key) =
-        crate::services::preferred_service_signing_key(&key_store).ok_or_else(|| {
+        crate::services::preferred_service_signing_key(&keyring).ok_or_else(|| {
             ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                 "no session-grant signing key is available",
             ))
@@ -280,7 +280,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         &issuance_seed,
         &*clock,
         &config,
-        &key_store,
+        &keyring,
         &browser_session,
         session_public_key,
         initial.audience_id.clone(),
@@ -329,7 +329,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             let plan = author_transition_plan(
                 &mut repo,
                 station.as_ref(),
-                &key_store,
+                &keyring,
                 super::owning_station_id_for(&config).as_str(),
                 &current_user,
                 &principal_binding,
@@ -598,7 +598,7 @@ async fn verify_station_completion_attestation(
         &depot.http_client()?,
         &depot.url_builder()?,
         &config,
-        &depot.key_store()?,
+        &depot.keyring()?,
         repo,
         depot.did_resolver_service()?.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),

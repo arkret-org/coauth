@@ -26,12 +26,12 @@ use crate::{AppError, AppResult};
 
 fn audit_signing_context(
     depot: &Depot,
-) -> Result<(coauth_keystore::Keystore, arkret_identifiers::Did, bool), AppError> {
-    let key_store = depot.key_store()?;
+) -> Result<(coauth_keyring::Keyring, arkret_identifiers::Did, bool), AppError> {
+    let keyring = depot.keyring()?;
     let arkret_config = depot.arkret_config()?;
     let service_did = owning_station_did_for(&arkret_config);
     Ok((
-        key_store,
+        keyring,
         service_did,
         arkret_config.audit_signature_fail_closed,
     ))
@@ -102,12 +102,12 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
         .add(&mut rng, &clock, &user, version, hashed_password, None)
         .await?;
 
-    let (key_store, service_id, audit_fail_closed) = audit_signing_context(depot)?;
+    let (keyring, service_id, audit_fail_closed) = audit_signing_context(depot)?;
     record_admin_operation_signed(
         &mut repo,
         &mut rng,
         &*clock,
-        &key_store,
+        &keyring,
         &service_id,
         audit_fail_closed,
         admin_user.as_ref(),

@@ -6,7 +6,7 @@ use arkret_identifiers::Did;
 use async_trait::async_trait;
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, RepositoryAccess, UrlBuilder, User};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use serde_json::Value;
 use thiserror::Error;
 use url::Url;
@@ -249,7 +249,7 @@ pub trait DidResolverService: Send + Sync {
         _http_client: &reqwest::Client,
         _url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        _key_store: &Keystore,
+        _keyring: &Keyring,
         repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError>;
@@ -268,7 +268,7 @@ pub trait DidResolverService: Send + Sync {
         http_client: &reqwest::Client,
         url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        key_store: &Keystore,
+        keyring: &Keyring,
         repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError>;
@@ -334,7 +334,7 @@ impl DidResolverService for DefaultDidResolverService {
         _http_client: &reqwest::Client,
         _url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        _key_store: &Keystore,
+        _keyring: &Keyring,
         _repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError> {
@@ -396,7 +396,7 @@ impl DidResolverService for DefaultDidResolverService {
         _http_client: &reqwest::Client,
         _url_builder: &UrlBuilder,
         arkret_config: &ArkretConfig,
-        _key_store: &Keystore,
+        _keyring: &Keyring,
         _repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError> {
@@ -940,8 +940,7 @@ mod tests {
             stations: vec![coauth_config::StationConfig {
                 name: "soland-alpha".to_owned(),
                 endpoint: "https://soland-alpha.local.host/".parse().unwrap(),
-                service_id: None,
-                session_grant_introspection_bearer: None,
+                internal_authority_shared_secret: None,
                 embedded_webvh_registration_bearer: None,
                 trust_domain: None,
             }],

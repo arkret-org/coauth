@@ -10,7 +10,7 @@ That delegation uses an RFC 9421 service signature made with the owning
 Station DID's authorised `#account-authority` assertion method. It binds the
 method, exact target, operation, source and destination service ids, both trust
 domains, and `Content-Digest` when a body is present. It never reuses the
-session-grant introspection bearer.
+internal-authority shared secret.
 
 The old product-private
 `POST /_coauth/self/agents/{id}/accountability-grant` endpoint had no canonical

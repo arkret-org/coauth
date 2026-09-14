@@ -34,7 +34,7 @@ use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::JwtSignatureError;
-use coauth_keystore::WrongAlgorithmError;
+use coauth_keyring::WrongAlgorithmError;
 use coauth_oauth_types::scope::Scope;
 use salvo::prelude::*;
 #[cfg(debug_assertions)]
@@ -276,13 +276,13 @@ impl From<crate::AppError> for ArkretRouteError {
 ///
 /// A session-grant reservation stamps the operation with the key that will
 /// later sign the credential, so the reservation and the issuance cannot drift
-/// onto different keys. A keystore without a usable key is a deployment
+/// onto different keys. A keyring without a usable key is a deployment
 /// misconfiguration, never a request failure, which is why both arms collapse
 /// onto [`SessionGrantError::NoSigningKey`].
 pub(crate) fn preferred_signing_key_id(
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
 ) -> Result<String, ArkretRouteError> {
-    let (_, signing_key) = crate::services::preferred_service_signing_key(key_store)
+    let (_, signing_key) = crate::services::preferred_service_signing_key(keyring)
         .ok_or(SessionGrantError::NoSigningKey)?;
     Ok(signing_key
         .kid()
@@ -394,9 +394,9 @@ pub(crate) async fn require_session_grant_caller(
         .or_else(|| auth_str.strip_prefix("bearer "))
         .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
 
-    // Static bearer fallback: a Station may authenticate with a
-    // token configured in `arkret.stations[].
-    // session_grant_introspection_bearer`. This lets a server-to-server caller
+    // Shared-secret fallback: a Station may authenticate with a token configured
+    // in `arkret.stations[].internal_authority_shared_secret`. This lets a
+    // server-to-server caller
     // skip the DB-backed PAT/OAuth-session lookup. Grants `Station`
     // authz only — never `Admin` — so it cannot revoke session grants. The
     // matching server's audience is the only one this caller may read.
@@ -507,7 +507,7 @@ pub(crate) async fn require_session_grant_caller(
 }
 
 #[cfg(test)]
-pub(crate) fn station_static_session_grant_bearer_matches(
+pub(crate) fn station_internal_authority_shared_secret_matches(
     arkret_config: &ArkretConfig,
     token: &str,
 ) -> bool {
@@ -517,10 +517,10 @@ pub(crate) fn station_static_session_grant_bearer_matches(
 /// Callers authenticated on the deployment-internal channel
 /// (`sync/service-http-binding.md` §2.2.3) by `credential`.
 ///
-/// The identity is the one explicit service id whose configured channel
-/// credential matches, never a request header or body field. Configuration
-/// validation rejects duplicate credentials, and this helper independently
-/// rejects an ambiguous match rather than choosing the first Station.
+/// The identity is the one verified durable Station binding whose configured
+/// channel credential matches, never a request header or body field.
+/// Configuration validation rejects duplicate credentials, and this helper
+/// independently rejects an ambiguous match rather than choosing the first.
 pub(crate) fn station_internal_channel_caller(
     arkret_config: &ArkretConfig,
     token: &str,
@@ -533,16 +533,14 @@ pub(crate) fn station_internal_channel_caller(
         .iter()
         .filter(|server| {
             server.has_internal_authority_peer()
-                && server.service_id.is_some()
                 && server.trust_domain.is_some()
                 && server
-                    .session_grant_introspection_bearer
-                    .as_deref()
+                    .internal_authority_shared_secret()
                     .is_some_and(|configured| {
                         crate::util::constant_time_token_eq(configured, token)
                     })
         })
-        .filter_map(|server| server.service_id.clone())
+        .filter_map(station_trust::effective_audience_shared)
         .map(|audience| audience.to_string());
     let caller = matches.next()?;
     if matches.next().is_some() {
@@ -1131,7 +1129,7 @@ pub async fn debug_issue_dpop_grant(
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
@@ -1190,7 +1188,7 @@ pub async fn debug_issue_dpop_grant(
     let request_identity = format!("cotest:sha256:{}", hex::encode(canonical_intent_digest));
     let not_before = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let expires_at = not_before + arkret_config.session_grant_ttl;
-    let (_, signing_key) = crate::services::preferred_service_signing_key(&key_store)
+    let (_, signing_key) = crate::services::preferred_service_signing_key(&keyring)
         .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
     let signing_key_id = signing_key
         .kid()
@@ -1273,7 +1271,7 @@ pub async fn debug_issue_dpop_grant(
         &SessionGrantIssuanceSeed::from_operation(&operation)?,
         &*clock,
         &arkret_config,
-        &key_store,
+        &keyring,
         &browser_session,
         public_jwk,
         audience_id,

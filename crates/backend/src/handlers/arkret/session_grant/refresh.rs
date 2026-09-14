@@ -140,7 +140,7 @@ pub async fn refresh_session_grant(
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let http_client = depot.http_client()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -324,7 +324,7 @@ pub async fn refresh_session_grant(
         arkret_config.session_grant_ttl
     };
     let grant_expires_at = grant_not_before + ttl;
-    let signing_key_id = super::super::preferred_signing_key_id(&key_store)?;
+    let signing_key_id = super::super::preferred_signing_key_id(&keyring)?;
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
@@ -451,7 +451,7 @@ pub async fn refresh_session_grant(
         let authoritative_agent = match enforce_authoritative_agent_lifecycle(
             &http_client,
             &arkret_config,
-            &key_store,
+            &keyring,
             prior_payload.account_id.principal_id.as_str(),
         )
         .await
@@ -557,7 +557,7 @@ pub async fn refresh_session_grant(
         let new_material = mint_agent_session_grant(
             &issuance_seed,
             &arkret_config,
-            &key_store,
+            &keyring,
             &prior_payload.account_id.principal_id,
             LocalAccountId::new(controller_user_id.to_string())?,
             &device_id,
@@ -817,7 +817,7 @@ pub async fn refresh_session_grant(
         &issuance_seed,
         &*clock,
         &arkret_config,
-        &key_store,
+        &keyring,
         &browser_session,
         crate::services::dpop::session_public_jwk(&verification.public_jwk)?,
         audience_id,

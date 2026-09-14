@@ -204,7 +204,7 @@ pub async fn oauth_approval_post(
 ) -> Result<(), RouteError> {
     let mut rng = make_rng();
     let clock = make_clock();
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
     let policy_factory = depot.policy_factory()?;
@@ -259,7 +259,7 @@ pub async fn oauth_approval_post(
         repo,
         &mut rng,
         &clock,
-        &key_store,
+        &keyring,
         &url_builder,
         &arkret_config,
         policy_factory.as_ref(),

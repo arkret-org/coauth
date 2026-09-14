@@ -114,15 +114,15 @@ pub async fn issue_controller_gate_attestation(
     let (status, eligibility) = controller_status(user.status);
     let authority_did = super::owning_station_did_for(&depot.arkret_config()?);
     let authority_id = owning_station_id_for(&depot.arkret_config()?);
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     // The attestation is signed as the owning Station, and soland verifies it
     // by resolving `verification_method` out of the Station's DID document.
     // That document authorizes exactly one method for this Account Authority,
     // holding the designated Account Authority key. Selecting "an Ed25519
-    // key" by algorithm returned whichever key sat last in the keystore and
+    // key" by algorithm returned whichever key sat last in the keyring and
     // wrote its `kid` as the fragment - a method that exists in no DID
     // document, so the attestation could never verify.
-    let signing_seed = key_store.account_authority_seed().map_err(|error| {
+    let signing_seed = keyring.account_authority_seed().map_err(|error| {
         ArkretRouteError::Internal(format!("Account Authority signing key: {error}").into())
     })?;
     let signing_key_id =
@@ -203,9 +203,9 @@ pub async fn issue_controller_gate_attestation(
 /// The internal identity comes only from verifying the credential configured
 /// for this exact Account Authority / Station edge. Request identity headers,
 /// path fields and body fields do not decide that identity. The fixed route and
-/// matched peer configuration provide the remaining binding. The channel is the complete authentication contract for this
-/// operation and replaces the RFC 9421 request signature, so the request body
-/// no longer carries a service-resolution carrier.
+/// matched peer configuration provide the remaining binding. The channel is the complete
+/// authentication contract for this operation and replaces the RFC 9421 request signature, so the
+/// request body no longer carries a service-resolution carrier.
 ///
 /// The verified caller MUST equal `agent_authority_id`; the caller's verbatim
 /// equality with the principal's current `AcceptedAtServiceBinding.service_id`

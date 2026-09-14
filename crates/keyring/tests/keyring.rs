@@ -1,14 +1,14 @@
-// Integration tests for the coauth-keystore crate.
+// Integration tests for the coauth-keyring crate.
 //
 // Covers: loading keys from various PEM/DER formats (plain and encrypted),
 // round-trip serialisation, key generation, JWT signing + verification via
-// the Keystore / JWKS API, and thumbprint consistency.
+// the Keyring / JWKS API, and thumbprint consistency.
 
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::jwk::{ParametersInfo, Thumbprint};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use coauth_keystore::{
-    ACCOUNT_AUTHORITY_KEY_ID, AccountAuthorityKeyError, JsonWebKey, JsonWebKeySet, Keystore,
+use coauth_keyring::{
+    ACCOUNT_AUTHORITY_KEY_ID, AccountAuthorityKeyError, JsonWebKey, JsonWebKeySet, Keyring,
     PrivateKey,
 };
 use der::pem::LineEnding;
@@ -213,18 +213,18 @@ fn load_unencrypted_as_encrypted_error() {
     let pem_content = include_str!("./keys/rsa.pkcs8.pem");
     assert!(matches!(
         PrivateKey::load_encrypted_pem(pem_content, TEST_PASSPHRASE).unwrap_err(),
-        coauth_keystore::LoadError::Unencrypted
+        coauth_keyring::LoadError::Unencrypted
     ));
 
     let der_content = include_bytes!("./keys/rsa.pkcs8.der");
     assert!(matches!(
         PrivateKey::load_encrypted_der(der_content, TEST_PASSPHRASE).unwrap_err(),
-        coauth_keystore::LoadError::Unencrypted
+        coauth_keyring::LoadError::Unencrypted
     ));
 }
 
 // ---------------------------------------------------------------------------
-// Full keystore: generate several key types, build a Keystore + JWKS, and
+// Full keyring: generate several key types, build a Keyring + JWKS, and
 // sign/verify for every standard algorithm.
 // ---------------------------------------------------------------------------
 
@@ -251,8 +251,8 @@ fn generate_sign_and_verify() {
     let p521_key = PrivateKey::generate_ec_p521(&mut aux_rng);
     let ed_key = PrivateKey::generate_ed25519(&mut aux_rng);
 
-    // Assemble a Keystore from all six keys.
-    let store = Keystore::new(JsonWebKeySet::new(vec![
+    // Assemble a Keyring from all six keys.
+    let store = Keyring::new(JsonWebKeySet::new(vec![
         JsonWebKey::new(rsa_key),
         JsonWebKey::new(p256_key),
         JsonWebKey::new(p384_key),
@@ -307,7 +307,7 @@ fn generated_private_key_thumbprints_match_public_jwks() {
     ] {
         let expected = private_key.thumbprint_sha256_base64();
         let pub_jwks =
-            Keystore::new(JsonWebKeySet::new(vec![JsonWebKey::new(private_key)])).public_jwks();
+            Keyring::new(JsonWebKeySet::new(vec![JsonWebKey::new(private_key)])).public_jwks();
 
         assert_eq!(pub_jwks.len(), 1, "JWKS should contain exactly one key");
         assert_eq!(pub_jwks[0].thumbprint_sha256_base64(), expected);
@@ -325,7 +325,7 @@ fn account_authority_key_is_selected_by_reserved_kid() {
     };
     let expected_verifying_key =
         ed25519_dalek::SigningKey::from_bytes(&expected_seed).verifying_key();
-    let store = Keystore::new(JsonWebKeySet::new(vec![
+    let store = Keyring::new(JsonWebKeySet::new(vec![
         JsonWebKey::new(expected).with_kid(ACCOUNT_AUTHORITY_KEY_ID),
         // Keep another Ed25519 key after the authority key: the generic
         // algorithm-only selector prefers this entry, which is the exact
@@ -346,7 +346,7 @@ fn account_authority_key_is_selected_by_reserved_kid() {
 #[test]
 fn account_authority_key_rejects_missing_and_wrong_type() {
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(2028);
-    let missing = Keystore::new(JsonWebKeySet::new(vec![JsonWebKey::new(
+    let missing = Keyring::new(JsonWebKeySet::new(vec![JsonWebKey::new(
         PrivateKey::generate_ed25519(&mut rng),
     )]));
     assert!(matches!(
@@ -354,7 +354,7 @@ fn account_authority_key_rejects_missing_and_wrong_type() {
         Err(AccountAuthorityKeyError::Missing)
     ));
 
-    let wrong_type = Keystore::new(JsonWebKeySet::new(vec![
+    let wrong_type = Keyring::new(JsonWebKeySet::new(vec![
         JsonWebKey::new(PrivateKey::generate_ec_p256(&mut rng)).with_kid(ACCOUNT_AUTHORITY_KEY_ID),
     ]));
     assert!(matches!(

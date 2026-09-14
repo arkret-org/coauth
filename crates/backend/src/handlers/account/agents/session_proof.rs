@@ -1304,7 +1304,7 @@ where
 pub(super) async fn fetch_authoritative_agent_view(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
     agent_id: &str,
 ) -> Result<
     (
@@ -1321,7 +1321,7 @@ pub(super) async fn fetch_authoritative_agent_view(
     let client = crate::services::peer_protocol_client::PeerProtocolClient::new_for_owning_station(
         arkret_config,
         http_client,
-        key_store,
+        keyring,
     )
     .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
     let view = client
@@ -1349,11 +1349,11 @@ pub(super) async fn fetch_authoritative_agent_view(
 pub async fn enforce_authoritative_agent_lifecycle(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
     agent_id: &str,
 ) -> Result<arkret_models_collaboration::agent_operations::AgentView, AgentAuthRejection> {
     let (view, _) =
-        fetch_authoritative_agent_view(http_client, arkret_config, key_store, agent_id).await?;
+        fetch_authoritative_agent_view(http_client, arkret_config, keyring, agent_id).await?;
     // Session issuance is governed only by the controller lifecycle intent axis
     // (key-management.md §3.6.1). The orthogonal runtime_state readiness axis is
     // never a session gate; an agent that holds no active key simply cannot
@@ -1372,7 +1372,7 @@ pub async fn enforce_authoritative_agent_lifecycle(
 pub async fn enforce_authoritative_pairing_handle(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
     agent_id: &str,
     pairing_request_id: &str,
     now: chrono::DateTime<chrono::Utc>,
@@ -1384,7 +1384,7 @@ pub async fn enforce_authoritative_pairing_handle(
     AgentAuthRejection,
 > {
     let (view, server) =
-        fetch_authoritative_agent_view(http_client, arkret_config, key_store, agent_id).await?;
+        fetch_authoritative_agent_view(http_client, arkret_config, keyring, agent_id).await?;
     // Only the terminal lifecycle intent forbids pairing. Both active and
     // paused agents may complete a (bootstrap or replacement) pairing handle
     // (key-management.md §3.6.1); handle open/expiry is enforced below via the
@@ -1414,18 +1414,18 @@ pub async fn enforce_authoritative_pairing_handle(
 
 #[cfg(test)]
 mod tests {
-    use coauth_keystore::{ACCOUNT_AUTHORITY_KEY_ID, JsonWebKey, JsonWebKeySet, PrivateKey};
+    use coauth_keyring::{ACCOUNT_AUTHORITY_KEY_ID, JsonWebKey, JsonWebKeySet, PrivateKey};
     use rand_chacha::rand_core::SeedableRng as _;
     use wiremock::matchers::{header, header_exists, method};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
 
-    fn test_account_authority_keystore() -> coauth_keystore::Keystore {
+    fn test_account_authority_keyring() -> coauth_keyring::Keyring {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(71);
         let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
             .with_kid(ACCOUNT_AUTHORITY_KEY_ID);
-        coauth_keystore::Keystore::new(JsonWebKeySet::new(vec![key]))
+        coauth_keyring::Keyring::new(JsonWebKeySet::new(vec![key]))
     }
 
     async fn lifecycle_config(
@@ -1489,10 +1489,7 @@ mod tests {
         config.stations.push(coauth_config::StationConfig {
             name: "soland-test".to_owned(),
             endpoint: server.uri().parse().unwrap(),
-            service_id: Some(
-                arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.test").unwrap(),
-            ),
-            session_grant_introspection_bearer: None,
+            internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: Some("ak:trust_domain:soland.test".to_owned()),
         });
@@ -1502,12 +1499,12 @@ mod tests {
     #[tokio::test]
     async fn authoritative_lifecycle_and_pairing_fail_closed() {
         let client = reqwest::Client::new();
-        let key_store = test_account_authority_keystore();
+        let keyring = test_account_authority_keyring();
         let (_active_server, active) = lifecycle_config("active", "pair-current").await;
         enforce_authoritative_agent_lifecycle(
             &client,
             &active,
-            &key_store,
+            &keyring,
             "ak:did_core:web:agent.example",
         )
         .await
@@ -1515,7 +1512,7 @@ mod tests {
         enforce_authoritative_pairing_handle(
             &client,
             &active,
-            &key_store,
+            &keyring,
             "ak:did_core:web:agent.example",
             "pair-current",
             chrono::Utc::now(),
@@ -1526,7 +1523,7 @@ mod tests {
             enforce_authoritative_pairing_handle(
                 &client,
                 &active,
-                &key_store,
+                &keyring,
                 "ak:did_core:web:agent.example",
                 "pair-old",
                 chrono::Utc::now(),
@@ -1541,7 +1538,7 @@ mod tests {
             enforce_authoritative_agent_lifecycle(
                 &client,
                 &paused,
-                &key_store,
+                &keyring,
                 "ak:did_core:web:agent.example",
             )
             .await
@@ -1552,7 +1549,7 @@ mod tests {
             enforce_authoritative_agent_lifecycle(
                 &client,
                 &ArkretConfig::default(),
-                &key_store,
+                &keyring,
                 "ak:did_core:web:agent.example",
             )
             .await

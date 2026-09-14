@@ -9,7 +9,7 @@ use coauth_data::{
     Session, SiteConfig, UrlBuilder,
 };
 use coauth_i18n::Locale;
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_oauth_types::requests::{AccessTokenResponse, AuthorizationCodeGrant, GrantType};
 use coauth_oauth_types::scope;
 use coauth_principal::ConnectorAdmin;
@@ -306,7 +306,7 @@ pub async fn exchange_authorization_code(
     activity_tracker: &BoundActivityTracker,
     grant: &AuthorizationCodeGrant,
     client: &Client,
-    key_store: &Keystore,
+    keyring: &Keyring,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
@@ -404,7 +404,7 @@ pub async fn exchange_authorization_code(
                 principal_id
                     .as_ref()
                     .map(arkret_identifiers::DidCoreId::as_str),
-                key_store,
+                keyring,
                 client,
                 Some(&authz_grant),
                 Some(&session),

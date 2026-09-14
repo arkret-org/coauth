@@ -442,11 +442,11 @@ async fn patch_account(
     let arkret_config = depot.arkret_config()?;
     let id = extract_ulid_param(req)?;
     let station = depot.station()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let service_id = crate::handlers::arkret::owning_station_id_for(&arkret_config);
     let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
-        keystore: &key_store,
+        keyring: &keyring,
         service_id: &service_id,
         service_did: &service_did,
         fail_closed: arkret_config.audit_signature_fail_closed,
@@ -1187,15 +1187,15 @@ mod tests {
             .expect("admin principal binding should be seeded");
         let did = binding.verified_did.to_string();
 
-        // The approval proof is signed by the test keystore's Ed25519 key
+        // The approval proof is signed by the test keyring's Ed25519 key
         // under `kid = {admin core id}#key-1`, so the pinned document must
         // advertise that method with the same public key.
         let public_jwk = state
-            .key_store
+            .keyring
             .public_jwks()
             .iter()
             .find(|jwk| jwk.kid() == Some(crate::handlers::test_utils::TEST_ED25519_KEY_ID))
-            .expect("test keystore should expose its Ed25519 public key")
+            .expect("test keyring should expose its Ed25519 public key")
             .clone();
         let resolution = crate::services::did_resolver::DidResolution {
             document: crate::handlers::arkret::DidDocument {
@@ -1255,7 +1255,7 @@ mod tests {
         let alg = JsonWebSignatureAlg::Ed25519;
         // Select by `kid`, not by algorithm: `seed_admin_authority_acceptance`
         // pins `test-ed25519`'s public JWK in the fixture DID document, and the
-        // fixture keystore holds four Ed25519 keys whose order decides what
+        // fixture keyring holds four Ed25519 keys whose order decides what
         // `signer_for_algorithm` returns.
         let signer = crate::handlers::test_utils::test_ed25519_private_key()
             .signing_key_for_alg(&alg)

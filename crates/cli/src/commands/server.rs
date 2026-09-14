@@ -28,6 +28,10 @@ use tracing::{info, info_span, warn};
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Parser, Debug, Default)]
 pub(super) struct Options {
+    /// Generate the durable runtime key bundle when the configured KeyStore is empty
+    #[arg(long)]
+    first_provisioning: bool,
+
     /// Do not apply pending database migrations on start
     #[arg(long)]
     no_migrate: bool,
@@ -44,7 +48,11 @@ pub(super) struct Options {
 impl Options {
     pub async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
         let span = info_span!("cli.run.init").entered();
-        let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+        let mut config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+        config
+            .arkret
+            .resolve_internal_authority_shared_secrets()
+            .await?;
         let mut shutdown = LifecycleManager::new()?
             .with_timeout(Duration::from_secs(config.http.shutdown_grace_seconds));
 
@@ -69,7 +77,14 @@ impl Options {
                 .context("could not run migrations")?;
         }
 
-        let encrypter = config.secrets.encrypter().await?;
+        let first_provisioning =
+            self.first_provisioning || coauth_backend::error::development_mode_from_env();
+        let runtime_secrets = config
+            .secrets
+            .runtime(first_provisioning)
+            .await
+            .context("could not load runtime keys from the configured KeyStore")?;
+        let encrypter = runtime_secrets.encrypter();
 
         if self.no_sync {
             info!("Skipping configuration sync");
@@ -98,14 +113,10 @@ impl Options {
         }
 
         // Initialize the key store
-        let key_store = config
-            .secrets
-            .key_store()
-            .await
-            .context("could not import keys from config")?;
+        let keyring = runtime_secrets.keyring();
         let cookie_manager = CookieManager::derive_from(
             config.http.public_base_url.clone(),
-            &config.secrets.encryption().await?,
+            runtime_secrets.encryption_key(),
         );
 
         // Load the Cedar policies (and fall back to the default embedded one)
@@ -161,7 +172,7 @@ impl Options {
             PgRepositoryFactory::new(pool.clone()).boxed(),
             arkret_config.clone(),
             http_client.clone(),
-            &key_store,
+            &keyring,
             &url_builder,
         )?;
 
@@ -272,7 +283,7 @@ impl Options {
                 repository_factory: PgRepositoryFactory::new(pool.clone()),
                 templates,
                 arkret_config,
-                key_store,
+                keyring,
                 cookie_manager,
                 encrypter,
                 url_builder,

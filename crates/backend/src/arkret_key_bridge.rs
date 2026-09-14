@@ -1,13 +1,13 @@
 //! The only crossing between the two Ed25519 generations this crate links.
 //!
-//! `coauth-jose` and `coauth-keystore` are built on `ed25519-dalek` 2.x: that
+//! `coauth-jose` and `coauth-keyring` are built on `ed25519-dalek` 2.x: that
 //! generation carries the `pkcs8` feature `PrivateKey::to_pkcs8_der` needs in
 //! order to keep every OIDC signing algorithm behind one return type, and
 //! `coauth_jose::jwa::Ed25519SigningKey` / `Ed25519VerifyingKey` are aliases
 //! for its types. The Arkret SDK (`arkret-signatures`, `arkret-identity`) is
 //! built on `ed25519-dalek` 3.x, declared in the workspace manifest under the
 //! `ed25519-dalek-3` rename. `coauth-backend` sits on top of both, so every
-//! key that travels from the keystore/JOSE side into an SDK signing or
+//! key that travels from the keyring/JOSE side into an SDK signing or
 //! verification call has to change generation somewhere.
 //!
 //! It changes generation here, and nowhere else under `src/`. The crossing is
@@ -41,7 +41,7 @@ pub struct MalformedEd25519PublicKey;
 
 /// Builds an SDK-generation signing key from a raw 32-byte Ed25519 seed.
 ///
-/// The seed comes from `coauth_keystore::Keystore::account_authority_seed`, or
+/// The seed comes from `coauth_keyring::Keyring::account_authority_seed`, or
 /// from a fixed test seed. An Ed25519 seed is opaque bytes in every
 /// generation, so this direction cannot fail.
 #[must_use]

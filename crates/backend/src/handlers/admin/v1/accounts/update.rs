@@ -52,12 +52,12 @@ pub async fn update_account(
     } = call_context;
     let id = extract_ulid_param(req)?;
     let station = depot.station()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let arkret_config = depot.arkret_config()?;
     let service_id = owning_station_id_for(&arkret_config);
     let service_did = owning_station_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
-        keystore: &key_store,
+        keyring: &keyring,
         service_id: &service_id,
         service_did: &service_did,
         fail_closed: arkret_config.audit_signature_fail_closed,

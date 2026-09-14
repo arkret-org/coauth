@@ -29,13 +29,11 @@ clients:
 ## `config generate [--output <output>]`
 
 Generate a sample configuration file.
-It generates random signing keys (`.secrets.keys`) and the cookie encryption secret (`.secrets.encryption`).
+It contains no signing or application-encryption keys. Those are generated
+once into the configured durable KeyStore by `coauth server --first-provisioning`.
 
 ```console
 $ coauth config generate > config.yaml
-INFO generate: coauth_config::oauth: Generating keys...
-INFO generate:rsa: coauth_config::oauth: Done generating RSA key
-INFO generate:ecdsa: coauth_config::oauth: Done generating ECDSA key
 ```
 
 The `--output` option can be used to specify the output file. If not specified, the output will be written to stdout.

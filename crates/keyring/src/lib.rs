@@ -1,4 +1,8 @@
-//! A crate to store keys which can then be used to sign and verify JWTs.
+//! An in-process JOSE private-key ring used to sign and verify JWTs.
+//!
+//! Key material is loaded from Coauth's `arkret-keystore` backend at startup.
+//! This crate is not a durable secret store and does not own persistence,
+//! distribution, or rotation.
 
 use std::ops::Deref;
 use std::sync::Arc;
@@ -616,11 +620,11 @@ type SignerCacheKey = (String, JsonWebSignatureAlg);
 /// [`Arc`] to ensure they are only loaded once in memory and allow cheap
 /// cloning
 #[derive(Clone, Default)]
-pub struct Keystore {
+pub struct Keyring {
     inner: Arc<JsonWebKeySet<PrivateKey>>,
 
-    /// Precomputed public JWKS, built once in [`Keystore::new`] so that
-    /// [`Keystore::public_jwks`] does not have to rebuild it on every call.
+    /// Precomputed public JWKS, built once in [`Keyring::new`] so that
+    /// [`Keyring::public_jwks`] does not have to rebuild it on every call.
     public_jwks: Arc<PublicJsonWebKeySet>,
 
     /// Cache of already-built signers, keyed by `(kid, alg)`, so that the
@@ -694,8 +698,8 @@ pub enum AuditSigningKeyError {
     WrongKeyType,
 }
 
-impl Keystore {
-    /// Create a keystore out of a JSON Web Key Set
+impl Keyring {
+    /// Create a keyring out of a JSON Web Key Set
     #[must_use]
     pub fn new(keys: JsonWebKeySet<PrivateKey>) -> Self {
         let inner = Arc::new(keys);
@@ -711,9 +715,9 @@ impl Keystore {
         }
     }
 
-    /// Get the public JSON Web Key Set for the keys stored in this [`Keystore`]
+    /// Get the public JSON Web Key Set for the keys stored in this [`Keyring`]
     ///
-    /// The set is computed once in [`Keystore::new`]; this returns a clone of
+    /// The set is computed once in [`Keyring::new`]; this returns a clone of
     /// the precomputed value (the keyset is immutable after construction).
     #[must_use]
     pub fn public_jwks(&self) -> PublicJsonWebKeySet {
@@ -820,7 +824,7 @@ impl Keystore {
     /// sign them under.
     ///
     /// Resolves the key designated by [`SESSION_GRANT_SIGNING_KEY_ID`], picking
-    /// the most preferred algorithm that key can actually sign with. A keystore
+    /// the most preferred algorithm that key can actually sign with. A keyring
     /// that does not carry the designated kid issues no grants: selecting by
     /// algorithm order instead would move grant issuance - and the `kid` every
     /// client reads out of a grant - whenever a key is added or reordered.
@@ -885,7 +889,7 @@ impl Keystore {
     }
 }
 
-impl Deref for Keystore {
+impl Deref for Keyring {
     type Target = JsonWebKeySet<PrivateKey>;
 
     fn deref(&self) -> &Self::Target {

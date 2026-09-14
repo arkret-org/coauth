@@ -1,5 +1,5 @@
 ---
-source: crates/keystore/tests/keystore.rs
+source: crates/keyring/tests/keyring.rs
 expression: "ec_k256.to_pem(LineEnding::LF).unwrap()"
 ---
 -----BEGIN EC PRIVATE KEY-----

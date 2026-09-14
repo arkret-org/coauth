@@ -4,7 +4,7 @@ use coauth_data::queue::{
 };
 use coauth_data::user::UserRepository;
 use coauth_data::{BoxRepository, Clock, RepositoryAccess, RepositoryError, SiteConfig};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_principal::ConnectorAdmin;
 use rand_chacha::rand_core::CryptoRngCore;
 use thiserror::Error;
@@ -44,7 +44,7 @@ pub async fn deactivate_current_account(
     config: &SiteConfig,
     password_manager: &PasswordManager,
     station: &dyn ConnectorAdmin,
-    key_store: &Keystore,
+    keyring: &Keyring,
     service_id: &str,
     password: Option<String>,
     principal_erase: bool,
@@ -96,7 +96,7 @@ pub async fn deactivate_current_account(
     let publication = crate::services::account_status_publication::author_transition_plan(
         &mut repo,
         station,
-        key_store,
+        keyring,
         service_id,
         &original_user,
         &binding,

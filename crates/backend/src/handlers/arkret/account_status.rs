@@ -79,7 +79,7 @@ pub async fn resolve_account_status(
         &depot.http_client()?,
         &depot.url_builder()?,
         &config,
-        &depot.key_store()?,
+        &depot.keyring()?,
         &mut repo,
         depot.did_resolver_service()?.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),

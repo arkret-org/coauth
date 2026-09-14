@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SystemClock};
-use coauth_keystore::Encrypter;
+use coauth_keyring::Encrypter;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::RevocationRequest;
 use coauth_principal::ConnectorAdmin;

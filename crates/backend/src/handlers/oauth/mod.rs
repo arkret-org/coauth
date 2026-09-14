@@ -29,7 +29,7 @@ use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::claims::{self, hash_token};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use thiserror::Error;
 
 use crate::handlers::arkret;
@@ -62,7 +62,7 @@ pub(crate) enum IdTokenSignatureError {
     InvalidSigningKey,
     Claim(#[from] coauth_jose::claims::ClaimError),
     JwtSignature(#[from] coauth_jose::jwt::JwtSignatureError),
-    WrongAlgorithm(#[from] coauth_keystore::WrongAlgorithmError),
+    WrongAlgorithm(#[from] coauth_keyring::WrongAlgorithmError),
     TokenHash(#[from] coauth_jose::claims::TokenHashError),
 }
 
@@ -77,7 +77,7 @@ pub(crate) fn generate_id_token(
     url_builder: &UrlBuilder,
     subject_did: &str,
     principal_id: Option<&str>,
-    key_store: &Keystore,
+    keyring: &Keyring,
     client: &Client,
     grant: Option<&AuthorizationGrant>,
     session: Option<&Session>,
@@ -125,7 +125,7 @@ pub(crate) fn generate_id_token(
         .id_token_signed_response_alg
         .clone()
         .unwrap_or(JsonWebSignatureAlg::Rs256);
-    let key = key_store
+    let key = keyring
         .signing_key_for_algorithm(&alg)
         .ok_or(IdTokenSignatureError::InvalidSigningKey)?;
 
@@ -137,7 +137,7 @@ pub(crate) fn generate_id_token(
         claims::C_HASH.insert(&mut claims, hash_token(&alg, &code.code)?)?;
     }
 
-    let signer = key_store.signer_for_algorithm(&alg)?;
+    let signer = keyring.signer_for_algorithm(&alg)?;
     let header = JsonWebSignatureHeader::new(alg)
         .with_kid(key.kid().ok_or(IdTokenSignatureError::InvalidSigningKey)?);
     let id_token = Jwt::sign_with_rng(rng, header, claims, &*signer)?;
@@ -179,7 +179,7 @@ mod tests {
     use coauth_data::{AccessTokenState, AuthenticationMethod};
     use coauth_jose::claims::hash_token;
     use coauth_jose::jwt::Jwt;
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use serde_json::Value;
@@ -187,7 +187,7 @@ mod tests {
 
     use super::*;
 
-    fn keystore_for_alg(alg: &JsonWebSignatureAlg) -> (Keystore, &'static str) {
+    fn keyring_for_alg(alg: &JsonWebSignatureAlg) -> (Keyring, &'static str) {
         let mut rng = ChaChaRng::seed_from_u64(42);
         let (private_key, kid) = match alg {
             JsonWebSignatureAlg::Es512 => (PrivateKey::generate_ec_p521(&mut rng), "test-es512"),
@@ -198,7 +198,7 @@ mod tests {
         };
 
         let key = JsonWebKey::new(private_key).with_kid(kid);
-        (Keystore::new(JsonWebKeySet::new(vec![key])), kid)
+        (Keyring::new(JsonWebKeySet::new(vec![key])), kid)
     }
 
     fn assert_generated_id_token_works(alg: JsonWebSignatureAlg) {
@@ -234,7 +234,7 @@ mod tests {
             created_at: now - Duration::try_minutes(2).unwrap(),
             authentication_method: AuthenticationMethod::Unknown,
         };
-        let (key_store, kid) = keystore_for_alg(&alg);
+        let (keyring, kid) = keyring_for_alg(&alg);
         let mut signing_rng = ChaChaRng::seed_from_u64(9);
 
         let encoded = generate_id_token(
@@ -243,7 +243,7 @@ mod tests {
             &url_builder,
             principal_id,
             Some(principal_id),
-            &key_store,
+            &keyring,
             &client,
             Some(&grant),
             None,
@@ -257,7 +257,7 @@ mod tests {
 
         assert_eq!(jwt.header().alg(), &alg);
         assert_eq!(jwt.header().kid(), Some(kid));
-        jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
+        jwt.verify_with_jwks(&keyring.public_jwks()).unwrap();
 
         let payload = jwt.payload();
         assert_eq!(
@@ -317,7 +317,7 @@ mod tests {
             .into_iter()
             .next()
             .unwrap();
-        let (key_store, _) = keystore_for_alg(&JsonWebSignatureAlg::Ed25519);
+        let (keyring, _) = keyring_for_alg(&JsonWebSignatureAlg::Ed25519);
 
         let encoded = generate_id_token(
             &mut rng,
@@ -325,7 +325,7 @@ mod tests {
             &url_builder,
             subject,
             None,
-            &key_store,
+            &keyring,
             &client,
             None,
             None,

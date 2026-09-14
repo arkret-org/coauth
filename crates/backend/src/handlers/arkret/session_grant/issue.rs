@@ -143,8 +143,8 @@ async fn reserve_issue_operation(
             "account handoff expires before a recovery session grant can be issued",
         ));
     }
-    let signing_key_store = depot.key_store()?;
-    let signing_key_id = super::super::preferred_signing_key_id(&signing_key_store)?;
+    let signing_keyring = depot.keyring()?;
+    let signing_key_id = super::super::preferred_signing_key_id(&signing_keyring)?;
     // Tombstones must outlive both the issued credential and ordinary delayed
     // retry horizons. A committed operation can still retain its canonical
     // outcome longer in storage policy; this is the minimum requested here.
@@ -746,7 +746,7 @@ async fn issue_account_handoff_session_grant(
         issue_pairwise_session_grant_for_audience(
             &issuance_seed,
             &depot.arkret_config()?,
-            &depot.key_store()?,
+            &depot.keyring()?,
             &browser_session,
             crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
             DidCoreId::new(handoff_audience.clone())?,
@@ -760,7 +760,7 @@ async fn issue_account_handoff_session_grant(
             &issuance_seed,
             &*clock,
             &depot.arkret_config()?,
-            &depot.key_store()?,
+            &depot.keyring()?,
             &browser_session,
             crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
             DidCoreId::new(handoff_audience.clone())?,
@@ -981,7 +981,7 @@ async fn issue_recovery_session_grant(
     let material = issue_recovery_session_grant_for_audience(
         &issuance_seed,
         &depot.arkret_config()?,
-        &depot.key_store()?,
+        &depot.keyring()?,
         crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
         DidCoreId::new(handoff_audience.clone())?,
         body.device_id.clone(),
@@ -1188,7 +1188,7 @@ async fn validate_agent_before_reservation(
         AgentSessionProofError, enforce_authoritative_agent_lifecycle, validate_agent_session_proof,
     };
     let config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let urls = depot.url_builder()?;
     let clock = crate::handlers::make_clock();
     let target = urls
@@ -1216,7 +1216,7 @@ async fn validate_agent_before_reservation(
     let view = enforce_authoritative_agent_lifecycle(
         &depot.http_client()?,
         &config,
-        &key_store,
+        &keyring,
         body.principal_id.as_str(),
     )
     .await
@@ -1259,7 +1259,7 @@ async fn issue_agent_key_proof_session_grant(
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let http_client = depot.http_client()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
@@ -1297,7 +1297,7 @@ async fn issue_agent_key_proof_session_grant(
     let authoritative_agent = match enforce_authoritative_agent_lifecycle(
         &http_client,
         &arkret_config,
-        &key_store,
+        &keyring,
         agent_id,
     )
     .await
@@ -1397,7 +1397,7 @@ async fn issue_agent_key_proof_session_grant(
     let material = mint_agent_session_grant(
         &issuance_seed,
         &arkret_config,
-        &key_store,
+        &keyring,
         &authorization.agent_id,
         LocalAccountId::new(controller_user_id.to_string())?,
         &body.device_id,

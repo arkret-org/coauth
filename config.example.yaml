@@ -49,43 +49,13 @@ email:
     username: ${COAUTH_SMTP_USERNAME}
     password: ${COAUTH_SMTP_PASSWORD}
 secrets:
-  # 32-byte hex encryption key (openssl rand -hex 32)
-  encryption: ${COAUTH_SECRETS_ENCRYPTION_KEY}
-  keys:
-  # Provide RSA / EC PEM private keys via environment variables or a local-only
-  # secrets file. Generate fresh keys with:
-  #   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048
-  #   openssl ecparam -name prime256v1 -genkey -noout
-  # NEVER commit real keys to git.
-  - key: ${COAUTH_SIGNING_KEY_RSA_PEM}
-  - key: ${COAUTH_SIGNING_KEY_ES256_PEM}
-  - key: ${COAUTH_SIGNING_KEY_ES384_PEM}
-  - key: ${COAUTH_SIGNING_KEY_ES256K_PEM}
-  # Private Account Authority signer delegated by the owning Station under
-  # `#account-authority`. Soland reads its public half from this service's JWKS
-  # while provisioning the Station DID.
-  - kid: coauth-account-authority-v1
-    key: ${COAUTH_ACCOUNT_AUTHORITY_KEY_ED25519_PEM}
-  # Stable Ed25519 key used for Coauth's own did:webvh signing and control-key
-  # derivation. Retain this key across database restore or replacement.
-  - kid: coauth-service-identity-v1
-    key: ${COAUTH_SERVICE_IDENTITY_KEY_ED25519_PEM}
-  # Stable, distinct Ed25519 key that signs `ak.session.grant` credentials.
-  # Selected by this kid so adding or reordering other keys cannot move grant
-  # issuance onto a different key. Retain it while any issued grant is still
-  # valid: clients resolve it from the published JWKS by the kid in the grant.
-  - kid: coauth-session-grant-v1
-    key: ${COAUTH_SESSION_GRANT_KEY_ED25519_PEM}
-  # Stable, distinct Ed25519 key that signs admin audit rows. Selected by this
-  # kid, never by algorithm, so adding or reordering other Ed25519 keys cannot
-  # change which key the audit trail is verified against. Retain it: rows
-  # already written name it in their signature.
-  - kid: coauth-audit-signing-v1
-    key: ${COAUTH_AUDIT_SIGNING_KEY_ED25519_PEM}
-  # Stable, distinct Ed25519 key delegated only to B-model first-device
-  # enrollment. Retain it across process and database replacement.
-  - kid: coauth-device-enrollment-v1
-    key: ${COAUTH_DEVICE_ENROLLMENT_KEY_ED25519_PEM}
+  # Production container / multi-replica deployments share this encrypted
+  # file and custody its wrapping key separately. Run exactly one initial
+  # server with --first-provisioning; later starts and workers are read-only.
+  backend: encrypted_file
+  path: /var/lib/coauth/keystore.v1
+  master_key_file: /run/secrets/coauth_runtime_keys_master_key
+
 sms:
   transport: blackhole
   # transport: twilio
@@ -129,13 +99,12 @@ arkret:
   # keys and JWKS publication are operational.
   audit_signature_fail_closed: false
   stations:
-    # A Station using the fixed internal-authority bearer routes requires this
-    # explicit identity pin and trust domain. Standard Agent operations use
-    # RFC 9421 service signatures, not this bearer.
+    # The Station identity is verified from this exact endpoint and durably
+    # bound on first startup. The per-edge secret and trust domains remain
+    # explicit deployment facts.
   - name: soland-example
     endpoint: https://local.host/
-    service_id: ak:did_core:web:local.host
-    session_grant_introspection_bearer: ${SOLAND_SESSION_GRANT_INTROSPECTION_BEARER}
+    internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
     trust_domain: ak:trust_domain:soland.example
   # Standalone identity Providers use the same standard operations. Configure

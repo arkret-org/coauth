@@ -6,7 +6,7 @@ use coauth_config::ArkretConfig;
 use coauth_data::{
     BoxRepository, Client, Clock, DeviceCodeGrantState, SiteConfig, TokenType, UrlBuilder,
 };
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_oauth_types::requests::{AccessTokenResponse, DeviceCodeGrant, GrantType};
 use coauth_oauth_types::scope;
 use coauth_principal::ConnectorAdmin;
@@ -28,7 +28,7 @@ pub async fn exchange_device_code(
     activity_tracker: &BoundActivityTracker,
     grant: &DeviceCodeGrant,
     client: &Client,
-    key_store: &Keystore,
+    keyring: &Keyring,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
     site_config: &SiteConfig,
@@ -214,7 +214,7 @@ pub async fn exchange_device_code(
             principal_id
                 .as_ref()
                 .map(arkret_identifiers::DidCoreId::as_str),
-            key_store,
+            keyring,
             client,
             None,
             Some(&session),

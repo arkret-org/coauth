@@ -18,7 +18,7 @@
 //! The SDK helper takes a **synchronous** `DidResolver`. coauth's
 //! [`DidResolverService::resolve_did_document`] is `async` and additionally
 //! needs the outbound `reqwest::Client`, the deployment `ArkretConfig`, the
-//! keystore and a `&mut BoxRepository`. Blocking on it from a sync trait
+//! keyring and a `&mut BoxRepository`. Blocking on it from a sync trait
 //! method inside the Salvo runtime is not an option, so
 //! [`resolve_and_accept_binding`] reproduces the SDK helper's *contract*
 //! (store first → resolver at most once → `accept()` back into the same
@@ -68,7 +68,7 @@ use arkret_wire::DidFreshnessProfileId;
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 
 use crate::handlers::arkret::DidDocument as CoauthDidDocument;
 use crate::services::did_resolver::{
@@ -631,7 +631,7 @@ pub async fn resolve_and_accept_binding(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
     store: &DurableVerifiedDidBindingStore,
@@ -678,7 +678,7 @@ pub async fn resolve_and_accept_binding(
             http_client,
             url_builder,
             arkret_config,
-            key_store,
+            keyring,
             repo,
             request.did,
         )
@@ -734,7 +734,7 @@ pub async fn authority_document(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
     store: &DurableVerifiedDidBindingStore,
@@ -755,7 +755,7 @@ pub async fn authority_document(
         http_client,
         url_builder,
         arkret_config,
-        key_store,
+        keyring,
         repo,
         did_resolver,
         store,

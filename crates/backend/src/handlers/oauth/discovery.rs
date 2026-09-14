@@ -5,7 +5,7 @@ use coauth_iana::oauth::{
     PkceCodeChallengeMethod,
 };
 use coauth_jose::jwa::SUPPORTED_SIGNING_ALGORITHMS;
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_oauth_types::oidc::{ClaimType, ProviderMetadata, SubjectType};
 use coauth_oauth_types::requests::{Display, GrantType, Prompt, ResponseMode};
 use coauth_oauth_types::scope;
@@ -51,7 +51,7 @@ struct IdentityRegistryMetadata {
 /// Process-wide cache of the serialized OIDC discovery document.
 ///
 /// Every input to the discovery document — the URL builder, site config,
-/// arkret config and the keystore's available signing algorithms — is fixed
+/// arkret config and the keyring's available signing algorithms — is fixed
 /// for the lifetime of the process (a single config per process). So the
 /// document only needs to be built once; subsequent requests clone the cached
 /// JSON value instead of rebuilding the whole `DiscoveryDocument` and
@@ -106,9 +106,9 @@ fn discovery_admin_audience(arkret_config: &ArkretConfig) -> Option<String> {
 /// construction directly without going through the process-wide
 /// [`OnceLock`](std::sync::OnceLock) cache.
 fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
-    let key_store = depot
-        .get::<Keystore>("keystore")
-        .expect("Keystore not found in depot");
+    let keyring = depot
+        .get::<Keyring>("keyring")
+        .expect("Keyring not found in depot");
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
@@ -133,7 +133,7 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
     let client_auth_signing_alg_values_supported = Some(SUPPORTED_SIGNING_ALGORITHMS.to_vec());
 
     // This is how we can sign stuff
-    let jwt_signing_alg_values_supported = Some(key_store.available_signing_algorithms());
+    let jwt_signing_alg_values_supported = Some(keyring.available_signing_algorithms());
 
     // Prepare all the endpoints
     let issuer = Some(url_builder.oidc_issuer().into());
@@ -319,23 +319,23 @@ fn build_response(depot: &Depot) -> Json<DiscoveryDocument> {
 #[cfg(test)]
 mod tests {
     use coauth_data::UrlBuilder;
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
     use super::*;
 
-    fn test_keystore() -> Keystore {
+    fn test_keyring() -> Keyring {
         let mut rng = ChaChaRng::seed_from_u64(42);
         let es512 = JsonWebKey::new(PrivateKey::generate_ec_p521(&mut rng)).with_kid("test-es512");
         let ed25519 =
             JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("test-ed25519");
-        Keystore::new(JsonWebKeySet::new(vec![es512, ed25519]))
+        Keyring::new(JsonWebKeySet::new(vec![es512, ed25519]))
     }
 
     fn test_depot() -> Depot {
         let mut depot = Depot::new();
-        depot.insert("keystore", test_keystore());
+        depot.insert("keyring", test_keyring());
         depot.insert(
             "url_builder",
             UrlBuilder::new("https://example.com/".parse().unwrap(), None, None),
@@ -462,7 +462,7 @@ mod tests {
     /// Snapshot the full set of scopes and claims so accidental drift in
     /// either direction surfaces as a test diff. Endpoint URLs / signing
     /// algorithms are intentionally excluded — they are environment- and
-    /// keystore-specific and covered by other tests.
+    /// keyring-specific and covered by other tests.
     #[tokio::test]
     async fn discovery_scopes_and_claims_snapshot() {
         crate::handlers::test_utils::setup();

@@ -208,7 +208,7 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
         &mut self,
         clock: &dyn Clock,
         params: NewStationTrustEnrollment,
-    ) -> Result<StationTrustEnrollment, Self::Error> {
+    ) -> Result<Option<StationTrustEnrollment>, Self::Error> {
         if arkret_identifiers::project_did_to_core_id(&params.did)
             .map_or(true, |projected| projected != params.service_id)
         {
@@ -216,11 +216,12 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
         }
         let now = clock.now();
         let row = NewEnrollmentRow::from_params(&params, now);
-        diesel::insert_into(station_trust_enrollments::table)
+        let inserted = diesel::insert_into(station_trust_enrollments::table)
             .values(&row)
+            .on_conflict_do_nothing()
             .execute(self.conn)
             .await?;
-        Ok(StationTrustEnrollment {
+        Ok((inserted == 1).then_some(StationTrustEnrollment {
             name: params.name,
             canonical_endpoint: params.canonical_endpoint,
             service_id: params.service_id,
@@ -230,7 +231,49 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
             source: params.source,
             enrolled_at: now,
             last_verified_at: now,
-        })
+        }))
+    }
+
+    #[tracing::instrument(name = "db.station_trust.relocate_verified", skip_all, err)]
+    async fn relocate_verified(
+        &mut self,
+        clock: &dyn Clock,
+        name: &str,
+        expected_service_id: &arkret_identifiers::DidCoreId,
+        expected_canonical_endpoint: &str,
+        expected_method_history_head: &str,
+        params: NewStationTrustEnrollment,
+    ) -> Result<bool, Self::Error> {
+        if arkret_identifiers::project_did_to_core_id(&params.did)
+            .map_or(true, |projected| projected != params.service_id)
+            || &params.service_id != expected_service_id
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let changes = EnrollmentReplacement {
+            canonical_endpoint: params.canonical_endpoint.clone(),
+            service_id: params.service_id.clone(),
+            did: params.did.to_string(),
+            method_history_head: params.method_history_head.clone(),
+            version_id: params.version_id.clone(),
+            source: params.source.as_str().to_owned(),
+            last_verified_at: clock.now(),
+        };
+        let rows_affected = diesel::update(
+            station_trust_enrollments::table
+                .filter(station_trust_enrollments::name.eq(name))
+                .filter(station_trust_enrollments::service_id.eq(expected_service_id))
+                .filter(
+                    station_trust_enrollments::canonical_endpoint.eq(expected_canonical_endpoint),
+                )
+                .filter(
+                    station_trust_enrollments::method_history_head.eq(expected_method_history_head),
+                ),
+        )
+        .set(&changes)
+        .execute(self.conn)
+        .await?;
+        Ok(rows_affected == 1)
     }
 
     #[tracing::instrument(name = "db.station_trust.replace", skip_all, err)]
@@ -270,14 +313,20 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
     async fn record_verification(
         &mut self,
         clock: &dyn Clock,
+        name: &str,
         canonical_endpoint: &str,
+        expected_method_history_head: &str,
         did: &arkret_identifiers::Did,
         method_history_head: &str,
         version_id: &str,
     ) -> Result<bool, Self::Error> {
         let rows_affected = diesel::update(
             station_trust_enrollments::table
-                .filter(station_trust_enrollments::canonical_endpoint.eq(canonical_endpoint)),
+                .filter(station_trust_enrollments::name.eq(name))
+                .filter(station_trust_enrollments::canonical_endpoint.eq(canonical_endpoint))
+                .filter(
+                    station_trust_enrollments::method_history_head.eq(expected_method_history_head),
+                ),
         )
         .set((
             station_trust_enrollments::last_verified_at.eq(clock.now()),
@@ -377,7 +426,7 @@ mod tests {
                 .expect("valid DID"),
             method_history_head: "sha256:aa".to_owned(),
             version_id: "1-bb".to_owned(),
-            source: StationTrustSource::OperatorCli,
+            source: StationTrustSource::AutomaticVerified,
         }
     }
 
@@ -405,8 +454,9 @@ mod tests {
             .station_trust()
             .enroll(&clock, enrollment_params("soland", "ak:did_core:webvh:old"))
             .await
+            .unwrap()
             .unwrap();
-        assert_eq!(enrolled.source, StationTrustSource::OperatorCli);
+        assert_eq!(enrolled.source, StationTrustSource::AutomaticVerified);
 
         let fetched = repo
             .station_trust()
@@ -477,7 +527,9 @@ mod tests {
             repo.station_trust()
                 .record_verification(
                     &clock,
+                    "soland",
                     "https://soland.example/",
+                    "sha256:aa",
                     &arkret_identifiers::Did::new("did:webvh:new:replacement.example").unwrap(),
                     "sha256:ee",
                     "3-ff"
@@ -532,6 +584,94 @@ mod tests {
                 .is_none()
         );
 
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn concurrent_enroll_is_idempotent_and_endpoint_relocation_uses_full_cas() {
+        let Some(pool) = crate::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let clock = MockClock::default();
+        let name = format!("station-{}", Uuid::now_v7().simple());
+        let original = enrollment_params(&name, "ak:did_core:webvh:relocate");
+        let original_endpoint = original.canonical_endpoint.clone();
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+
+        assert!(
+            repo.station_trust()
+                .enroll(&clock, original.clone())
+                .await
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            repo.station_trust()
+                .enroll(&clock, original.clone())
+                .await
+                .unwrap()
+                .is_none(),
+            "an identical uniqueness conflict must not abort the transaction"
+        );
+        assert!(
+            repo.station_trust()
+                .find_by_name(&name)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        let mut relocated = original.clone();
+        relocated.canonical_endpoint = format!("https://moved-{name}.example/");
+        relocated.method_history_head = "sha256:bb".to_owned();
+        relocated.version_id = "2-cc".to_owned();
+        assert!(
+            !repo
+                .station_trust()
+                .relocate_verified(
+                    &clock,
+                    &name,
+                    &original.service_id,
+                    &original_endpoint,
+                    "sha256:stale",
+                    relocated.clone(),
+                )
+                .await
+                .unwrap(),
+            "a stale history floor must not move the endpoint"
+        );
+        assert!(
+            repo.station_trust()
+                .relocate_verified(
+                    &clock,
+                    &name,
+                    &original.service_id,
+                    &original_endpoint,
+                    &original.method_history_head,
+                    relocated.clone(),
+                )
+                .await
+                .unwrap()
+        );
+        assert!(
+            repo.station_trust()
+                .find_by_endpoint(&original_endpoint)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            repo.station_trust()
+                .find_by_endpoint(&relocated.canonical_endpoint)
+                .await
+                .unwrap()
+                .unwrap()
+                .method_history_head,
+            "sha256:bb"
+        );
         repo.cancel().await.unwrap();
     }
 

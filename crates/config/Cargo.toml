@@ -29,14 +29,16 @@ anyhow = { workspace = true }
 # false` keeps the optional `salvo` surface out of the config build.
 arkret-identifiers = { workspace = true }
 arkret-identity = { workspace = true }
+arkret-keystore = { workspace = true, features = ["keystore-macos", "keystore-linux", "keystore-windows", "keystore-encrypted-file"] }
 arkret-models-identity = { workspace = true }
 arkret-wire = { workspace = true }
+base64 = { workspace = true }
 camino = { workspace = true }
 chrono = { workspace = true }
 coauth-email-types = { workspace = true }
 coauth-iana = { workspace = true }
 coauth-jose = { workspace = true }
-coauth-keystore = { workspace = true }
+coauth-keyring = { workspace = true }
 figment = { workspace = true }
 futures-util = { workspace = true }
 hex = { workspace = true }
@@ -54,6 +56,10 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 ulid = { workspace = true }
 url = { workspace = true }
+zeroize = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

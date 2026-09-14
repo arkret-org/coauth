@@ -66,7 +66,7 @@ pub(crate) async fn acquire_human_device_binding(
     let channel = InternalAuthorityChannel::new(
         &destination.endpoint,
         &http_client,
-        destination.session_grant_introspection_bearer.as_deref(),
+        destination.internal_authority_shared_secret(),
         account_id.station_id.clone(),
     )
     .map_err(map_peer_gate_error)?;

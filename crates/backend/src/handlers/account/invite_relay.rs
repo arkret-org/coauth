@@ -324,7 +324,7 @@ pub async fn post_invite_relay(
 
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let url_builder = depot.url_builder()?;
 
     // ── Authentication + authorization ─────────────────────────────
@@ -401,7 +401,7 @@ pub async fn post_invite_relay(
     let peer_client = match PeerProtocolClient::new(
         principal_url.as_ref(),
         &http_client,
-        &key_store,
+        &keyring,
         arkret::owning_station_did_for(&arkret_config),
         identity,
         trust_domain.clone(),
@@ -453,13 +453,13 @@ mod tests {
         Url::parse("https://station.example/").unwrap()
     }
 
-    fn test_keystore() -> coauth_keystore::Keystore {
-        use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
+    fn test_keyring() -> coauth_keyring::Keyring {
+        use coauth_keyring::{JsonWebKey, JsonWebKeySet, PrivateKey};
         use rand_chacha::rand_core::SeedableRng as _;
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(9);
         let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
-        coauth_keystore::Keystore::new(JsonWebKeySet::new(vec![key]))
+            .with_kid(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID);
+        coauth_keyring::Keyring::new(JsonWebKeySet::new(vec![key]))
     }
 
     fn peer_identity() -> arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
@@ -539,29 +539,33 @@ mod tests {
     }
 
     fn relay_config() -> ArkretConfig {
-        let station = |name: &str, endpoint: &str, service_id: &str| coauth_config::StationConfig {
+        let station = |name: &str, endpoint: &str| coauth_config::StationConfig {
             name: name.to_owned(),
             endpoint: Url::parse(endpoint).unwrap(),
-            service_id: Some(core_id(service_id)),
-            session_grant_introspection_bearer: None,
+            internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         };
         ArkretConfig {
             stations: vec![
-                station(
-                    "other",
-                    "https://other.example/",
-                    "ak:did_core:web:other.example",
-                ),
-                station(
-                    "recipient",
-                    "https://auth.example/",
-                    "ak:did_core:web:auth.example",
-                ),
+                station("other", "https://other.example/"),
+                station("recipient", "https://auth.example/"),
             ],
             ..ArkretConfig::default()
         }
+    }
+
+    fn relay_resolver(config: &ArkretConfig) -> StationTrustResolver {
+        let resolver = StationTrustResolver::new();
+        for station in &config.stations {
+            let service_id = if station.name == "other" {
+                "ak:did_core:web:other.example"
+            } else {
+                "ak:did_core:web:auth.example"
+            };
+            resolver.insert_for_test(&station.endpoint, service_id);
+        }
+        resolver
     }
 
     fn assert_target_rejected(
@@ -571,14 +575,9 @@ mod tests {
         config: &ArkretConfig,
         reason: &str,
     ) {
-        let error = invite_delivery_target(
-            delivery,
-            holder,
-            endpoint,
-            config,
-            &StationTrustResolver::new(),
-        )
-        .unwrap_err();
+        let error =
+            invite_delivery_target(delivery, holder, endpoint, config, &relay_resolver(config))
+                .unwrap_err();
         assert!(matches!(error, RouteError::BadRequest(message) if message == reason));
     }
 
@@ -587,12 +586,13 @@ mod tests {
         let delivery = invite_delivery();
         let before = serde_json::to_vec(&delivery.invite_event).unwrap();
         let config = relay_config();
+        let resolver = relay_resolver(&config);
         let endpoint = invite_delivery_target(
             &delivery,
             &core_id("ak:did_core:web:holder"),
             None,
             &config,
-            &StationTrustResolver::new(),
+            &resolver,
         )
         .unwrap();
         assert_eq!(endpoint, config.stations[1].endpoint);
@@ -632,8 +632,7 @@ mod tests {
         }
 
         let mut retargeted = delivery.clone();
-        retargeted.invite_address.account_id.station_id =
-            config.stations[0].service_id.clone().unwrap();
+        retargeted.invite_address.account_id.station_id = core_id("ak:did_core:web:other.example");
         assert_target_rejected(
             &retargeted,
             &holder,
@@ -659,7 +658,7 @@ mod tests {
         let delivery = invite_delivery();
         let config = relay_config();
         let holder = core_id("ak:did_core:web:holder");
-        let resolver = StationTrustResolver::new();
+        let resolver = relay_resolver(&config);
         let mut wrong_kind = delivery.clone();
         wrong_kind.invite_event.kind = EventKind::ViewCreate;
         assert_target_rejected(
@@ -724,7 +723,7 @@ mod tests {
         alternate.name = "recipient-alternate".into();
         alternate.endpoint = Url::parse("https://auth.example:8443/alternate/").unwrap();
         config.stations.push(alternate.clone());
-        let resolver = StationTrustResolver::new();
+        let resolver = relay_resolver(&config);
         assert_eq!(
             invite_delivery_target(&delivery, &holder, None, &config, &resolver).unwrap(),
             config.stations[1].endpoint,
@@ -755,10 +754,10 @@ mod tests {
     }
 
     #[test]
-    fn relay_destination_requires_a_configured_or_verified_station_pin() {
+    fn relay_destination_requires_a_verified_station_binding() {
         let delivery = invite_delivery();
         let holder = core_id("ak:did_core:web:holder");
-        let mut config = relay_config();
+        let config = relay_config();
         let mut unknown_station = delivery.clone();
         unknown_station.invite_address.account_id.station_id =
             core_id("ak:did_core:web:unconfigured.example");
@@ -774,15 +773,11 @@ mod tests {
             &config,
             "invite_delivery_station_unknown",
         );
-        config.stations[1].service_id = None;
-        assert_target_rejected(
-            &delivery,
-            &holder,
-            None,
-            &config,
-            "invite_delivery_station_unknown",
-        );
         let resolver = StationTrustResolver::new();
+        assert!(matches!(
+            invite_delivery_target(&delivery, &holder, None, &config, &resolver),
+            Err(RouteError::BadRequest(message)) if message == "invite_delivery_station_unknown"
+        ));
         resolver.insert_for_test(&config.stations[1].endpoint, "ak:did_core:web:auth.example");
         assert_eq!(
             invite_delivery_target(
@@ -852,11 +847,11 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let keystore = test_keystore();
+        let keyring = test_keyring();
         let peer = PeerProtocolClient::new(
             Some(&base),
             &client,
-            &keystore,
+            &keyring,
             source_did(),
             peer_identity(),
             trust_domain(),
@@ -1001,11 +996,11 @@ mod tests {
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let keystore = test_keystore();
+        let keyring = test_keyring();
         let peer = PeerProtocolClient::new(
             Some(&base),
             &client,
-            &keystore,
+            &keyring,
             source_did(),
             peer_identity(),
             trust_domain(),

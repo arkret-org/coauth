@@ -42,20 +42,11 @@ impl Options {
             warn!("No Arkret Stations are configured (`arkret.stations` is empty).");
         } else {
             for server in &config.arkret.stations {
-                match server.service_id.as_ref() {
-                    Some(service_id) => info!(
-                        name = %server.name,
-                        audience = %service_id.as_str(),
-                        endpoint = %server.endpoint,
-                        "Configured Arkret Station (identity pinned in configuration)"
-                    ),
-                    None => info!(
-                        name = %server.name,
-                        audience = "<pinned by the persisted trust enrollment; run `coauth station trust bootstrap --name <name>` if none exists yet>",
-                        endpoint = %server.endpoint,
-                        "Configured Arkret Station"
-                    ),
-                }
+                info!(
+                    name = %server.name,
+                    endpoint = %server.endpoint,
+                    "Configured Arkret Station (identity is automatically verified and durably bound at startup)"
+                );
             }
         }
 

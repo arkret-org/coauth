@@ -1,5 +1,5 @@
 use coauth_jose::jwk::PublicJsonWebKeySet;
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use salvo::prelude::*;
 
 #[handler]
@@ -9,16 +9,16 @@ pub async fn get(depot: &Depot) -> Json<PublicJsonWebKeySet> {
 }
 
 fn get_inner(depot: &Depot) -> Json<PublicJsonWebKeySet> {
-    let key_store = depot
-        .get::<Keystore>("keystore")
-        .expect("Keystore not found in depot");
-    let jwks = key_store.public_jwks();
+    let keyring = depot
+        .get::<Keyring>("keyring")
+        .expect("Keyring not found in depot");
+    let jwks = keyring.public_jwks();
     Json(jwks)
 }
 
 #[cfg(test)]
 mod tests {
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
@@ -29,10 +29,10 @@ mod tests {
         let es512 = JsonWebKey::new(PrivateKey::generate_ec_p521(&mut rng)).with_kid("test-es512");
         let ed25519 =
             JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("test-ed25519");
-        let keystore = Keystore::new(JsonWebKeySet::new(vec![es512, ed25519]));
+        let keyring = Keyring::new(JsonWebKeySet::new(vec![es512, ed25519]));
 
         let mut depot = Depot::new();
-        depot.insert("keystore", keystore);
+        depot.insert("keyring", keyring);
         depot
     }
 
@@ -50,10 +50,10 @@ mod tests {
 
         let mut rng = ChaChaRng::seed_from_u64(7);
         let authority = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
-        let keystore = Keystore::new(JsonWebKeySet::new(vec![authority]));
+            .with_kid(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID);
+        let keyring = Keyring::new(JsonWebKeySet::new(vec![authority]));
         let mut depot = Depot::new();
-        depot.insert("keystore", keystore);
+        depot.insert("keyring", keyring);
 
         let Json(jwks) = get_inner(&depot);
         let body = serde_json::to_value(jwks).unwrap();
@@ -61,7 +61,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .find(|key| key["kid"].as_str() == Some(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID))
+            .find(|key| key["kid"].as_str() == Some(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID))
             .expect("the Account Authority key is published under its stable kid");
 
         assert_eq!(key["kty"].as_str(), Some("OKP"));

@@ -2,7 +2,7 @@ use arkret_models_collaboration::events_payloads::event_wire::VerificationStub;
 use arkret_models_collaboration::governance::erasure::{ErasureReceipt, ErasureReceiptPackage};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use thiserror::Error;
 
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
@@ -56,7 +56,7 @@ pub async fn verify_erasure_receipt(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
     binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
@@ -81,7 +81,7 @@ pub async fn verify_erasure_receipt(
         http_client,
         url_builder,
         arkret_config,
-        key_store,
+        keyring,
         repo,
         did_resolver,
         binding_store,
@@ -128,7 +128,7 @@ pub async fn verify_erasure_receipt_package(
     http_client: &reqwest::Client,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     repo: &mut BoxRepository,
     did_resolver: &dyn DidResolverService,
     binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
@@ -140,7 +140,7 @@ pub async fn verify_erasure_receipt_package(
         http_client,
         url_builder,
         arkret_config,
-        key_store,
+        keyring,
         repo,
         did_resolver,
         binding_store,

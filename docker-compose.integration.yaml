@@ -28,8 +28,8 @@
 #   The coauth container expects a config at /etc/coauth/config.yaml. The
 #   `scripts/integration-up.sh` wrapper generates one via an ephemeral
 #   `coauth config generate` invocation before bringing the stack up. The
-#   generated file lives at conformance/test-config.yaml — gitignored so
-#   secrets aren't committed.
+#   generated file lives at conformance/test-config.yaml. Long-term runtime
+#   keys live in the encrypted `coauth_keys` volume, not in that config.
 
 services:
   postgres:
@@ -70,14 +70,20 @@ services:
     # default subcommand (server) take over. The healthcheck below uses
     # `coauth healthcheck` which is shipped in the image specifically so
     # the distroless runtime doesn't need extra binaries.
-    command: ["server", "--config", "/etc/coauth/config.yaml"]
+    command: ["server", "--first-provisioning", "--config", "/etc/coauth/config.yaml"]
     volumes:
       - ./conformance/test-config.yaml:/etc/coauth/config.yaml:ro
+      - coauth_keys:/var/lib/coauth
     environment:
       # Override only the DB URI so the same test config works against the
       # compose postgres without baking host-specific values into the file.
       COAUTH_DATABASE__URI: postgresql://arkret:arkret@postgres:5432/arkret
       COAUTH_CONFIG: /etc/coauth/config.yaml
+      COAUTH_SECRETS__BACKEND: encrypted_file
+      COAUTH_SECRETS__PATH: /var/lib/coauth/keystore.v1
+      # Integration-only wrapping key. Production supplies this from a
+      # separately custodied secret or `master_key_file`.
+      COAUTH_SECRETS__MASTER_KEY: SUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUlJSUk=
       RUST_LOG: info
     ports:
       - "57080:7080"
@@ -146,4 +152,5 @@ services:
       start_period: 15s
 
 volumes:
+  coauth_keys:
   pgdata:

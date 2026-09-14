@@ -30,7 +30,7 @@ use arkret_wire::{
     HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
     PATH_PEER_DEVICE_REVOCATIONS_CHECK, ServiceOperationId,
 };
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use serde::Serialize;
 use thiserror::Error;
 use url::Url;
@@ -90,7 +90,7 @@ pub enum PeerProtocolClientError {
 pub struct PeerProtocolClient<'a> {
     base_url: &'a Url,
     http_client: &'a reqwest::Client,
-    keystore: &'a Keystore,
+    keyring: &'a Keyring,
     source_did: Did,
     identity: KeyPackagesClaimServiceBinding,
     source_trust_domain: arkret_identifiers::TrustDomainId,
@@ -101,7 +101,7 @@ impl<'a> PeerProtocolClient<'a> {
     pub fn new(
         base_url: Option<&'a Url>,
         http_client: &'a reqwest::Client,
-        keystore: &'a Keystore,
+        keyring: &'a Keyring,
         source_did: Did,
         identity: KeyPackagesClaimServiceBinding,
         source_trust_domain: arkret_identifiers::TrustDomainId,
@@ -120,7 +120,7 @@ impl<'a> PeerProtocolClient<'a> {
         Ok(Self {
             base_url,
             http_client,
-            keystore,
+            keyring,
             source_did,
             identity,
             source_trust_domain,
@@ -139,7 +139,7 @@ impl<'a> PeerProtocolClient<'a> {
     pub fn new_for_owning_station(
         arkret_config: &'a coauth_config::ArkretConfig,
         http_client: &'a reqwest::Client,
-        keystore: &'a Keystore,
+        keyring: &'a Keyring,
     ) -> Result<Self, PeerProtocolClientError> {
         let target = arkret_config.owning_station().ok_or_else(|| {
             PeerProtocolClientError::InvalidUrl(
@@ -154,16 +154,7 @@ impl<'a> PeerProtocolClient<'a> {
                     "owning Station identity is not verified".to_owned(),
                 )
             })?;
-        let destination_id = target.service_id.clone().ok_or_else(|| {
-            PeerProtocolClientError::InvalidUrl(
-                "owning Station service_id is not explicitly configured".to_owned(),
-            )
-        })?;
-        if delegated.station_id != destination_id {
-            return Err(PeerProtocolClientError::InvalidUrl(
-                "verified owning Station identity conflicts with configured service_id".to_owned(),
-            ));
-        }
+        let destination_id = delegated.station_id.clone();
         let source_trust_domain = arkret_identifiers::TrustDomainId::new(
             arkret_config
                 .trust_domain
@@ -191,7 +182,7 @@ impl<'a> PeerProtocolClient<'a> {
         Self::new(
             Some(&target.endpoint),
             http_client,
-            keystore,
+            keyring,
             delegated.did,
             KeyPackagesClaimServiceBinding {
                 source_id: delegated.station_id,
@@ -440,7 +431,7 @@ impl<'a> PeerProtocolClient<'a> {
             covered.push(Component::Header("idempotency-key".to_owned()));
         }
 
-        let signer = ed25519_signer(self.keystore)?;
+        let signer = ed25519_signer(self.keyring)?;
         let created = chrono::Utc::now().timestamp();
         let expires = created.saturating_add(SIGNATURE_WINDOW_SECONDS);
         let covered_wire = covered
@@ -634,9 +625,9 @@ fn request_parts(
 }
 
 fn ed25519_signer(
-    keystore: &Keystore,
+    keyring: &Keyring,
 ) -> Result<std::sync::Arc<coauth_jose::jwa::AsymmetricSigningKey>, PeerProtocolClientError> {
-    keystore
+    keyring
         .account_authority_signer()
         .map_err(|_| PeerProtocolClientError::NoSigningKey)
 }
@@ -666,18 +657,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use coauth_keystore::{ACCOUNT_AUTHORITY_KEY_ID, JsonWebKey, JsonWebKeySet, PrivateKey};
+    use coauth_keyring::{ACCOUNT_AUTHORITY_KEY_ID, JsonWebKey, JsonWebKeySet, PrivateKey};
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
 
-    fn test_keystore() -> Keystore {
+    fn test_keyring() -> Keyring {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(7);
         let service_key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
             .with_kid(ACCOUNT_AUTHORITY_KEY_ID);
         let unrelated_device_key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
             .with_kid("device-enrollment-key");
-        Keystore::new(JsonWebKeySet::new(vec![service_key, unrelated_device_key]))
+        Keyring::new(JsonWebKeySet::new(vec![service_key, unrelated_device_key]))
     }
 
     fn peer_identity() -> KeyPackagesClaimServiceBinding {
@@ -701,12 +692,12 @@ mod tests {
     fn signed_post_covers_peer_service_headers_and_content_digest() {
         let base = Url::parse("https://server.example/").unwrap();
         let client = reqwest::Client::new();
-        let keystore = test_keystore();
+        let keyring = test_keyring();
         let identity = peer_identity();
         let peer = PeerProtocolClient::new(
             Some(&base),
             &client,
-            &keystore,
+            &keyring,
             source_did(),
             identity,
             trust_domain(),
@@ -760,7 +751,7 @@ mod tests {
         assert!(header("Signature").unwrap().starts_with("sig1=:"));
 
         let service_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
-            &keystore.account_authority_seed().unwrap(),
+            &keyring.account_authority_seed().unwrap(),
         );
         let policy = arkret_signatures::http_signature::SignatureVerificationPolicy::new(vec![
             Component::Method,
@@ -796,12 +787,12 @@ mod tests {
     fn signed_query_covers_actual_method_target_and_content_digest() {
         let base = Url::parse("https://server.example/").unwrap();
         let client = reqwest::Client::new();
-        let keystore = test_keystore();
+        let keyring = test_keyring();
         let identity = peer_identity();
         let peer = PeerProtocolClient::new(
             Some(&base),
             &client,
-            &keystore,
+            &keyring,
             source_did(),
             identity,
             trust_domain(),

@@ -188,7 +188,7 @@ fn default_on_backchannel_logout() -> String {
 
 fn parse_request(
     body: ProviderRequestBody,
-    encrypter: &coauth_keystore::Encrypter,
+    encrypter: &coauth_keyring::Encrypter,
     source: provider::ProviderSource,
 ) -> Result<UpstreamOAuthProviderParams, AppError> {
     let scope: Scope = body

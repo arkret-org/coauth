@@ -113,9 +113,9 @@ skip = [
     # as the ecosystem converges on the new RustCrypto releases.
     { name = "base64", version = "0.21.7" },       # base64urlsafedata (webauthn-rs subtree)
     { name = "block-buffer", version = "0.10.4" },
-    { name = "chacha20", version = "0.9.1" },      # chacha20poly1305 0.10 (coauth-keystore)
+    { name = "chacha20", version = "0.9.1" },      # chacha20poly1305 0.10 (coauth-keyring)
     { name = "cipher", version = "0.4.4" },        # aes / aes-gcm 0.10
-    { name = "const-oid", version = "0.9.6" },     # der/pkcs8 0.7 line (coauth-keystore)
+    { name = "const-oid", version = "0.9.6" },     # der/pkcs8 0.7 line (coauth-keyring)
     { name = "cpufeatures", version = "0.2.17" },
     { name = "crypto-common", version = "0.1.6" },
     { name = "digest", version = "0.10.7" },

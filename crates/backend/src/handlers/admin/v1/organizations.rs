@@ -137,7 +137,7 @@ async fn verify_organization_controller_proof(
     }
     let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
     // §4 row 1 — an organization DID crossing this trust domain's boundary for
@@ -149,7 +149,7 @@ async fn verify_organization_controller_proof(
         &http_client,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
@@ -549,7 +549,7 @@ pub async fn issue_statement_handler(
         .map_err(|e| AppError::bad_request(format!("invalid realm_frontier_digest: {e}")))?;
 
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
 
     let call_context = extract_call_context(req, depot).await?;
@@ -601,10 +601,10 @@ pub async fn issue_statement_handler(
     // delegation row; direct statements use the offline resolver.
     let payload = if body.delegation_ref.is_some() {
         let resolver = RepositoryDelegationResolver::new(delegation, now);
-        issue_organization_statement(&key_store, service_did.as_str(), request, now, &resolver)
+        issue_organization_statement(&keyring, service_did.as_str(), request, now, &resolver)
     } else {
         issue_organization_statement(
-            &key_store,
+            &keyring,
             service_did.as_str(),
             request,
             now,

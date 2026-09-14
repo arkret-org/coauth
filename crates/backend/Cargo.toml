@@ -46,7 +46,7 @@ coauth-email-types = { workspace = true }
 coauth-i18n = { workspace = true }
 coauth-iana = { workspace = true }
 coauth-jose = { workspace = true }
-coauth-keystore = { workspace = true }
+coauth-keyring = { workspace = true }
 coauth-messaging = { workspace = true }
 coauth-oauth-types = { workspace = true }
 coauth-principal = { workspace = true }

@@ -11,7 +11,7 @@ use coauth_data::{
     AuthorizationGrant, AuthorizationGrantStage, BoxClock, BoxRepository, BoxRng, BrowserSession,
     Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
 };
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_oauth_types::requests::AuthorizationResponse;
 use coauth_principal::ConnectorAdmin;
 use thiserror::Error;
@@ -168,7 +168,7 @@ pub async fn accept_authorization_consent(
     mut repo: BoxRepository,
     rng: &mut BoxRng,
     clock: &BoxClock,
-    key_store: &Keystore,
+    keyring: &Keyring,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
     policy_factory: &PolicyFactory,
@@ -246,7 +246,7 @@ pub async fn accept_authorization_consent(
                 principal_id
                     .as_ref()
                     .map(arkret_identifiers::DidCoreId::as_str),
-                key_store,
+                keyring,
                 &client,
                 Some(&grant),
                 Some(&session),

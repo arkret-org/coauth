@@ -114,7 +114,7 @@ curl --fail http://127.0.0.1:9091/metrics
 
 - `/health`：存活类检查；确认 Postgres 连接池可达。
 - `/healthz`：`/health` 的别名。
-- `/readyz`：就绪检查；确认 Postgres 可达、可以从配置的签名密钥生成
+- `/readyz`：就绪检查；确认 Postgres 可达、可以从 KeyStore 中的签名密钥生成
   公共 JWKS，并且所有已配置 Station 均已完成在线信任验证。
 
 在编排器中使用 `/healthz` 作为 liveness，`/readyz` 作为 readiness。

@@ -9,7 +9,6 @@ use coauth_config::{
 };
 use coauth_data::SystemClock;
 use figment::Figment;
-use rand_core::SeedableRng;
 use tokio::io::AsyncWriteExt;
 use tracing::{info, info_span};
 use url::Url;
@@ -17,9 +16,9 @@ use url::Url;
 const DEV_DATABASE_URI: &str = "postgresql://coauth:coauth@localhost/coauth";
 const DEV_PUBLIC_BASE: &str = "https://auth.local.host/";
 const DEV_SOLAND_URL: &str = "https://local.host/";
-const DEV_SOLAND_SERVICE_ID: &str = "ak:did_core:web:local.host";
 const DEV_SOLAND_IDENTITY_RESOLVER_URL: &str = "https://local.host/_arkret/root/identity/resolve";
-const DEV_SOLAND_SESSION_GRANT_BEARER: &str = "local-coauth-session-grant-introspection";
+const DEV_SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET: &str =
+    "local-coauth-session-grant-introspection";
 const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registration";
 /// The dev Station's own trust domain. `arkret.trust_domain` is coauth's;
 /// §2.2.3 binds the *target* service's domain, so it is a fact of the
@@ -45,7 +44,7 @@ enum Command {
     /// Validate the configuration file
     Check,
 
-    /// Produce a fresh configuration file with generated secrets
+    /// Produce a configuration file without embedded private keys
     Generate(GenerateOptions),
 
     /// Synchronise clients and providers from the config into the database
@@ -111,8 +110,7 @@ impl Options {
     async fn handle_generate(options: GenerateOptions) -> anyhow::Result<ExitCode> {
         let _span = info_span!("cli.config.generate").entered();
 
-        let mut rng = rand_chacha::ChaChaRng::from_entropy();
-        let mut generated = RootConfig::generate(&mut rng).await?;
+        let mut generated = RootConfig::generate();
         apply_generated_config_options(&mut generated, &options)?;
         let yaml = serde_yaml_ng::to_string(&generated)?;
 
@@ -127,7 +125,8 @@ impl Options {
     ) -> anyhow::Result<ExitCode> {
         let cfg = SyncConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
         let clock = SystemClock::default();
-        let encrypter = cfg.secrets.encrypter().await?;
+        let runtime_secrets = cfg.secrets.runtime(false).await?;
+        let encrypter = runtime_secrets.encrypter();
 
         let db_url = database_url_from_config(&cfg.database)?;
         let pool = diesel_pool_from_config(&cfg.database).await?;
@@ -178,12 +177,11 @@ fn apply_generated_config_options(
         config.arkret.stations = vec![StationConfig {
             name: "soland-dev".to_owned(),
             endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
-            service_id: Some(
-                DEV_SOLAND_SERVICE_ID
-                    .parse()
-                    .expect("valid dev Soland service ID"),
+            internal_authority_shared_secret: Some(
+                DEV_SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET
+                    .to_owned()
+                    .into(),
             ),
-            session_grant_introspection_bearer: Some(DEV_SOLAND_SESSION_GRANT_BEARER.to_owned()),
             embedded_webvh_registration_bearer: Some(
                 DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
             ),
@@ -244,10 +242,6 @@ mod tests {
             .expect("dev config should include Soland");
         assert_eq!(station.endpoint.as_str(), DEV_SOLAND_URL);
         assert_eq!(
-            station.service_id.as_ref().unwrap().as_str(),
-            DEV_SOLAND_SERVICE_ID
-        );
-        assert_eq!(
             station.trust_domain.as_deref(),
             Some(DEV_SOLAND_TRUST_DOMAIN)
         );
@@ -257,6 +251,12 @@ mod tests {
         );
         assert!(station.has_internal_authority_peer());
         let serialized = serde_json::to_value(&config).expect("dev config should serialize");
+        assert_eq!(
+            serialized["secrets"],
+            serde_json::json!({"backend": "platform"})
+        );
+        assert!(serialized["secrets"].get("encryption").is_none());
+        assert!(serialized["secrets"].get("keys").is_none());
         let serialized_server = &serialized["arkret"]["stations"][0];
         assert!(serialized_server.get("audience").is_none());
         assert!(serialized_server.get("did").is_none());

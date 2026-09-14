@@ -82,7 +82,7 @@ arkret:
   stations:
     - name: soland
       endpoint: https://soland.example.com/
-      service_id: ak:did_core:webvh:<soland-scid>
+      internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
   # Required when more than one Station trust edge is configured.
@@ -96,11 +96,13 @@ arkret:
   session_grant_ttl: 300
 ```
 
-- `stations`: trusted Station configuration; operations
-  authenticating that service require an authorization pin — an explicit
-  `service_id` or a trust enrollment persisted by
-  `coauth station trust bootstrap` — and fail closed without one;
-  Describe cannot act as identity discovery or an authorization root
+- `stations`: trusted Station configuration. On first startup Coauth fully
+  verifies WebVH history and authenticated service resolution from the exact
+  endpoint, then persists the identity and anti-rollback floor automatically.
+  There is no configured `service_id` and no administrator bootstrap. A bare
+  Describe response or shared secret alone cannot establish or replace the
+  identity. The shared secret may be inline or loaded once at startup through
+  the corresponding `_file` field.
 - `deployment_profile`: identity deployment profile. `did:web` principal DIDs
   are accepted only for `personal_node`.
 - `principal_method`: principal DID method. Defaults to `did:webvh`; `did:web`
@@ -114,7 +116,7 @@ arkret:
   private issuer/controller duties delegated to the Account Authority.
 - Station audiences and DIDs are pinned by configuration or by the
   persisted trust enrollment; `/_arkret/describe` is only used for online
-  identity-chain verification during bootstrap and revalidation.
+  identity-chain verification during initial binding and revalidation.
 - `admin_audience`: audience expected by Arkret admin integrations, as a
   `did_core_id`; defaults to this deployment's own runtime service core id
 - `session_grant_ttl`: lifetime in seconds for Arkret session-grant JWTs
@@ -147,18 +149,21 @@ clients:
 
 ## `secrets`
 
-Encryption and signing keys.
+Durable storage for the application encryption key and JOSE private keys.
 
 ```yaml
 secrets:
-  encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  keys:
-    - key_file: ./keys/signing.pem
+  backend: encrypted_file
+  path: /var/lib/coauth/keystore.v1
+  master_key_file: /run/secrets/coauth_runtime_keys_master_key
 ```
 
-At least one signing key should be configured. `coauth` uses these keys for ID
-tokens, signed userinfo responses, JWKS publication, and Arkret session
-grants.
+`backend` is either `platform` (the current user's native credential store) or
+`encrypted_file`. The encrypted file and its base64-encoded 32-byte master-key
+file must be backed up separately. Run exactly one production server with
+`--first-provisioning` when the store is empty; normal server starts, workers,
+and `config sync` only load the existing bundle and fail closed when it is
+missing. All replicas must share the same encrypted file and master key.
 
 ## `passwords`
 

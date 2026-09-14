@@ -93,7 +93,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
     let query: AuditFeedQuery = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let arkret_config = depot.arkret_config()?;
     let service_did = owning_station_did_for(&arkret_config);
 
@@ -116,7 +116,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<AuditFeedOu
     let data: Vec<AuditEntry> = logs
         .into_iter()
         .map(|log| {
-            let signature_status = verify_admin_operation_signature(&log, &key_store, &service_did);
+            let signature_status = verify_admin_operation_signature(&log, &keyring, &service_did);
             audit_entry_from_log(log, signature_status)
         })
         .collect();

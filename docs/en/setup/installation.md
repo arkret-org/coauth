@@ -92,6 +92,6 @@ Building from the source requires:
 
 ## Next steps
 
-The service needs some configuration to work.
-This includes random, private keys and secrets.
+The service needs deployment configuration and a durable KeyStore backend.
+Private keys are provisioned into that backend rather than written into YAML.
 Follow the [configuration guide](./general.md) to configure the service.

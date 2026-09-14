@@ -5,7 +5,7 @@
 
 use anyhow::Context as _;
 use coauth_config::ArkretConfig;
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use http::HeaderValue;
@@ -80,14 +80,14 @@ async fn check_postgres(depot: &Depot) -> Result<(), InternalError> {
 }
 
 fn check_jwks(depot: &Depot) -> Result<(), InternalError> {
-    let key_store = depot
-        .get::<Keystore>("keystore")
-        .map_err(|_| InternalError::from_anyhow(anyhow::anyhow!("keystore not found in depot")))?;
+    let keyring = depot
+        .get::<Keyring>("keyring")
+        .map_err(|_| InternalError::from_anyhow(anyhow::anyhow!("keyring not found in depot")))?;
 
-    let public_jwks = key_store.public_jwks();
+    let public_jwks = keyring.public_jwks();
     if public_jwks.is_empty() {
         return Err(InternalError::from_anyhow(anyhow::anyhow!(
-            "keystore does not expose any public JWKS keys"
+            "keyring does not expose any public JWKS keys"
         )));
     }
     serde_json::to_value(&public_jwks)
@@ -99,27 +99,27 @@ fn check_jwks(depot: &Depot) -> Result<(), InternalError> {
 
 #[cfg(test)]
 mod tests {
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
 
     use super::*;
 
     #[test]
     fn jwks_check_accepts_materialized_public_keys() {
-        let rsa = PrivateKey::load_pem(include_str!("../../../keystore/tests/keys/rsa.pkcs1.pem"))
+        let rsa = PrivateKey::load_pem(include_str!("../../../keyring/tests/keys/rsa.pkcs1.pem"))
             .expect("test RSA key should load");
-        let key_store = Keystore::new(JsonWebKeySet::new(vec![
+        let keyring = Keyring::new(JsonWebKeySet::new(vec![
             JsonWebKey::new(rsa).with_kid("readyz-rsa"),
         ]));
         let mut depot = Depot::new();
-        depot.insert("keystore", key_store);
+        depot.insert("keyring", keyring);
 
         assert!(check_jwks(&depot).is_ok());
     }
 
     #[test]
-    fn jwks_check_rejects_empty_keystore() {
+    fn jwks_check_rejects_empty_keyring() {
         let mut depot = Depot::new();
-        depot.insert("keystore", Keystore::default());
+        depot.insert("keyring", Keyring::default());
 
         assert!(check_jwks(&depot).is_err());
     }

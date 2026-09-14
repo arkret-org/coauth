@@ -1,10 +1,10 @@
 //! Deployment-local Station trust enrollment persistence.
 //!
 //! These records are deployment control-plane state, not Arkret wire types:
-//! they persist the authorization pin accepted by an operator or trusted
-//! deployment artifact for a canonical Station endpoint, plus the WebVH
-//! anti-rollback floor verified at enrollment time. Public
-//! `/_arkret/describe` responses can never create or replace them.
+//! they persist the Station identity established by full method-native
+//! verification for a canonical endpoint, plus the WebVH anti-rollback floor.
+//! Public `/_arkret/describe` metadata or a shared secret alone can never
+//! create or replace them.
 
 use chrono::{DateTime, Utc};
 use rand_core::RngCore;
@@ -17,10 +17,10 @@ use crate::{Clock, repository_impl};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StationTrustSource {
-    /// Explicit `coauth station trust bootstrap` operator command.
-    OperatorCli,
-    /// Pin material provisioned by a trusted deployment artifact.
-    DeploymentArtifact,
+    /// Initial or continuity-preserving automatic method-native verification.
+    AutomaticVerified,
+    /// Explicit high-risk operator replacement of the service identity.
+    OperatorReplacement,
 }
 
 impl StationTrustSource {
@@ -28,8 +28,8 @@ impl StationTrustSource {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::OperatorCli => "operator_cli",
-            Self::DeploymentArtifact => "deployment_artifact",
+            Self::AutomaticVerified => "automatic_verified",
+            Self::OperatorReplacement => "operator_replacement",
         }
     }
 
@@ -37,8 +37,8 @@ impl StationTrustSource {
     #[must_use]
     pub fn from_stored(value: &str) -> Option<Self> {
         match value {
-            "operator_cli" => Some(Self::OperatorCli),
-            "deployment_artifact" => Some(Self::DeploymentArtifact),
+            "automatic_verified" => Some(Self::AutomaticVerified),
+            "operator_replacement" => Some(Self::OperatorReplacement),
             _ => None,
         }
     }
@@ -55,6 +55,8 @@ pub enum StationTrustAuditAction {
     VerificationFailed,
     /// An existing pin was explicitly replaced via expected-old CAS.
     Replaced,
+    /// The same service identity proved continuity at a new endpoint.
+    EndpointRelocated,
     /// An enrollment pin was explicitly revoked.
     Revoked,
 }
@@ -67,6 +69,7 @@ impl StationTrustAuditAction {
             Self::Enrolled => "enrolled",
             Self::VerificationFailed => "verification_failed",
             Self::Replaced => "replaced",
+            Self::EndpointRelocated => "endpoint_relocated",
             Self::Revoked => "revoked",
         }
     }
@@ -78,6 +81,7 @@ impl StationTrustAuditAction {
             "enrolled" => Some(Self::Enrolled),
             "verification_failed" => Some(Self::VerificationFailed),
             "replaced" => Some(Self::Replaced),
+            "endpoint_relocated" => Some(Self::EndpointRelocated),
             "revoked" => Some(Self::Revoked),
             _ => None,
         }
@@ -180,13 +184,27 @@ repository_impl! {
             name: &str,
         ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
 
-        /// Insert a new enrollment. Relies on the database unique constraints so
-        /// concurrent bootstraps converge on a single identity.
+        /// Insert a new enrollment without overwriting either unique key.
+        /// Returns `None` when a concurrent insert won the name or endpoint;
+        /// callers must re-read and compare the complete verified tuple.
         async fn enroll(
             &mut self,
             clock: &dyn Clock,
             params: NewStationTrustEnrollment,
-        ) -> Result<StationTrustEnrollment, Self::Error>;
+        ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
+
+        /// Move a verified binding to a new endpoint while preserving the
+        /// service core. The update is a CAS over the old endpoint and history
+        /// head so concurrent revalidation cannot overwrite newer state.
+        async fn relocate_verified(
+            &mut self,
+            clock: &dyn Clock,
+            name: &str,
+            expected_service_id: &arkret_identifiers::DidCoreId,
+            expected_canonical_endpoint: &str,
+            expected_method_history_head: &str,
+            params: NewStationTrustEnrollment,
+        ) -> Result<bool, Self::Error>;
 
         /// Compare-and-swap replacement of an existing enrollment: the update
         /// only applies when the stored `service_id` still equals
@@ -201,12 +219,14 @@ repository_impl! {
         ) -> Result<bool, Self::Error>;
 
         /// Advance the anti-rollback floor and `last_verified_at` after a
-        /// successful online re-verification of the pinned identity. Returns
-        /// `false` when no enrollment exists for the endpoint.
+        /// successful online re-verification of the pinned identity. The
+        /// update is a CAS over name, endpoint and old history head.
         async fn record_verification(
             &mut self,
             clock: &dyn Clock,
+            name: &str,
             canonical_endpoint: &str,
+            expected_method_history_head: &str,
             did: &arkret_identifiers::Did,
             method_history_head: &str,
             version_id: &str,
@@ -238,15 +258,15 @@ mod tests {
     use super::StationTrustSource;
 
     #[test]
-    fn station_trust_source_has_no_automatic_enrollment_variant() {
+    fn station_trust_source_is_closed() {
         assert_eq!(
-            StationTrustSource::from_stored("operator_cli"),
-            Some(StationTrustSource::OperatorCli)
+            StationTrustSource::from_stored("automatic_verified"),
+            Some(StationTrustSource::AutomaticVerified)
         );
         assert_eq!(
-            StationTrustSource::from_stored("deployment_artifact"),
-            Some(StationTrustSource::DeploymentArtifact)
+            StationTrustSource::from_stored("operator_replacement"),
+            Some(StationTrustSource::OperatorReplacement)
         );
-        assert_eq!(StationTrustSource::from_stored("development_auto"), None);
+        assert_eq!(StationTrustSource::from_stored("unknown"), None);
     }
 }

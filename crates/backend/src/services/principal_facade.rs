@@ -43,7 +43,7 @@ pub struct DbConnectorAdmin {
 
 #[derive(Clone)]
 struct PeerSigningContext {
-    keystore: coauth_keystore::Keystore,
+    keyring: coauth_keyring::Keyring,
     source_trust_domain: arkret_identifiers::TrustDomainId,
     url_builder: coauth_data::UrlBuilder,
 }
@@ -72,12 +72,12 @@ impl DbConnectorAdmin {
     #[must_use]
     pub fn with_peer_signing(
         mut self,
-        keystore: coauth_keystore::Keystore,
+        keyring: coauth_keyring::Keyring,
         source_trust_domain: arkret_identifiers::TrustDomainId,
         url_builder: coauth_data::UrlBuilder,
     ) -> Self {
         self.peer_signing = Some(PeerSigningContext {
-            keystore,
+            keyring,
             source_trust_domain,
             url_builder,
         });
@@ -106,7 +106,7 @@ fn owning_station_peer_identity(
 pub(crate) async fn commit_agent_key_pair_to_station(
     http_client: &reqwest::Client,
     arkret_config: &ArkretConfig,
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
     request: &PrincipalAgentKeyPairCommitRequest,
 ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error> {
     let server = arkret_config
@@ -119,7 +119,7 @@ pub(crate) async fn commit_agent_key_pair_to_station(
     let client = crate::services::peer_protocol_client::PeerProtocolClient::new_for_owning_station(
         arkret_config,
         http_client,
-        key_store,
+        keyring,
     )?;
     submit_agent_key_pair_to_target(&client, server, request).await
 }
@@ -294,7 +294,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
         let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
             Some(&target.endpoint),
             &self.http_client,
-            &signing.keystore,
+            &signing.keyring,
             source_did,
             identity,
             signing.source_trust_domain.clone(),
@@ -352,7 +352,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
         let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
             Some(&target.endpoint),
             &self.http_client,
-            &signing.keystore,
+            &signing.keyring,
             source_did,
             identity,
             signing.source_trust_domain.clone(),
@@ -415,7 +415,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             &self.http_client,
             &signing.url_builder,
             &self.arkret_config,
-            &signing.keystore,
+            &signing.keyring,
             &mut repo,
             resolver.as_ref(),
             binding_store.as_ref(),
@@ -438,7 +438,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
         commit_agent_key_pair_to_station(
             &self.http_client,
             &self.arkret_config,
-            &signing.keystore,
+            &signing.keyring,
             request,
         )
         .await
@@ -487,11 +487,7 @@ mod tests {
         coauth_config::StationConfig {
             name: name.to_owned(),
             endpoint: "https://principal.example/".parse().unwrap(),
-            service_id: Some(
-                arkret_identifiers::DidCoreId::new("ak:did_core:webvh:QmPrincipal".to_owned())
-                    .unwrap(),
-            ),
-            session_grant_introspection_bearer: None,
+            internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         }

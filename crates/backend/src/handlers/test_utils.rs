@@ -18,7 +18,7 @@ use coauth_data::{
     AppVersion, BoxRepository, RepositoryAccess, RepositoryError, RepositoryFactory, SiteConfig,
     SystemClock, TokenType, UrlBuilder,
 };
-use coauth_keystore::{Encrypter, JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+use coauth_keyring::{Encrypter, JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
 use coauth_messaging::NotificationCenter;
 use coauth_messaging::email::{Mailer, Transport as MailTransport};
 use coauth_oauth_types::scope::Scope;
@@ -109,14 +109,14 @@ pub(crate) async fn policy_factory(
     anyhow::bail!("tests require the `cedar` feature to be enabled")
 }
 
-/// `kid` of the general-purpose Ed25519 key in the fixture keystore.
+/// `kid` of the general-purpose Ed25519 key in the fixture keyring.
 pub(crate) const TEST_ED25519_KEY_ID: &str = "test-ed25519";
 
 /// The private half of [`TEST_ED25519_KEY_ID`].
 ///
 /// Fixtures that both sign something and pin the matching public JWK in a DID
-/// document MUST select this key by `kid`. The fixture keystore holds four
-/// Ed25519 keys and `Keystore::signer_for_algorithm` picks by key order, so an
+/// document MUST select this key by `kid`. The fixture keyring holds four
+/// Ed25519 keys and `Keyring::signer_for_algorithm` picks by key order, so an
 /// algorithm-only selection signs with whichever key happens to come first --
 /// which stopped being `test-ed25519` once the designated account-authority,
 /// audit and session-grant keys were added, and made such a proof fail to
@@ -130,7 +130,7 @@ pub(crate) struct TestState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
     pub arkret_config: ArkretConfig,
-    pub key_store: Keystore,
+    pub keyring: Keyring,
     pub cookie_manager: CookieManager,
     pub metadata_cache: MetadataCache,
     pub encrypter: Encrypter,
@@ -336,7 +336,7 @@ impl Handler for InjectTestState {
         depot.insert("templates", state.templates.clone());
         depot.insert("translator", state.templates.translator());
         depot.insert("arkret_config", state.arkret_config.clone());
-        depot.insert("keystore", state.key_store.clone());
+        depot.insert("keyring", state.keyring.clone());
         depot.insert("encrypter", state.encrypter.clone());
         depot.insert("url_builder", state.url_builder.clone());
         depot.insert("http_client", state.http_client.clone());
@@ -401,7 +401,7 @@ pub(crate) const TEST_STATION_AUDIENCE: &str = "ak:did_core:webvh:zTestStation";
 fn test_arkret_config(stations: Vec<coauth_config::StationConfig>) -> ArkretConfig {
     // Seed the runtime identity fixture so DID-shaped assertions stay
     // stable without introducing a configuration-level service DID.
-    ArkretConfig {
+    let config = ArkretConfig {
         runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:web:example.com",
         ),
@@ -412,7 +412,12 @@ fn test_arkret_config(stations: Vec<coauth_config::StationConfig>) -> ArkretConf
         trust_domain: Some("ak:trust_domain:example.com".to_owned()),
         stations,
         ..ArkretConfig::default()
+    };
+    for station in &config.stations {
+        crate::services::station_trust::shared()
+            .insert_for_test(&station.endpoint, TEST_STATION_AUDIENCE);
     }
+    config
 }
 
 impl TestState {
@@ -433,8 +438,7 @@ impl TestState {
             test_arkret_config(vec![coauth_config::StationConfig {
                 name: "principal-test".to_owned(),
                 endpoint: "https://principal.example/".parse()?,
-                service_id: Some(arkret_identifiers::DidCoreId::new(TEST_STATION_AUDIENCE)?),
-                session_grant_introspection_bearer: None,
+                internal_authority_shared_secret: None,
                 embedded_webvh_registration_bearer: None,
                 trust_domain: Some("ak:trust_domain:principal.example".to_owned()),
             }]),
@@ -475,7 +479,7 @@ impl TestState {
 
         let http_client = crate::outbound_http::reqwest_client_for_tests();
 
-        let rsa = PrivateKey::load_pem(include_str!("../../../keystore/tests/keys/rsa.pkcs1.pem"))
+        let rsa = PrivateKey::load_pem(include_str!("../../../keyring/tests/keys/rsa.pkcs1.pem"))
             .unwrap();
         let rsa = JsonWebKey::new(rsa).with_kid("test-rsa");
         let ed25519 = JsonWebKey::new(test_ed25519_private_key()).with_kid(TEST_ED25519_KEY_ID);
@@ -487,17 +491,17 @@ impl TestState {
         // the algorithm-only selector ambiguous.
         let account_authority_key =
             JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(44)))
-                .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
+                .with_kid(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID);
         // Admin audit rows are signed with the key designated for them; without
         // it every signed-audit path would write unsigned rows and warn.
         let audit_signing_key =
             JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(45)))
-                .with_kid(coauth_keystore::AUDIT_SIGNING_KEY_ID);
+                .with_kid(coauth_keyring::AUDIT_SIGNING_KEY_ID);
         // Session grants are signed by the key designated for them, so the
         // fixture pins it rather than letting key order decide.
         let session_grant_key =
             JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(46)))
-                .with_kid(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID);
+                .with_kid(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID);
         let jwks = JsonWebKeySet::new(vec![
             rsa,
             ed25519,
@@ -505,7 +509,7 @@ impl TestState {
             audit_signing_key,
             session_grant_key,
         ]);
-        let key_store = Keystore::new(jwks);
+        let keyring = Keyring::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);
         let cookie_manager = CookieManager::derive_from(url_builder.http_base(), &[0x42; 32]);
@@ -572,7 +576,7 @@ impl TestState {
             repository_factory: PgRepositoryFactory::new(pool),
             templates,
             arkret_config,
-            key_store,
+            keyring,
             cookie_manager,
             metadata_cache,
             encrypter,
@@ -866,7 +870,7 @@ impl TestState {
         crate::services::account_status_publication::author_transition_plan(
             &mut repo,
             self.station_admin.as_ref(),
-            &self.key_store,
+            &self.keyring,
             crate::handlers::arkret::owning_station_id_for(&self.arkret_config).as_str(),
             user,
             &binding,

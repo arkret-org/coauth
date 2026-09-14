@@ -1,13 +1,14 @@
 use std::sync::{Arc, RwLock};
 
 use arkret_identifiers::{Did, DidCoreId};
+use camino::Utf8PathBuf;
 use chrono::Duration;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
-use super::ConfigurationSection;
+use super::{ClientSecret, ConfigurationSection};
 
 /// Round R2/R3 (2026-05-20) — deployment-scope trust-domain prefix.
 ///
@@ -309,6 +310,29 @@ impl Default for ArkretConfig {
 }
 
 impl ArkretConfig {
+    /// Resolve every Station shared-secret file exactly once during process
+    /// startup, then reject empty or duplicate resolved credentials.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a configured file cannot be read, contains no
+    /// non-whitespace bytes, or resolves to the same credential as another
+    /// Station edge.
+    pub async fn resolve_internal_authority_shared_secrets(&mut self) -> anyhow::Result<()> {
+        let mut secrets = std::collections::BTreeSet::new();
+        for station in &mut self.stations {
+            station.resolve_internal_authority_shared_secret().await?;
+            if let Some(secret) = station.internal_authority_shared_secret()
+                && !secrets.insert(secret.to_owned())
+            {
+                anyhow::bail!(
+                    "arkret.stations[].internal_authority_shared_secret values must be unique across Stations"
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// Returns `true` when the Arkret section carries no explicit overrides.
     #[must_use]
     pub fn is_default(&self) -> bool {
@@ -455,20 +479,19 @@ impl ConfigurationSection for ArkretConfig {
         }
 
         let mut station_names = std::collections::BTreeSet::new();
-        let mut internal_authority_bearers = std::collections::BTreeSet::new();
+        let mut internal_authority_shared_secrets = std::collections::BTreeSet::new();
         for server in &self.stations {
             if server.name.trim().is_empty() {
                 return Err(
                     std::io::Error::other("arkret.stations[].name must not be empty").into(),
                 );
             }
-            if server
-                .session_grant_introspection_bearer
-                .as_deref()
-                .is_some_and(|bearer| bearer.trim().is_empty())
-            {
+            if matches!(
+                server.internal_authority_shared_secret,
+                Some(ClientSecret::Value(ref secret)) if secret.trim().is_empty()
+            ) {
                 return Err(std::io::Error::other(
-                    "arkret.stations[].session_grant_introspection_bearer must not be empty",
+                    "arkret.stations[].internal_authority_shared_secret must not be empty",
                 )
                 .into());
             }
@@ -487,34 +510,27 @@ impl ConfigurationSection for ArkretConfig {
                     std::io::Error::other(format!("arkret.stations[].trust_domain: {error}"))
                 })?;
             }
-            if let Some(bearer) = server
-                .session_grant_introspection_bearer
-                .as_deref()
-                .filter(|value| !value.trim().is_empty())
-            {
-                if server.service_id.is_none() {
-                    return Err(std::io::Error::other(
-                        "arkret.stations[].session_grant_introspection_bearer requires an explicit service_id",
-                    )
-                    .into());
-                }
+            if server.internal_authority_shared_secret.is_some() {
                 if server.trust_domain.is_none() {
                     return Err(std::io::Error::other(
-                        "arkret.stations[].session_grant_introspection_bearer requires an explicit Station trust_domain",
+                        "arkret.stations[].internal_authority_shared_secret requires an explicit Station trust_domain",
                     )
                     .into());
                 }
                 if self.trust_domain.is_none() {
                     return Err(std::io::Error::other(
-                        "arkret.stations[].session_grant_introspection_bearer requires an explicit arkret.trust_domain",
+                        "arkret.stations[].internal_authority_shared_secret requires an explicit arkret.trust_domain",
                     )
                     .into());
                 }
-                if !internal_authority_bearers.insert(bearer) {
+                if let Some(ClientSecret::Value(secret)) =
+                    server.internal_authority_shared_secret.as_ref()
+                    && !internal_authority_shared_secrets.insert(secret.trim())
+                {
                     return Err(std::io::Error::other(
-                        "arkret.stations[].session_grant_introspection_bearer credentials must be unique across Stations",
-                    )
-                    .into());
+                            "arkret.stations[].internal_authority_shared_secret values must be unique across Stations",
+                        )
+                        .into());
                 }
             }
             if !station_names.insert(server.name.as_str()) {
@@ -540,7 +556,59 @@ impl ConfigurationSection for ArkretConfig {
     }
 }
 
+/// Serialization helper for a Station's inline/file internal-authority
+/// shared secret.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+struct InternalAuthoritySharedSecretRaw {
+    /// Inline per-edge secret. Mutually exclusive with the file source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    internal_authority_shared_secret: Option<String>,
+    /// UTF-8 secret file read once during process startup. Mutually exclusive
+    /// with the inline source.
+    #[schemars(with = "Option<String>")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    internal_authority_shared_secret_file: Option<Utf8PathBuf>,
+}
+
+impl TryFrom<InternalAuthoritySharedSecretRaw> for Option<ClientSecret> {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: InternalAuthoritySharedSecretRaw) -> Result<Self, Self::Error> {
+        match (
+            raw.internal_authority_shared_secret,
+            raw.internal_authority_shared_secret_file,
+        ) {
+            (None, None) => Ok(None),
+            (Some(value), None) => Ok(Some(ClientSecret::Value(value))),
+            (None, Some(path)) => Ok(Some(ClientSecret::File(path))),
+            (Some(_), Some(_)) => anyhow::bail!(
+                "Cannot specify both `internal_authority_shared_secret` and `internal_authority_shared_secret_file`"
+            ),
+        }
+    }
+}
+
+impl From<Option<ClientSecret>> for InternalAuthoritySharedSecretRaw {
+    fn from(secret: Option<ClientSecret>) -> Self {
+        match secret {
+            None => Self {
+                internal_authority_shared_secret: None,
+                internal_authority_shared_secret_file: None,
+            },
+            Some(ClientSecret::Value(value)) => Self {
+                internal_authority_shared_secret: Some(value),
+                internal_authority_shared_secret_file: None,
+            },
+            Some(ClientSecret::File(path)) => Self {
+                internal_authority_shared_secret: None,
+                internal_authority_shared_secret_file: Some(path),
+            },
+        }
+    }
+}
+
 /// Trusted Station metadata published through Arkret discovery.
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StationConfig {
@@ -550,29 +618,18 @@ pub struct StationConfig {
     /// Base URL of the Station integration point.
     pub endpoint: Url,
 
-    /// Stable service identity core for authenticated S2S authorization.
-    ///
-    /// Optional explicit authorization pin, highest priority. When omitted,
-    /// the effective pin comes from the persisted trust enrollment written by
-    /// `coauth station trust bootstrap`. Describe metadata may confirm a pin
-    /// but can never discover or replace it; an
-    /// endpoint URL or bearer token is never converted into an identity core.
-    /// A configured value that conflicts with the persisted enrollment fails
-    /// startup closed. An internal authority bearer requires this pin
-    /// explicitly; a persisted or hostname-derived identity cannot complete
-    /// that contract.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "Option<String>")]
-    pub service_id: Option<arkret_identifiers::DidCoreId>,
-
-    /// Optional static bearer for only the registered deployment-internal
+    /// Optional shared per-edge secret for only the registered
+    /// deployment-internal
     /// Account Authority / Station operations: session-grant introspection,
     /// Auth-side logout, controller grant gating, and device-revocation
     /// gating. Standard Agent resource and command operations use RFC 9421
-    /// service signatures instead. When present this bearer defines the
-    /// internal authority peer and must be unique across Station entries.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_grant_introspection_bearer: Option<String>,
+    /// service signatures instead. It is presented as an HTTP Bearer token,
+    /// defines the internal authority peer, and must be unique across Station
+    /// entries.
+    #[schemars(with = "InternalAuthoritySharedSecretRaw")]
+    #[serde_as(as = "serde_with::TryFromInto<InternalAuthoritySharedSecretRaw>")]
+    #[serde(flatten)]
+    pub internal_authority_shared_secret: Option<ClientSecret>,
 
     /// Optional static bearer token coauth should send when writing embedded
     /// `did:webvh` registration records into this Station.
@@ -583,8 +640,8 @@ pub struct StationConfig {
     ///
     /// This is a fact of the Station peer entry, never something derived from
     /// the endpoint URL, hostname or `arkret.trust_domain` (coauth's own
-    /// domain). When an internal authority bearer is present, this value is
-    /// mandatory and is never repeated in request headers.
+    /// domain). When an internal authority shared secret is present, this
+    /// value is mandatory and is never repeated in request headers.
     ///
     /// Wire form: `ak:trust_domain:<scope>`, validated by
     /// [`ArkretConfig::validate_trust_domain`].
@@ -593,16 +650,45 @@ pub struct StationConfig {
 }
 
 impl StationConfig {
+    /// Return the startup-resolved credential. A file source is deliberately
+    /// unavailable until [`Self::resolve_internal_authority_shared_secret`]
+    /// has loaded it, preventing request-path file I/O.
+    #[must_use]
+    pub fn internal_authority_shared_secret(&self) -> Option<&str> {
+        match self.internal_authority_shared_secret.as_ref() {
+            Some(ClientSecret::Value(value)) => Some(value.as_str()),
+            Some(ClientSecret::File(_)) | None => None,
+        }
+    }
+
+    async fn resolve_internal_authority_shared_secret(&mut self) -> anyhow::Result<()> {
+        let Some(source) = self.internal_authority_shared_secret.as_ref() else {
+            return Ok(());
+        };
+        let value = source.value().await.map_err(|error| {
+            anyhow::anyhow!(
+                "failed to load arkret Station {:?} internal authority shared secret: {error}",
+                self.name
+            )
+        })?;
+        let value = value.trim().to_owned();
+        anyhow::ensure!(
+            !value.is_empty(),
+            "arkret Station {:?} internal authority shared secret must not be empty",
+            self.name
+        );
+        self.internal_authority_shared_secret = Some(ClientSecret::Value(value));
+        Ok(())
+    }
+
     /// Whether this Station has the complete minimal peer binding used by the
     /// fixed internal authority routes.
     #[must_use]
     pub fn has_internal_authority_peer(&self) -> bool {
-        self.service_id.is_some()
-            && self.trust_domain.is_some()
+        self.trust_domain.is_some()
             && self
-                .session_grant_introspection_bearer
-                .as_deref()
-                .is_some_and(|bearer| !bearer.trim().is_empty())
+                .internal_authority_shared_secret()
+                .is_some_and(|secret| !secret.trim().is_empty())
     }
 }
 
@@ -743,30 +829,18 @@ mod tests {
     }
 
     #[test]
-    fn station_config_persists_explicit_service_identity_pin() {
-        let config: ArkretConfig = serde_json::from_value(serde_json::json!({
-            "stations": [{
-                "name": "principal-a",
-                "endpoint": "https://principal.example/",
-                "service_id": "ak:did_core:webvh:QmUz1hyNMdPEzWvu41UVazczohzzXmiWFy8w6xxrboxN3i"
-            }]
-        }))
-        .unwrap();
-
-        let serialized = serde_json::to_value(&config.stations[0]).unwrap();
-        assert_eq!(serialized["name"], "principal-a");
-        assert_eq!(serialized["endpoint"], "https://principal.example/");
-        assert_eq!(
-            serialized["service_id"],
-            "ak:did_core:webvh:QmUz1hyNMdPEzWvu41UVazczohzzXmiWFy8w6xxrboxN3i"
+    fn station_config_rejects_service_identity_pin() {
+        assert!(
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "stations": [{
+                    "name": "principal-a",
+                    "endpoint": "https://principal.example/",
+                    "service_id": "ak:did_core:webvh:QmUz1hyNMdPEzWvu41UVazczohzzXmiWFy8w6xxrboxN3i"
+                }]
+            }))
+            .is_err()
         );
-        assert!(serialized.get("audience").is_none());
-        assert!(serialized.get("did").is_none());
-        assert!(config.validate(&figment::Figment::new()).is_ok());
-    }
 
-    #[test]
-    fn station_config_allows_missing_service_identity_pin() {
         let config: ArkretConfig = serde_json::from_value(serde_json::json!({
             "stations": [{
                 "name": "principal-a",
@@ -774,31 +848,21 @@ mod tests {
             }]
         }))
         .unwrap();
-
-        assert_eq!(config.stations[0].service_id, None);
-        // An omitted pin is valid configuration: the effective pin then comes
-        // from the persisted trust enrollment (bootstrap), never from
-        // implicit describe TOFU at startup.
         assert!(config.validate(&figment::Figment::new()).is_ok());
-
         let serialized = serde_json::to_value(&config.stations[0]).unwrap();
         assert!(serialized.get("service_id").is_none());
     }
 
     #[test]
-    fn internal_authority_bearer_requires_complete_unique_station_binding() {
+    fn internal_authority_shared_secret_requires_complete_unique_station_binding() {
         let complete = ArkretConfig {
             trust_domain: Some("ak:trust_domain:authority.example".to_owned()),
             stations: vec![StationConfig {
                 name: "principal-a".to_owned(),
                 endpoint: "https://principal-a.example/".parse().unwrap(),
-                service_id: Some(
-                    arkret_identifiers::DidCoreId::new(
-                        "ak:did_core:web:principal-a.example".to_owned(),
-                    )
-                    .unwrap(),
-                ),
-                session_grant_introspection_bearer: Some("credential-a".to_owned()),
+                internal_authority_shared_secret: Some(ClientSecret::Value(
+                    "credential-a".to_owned(),
+                )),
                 embedded_webvh_registration_bearer: None,
                 trust_domain: Some("ak:trust_domain:principal-a.example".to_owned()),
             }],
@@ -807,18 +871,10 @@ mod tests {
         assert!(complete.validate(&figment::Figment::new()).is_ok());
         assert!(complete.stations[0].has_internal_authority_peer());
 
-        let mut missing_bearer = complete.clone();
-        missing_bearer.stations[0].session_grant_introspection_bearer = None;
-        assert!(missing_bearer.validate(&figment::Figment::new()).is_ok());
-        assert!(!missing_bearer.stations[0].has_internal_authority_peer());
-
-        let mut missing_service_id = complete.clone();
-        missing_service_id.stations[0].service_id = None;
-        assert!(
-            missing_service_id
-                .validate(&figment::Figment::new())
-                .is_err()
-        );
+        let mut missing_secret = complete.clone();
+        missing_secret.stations[0].internal_authority_shared_secret = None;
+        assert!(missing_secret.validate(&figment::Figment::new()).is_ok());
+        assert!(!missing_secret.stations[0].has_internal_authority_peer());
 
         let mut missing_station_domain = complete.clone();
         missing_station_domain.stations[0].trust_domain = None;
@@ -836,18 +892,139 @@ mod tests {
                 .is_err()
         );
 
-        let mut duplicate_bearer = complete;
-        let mut second = duplicate_bearer.stations[0].clone();
+        let mut duplicate_secret = complete;
+        let mut second = duplicate_secret.stations[0].clone();
         second.name = "principal-b".to_owned();
         second.endpoint = "https://principal-b.example/".parse().unwrap();
-        second.service_id = Some(
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:principal-b.example".to_owned())
-                .unwrap(),
-        );
         second.trust_domain = Some("ak:trust_domain:principal-b.example".to_owned());
-        duplicate_bearer.stations.push(second);
-        duplicate_bearer.owning_station = Some("principal-a".to_owned());
-        assert!(duplicate_bearer.validate(&figment::Figment::new()).is_err());
+        duplicate_secret.stations.push(second);
+        duplicate_secret.owning_station = Some("principal-a".to_owned());
+        assert!(duplicate_secret.validate(&figment::Figment::new()).is_err());
+    }
+
+    #[tokio::test]
+    async fn internal_authority_shared_secret_file_is_resolved_once() {
+        let path = std::env::temp_dir().join(format!(
+            "coauth-internal-authority-secret-{}",
+            ulid::Ulid::generate()
+        ));
+        tokio::fs::write(&path, " file-secret\n").await.unwrap();
+        let path = Utf8PathBuf::from_path_buf(path).unwrap();
+        let mut config: ArkretConfig = serde_json::from_value(serde_json::json!({
+            "trust_domain": "ak:trust_domain:authority.example",
+            "stations": [{
+                "name": "principal-a",
+                "endpoint": "https://principal.example/",
+                "trust_domain": "ak:trust_domain:principal.example",
+                "internal_authority_shared_secret_file": path.clone()
+            }]
+        }))
+        .unwrap();
+
+        assert_eq!(config.stations[0].internal_authority_shared_secret(), None);
+        config
+            .resolve_internal_authority_shared_secrets()
+            .await
+            .unwrap();
+        assert_eq!(
+            config.stations[0].internal_authority_shared_secret(),
+            Some("file-secret")
+        );
+        tokio::fs::remove_file(path).await.unwrap();
+        assert_eq!(
+            config.stations[0].internal_authority_shared_secret(),
+            Some("file-secret")
+        );
+    }
+
+    #[test]
+    fn internal_authority_shared_secret_rejects_inline_and_file_sources_together() {
+        assert!(
+            serde_json::from_value::<ArkretConfig>(serde_json::json!({
+                "trust_domain": "ak:trust_domain:authority.example",
+                "stations": [{
+                    "name": "principal-a",
+                    "endpoint": "https://principal.example/",
+                    "trust_domain": "ak:trust_domain:principal.example",
+                    "internal_authority_shared_secret": "inline-secret",
+                    "internal_authority_shared_secret_file": "secret.txt"
+                }]
+            }))
+            .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn internal_authority_shared_secret_rejects_empty_file() {
+        let path = std::env::temp_dir().join(format!(
+            "coauth-empty-internal-authority-secret-{}",
+            ulid::Ulid::generate()
+        ));
+        tokio::fs::write(&path, "  \n").await.unwrap();
+        let path = Utf8PathBuf::from_path_buf(path).unwrap();
+        let mut config: ArkretConfig = serde_json::from_value(serde_json::json!({
+            "trust_domain": "ak:trust_domain:authority.example",
+            "stations": [{
+                "name": "principal-a",
+                "endpoint": "https://principal.example/",
+                "trust_domain": "ak:trust_domain:principal.example",
+                "internal_authority_shared_secret_file": path.clone()
+            }]
+        }))
+        .unwrap();
+
+        assert!(
+            config
+                .resolve_internal_authority_shared_secrets()
+                .await
+                .is_err()
+        );
+        tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn internal_authority_shared_secret_rejects_duplicate_file_values() {
+        let suffix = ulid::Ulid::generate();
+        let first_path =
+            std::env::temp_dir().join(format!("coauth-internal-authority-secret-a-{suffix}"));
+        let second_path =
+            std::env::temp_dir().join(format!("coauth-internal-authority-secret-b-{suffix}"));
+        tokio::fs::write(&first_path, "duplicate-secret")
+            .await
+            .unwrap();
+        tokio::fs::write(&second_path, "duplicate-secret\n")
+            .await
+            .unwrap();
+        let first_path = Utf8PathBuf::from_path_buf(first_path).unwrap();
+        let second_path = Utf8PathBuf::from_path_buf(second_path).unwrap();
+        let mut config: ArkretConfig = serde_json::from_value(serde_json::json!({
+            "trust_domain": "ak:trust_domain:authority.example",
+            "owning_station": "principal-a",
+            "stations": [
+                {
+                    "name": "principal-a",
+                    "endpoint": "https://principal-a.example/",
+                    "trust_domain": "ak:trust_domain:principal-a.example",
+                    "internal_authority_shared_secret_file": first_path.clone()
+                },
+                {
+                    "name": "principal-b",
+                    "endpoint": "https://principal-b.example/",
+                    "trust_domain": "ak:trust_domain:principal-b.example",
+                    "internal_authority_shared_secret_file": second_path.clone()
+                }
+            ]
+        }))
+        .unwrap();
+
+        assert!(
+            config
+                .resolve_internal_authority_shared_secrets()
+                .await
+                .is_err()
+        );
+        tokio::fs::remove_file(first_path).await.unwrap();
+        tokio::fs::remove_file(second_path).await.unwrap();
     }
 
     /// The target's trust domain is a registered fact of the Station entry
@@ -859,8 +1036,7 @@ mod tests {
         let station = |trust_domain: Option<&str>| StationConfig {
             name: "soland".to_owned(),
             endpoint: "https://soland.example/".parse().unwrap(),
-            service_id: None,
-            session_grant_introspection_bearer: None,
+            internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: trust_domain.map(ToOwned::to_owned),
         };
@@ -896,8 +1072,7 @@ mod tests {
         let station = |name: &str| StationConfig {
             name: name.to_owned(),
             endpoint: format!("https://{name}.example/").parse().unwrap(),
-            service_id: None,
-            session_grant_introspection_bearer: None,
+            internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         };

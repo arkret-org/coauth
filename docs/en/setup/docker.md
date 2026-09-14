@@ -77,13 +77,12 @@ arkret:
   stations:
     - name: soland
       endpoint: https://soland.example.com/
-      service_id: ak:did_core:webvh:<soland-scid>
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
 secrets:
-  encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  keys:
-    - key_file: /var/lib/coauth/signing.pem
+  backend: encrypted_file
+  path: /var/lib/coauth/keystore.v1
+  master_key_file: /run/secrets/coauth_runtime_keys_master_key
 
 passwords:
   enabled: true

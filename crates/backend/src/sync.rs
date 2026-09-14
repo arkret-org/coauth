@@ -7,7 +7,7 @@ use coauth_data::upstream_oauth::{
     UpstreamOAuthProviderFilter, UpstreamOAuthProviderParams, provider,
 };
 use coauth_data::{Clock, Pagination, RepositoryAccess};
-use coauth_keystore::Encrypter;
+use coauth_keyring::Encrypter;
 use coauth_storage_postgres::PgRepository;
 use coauth_storage_postgres::advisory_lock::advisory_lock_key;
 use diesel::sql_query;

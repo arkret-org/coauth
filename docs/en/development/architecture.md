@@ -40,7 +40,7 @@ This includes:
  - [`coauth-templates`][coauth-templates]: Server-rendered template registry and render context
  - [`coauth-i18n`][coauth-i18n]: Fluent translation loading
  - [`coauth-principal`][coauth-principal]: Station client types and helpers
- - [`coauth-keystore`][coauth-keystore]: Key material storage and encryption
+ - [`coauth-keyring`][coauth-keyring]: Process-local JOSE signing, verification, and encryption; durable custody is provided by `arkret-keystore`
  - [`coauth-iana`][coauth-iana]: Hand-maintained enums for the IANA JOSE and OAuth registries, declared through the crate's `open_enum!` / `closed_enum!` macros
  - [`coauth-jose`][coauth-jose]: JWT/JWS/JWE/JWK abstraction
  - [`coauth-oauth-types`][coauth-oauth-types]: Structures and types for OAuth/OpenID Connect endpoints
@@ -58,7 +58,7 @@ This includes:
 [coauth-templates]: ../rustdoc/coauth_templates/index.html
 [coauth-i18n]: ../rustdoc/coauth_i18n/index.html
 [coauth-principal]: ../rustdoc/coauth_principal/index.html
-[coauth-keystore]: ../rustdoc/coauth_keystore/index.html
+[coauth-keyring]: ../rustdoc/coauth_keyring/index.html
 [coauth-iana]: ../rustdoc/coauth_iana/index.html
 [coauth-jose]: ../rustdoc/coauth_jose/index.html
 [coauth-oauth-types]: ../rustdoc/coauth_oauth_types/index.html

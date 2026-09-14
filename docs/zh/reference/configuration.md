@@ -79,7 +79,7 @@ arkret:
   stations:
     - name: soland
       endpoint: https://soland.example.com/
-      service_id: ak:did_core:webvh:<soland-scid>
+      internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 
   # 配置多个 Station trust edge 时必须显式指定。
@@ -93,9 +93,11 @@ arkret:
   session_grant_ttl: 300
 ```
 
-- `stations`：受信任 Station 配置；涉及该服务身份认证的操作必须存在
-  授权 pin——显式配置的 `service_id` 或 `coauth station trust bootstrap`
-  持久化的 trust enrollment——否则 fail closed；Describe 不能作为身份发现或授权根
+- `stations`：受信任 Station 配置；首次启动从 exact endpoint 完整验证 WebVH
+  history 与 authenticated service resolution 后自动持久化身份和防回滚 floor。
+  不配置 `service_id`，也不需要管理员 bootstrap；裸 Describe 或 shared secret
+  单独都不能建立或替换身份。shared secret 可内联，也可通过同名 `_file` 字段在
+  启动时读取一次。
 - `deployment_profile`：身份部署 profile。只有 `personal_node` 可接受
   `did:web` principal DID。
 - `principal_method`：principal DID 方法。默认 `did:webvh`；`did:web`
@@ -107,7 +109,7 @@ arkret:
   完成后，它仅在 Account Authority 被委托的私有 issuer/controller 职责中使用已验证的
   owning Station 身份。
 - Station 的 audience/DID 由配置 pin 或持久化的 trust enrollment 固定；
-  `/_arkret/describe` 仅用于 bootstrap/验证时的在线身份链核验。
+  `/_arkret/describe` 仅用于首次绑定与持续复验时的在线身份链核验。
 - `admin_audience`：Arkret admin 集成期望的 audience，取 `did_core_id`；默认回退到 owning Station id
 - `session_grant_ttl`：REST auth bridge 登录/交换路径以及 refresh endpoint
   返回的 Arkret session-grant JWT 生命周期，单位秒；默认 `300`（5 分钟）。
@@ -137,17 +139,19 @@ clients:
 
 ## `secrets`
 
-加密和签名密钥。
+应用加密密钥和 JOSE 私钥的持久存储。
 
 ```yaml
 secrets:
-  encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  keys:
-    - key_file: ./keys/signing.pem
+  backend: encrypted_file
+  path: /var/lib/coauth/keystore.v1
+  master_key_file: /run/secrets/coauth_runtime_keys_master_key
 ```
 
-至少应配置一把签名密钥。`coauth` 会用这些密钥签发 ID token、signed userinfo、JWKS，以及
-Arkret session grant。
+`backend` 可选当前用户的平台凭据库 `platform`，或 `encrypted_file`。后者的数据文件与
+32-byte、base64 编码的 master-key 文件必须分开备份。KeyStore 为空时，只运行一个带
+`--first-provisioning` 的生产 server；后续 server、worker 和 `config sync` 只装载已存在
+的 bundle，缺失时 fail closed。所有副本必须共享同一 encrypted file 和 master key。
 
 ## `passwords`
 

@@ -145,7 +145,7 @@ pub async fn directory_resolve_handle(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let binding_store = depot.verified_did_binding_store()?;
     let limiter = depot.limiter()?;
     let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
@@ -214,7 +214,7 @@ pub async fn directory_resolve_handle(
         &*clock,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         &user,
         &principal_binding.account_id,
         arkret_models_identity::HandleClaimKind::HandleBinding,

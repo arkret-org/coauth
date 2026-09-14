@@ -1,27 +1,16 @@
-//! Station trust resolution: three-layer pin resolution, asynchronous server
-//! startup verification, mandatory worker preflight, one-time bootstrap and
-//! explicit replacement.
+//! Station trust resolution: automatic verified durable binding,
+//! asynchronous server startup verification, mandatory worker preflight and
+//! explicit high-risk replacement.
 //!
 //! ## Why
 //!
-//! `/_arkret/describe` is capability metadata, not an authorization root.
-//! `overview/architecture.md` §2.8 makes the owning Station's identity,
-//! endpoint and trust domain explicit deployment configuration: a missing or
-//! conflicting configuration MUST be rejected, a target change MUST go through
-//! an explicit rebinding, and the runtime MUST NOT fall back to guessing the
-//! peer from `describe`, from the first `stations[]` entry or from a network
-//! error. The effective audience pin for each configured Station is
-//! resolved from exactly one of three layers, in priority order:
-//!
-//! 1. the explicit config pin (`stations[].service_id`);
-//! 2. the persisted trust enrollment written by an explicit `coauth station trust bootstrap` /
-//!    `replace`;
-//! 3. nothing — business routes remain unavailable and point at the bootstrap command.
-//!
-//! A remote describe response only ever *confirms* a pin. It can never
-//! create or replace one outside the explicit bootstrap/replace operations,
-//! and an endpoint that starts presenting a different identity keeps its
-//! pinned one until an operator rebinds it.
+//! `/_arkret/describe` is discovery metadata, not an authorization root. On a
+//! fresh database, the configured exact endpoint plus TLS/egress policy and a
+//! fully verified WebVH history / authenticated service resolution establish
+//! the initial durable binding. Thereafter the persisted service core and
+//! history floor are mandatory. A shared secret never establishes or replaces
+//! identity, and an endpoint change is accepted automatically only when the
+//! same service core proves continuous, non-rollback method history.
 //!
 //! ## Concurrency
 //!
@@ -180,8 +169,7 @@ impl StationTrustResolver {
         self.write_pin(endpoint, service_id, Instant::now(), PinWrite::Verified);
     }
 
-    /// Record the outcome of an explicit rebinding, which is the only path
-    /// allowed to move an endpoint to a different identity.
+    /// Record the outcome of an explicit identity replacement.
     pub(crate) fn note_rebound(&self, endpoint: &Url, service_id: DidCoreId) {
         self.write_pin(endpoint, service_id, Instant::now(), PinWrite::Rebound);
     }
@@ -241,21 +229,14 @@ enum PinWrite {
     Rebound,
 }
 
-/// The effective authorization audience for `server`.
-///
-/// Three-layer resolution: the explicit config pin wins when present; the
-/// verified persisted enrollment pin (cached by preflight) is used when the
-/// config omits the pin; otherwise `None` and callers fail closed. Describe
-/// metadata never supplies this value.
+/// The effective authorization audience for `server`, sourced only from a
+/// freshly verified durable binding cached by preflight.
 #[must_use]
 pub fn effective_audience(
     server: &StationConfig,
     resolver: &StationTrustResolver,
 ) -> Option<DidCoreId> {
-    server
-        .service_id
-        .clone()
-        .or_else(|| resolver.resolve(&server.endpoint))
+    resolver.resolve(&server.endpoint)
 }
 
 /// [`effective_audience`] against the process-wide [`shared`] resolver — the
@@ -269,9 +250,8 @@ pub fn effective_audience_shared(server: &StationConfig) -> Option<DidCoreId> {
 /// and the owning Station identity has been delegated to the Account
 /// Authority runtime.
 ///
-/// An empty Station list needs no trust gate. A configured static `service_id`
-/// is not sufficient here: readiness requires fresh endpoint verification,
-/// represented by the resolver cache populated by the verifier.
+/// An empty Station list needs no trust gate. Readiness requires fresh endpoint
+/// verification represented by the resolver cache populated by the verifier.
 #[must_use]
 pub fn is_ready(arkret_config: &ArkretConfig) -> bool {
     if arkret_config.stations.is_empty() {
@@ -320,7 +300,7 @@ pub enum TrustVerificationError {
     /// The observed service id does not equal the effective pin.
     #[error("observed service_id {observed} does not match the effective pin {expected}")]
     IdentityMismatch {
-        /// The effective pin (config or persisted enrollment).
+        /// The service identity held by the durable binding.
         expected: String,
         /// The service id the endpoint currently presents.
         observed: String,
@@ -615,7 +595,7 @@ pub async fn verify_station_identity(
     })
 }
 
-/// Failure of a bootstrap / replace operation.
+/// Failure of automatic enrollment or explicit replacement.
 #[derive(Debug, thiserror::Error)]
 pub enum TrustEnrollmentError {
     /// Online identity verification failed.
@@ -629,14 +609,6 @@ pub enum TrustEnrollmentError {
         /// Canonical endpoint.
         endpoint: String,
         /// Currently enrolled service id.
-        existing: String,
-    },
-    /// The operator-facing name is bound to a different endpoint.
-    #[error("name {name} is already enrolled for a different endpoint ({existing})")]
-    ConflictingName {
-        /// Operator-facing name.
-        name: String,
-        /// Currently enrolled endpoint.
         existing: String,
     },
     /// No enrollment exists to replace.
@@ -657,28 +629,16 @@ pub enum TrustEnrollmentError {
     /// The verified identity already equals the stored pin.
     #[error("the verified identity {0} already equals the stored pin; nothing to replace")]
     AlreadyCurrent(String),
-    /// The configured explicit pin disagrees with the verified identity.
-    #[error(
-        "the configured service_id pin {configured} does not match the verified identity {verified}"
-    )]
-    ConfiguredPinMismatch {
-        /// Configured pin.
-        configured: String,
-        /// Verified identity.
-        verified: String,
-    },
     /// Storage failure.
     #[error("storage failure: {0}")]
     Storage(#[from] RepositoryError),
 }
 
-/// Outcome of a successful bootstrap.
+/// Outcome of a successful automatic enrollment.
 #[derive(Debug)]
-pub struct BootstrapOutcome {
+struct AutomaticEnrollmentOutcome {
     /// The persisted (or pre-existing, for idempotent reruns) enrollment.
     pub enrollment: StationTrustEnrollment,
-    /// Whether the enrollment already existed with the same identity.
-    pub already_enrolled: bool,
 }
 
 fn enrollment_params(
@@ -738,96 +698,86 @@ async fn record_failure_audit(
     }
 }
 
-/// One-time idempotent trust bootstrap for one configured Station.
+fn same_enrollment_tuple(left: &StationTrustEnrollment, right: &StationTrustEnrollment) -> bool {
+    left.name == right.name
+        && left.canonical_endpoint == right.canonical_endpoint
+        && left.service_id == right.service_id
+        && left.did == right.did
+        && left.method_history_head == right.method_history_head
+        && left.version_id == right.version_id
+}
+
+fn enrollment_matches_verified(
+    enrollment: &StationTrustEnrollment,
+    server: &StationConfig,
+    verified: &VerifiedStationIdentity,
+) -> bool {
+    enrollment.name == server.name
+        && enrollment.canonical_endpoint == verified.canonical_endpoint
+        && enrollment.service_id == verified.service_id
+        && enrollment.did == verified.did
+        && enrollment.method_history_head == verified.method_history_head
+        && enrollment.version_id == verified.version_id
+}
+
+/// Verify and atomically create the initial durable Station binding.
 ///
-/// Verifies the DID control chain online, then creates the enrollment and
-/// its audit entry in a single transaction. Re-running with an unchanged
-/// identity succeeds without altering the pin; an endpoint enrolled with a
-/// different identity is rejected in favour of the explicit replace flow.
-pub async fn bootstrap(
+/// A uniqueness conflict is accepted only when re-reading by both name and
+/// endpoint yields the exact tuple this invocation verified. This makes
+/// concurrent first startup idempotent without permitting last-writer-wins.
+async fn automatic_enroll(
     repository_factory: &PgRepositoryFactory,
     http_client: &reqwest::Client,
     server: &StationConfig,
-    source: StationTrustSource,
-) -> Result<BootstrapOutcome, TrustEnrollmentError> {
-    let verified = match verify_station_identity(
-        http_client,
-        &server.endpoint,
-        server.service_id.as_ref(),
-        None,
-    )
-    .await
-    {
+) -> Result<AutomaticEnrollmentOutcome, TrustEnrollmentError> {
+    let verified = match verify_station_identity(http_client, &server.endpoint, None, None).await {
         Ok(verified) => verified,
         Err(error) => {
-            // The asynchronous server bootstrap retries ordinary outages.
+            // The asynchronous server preflight retries ordinary outages.
             // Recording every 5-second 502/timeout would turn expected startup
             // ordering into an unbounded audit-log write loop. Evidence and
             // policy failures remain durable audit events.
             if !error.is_transient_network() {
-                record_failure_audit(
-                    repository_factory,
-                    &server.name,
-                    server.service_id.clone(),
-                    error.to_string(),
-                )
-                .await;
+                record_failure_audit(repository_factory, &server.name, None, error.to_string())
+                    .await;
             }
             return Err(error.into());
         }
     };
 
     let mut repo = repository_factory.create().await?;
-    // Bind the lookup result first: the repository guard borrows `repo`
-    // mutably, and holding it across the `if let` scrutinee would block the
-    // writes in the idempotent-rerun path.
-    let existing_by_endpoint = repo
-        .station_trust()
-        .find_by_endpoint(&verified.canonical_endpoint)
-        .await?;
-    if let Some(existing) = existing_by_endpoint {
-        if existing.service_id != verified.service_id {
-            return Err(TrustEnrollmentError::ConflictingEnrollment {
-                endpoint: verified.canonical_endpoint.clone(),
-                existing: existing.service_id.to_string(),
-            });
-        }
-        if existing.name != server.name {
-            return Err(TrustEnrollmentError::ConflictingName {
-                name: server.name.clone(),
-                existing: existing.name,
-            });
-        }
-        // Idempotent rerun: advance the anti-rollback floor and the
-        // last-verified timestamp, never the pin.
-        repo.station_trust()
-            .record_verification(
-                &SystemClock::default(),
-                &verified.canonical_endpoint,
-                &verified.did,
-                &verified.method_history_head,
-                &verified.version_id,
-            )
-            .await?;
-        repo.save().await?;
-        shared().note_verified(&server.endpoint, verified.service_id.clone());
-        return Ok(BootstrapOutcome {
-            enrollment: existing,
-            already_enrolled: true,
-        });
-    }
-    if let Some(existing) = repo.station_trust().find_by_name(&server.name).await? {
-        return Err(TrustEnrollmentError::ConflictingName {
-            name: server.name.clone(),
-            existing: existing.canonical_endpoint,
-        });
-    }
-
+    let source = StationTrustSource::AutomaticVerified;
     let params = enrollment_params(server, &verified, source);
     let enrollment = repo
         .station_trust()
         .enroll(&SystemClock::default(), params)
         .await?;
+    let Some(enrollment) = enrollment else {
+        let by_name = repo.station_trust().find_by_name(&server.name).await?;
+        let by_endpoint = repo
+            .station_trust()
+            .find_by_endpoint(&verified.canonical_endpoint)
+            .await?;
+        let Some(existing) = by_name.filter(|by_name| {
+            by_endpoint.as_ref().is_some_and(|by_endpoint| {
+                same_enrollment_tuple(by_name, by_endpoint)
+                    && enrollment_matches_verified(by_name, server, &verified)
+            })
+        }) else {
+            return Err(TrustEnrollmentError::ConflictingEnrollment {
+                endpoint: verified.canonical_endpoint.clone(),
+                existing: by_endpoint.map_or_else(
+                    || "different name binding".to_owned(),
+                    |value| value.service_id.to_string(),
+                ),
+            });
+        };
+        repo.cancel().await?;
+        shared().note_verified(&server.endpoint, verified.service_id.clone());
+        return Ok(AutomaticEnrollmentOutcome {
+            enrollment: existing,
+        });
+    };
     let mut rng = ChaCha20Rng::from_entropy();
     repo.station_trust()
         .record_audit(
@@ -839,8 +789,7 @@ pub async fn bootstrap(
                 service_id: Some(verified.service_id.clone()),
                 previous_service_id: None,
                 detail: format!(
-                    "enrolled via {} at {}",
-                    source.as_str(),
+                    "automatically verified and enrolled at {}",
                     verified.canonical_endpoint
                 ),
             },
@@ -848,10 +797,7 @@ pub async fn bootstrap(
         .await?;
     repo.save().await?;
     shared().note_verified(&server.endpoint, verified.service_id.clone());
-    Ok(BootstrapOutcome {
-        enrollment,
-        already_enrolled: false,
-    })
+    Ok(AutomaticEnrollmentOutcome { enrollment })
 }
 
 /// Outcome of a successful explicit replacement.
@@ -899,25 +845,13 @@ pub async fn replace(
             verified.service_id.to_string(),
         ));
     }
-    if let Some(configured) = server.service_id.as_ref()
-        && configured != &verified.service_id
-    {
-        // The explicit config pin has highest priority; replacing the
-        // persisted enrollment underneath it would split the deployment's
-        // view of the authorization root.
-        return Err(TrustEnrollmentError::ConfiguredPinMismatch {
-            configured: configured.to_string(),
-            verified: verified.service_id.to_string(),
-        });
-    }
-
     let applied = repo
         .station_trust()
         .replace(
             &SystemClock::default(),
             &server.name,
             expect_old,
-            enrollment_params(server, &verified, StationTrustSource::OperatorCli),
+            enrollment_params(server, &verified, StationTrustSource::OperatorReplacement),
         )
         .await?;
     if !applied {
@@ -962,7 +896,7 @@ pub async fn replace(
             did: verified.did.clone(),
             method_history_head: verified.method_history_head.clone(),
             version_id: verified.version_id.clone(),
-            source: StationTrustSource::OperatorCli,
+            source: StationTrustSource::OperatorReplacement,
             enrolled_at: existing.enrolled_at,
             last_verified_at: Utc::now(),
         },
@@ -1004,8 +938,8 @@ pub async fn revoke(
 
 /// Mandatory online startup preflight for every configured Station.
 ///
-/// Resolves the effective pin (config layer, then persisted enrollment),
-/// verifies the DID control chain online for each server, advances the
+/// Loads or establishes the durable pin, verifies the DID control chain
+/// online for each server, advances the
 /// persisted anti-rollback floor, populates the request-path cache, and only
 /// then returns. Any missing pin, unreachable server, invalid evidence,
 /// rollback or identity mismatch fails the whole startup before the business
@@ -1071,8 +1005,8 @@ impl RevalidationSchedule {
 /// discovery, JWKS and health while [`is_ready`] is false; all business
 /// requests fail closed with 503.
 ///
-/// Workers still use [`preflight_and_spawn`], because they expose no bootstrap
-/// HTTP surface and must not process jobs before Station trust is ready.
+/// Workers still use [`preflight_and_spawn`], because they expose no public
+/// cold-start surface and must not process jobs before Station trust is ready.
 pub fn spawn_preflight_and_revalidation(
     repository_factory: PgRepositoryFactory,
     arkret_config: ArkretConfig,
@@ -1109,7 +1043,7 @@ pub fn spawn_preflight_and_revalidation(
                         endpoint = %server.endpoint,
                         %error,
                         retry_seconds = initial_retry_interval.as_secs(),
-                        "Station trust is not ready; Coauth bootstrap routes remain available",
+                        "Station trust is not ready; only Coauth cold-start routes remain available",
                     );
                 }
             }
@@ -1163,63 +1097,122 @@ async fn preflight_server(
     let canonical_endpoint = canonical_endpoint_key(&server.endpoint)
         .ok_or_else(|| anyhow::anyhow!("Station {:?} endpoint is invalid", server.name))?;
     let mut repo = repository_factory.create().await?;
-    let enrollment = repo
+    let by_name = repo.station_trust().find_by_name(&server.name).await?;
+    let by_endpoint = repo
         .station_trust()
         .find_by_endpoint(&canonical_endpoint)
         .await?;
+    repo.cancel().await?;
 
-    // Layer resolution. A config pin that disagrees with the persisted
-    // enrollment is a hard conflict, never a silent choice.
-    // `overview/architecture.md` §2.8 / `service-http-binding.md` §2.2.3: the
-    // owning Station's identity, endpoint and trust domain come from explicit
-    // deployment configuration. A missing pin is a rejection and a conflicting
-    // pin is a hard failure; neither is ever resolved by adopting whatever
-    // identity `describe` currently asserts.
-    let effective = match (server.service_id.as_ref(), enrollment.as_ref()) {
-        (Some(configured), Some(persisted)) if configured != &persisted.service_id => {
-            anyhow::bail!(
-                "Station {:?} ({canonical_endpoint}): configured service_id {configured} conflicts with the persisted enrollment {}; resolve with `coauth station trust replace` or fix the configuration",
-                server.name,
-                persisted.service_id,
+    let enrollment = match (by_name, by_endpoint) {
+        (None, None) => {
+            let outcome = automatic_enroll(repository_factory, http_client, server)
+                .await
+                .map_err(|error| {
+                    anyhow::anyhow!(
+                        "Station {:?} ({canonical_endpoint}) failed automatic trust enrollment: {error}",
+                        server.name
+                    )
+                })?;
+            let enrollment = outcome.enrollment;
+            shared().note_verified(&server.endpoint, enrollment.service_id.clone());
+            delegate_owning_station_identity(
+                arkret_config,
+                server,
+                enrollment.service_id.clone(),
+                enrollment.did.clone(),
             );
+            return Ok(());
         }
-        (Some(configured), _) => configured.clone(),
-        (None, Some(persisted)) => persisted.service_id.clone(),
-        (None, None) => anyhow::bail!(
-            "Station {:?} ({canonical_endpoint}) is not enrolled: no config service_id pin and no persisted trust enrollment; set `stations[].service_id` or run `coauth station trust bootstrap --name {}` first",
+        (None, Some(endpoint_binding)) => anyhow::bail!(
+            "Station {:?} endpoint {canonical_endpoint} is already bound to Station {:?}",
             server.name,
-            server.name,
+            endpoint_binding.name
         ),
+        (Some(name_binding), Some(endpoint_binding)) => {
+            if !same_enrollment_tuple(&name_binding, &endpoint_binding) {
+                anyhow::bail!(
+                    "Station {:?} name and endpoint resolve to different durable bindings",
+                    server.name
+                );
+            }
+            name_binding
+        }
+        (Some(name_binding), None) => name_binding,
     };
 
-    let floor = enrollment.as_ref().map(|persisted| {
-        (
-            persisted.method_history_head.as_str(),
-            persisted.version_id.as_str(),
+    let old_endpoint = enrollment.canonical_endpoint.clone();
+    let old_head = enrollment.method_history_head.clone();
+    let verified = verify_station_identity(
+        http_client,
+        &server.endpoint,
+        Some(&enrollment.service_id),
+        Some((
+            enrollment.method_history_head.as_str(),
+            enrollment.version_id.as_str(),
+        )),
+    )
+    .await
+    .map_err(|error| {
+        anyhow::anyhow!(
+            "Station {:?} ({canonical_endpoint}) failed startup verification: {error}",
+            server.name
         )
-    });
-    let verified = verify_station_identity(http_client, &server.endpoint, Some(&effective), floor)
-        .await
-        .map_err(|error| {
-            anyhow::anyhow!(
-                "Station {:?} ({canonical_endpoint}) failed startup verification: {error}",
-                server.name
+    })?;
+
+    let endpoint_changed = old_endpoint != canonical_endpoint;
+    let mut repo = repository_factory.create().await?;
+    let applied = if endpoint_changed {
+        repo.station_trust()
+            .relocate_verified(
+                &SystemClock::default(),
+                &server.name,
+                &enrollment.service_id,
+                &old_endpoint,
+                &old_head,
+                enrollment_params(server, &verified, StationTrustSource::AutomaticVerified),
             )
-        })?;
-    if enrollment.is_some() {
+            .await?
+    } else {
         repo.station_trust()
             .record_verification(
                 &SystemClock::default(),
+                &server.name,
                 &canonical_endpoint,
+                &old_head,
                 &verified.did,
                 &verified.method_history_head,
                 &verified.version_id,
             )
-            .await?;
-        repo.save().await?;
+            .await?
+    };
+    if !applied {
+        anyhow::bail!(
+            "Station {:?} durable binding changed concurrently; retrying full verification is required",
+            server.name
+        );
     }
-    shared().note_verified(&server.endpoint, effective.clone());
-    delegate_owning_station_identity(arkret_config, server, effective, verified.did);
+    if endpoint_changed {
+        let mut rng = ChaCha20Rng::from_entropy();
+        repo.station_trust()
+            .record_audit(
+                &mut rng,
+                &SystemClock::default(),
+                NewStationTrustAudit {
+                    enrollment_name: server.name.clone(),
+                    action: StationTrustAuditAction::EndpointRelocated,
+                    service_id: Some(verified.service_id.clone()),
+                    previous_service_id: None,
+                    detail: format!(
+                        "verified endpoint continuity from {old_endpoint} to {canonical_endpoint}"
+                    ),
+                },
+            )
+            .await?;
+    }
+    repo.save().await?;
+    shared().note_verified(&server.endpoint, verified.service_id.clone());
+    delegate_owning_station_identity(arkret_config, server, verified.service_id, verified.did);
     Ok(())
 }
 
@@ -1240,33 +1233,59 @@ async fn revalidate_all(
             soft_shutdown.cancel();
             return;
         };
-        let floor = match repository_factory.create().await {
-            Ok(mut repo) => match canonical_endpoint_key(&server.endpoint) {
-                Some(endpoint) => match repo.station_trust().find_by_endpoint(&endpoint).await {
-                    Ok(Some(enrollment)) => Some((
-                        enrollment.method_history_head.clone(),
-                        enrollment.version_id.clone(),
-                    )),
-                    Ok(None) => None,
-                    Err(error) => {
-                        tracing::warn!(%error, "failed to load trust enrollment floor; keeping last-verified state");
-                        continue;
-                    }
-                },
-                None => None,
-            },
+        let Some(endpoint) = canonical_endpoint_key(&server.endpoint) else {
+            tracing::error!(
+                name = %server.name,
+                endpoint = %server.endpoint,
+                "station endpoint became non-canonical; initiating fatal shutdown",
+            );
+            soft_shutdown.cancel();
+            return;
+        };
+        let mut repo = match repository_factory.create().await {
+            Ok(repo) => repo,
             Err(error) => {
                 tracing::warn!(%error, "failed to open repository for trust revalidation; keeping last-verified state");
                 continue;
             }
         };
+        let enrollment = match repo.station_trust().find_by_name(&server.name).await {
+            Ok(Some(enrollment)) => enrollment,
+            Ok(None) => {
+                tracing::error!(
+                    name = %server.name,
+                    "durable Station binding disappeared; initiating fatal shutdown",
+                );
+                soft_shutdown.cancel();
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(%error, "failed to load trust enrollment floor; keeping last-verified state");
+                continue;
+            }
+        };
+        if enrollment.canonical_endpoint != endpoint || enrollment.service_id != pin {
+            tracing::error!(
+                name = %server.name,
+                endpoint,
+                "durable Station binding diverged from the verified runtime pin; initiating fatal shutdown",
+            );
+            soft_shutdown.cancel();
+            return;
+        }
+        let floor = (
+            enrollment.method_history_head.clone(),
+            enrollment.version_id.clone(),
+        );
+        if let Err(error) = repo.cancel().await {
+            tracing::warn!(%error, "failed to close trust enrollment read transaction; keeping last-verified state");
+            continue;
+        }
         match verify_station_identity(
             http_client,
             &server.endpoint,
             Some(&pin),
-            floor
-                .as_ref()
-                .map(|(head, version)| (head.as_str(), version.as_str())),
+            Some((floor.0.as_str(), floor.1.as_str())),
         )
         .await
         {
@@ -1278,14 +1297,14 @@ async fn revalidate_all(
                     verified.service_id.clone(),
                     verified.did.clone(),
                 );
-                if let Ok(mut repo) = repository_factory.create().await
-                    && let Some(endpoint) = canonical_endpoint_key(&server.endpoint)
-                {
+                if let Ok(mut repo) = repository_factory.create().await {
                     let result = repo
                         .station_trust()
                         .record_verification(
                             &SystemClock::default(),
+                            &server.name,
                             &endpoint,
+                            &floor.0,
                             &verified.did,
                             &verified.method_history_head,
                             &verified.version_id,
@@ -1440,15 +1459,14 @@ mod tests {
         StationConfig {
             name: "soland".to_owned(),
             endpoint: Url::parse(endpoint).unwrap(),
-            service_id: Some(DidCoreId::new("ak:did_core:webvh:configured".to_owned()).unwrap()),
-            session_grant_introspection_bearer: None,
+            internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: None,
         }
     }
 
     #[test]
-    fn configured_pin_wins_over_cached_enrollment_value() {
+    fn verified_cached_enrollment_is_the_only_audience_source() {
         let resolver = StationTrustResolver::new();
         let endpoint = "https://local.host/";
         resolver.insert_for_test(
@@ -1456,21 +1474,6 @@ mod tests {
             "ak:did_core:webvh:persisted",
         );
         let server = server(endpoint);
-        assert_eq!(
-            effective_audience(&server, &resolver)
-                .as_ref()
-                .map(arkret_identifiers::DidCoreId::as_str),
-            Some("ak:did_core:webvh:configured"),
-        );
-    }
-
-    #[test]
-    fn persisted_pin_resolves_when_config_omits_pin() {
-        let resolver = StationTrustResolver::new();
-        let endpoint = Url::parse("https://local.host/").unwrap();
-        resolver.insert_for_test(&endpoint, "ak:did_core:webvh:persisted");
-        let mut server = server(endpoint.as_str());
-        server.service_id = None;
         assert_eq!(
             effective_audience(&server, &resolver)
                 .as_ref()
@@ -1482,8 +1485,7 @@ mod tests {
     #[test]
     fn missing_pin_in_both_layers_fails_closed() {
         let resolver = StationTrustResolver::new();
-        let mut server = server("https://local.host/");
-        server.service_id = None;
+        let server = server("https://local.host/");
         assert_eq!(effective_audience(&server, &resolver), None);
     }
 

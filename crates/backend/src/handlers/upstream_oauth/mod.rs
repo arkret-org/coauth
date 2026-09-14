@@ -22,7 +22,7 @@ use std::string::FromUtf8Error;
 use coauth_data::UpstreamOAuthProvider;
 use coauth_data::upstream_oauth::provider;
 use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_keystore::{DecryptError, Encrypter, Keystore};
+use coauth_keyring::{DecryptError, Encrypter, Keyring};
 use pkcs8::DecodePrivateKey;
 use serde::Deserialize;
 use thiserror::Error;
@@ -81,7 +81,7 @@ pub struct SignInWithApple {
 pub(crate) fn client_credentials_for_provider(
     provider: &UpstreamOAuthProvider,
     token_endpoint: &Url,
-    keystore: &Keystore,
+    keyring: &Keyring,
     encrypter: &Encrypter,
 ) -> Result<ClientCredentials, ProviderCredentialsError> {
     let client_id = provider.client_id.clone();
@@ -122,7 +122,7 @@ pub(crate) fn client_credentials_for_provider(
 
         provider::TokenAuthMethod::PrivateKeyJwt => ClientCredentials::PrivateKeyJwt {
             client_id,
-            keystore: keystore.clone(),
+            keyring: keyring.clone(),
             signing_algorithm: provider
                 .token_endpoint_signing_alg
                 .clone()

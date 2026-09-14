@@ -368,7 +368,7 @@ async fn verify_approval_proof_jws(
     http_client: &reqwest::Client,
     url_builder: &coauth_data::UrlBuilder,
     arkret_config: &coauth_config::ArkretConfig,
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
     repo: &mut coauth_data::BoxRepository,
     did_resolver: &dyn DidResolverService,
     binding_store: &crate::services::did_binding::DurableVerifiedDidBindingStore,
@@ -408,7 +408,7 @@ async fn verify_approval_proof_jws(
         http_client,
         url_builder,
         arkret_config,
-        key_store,
+        keyring,
         repo,
         did_resolver,
         binding_store,
@@ -473,7 +473,7 @@ pub async fn propose(
     let risk_action_state = depot.risk_action_state_service()?;
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -518,7 +518,7 @@ pub async fn propose(
             &mut repo,
             &mut rng,
             &*clock,
-            &key_store,
+            &keyring,
             &service_did,
             arkret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
@@ -597,7 +597,7 @@ pub async fn approve(
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
     let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
@@ -643,7 +643,7 @@ pub async fn approve(
         &http_client,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         &mut repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
@@ -682,7 +682,7 @@ pub async fn approve(
             &mut repo,
             &mut rng,
             &*clock,
-            &key_store,
+            &keyring,
             &service_did,
             arkret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
@@ -820,11 +820,11 @@ pub async fn execute(
     } = extract_call_context(req, depot).await?;
     let arkret_config = depot.arkret_config()?;
     let station = depot.station()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let service_id = owning_station_id_for(&arkret_config);
     let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
     let audit_signing = AdminAuditSigning {
-        keystore: &key_store,
+        keyring: &keyring,
         service_id: &service_id,
         service_did: &service_did,
         fail_closed: arkret_config.audit_signature_fail_closed,
@@ -896,7 +896,7 @@ pub async fn execute(
         &mut repo,
         &mut rng,
         &*clock,
-        &key_store,
+        &keyring,
         &service_did,
         arkret_config.audit_signature_fail_closed,
         admin_user.as_ref(),

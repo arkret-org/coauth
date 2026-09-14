@@ -225,8 +225,8 @@ pub async fn account_register_endpoint(
         .await?
         .ok_or_else(|| failed_precondition("originating browser session no longer exists"))?;
     prerequisite_repo.cancel().await.ok();
-    let key_store = depot.key_store()?;
-    let session_signing_key_id = super::preferred_signing_key_id(&key_store)?;
+    let keyring = depot.keyring()?;
+    let session_signing_key_id = super::preferred_signing_key_id(&keyring)?;
     // `account-lifecycle.md` §2.1.2 ruling B.2 keeps this: the control proof and
     // the registration DID evidence draft are verified *before* the first DID
     // registry I/O, behind the frozen-reservation barrier. A later genesis
@@ -406,11 +406,11 @@ pub async fn account_register_endpoint(
             &config,
         ))?;
         let http_client = depot.http_client()?;
-        let key_store = depot.key_store()?;
+        let keyring = depot.keyring()?;
         let peer = PeerProtocolClient::new(
             Some(&station.endpoint),
             &http_client,
-            &key_store,
+            &keyring,
             owning_station_did_for(&config),
             arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
                 source_id: owning_station_id_for(&config),
@@ -522,7 +522,7 @@ pub async fn account_register_endpoint(
             jws: String::new(),
         },
     };
-    sign_account_binding_receipt(&mut receipt, &key_store)?;
+    sign_account_binding_receipt(&mut receipt, &keyring)?;
     let mut rng = make_rng();
     let mut repo = depot.repo().await?;
     if context.lease.state != IdentityCreationLeaseState::AccountBound {
@@ -594,7 +594,7 @@ pub async fn account_register_endpoint(
         let initial_status_publication = author_transition_plan(
             &mut repo,
             account_status_connector.as_ref(),
-            &key_store,
+            &keyring,
             account_authority_id.as_str(),
             &user,
             &durable_binding,
@@ -685,7 +685,7 @@ pub async fn account_register_endpoint(
         &issuance_seed,
         &*clock,
         &depot.arkret_config()?,
-        &key_store,
+        &keyring,
         &browser_session,
         session_public_key,
         initial.audience_id.clone(),
@@ -822,7 +822,7 @@ fn validate_registration_transcript(
 
 fn sign_account_binding_receipt(
     receipt: &mut AccountBindingReceipt,
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
 ) -> Result<(), ArkretRouteError> {
     let payload_digest = receipt.canonical_payload_digest()?;
     receipt.proof.payload_digest = payload_digest.clone();
@@ -834,7 +834,7 @@ fn sign_account_binding_receipt(
     let protected = Base64UrlUnpadded::encode_string(&protected);
     let payload = Base64UrlUnpadded::encode_string(&payload);
     let signing_input = format!("{protected}.{payload}");
-    let signer = key_store
+    let signer = keyring
         .account_authority_signer()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
     let mut entropy = make_rng();

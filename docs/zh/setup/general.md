@@ -2,13 +2,17 @@
 
 ## 生成初始配置
 
-服务启动前需要准备签名密钥、加密密钥、数据库配置，以及 Arkret 部署元数据。
+服务启动前需要准备 durable KeyStore backend、数据库配置和 Arkret 部署元数据。签名密钥
+与应用加密密钥写入 KeyStore，不写入生成的 YAML。
 
 用生成器输出一份带默认值的完整配置：
 
 ```bash
 coauth config generate > config.yaml
 ```
+
+选择 `secrets.backend` 后，首次生产启动只运行一个带 `--first-provisioning` 的 server；
+后续 server、worker 和 `config sync` 只装载已持久化的密钥包。
 
 生成结果会比较冗长。实际部署时通常只保留你要覆盖的配置段，把未修改的默认项删掉。
 

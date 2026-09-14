@@ -46,80 +46,12 @@ database:
 #     username: chris@arkret.org
 #     password: PASSWORD
 secrets:
-  encryption: 144d85d6edcbf6d8f646e3e5e9e9afc0c6ec8842421fc5a4fbb21b7f77b98157
-  keys:
-  - key: |
-      -----BEGIN RSA PRIVATE KEY-----
-      MIIEowIBAAKCAQEAr67PkGL2mduWM1IzXtDkmSyAaWPrei5mLxmQ+QdNBOj9BmeV
-      Dq0khBz9aO0rGtpyQHvt0FWx4GBk0rN1cFngF1BJ4ZzgMQTYJIvqFiezY5YOqBPK
-      V9dpjfBC53ykt7WccIeOSUDXYFx7luEF0OpoHoQCbUiQV67KWeHz8XG4BUy+tGcC
-      gTar9g0IHYV6zzapR//5VQfjPqSTkYr+R3r6wBseb8xSHayZAYoYZUUnxkvlQfkb
-      TLHbcZfv/rSBoW23xTFv7C3uch7pEWo5VQK2C+efeJUHYv7zlnlNdYaUV1sB/Ud6
-      e4WdGbWDradPE1NuteW/NYnTevSPTThbCRHkqQIDAQABAoIBAGCgl41kwRnSywQj
-      PBn0bydIcMCGsqebCZzyROiTeWsv8qspIbTWynTXtRGXENROPfT1tNGXsKQmoI27
-      IubOqBBqmpg6vpx3e6JuSiwxXdtyV1FewTYbRvVIpqPHzJk2jHrgNARaY5uegmN0
-      FMzZgLb4CJWvCaUQgD97pb6wu3Q93g8kUI1KcxywBgAyB73fkOMdi+wWWd//kh87
-      wWK5OOVoiRTqaDOKzisEv7kxTDd9CjVgNHFSpIYCs+J0fHVx5lgYXyQcI4pFdRW4
-      fNykYqO+0F+KswOFRx0CqI9AtjC3rbsNADiZ8iw0UbnZZTh5VbEt+jPpcr/cTpCV
-      usdzmgECgYEA4cwJqHzbaLimJ+PBv/VsaaLS1B7iSTTs+UVvVMgSwImrAbtroTG2
-      6dqZ3rClMOTNBuJPB1Q1/VtcL/LI7u4o6b2+YMMhKhPSKfNBrhAWqQjZrZEzl6jc
-      xQud8gDPwgOQpVuaVpfFmcFk0MiOcMiMTMMOdGlmZC1OBUUBmTJv7mECgYEAxy62
-      +0OzFWUt7UcS1TMyBKafQOXZbPADAuPvrpCsywwOmQIiaZp6XdIiMKhx2RM6tJi4
-      HOiKB7M8i93leRc/qhfDzPOlzeHWLO9xuCHCFTiQqgdYqyfFzueC+4lUVaJBNEIm
-      FC7J+pR67ZIb5oDDeyHffghESLrfUvThS7kgy0kCgYBp3yrUJp8WLiYyY/dv01qe
-      +WqTbVu66acHhkgaX6lzP9m/+SoRLedPJWGqafc6wr1jse9OR2z9O74w+Uy/w0nJ
-      t18xray6Nwr/AoFUZVTKs0yltoSTYukJN1Y6p6jClrtW3WmzmnxbiLOFtdQcC9zF
-      DVyUtur8o8WGcQG73EthYQKBgCQK1PukpXxCocvk54iCyhNDX1/r96sZx0G3o0Bw
-      V4Qqe12+oCGB3ZCqnJs3b9p6+02AsRgyEAASs+sPTR3bUh7iTAEDOcaGji31ahuK
-      qEcUxECwMaBPAyFMjUwc7pDMWoYtThyq1susII5quPe95yGZ4Io6zrhmcFDflQER
-      z9hZAoGBAL5gndoDKC28fSj1NR1p0xxuRVDY85Y+dB97Qk7cy6nTByQtDoat3duc
-      k1iP5HnaiEm2lqnV7FH4ie6rKy7vAHQyxe7uzU70az67Z+a0TGO59wD9Kt3+4DRE
-      wkQ+acd/5+c9VVt8kDL4X+U7WT5Pkae6j4BGkiv+KILnDnr8vkNh
-      -----END RSA PRIVATE KEY-----
-  - key: |
-      -----BEGIN EC PRIVATE KEY-----
-      MHcCAQEEIJ/2pGuvW2JtKJgLTn48nz05RRIMpv+774Zs2Wc2ABy4oAoGCCqGSM49
-      AwEHoUQDQgAEO4jHncdKfygiCeaVPKIsg7pAjv7aSV9AoptTNrfOT6Hfh6J9oBwF
-      RFXwWOUJHxJtW6Zg4Kh9MU6VeyosNt0cVQ==
-      -----END EC PRIVATE KEY-----
-  - key: |
-      -----BEGIN EC PRIVATE KEY-----
-      MIGkAgEBBDAOVSe+F3ceZn3bBHvC8TRKXh5V8Kz4xjjo8LTitG+ypLB3WsV5Obin
-      invYhbBclD2gBwYFK4EEACKhZANiAATkka2jiwEcoyFmx4FBU+nuccohpGEHCYcb
-      3FY/1EmB1HAVqz/ehvlX9PkkJVnJofDnaN9ait3eMDOnPRCvXze5UnD/xsOWeMJG
-      cAYszHKHeKHd8zJs521PLU99fSWOkLI=
-      -----END EC PRIVATE KEY-----
-  - key: |
-      -----BEGIN EC PRIVATE KEY-----
-      MHQCAQEEII7Dkp0vvYMyCg57K6p4gSfVsTvdPO7ZX3icSLogrK9ooAcGBSuBBAAK
-      oUQDQgAEeibK9H46/WG0q0u+AhrnALVQeK4ny5XDhEiEQG5iNbewL8Vkzbl/w9xQ
-      VBcGmfUG9zJBQYztKW5Eqc7M+62eBQ==
-      -----END EC PRIVATE KEY-----
-  - kid: coauth-account-authority-v1
-    key: |
-      -----BEGIN PRIVATE KEY-----
-      MC4CAQAwBQYDK2VwBCIEIAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ
-      -----END PRIVATE KEY-----
-  - kid: coauth-session-grant-v1
-    key: |
-      -----BEGIN PRIVATE KEY-----
-      MC4CAQAwBQYDK2VwBCIEIAsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsL
-      -----END PRIVATE KEY-----
-  - kid: coauth-audit-signing-v1
-    key: |
-      -----BEGIN PRIVATE KEY-----
-      MC4CAQAwBQYDK2VwBCIEIAoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK
-      -----END PRIVATE KEY-----
-  - kid: coauth-service-identity-v1
-    key: |
-      -----BEGIN PRIVATE KEY-----
-      MC4CAQAwBQYDK2VwBCIEIAcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcH
-      -----END PRIVATE KEY-----
-  - kid: coauth-device-enrollment-v1
-    key: |
-      -----BEGIN PRIVATE KEY-----
-      MC4CAQAwBQYDK2VwBCIEIAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI
-      -----END PRIVATE KEY-----
+  # Local development uses the same restart-persistent encrypted backend as
+  # container tests. This fixed wrapping key is development-only.
+  backend: encrypted_file
+  path: ./data/coauth-runtime-keys.v1
+  master_key: ZGV2LWNvYXV0aC1ydW50aW1lLWtleXMtdjEhISEhISE=
+
 sms:
   transport: blackhole
   # transport: twilio
@@ -167,8 +99,7 @@ arkret:
   stations:
   - name: soland-dev
     endpoint: https://local.host/
-    service_id: ak:did_core:web:local.host
-    session_grant_introspection_bearer: local-coauth-session-grant-introspection
+    internal_authority_shared_secret: local-coauth-session-grant-introspection
     embedded_webvh_registration_bearer: local-soland-webvh-registration
     # The Station's own trust domain, as a registered fact of this entry
     # (service-http-binding.md 2.2.3). `arkret.trust_domain` above is coauth's

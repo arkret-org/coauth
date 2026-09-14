@@ -15,8 +15,8 @@
 #
 # Pre-bringup, this script generates a fresh `conformance/test-config.yaml`
 # by running `coauth config generate` inside an ephemeral copy of the
-# coauth image. That gives the container a valid config (with real signing
-# keys) without baking secrets into the repo.
+# coauth image. Runtime keys are provisioned into the compose encrypted-file
+# KeyStore volume; generated YAML contains no private key material.
 
 set -euo pipefail
 
@@ -65,21 +65,20 @@ COAUTH_IMAGE="${COAUTH_IMAGE_REF}" \
     docker compose -f "${COMPOSE_FILE}" build coauth
 
 # ─────────────────────────────────────────────────────────────────────
-# Step 2: generate a config file with valid signing keys, mount it later.
+# Step 2: generate a key-free config file, mount it later.
 # ─────────────────────────────────────────────────────────────────────
 if [[ ! -f "${GENERATED_CONFIG}" ]] || [[ "${REGENERATE_CONFIG:-0}" == "1" ]]; then
     echo "[integration-up] generating ${GENERATED_CONFIG} via ephemeral coauth container"
     mkdir -p "$(dirname "${GENERATED_CONFIG}")"
-    # `coauth config generate` writes a fully-valid YAML with a fresh
-    # encryption key + signing keypair to stdout. The container is
-    # destroyed after one shot.
+    # `coauth config generate` writes only deployment configuration. The
+    # server's explicit --first-provisioning creates the durable key bundle.
     docker run --rm "${COAUTH_IMAGE_REF}" config generate > "${GENERATED_CONFIG}.raw"
 
     # Patch the generated config so it points at the compose-internal
     # postgres, binds the http listener to 0.0.0.0:7080, exposes /health
     # on the SAME listener (so host-side `127.0.0.1:57080/health` works),
     # and uses the in-cluster service name for issuer/public_base_url.
-    # Generated keys + secrets are preserved verbatim.
+# The KeyStore backend is supplied by compose environment overrides.
     #
     # The default config-generate output produces TWO listeners — `web`
     # (no health) on `[::]:7080` + `internal` (health-only) on

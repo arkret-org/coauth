@@ -1,5 +1,5 @@
 ---
-source: crates/keystore/tests/keystore.rs
+source: crates/keyring/tests/keyring.rs
 expression: "rsa.to_pem(LineEnding::LF).unwrap()"
 ---
 -----BEGIN RSA PRIVATE KEY-----

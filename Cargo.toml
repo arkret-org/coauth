@@ -89,6 +89,7 @@ arkret-http-client = { version = "0.3.0", path = "../arkret-rust-sdk/crates/http
 # `ak:trust_domain:<scope>` wire-form check so config and SDK never drift.
 arkret-identifiers = { version = "0.3.0", path = "../arkret-rust-sdk/crates/identifiers", default-features = false }
 arkret-identity = { version = "0.3.0", path = "../arkret-rust-sdk/crates/identity", default-features = false }
+arkret-keystore = { version = "0.3.0", path = "../arkret-rust-sdk/crates/keystore", default-features = false }
 arkret-locale = { version = "0.3.0", path = "../arkret-rust-sdk/crates/locale", default-features = false, features = ["serde"] }
 arkret-models-collaboration = { version = "0.3.0", path = "../arkret-rust-sdk/crates/models-collaboration", default-features = false }
 arkret-models-crypto = { version = "0.3.0", path = "../arkret-rust-sdk/crates/models-crypto", default-features = false }
@@ -123,7 +124,7 @@ coauth-email-types = { version = "=0.3.0", path = "crates/email-types" }
 coauth-i18n = { version = "=0.3.0", path = "crates/i18n" }
 coauth-iana = { version = "=0.3.0", path = "crates/iana" }
 coauth-jose = { version = "=0.3.0", path = "crates/jose" }
-coauth-keystore = { version = "=0.3.0", path = "crates/keystore" }
+coauth-keyring = { version = "=0.3.0", path = "crates/keyring" }
 coauth-messaging = { version = "=0.3.0", path = "crates/messaging" }
 coauth-oauth-types = { version = "=0.3.0", path = "crates/oauth-types" }
 coauth-principal = { version = "=0.3.0", path = "crates/principal" }
@@ -169,8 +170,8 @@ dioxus = { version = "=0.7.10", default-features = false, features = [
 dotenvy = "0.15.7"
 ecdsa = { version = "0.16.9", features = ["signing", "verifying"] }
 # Two Ed25519 generations, on purpose and under guard. `ed25519-dalek 2.2`
-# is the JOSE/keystore generation: it carries the `pkcs8` feature that keeps
-# every `coauth_keystore::PrivateKey` variant behind one return type (see the
+# is the JOSE/keyring generation: it carries the `pkcs8` feature that keeps
+# every `coauth_keyring::PrivateKey` variant behind one return type (see the
 # `generic-array` note below), and `coauth_jose::jwa::Ed25519SigningKey` is an
 # alias for its type. `ed25519-dalek-3` is the generation the Arkret SDK signs
 # and verifies with, so anything crossing into `arkret-signatures` /
@@ -195,7 +196,7 @@ futures-util = "0.3.34"
 # today, pulled in through the Arkret SDK. So the 0.14 pin is not waiting on
 # the ecosystem; it is waiting on four specific crates.
 #
-# What blocks the move is `coauth_keystore::PrivateKey::to_pkcs8_der`: every
+# What blocks the move is `coauth_keyring::PrivateKey::to_pkcs8_der`: every
 # enum variant has to hand back the same `pkcs8` generation's document, and
 # `rsa 0.9.10`, `p384 0.13.1`, `p521 0.13.3` and `k256 0.13.4` have no
 # release built on `elliptic-curve 0.14` / `pkcs8 0.11`. Those four variants
@@ -208,13 +209,13 @@ futures-util = "0.3.34"
 # `pkcs8 0.11`. Until then `cargo tree -i elliptic-curve@0.13.8` in this
 # workspace keeps `k256 0.13.4`, `p256 0.13.2`, `p384 0.13.1`, `p521 0.13.3`,
 # `ecdsa 0.16.9` and `primeorder 0.13.6` alive next to our own
-# `coauth-backend` / `coauth-jose` / `coauth-keystore` (`voprf 0.6.0-pre.1`
+# `coauth-backend` / `coauth-jose` / `coauth-keyring` (`voprf 0.6.0-pre.1`
 # also sits in that subtree, via `arkret-models-discovery`, but it is not a
-# keystore concern), and `rsa 0.9.10`'s manifest still pins `pkcs8 0.10` /
+# keyring concern), and `rsa 0.9.10`'s manifest still pins `pkcs8 0.10` /
 # `spki 0.7` / `signature 2.2`. When that subtree collapses, this pin can go.
 # The `#[deprecated]` notes on `digest::generic_array::*` stay expected until
 # then. `chacha20poly1305 0.10` / `aead 0.5` are a separate axis: the
-# keystore's encrypter needs only `KeyInit` + `AeadInPlace`, never `pkcs8`,
+# keyring's encrypter needs only `KeyInit` + `AeadInPlace`, never `pkcs8`,
 # and is tracked on its own.
 generic-array = "0.14.9"
 getrandom = { version = "0.4.3", default-features = false }
@@ -300,7 +301,7 @@ pkcs8 = { version = "0.10.2", features = ["std", "pkcs5", "encryption", "pem"] }
 psl = "2.1.226"
 # `rand 0.8` / `rand_core 0.6` / `rand_chacha 0.3` are the workspace default:
 # every injected-RNG signature in coauth (`&mut impl RngCore` through
-# `coauth_data::new_id`, token and password generation, keystore key
+# `coauth_data::new_id`, token and password generation, keyring key
 # generation, the deterministic `ChaChaRng` seeds in storage tests) is that
 # generation, and ten of the crates here declare it.
 #
@@ -376,6 +377,7 @@ socket2 = "0.6.5"
 soland-contracts = { path = "../soland/crates/contracts" }
 spki = { version = "0.7.3", features = ["std"] }
 subtle = "2.6.1"
+tempfile = "3.23.0"
 thiserror = "2.0.20"
 time = "0.3"
 tokio = { version = "1.53.1", default-features = false, features = [

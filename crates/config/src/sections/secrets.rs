@@ -1,460 +1,479 @@
 // Copyright (c) 2026 Arkret Authors. Licensed under the Apache License,
 // Version 2.0; see LICENSE-APACHE for details.
 
-// ── Secret and Key Configuration ──
-//
-// Manages cryptographic keys and encryption secrets used for signing,
-// verifying, and encrypting application payloads and cookies.
+//! Durable custody for Coauth's runtime cryptographic material.
+//!
+//! `arkret-keystore` owns persistence and at-rest protection. The resulting
+//! [`Keyring`] and [`Encrypter`] remain process-local crypto objects.
 
-mod encryption;
 mod generation;
-mod key_config;
 
-use anyhow::Context;
+use std::collections::BTreeSet;
+use std::fmt;
+
+use anyhow::{Context, bail, ensure};
+use arkret_keystore::KeyStore;
+use base64::Engine as _;
 use camino::Utf8PathBuf;
-use coauth_jose::jwk::JsonWebKeySet;
-use coauth_keystore::{Encrypter, Keystore};
+use coauth_iana::jose::{JsonWebKeyUse, JsonWebSignatureAlg};
+use coauth_jose::jwk::{JsonWebKey, JsonWebKeySet, Thumbprint};
+use coauth_keyring::{Encrypter, Keyring, PrivateKey};
+use rand_core::SeedableRng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
+use zeroize::{Zeroize, Zeroizing};
 
-use self::encryption::{EncryptionKey, EncryptionKeyRaw};
-use self::key_config::{KeyConfig, enumerate_keys_in_directory};
+use self::generation::{StoredKeyBundle, generate_key_bundle};
 use super::ConfigurationSection;
 
-// ── Secrets Section ──
+/// Stable namespace passed to every `arkret-keystore` backend.
+pub const KEYSTORE_APPLICATION_ID: &str = "coauth.runtime-keys";
+/// The single atomic KeyStore item containing the complete v1 runtime key set.
+pub const KEY_BUNDLE_ID: &str = "arkret:coauth:runtime-key-bundle:v1";
 
-/// Aggregates all cryptographic material: signing keys, encryption keys,
-/// and optional key directories
-#[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct SecretsConfig {
-    /// Encryption key for secure cookies
-    #[schemars(with = "EncryptionKeyRaw")]
-    #[serde_as(as = "serde_with::TryFromInto<EncryptionKeyRaw>")]
-    #[serde(flatten)]
-    encryption: EncryptionKey,
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+enum KeyStoreBackend {
+    /// Native operating-system credential storage for the current user.
+    Platform,
+    /// Authenticated encrypted file with a separately custodied master key.
+    EncryptedFile,
+}
 
-    /// List of private keys to use for signing and encrypting payloads.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    keys: Option<Vec<KeyConfig>>,
-
-    /// Directory of private keys to use for signing and encrypting payloads.
+/// Durable backend configuration. There is deliberately no memory or disabled
+/// backend in the serialized production configuration.
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct KeyStoreConfig {
+    backend: KeyStoreBackend,
+    /// Encrypted KeyStore file; valid only with `encrypted_file`.
     #[schemars(with = "Option<String>")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    keys_dir: Option<Utf8PathBuf>,
+    path: Option<Utf8PathBuf>,
+    /// Base64-encoded 32-byte master key. Prefer `master_key_file` in
+    /// production so a config dump does not contain the wrapping key.
+    #[schemars(with = "Option<String>")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    master_key: Option<Zeroizing<String>>,
+    /// File containing the base64-encoded 32-byte master key.
+    #[schemars(with = "Option<String>")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    master_key_file: Option<Utf8PathBuf>,
 }
 
-impl ConfigurationSection for SecretsConfig {
+impl fmt::Debug for KeyStoreConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("KeyStoreConfig")
+            .field("backend", &self.backend)
+            .field("path", &self.path)
+            .field(
+                "master_key",
+                &self.master_key.as_ref().map(|_| "<redacted>"),
+            )
+            .field("master_key_file", &self.master_key_file)
+            .finish()
+    }
+}
+
+impl ConfigurationSection for KeyStoreConfig {
     const PATH: &'static str = "secrets";
+
+    fn validate(
+        &self,
+        _figment: &figment::Figment,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        self.validate_backend()
+            .map_err(anyhow::Error::into_boxed_dyn_error)
+    }
 }
 
-impl SecretsConfig {
-    // ── Public API ──
-
-    /// Builds a signing/verifying [`Keystore`] from the configured keys.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when a key could not be loaded or parsed.
-    #[tracing::instrument(name = "secrets.load", skip_all)]
-    pub async fn key_store(&self) -> anyhow::Result<Keystore> {
-        let all_keys = self.collect_key_configs().await?;
-        let mut jwk_list = Vec::with_capacity(all_keys.len());
-        for key in &all_keys {
-            let source = key.source_description();
-            let jwk = key
-                .to_json_web_key()
-                .await
-                .with_context(|| format!("loading {source}"))?;
-            jwk_list.push(jwk);
+impl KeyStoreConfig {
+    /// Production-safe generated default. It contains no private key material;
+    /// the first server launch must explicitly provision the platform store.
+    #[must_use]
+    pub const fn platform() -> Self {
+        Self {
+            backend: KeyStoreBackend::Platform,
+            path: None,
+            master_key: None,
+            master_key_file: None,
         }
-        let jwk_set =
-            JsonWebKeySet::try_new(jwk_list).context("invalid JWK metadata in secrets config")?;
-        Ok(Keystore::new(jwk_set))
     }
 
-    /// Derive an [`Encrypter`] from the configured encryption key.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the encryption key cannot be resolved.
-    pub async fn encrypter(&self) -> anyhow::Result<Encrypter> {
-        self.encryption.to_encrypter().await
+    fn validate_backend(&self) -> anyhow::Result<()> {
+        match self.backend {
+            KeyStoreBackend::Platform => {
+                ensure!(
+                    self.path.is_none()
+                        && self.master_key.is_none()
+                        && self.master_key_file.is_none(),
+                    "secrets.path and master-key settings are only valid with backend=encrypted_file"
+                );
+                Ok(())
+            }
+            KeyStoreBackend::EncryptedFile => {
+                let path = self.path.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("secrets.path is required with backend=encrypted_file")
+                })?;
+                ensure!(
+                    !path.as_str().trim().is_empty(),
+                    "secrets.path must not be empty"
+                );
+                match (&self.master_key, &self.master_key_file) {
+                    (Some(_), None) | (None, Some(_)) => {}
+                    (None, None) => bail!(
+                        "secrets.master_key or secrets.master_key_file is required with backend=encrypted_file"
+                    ),
+                    (Some(_), Some(_)) => {
+                        bail!(
+                            "secrets.master_key and secrets.master_key_file are mutually exclusive"
+                        )
+                    }
+                }
+                if let Some(master_key_file) = &self.master_key_file {
+                    ensure!(
+                        !paths_refer_to_same_file(master_key_file, path),
+                        "secrets.master_key_file must be separate from secrets.path"
+                    );
+                }
+                Ok(())
+            }
+        }
     }
 
-    /// Returns the raw 32-byte encryption secret.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error when the encryption secret could not be read from file.
-    pub async fn encryption(&self) -> anyhow::Result<[u8; 32]> {
-        self.encryption.resolve().await
+    /// Open the configured durable backend. This never falls back to memory.
+    async fn open(&self) -> anyhow::Result<Box<dyn KeyStore>> {
+        self.validate_backend()?;
+        match self.backend {
+            KeyStoreBackend::Platform => {
+                arkret_keystore::durable_platform_keystore(KEYSTORE_APPLICATION_ID)
+                    .map_err(|error| anyhow::anyhow!("opening platform KeyStore failed: {error}"))
+            }
+            KeyStoreBackend::EncryptedFile => {
+                let path = self.path.as_ref().expect("validated above");
+                let raw = match (&self.master_key, &self.master_key_file) {
+                    (Some(value), None) => value.clone(),
+                    (None, Some(path)) => Zeroizing::new(
+                        tokio::fs::read_to_string(path)
+                            .await
+                            .with_context(|| format!("reading KeyStore master-key file {path}"))?,
+                    ),
+                    _ => unreachable!("validated above"),
+                };
+                let mut decoded = Zeroizing::new(
+                    base64::engine::general_purpose::STANDARD
+                        .decode(raw.trim().as_bytes())
+                        .or_else(|_| {
+                            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                                .decode(raw.trim().as_bytes())
+                        })
+                        .context("KeyStore master key must be base64")?,
+                );
+                ensure!(
+                    decoded.len() == 32,
+                    "KeyStore master key must decode to exactly 32 bytes (got {})",
+                    decoded.len()
+                );
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&decoded);
+                decoded.zeroize();
+                let store = arkret_keystore::EncryptedFileKeyStore::new(
+                    path.as_std_path(),
+                    KEYSTORE_APPLICATION_ID,
+                    key,
+                )
+                .map_err(|error| {
+                    anyhow::anyhow!("opening encrypted-file KeyStore failed: {error}")
+                });
+                key.zeroize();
+                Ok(Box::new(store?) as Box<dyn KeyStore>)
+            }
+        }
     }
 
-    // ── Internal helpers ──
-
-    /// Merges directory-sourced and inline key configs into a unified list
-    async fn collect_key_configs(&self) -> anyhow::Result<Vec<KeyConfig>> {
-        let mut combined = match &self.keys_dir {
-            Some(dir) => enumerate_keys_in_directory(dir).await?,
-            None => vec![],
-        };
-
-        let inline_keys = self.keys.as_deref().unwrap_or_default();
-        combined.extend(inline_keys.iter().cloned());
-
-        Ok(combined)
+    /// Load the complete runtime secret set, optionally authorising one-time
+    /// generation when the durable store is empty.
+    pub async fn runtime(&self, first_provisioning: bool) -> anyhow::Result<RuntimeSecrets> {
+        let store = self.open().await?;
+        load_runtime_from_store(store.as_ref(), first_provisioning).await
     }
 }
 
-// ── Tests ──
+/// Process-local cryptographic objects built from one durable key bundle.
+pub struct RuntimeSecrets {
+    keyring: Keyring,
+    encrypter: Encrypter,
+    encryption_key: Zeroizing<[u8; 32]>,
+}
+
+impl RuntimeSecrets {
+    #[must_use]
+    pub fn keyring(&self) -> Keyring {
+        self.keyring.clone()
+    }
+
+    #[must_use]
+    pub fn encrypter(&self) -> Encrypter {
+        self.encrypter.clone()
+    }
+
+    #[must_use]
+    pub fn encryption_key(&self) -> &[u8; 32] {
+        &self.encryption_key
+    }
+}
+
+async fn load_runtime_from_store(
+    store: &dyn KeyStore,
+    first_provisioning: bool,
+) -> anyhow::Result<RuntimeSecrets> {
+    match store.load(KEY_BUNDLE_ID) {
+        Ok(bytes) => build_runtime(StoredKeyBundle::decode(bytes.as_slice())?),
+        Err(error) if error.is_not_found() && first_provisioning => {
+            let mut rng = rand_chacha::ChaChaRng::from_entropy();
+            let generated = generate_key_bundle(&mut rng).await?;
+            let encoded = generated.encode()?;
+            store
+                .store(KEY_BUNDLE_ID, &encoded)
+                .context("persisting generated Coauth runtime key bundle")?;
+
+            // Use the backend's committed value, not the local candidate. This
+            // also detects backends that acknowledged a write without making
+            // the complete value readable.
+            let persisted = store
+                .load(KEY_BUNDLE_ID)
+                .context("reloading provisioned Coauth runtime key bundle")?;
+            build_runtime(StoredKeyBundle::decode(persisted.as_slice())?)
+        }
+        Err(error) if error.is_not_found() => bail!(
+            "coauth_runtime_keys_first_provisioning_required: no runtime key bundle exists; run exactly one production server with --first-provisioning"
+        ),
+        Err(error) => Err(anyhow::Error::new(error).context("loading Coauth runtime key bundle")),
+    }
+}
+
+fn build_runtime(bundle: StoredKeyBundle) -> anyhow::Result<RuntimeSecrets> {
+    let mut jwks = Vec::with_capacity(bundle.keys.len());
+    let mut key_ids = BTreeSet::new();
+    for stored in bundle.keys {
+        let private_key =
+            PrivateKey::load(&stored.der).context("decoding stored JOSE private key")?;
+        let kid = stored
+            .kid
+            .unwrap_or_else(|| private_key.thumbprint_sha256_base64());
+        ensure!(
+            key_ids.insert(kid.clone()),
+            "stored key bundle contains duplicate kid {kid}"
+        );
+        jwks.push(
+            JsonWebKey::new(private_key)
+                .with_kid(kid)
+                .with_use(JsonWebKeyUse::Sig),
+        );
+    }
+
+    let keyring = Keyring::new(
+        JsonWebKeySet::try_new(jwks).context("invalid JWK metadata in stored key bundle")?,
+    );
+    keyring
+        .account_authority_seed()
+        .context("invalid Account Authority key in stored key bundle")?;
+    keyring
+        .audit_signing_seed()
+        .context("invalid audit signing key in stored key bundle")?;
+    ensure!(
+        keyring.session_grant_signing_key().is_some(),
+        "stored key bundle has no usable session-grant signing key"
+    );
+    for algorithm in [
+        JsonWebSignatureAlg::Rs256,
+        JsonWebSignatureAlg::Es256,
+        JsonWebSignatureAlg::Es384,
+        JsonWebSignatureAlg::Es512,
+        JsonWebSignatureAlg::Es256K,
+        JsonWebSignatureAlg::Ed25519,
+    ] {
+        keyring.signer_for_algorithm(&algorithm).with_context(|| {
+            format!("stored key bundle cannot sign with required algorithm {algorithm}")
+        })?;
+    }
+
+    let encrypter = Encrypter::new(&bundle.encryption_key);
+    Ok(RuntimeSecrets {
+        keyring,
+        encrypter,
+        encryption_key: bundle.encryption_key,
+    })
+}
+
+fn paths_refer_to_same_file(left: &Utf8PathBuf, right: &Utf8PathBuf) -> bool {
+    left == right
+        || std::fs::canonicalize(left)
+            .ok()
+            .zip(std::fs::canonicalize(right).ok())
+            .is_some_and(|(left, right)| left == right)
+}
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::result_large_err)]
-    use coauth_iana::jose::JsonWebSignatureAlg;
-    use coauth_jose::constraints::Constrainable;
-    use figment::providers::{Format, Yaml};
-    use figment::{Figment, Jail};
-    use rand_core::SeedableRng;
-    use tokio::runtime::Handle;
-    use tokio::task;
+    use std::collections::BTreeMap;
+    use std::sync::Mutex;
 
-    use super::encryption::EncryptionKey;
-    use super::key_config::Key;
+    use arkret_keystore::{EncryptedFileKeyStore, KeyBytes, KeyStoreError};
+    use tempfile::tempdir;
+
     use super::*;
 
-    #[tokio::test]
-    async fn load_config() {
-        task::spawn_blocking(|| {
-            Jail::expect_with(|jail| {
-                jail.create_file(
-                    "config.yaml",
-                    indoc::indoc! {r"
-                        secrets:
-                          encryption_file: encryption
-                          keys_dir: keys
-                    "},
-                )?;
-                jail.create_file(
-                    "encryption",
-                    "0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff",
-                )?;
-                jail.create_dir("keys")?;
-                jail.create_file(
-                    "keys/key1",
-                    indoc::indoc! {r"
-                        -----BEGIN RSA PRIVATE KEY-----
-                        MIIJKQIBAAKCAgEA6oR6LXzJOziUxcRryonLTM5Xkfr9cYPCKvnwsWoAHfd2MC6Q
-                        OCAWSQnNcNz5RTeQUcLEaA8sxQi64zpCwO9iH8y8COCaO8u9qGkOOuJwWnmPfeLs
-                        cEwALEp0LZ67eSUPsMaz533bs4C8p+2UPMd+v7Td8TkkYoqgUrfYuT0bDTMYVsSe
-                        wcNB5qsI7hDLf1t5FX6KU79/Asn1K3UYHTdN83mghOlM4zh1l1CJdtgaE1jAg4Ml
-                        1X8yG+cT+Ks8gCSGQfIAlVFV4fvvzmpokNKfwAI/b3LS2/ft4ZrK+RCTsWsjUu38
-                        Zr8jbQMtDznzBHMw1LoaHpwRNjbJZ7uA6x5ikbwz5NAlfCITTta6xYn8qvaBfiYJ
-                        YyUFl0kIHm9Kh9V9p54WPMCFCcQx12deovKV82S6zxTeMflDdosJDB/uG9dT2qPt
-                        wkpTD6xAOx5h59IhfiY0j4ScTl725GygVzyK378soP3LQ/vBixQLpheALViotodH
-                        fJknsrelaISNkrnapZL3QE5C1SUoaUtMG9ovRz5HDpMx5ooElEklq7shFWDhZXbp
-                        2ndU5RPRCZO3Szop/Xhn2mNWQoEontFh79WIf+wS8TkJIRXhjtYBt3+s96z0iqSg
-                        gDmE8BcP4lP1+TAUY1d7+QEhGCsTJa9TYtfDtNNfuYI9e3mq6LEpHYKWOvECAwEA
-                        AQKCAgAlF60HaCGf50lzT6eePQCAdnEtWrMeyDCRgZTLStvCjEhk7d3LssTeP9mp
-                        oe8fPomUv6c3BOds2/5LQFockABHd/y/CV9RA973NclAEQlPlhiBrb793Vd4VJJe
-                        6331dveDW0+ggVdFjfVzjhqQfnE9ZcsQ2JvjpiTI0Iv2cy7F01tke0GCSMgx8W1p
-                        J2jjDOxwNOKGGoIT8S4roHVJnFy3nM4sbNtyDj+zHimP4uBE8m2zSgQAP60E8sia
-                        3+Ki1flnkXJRgQWCHR9cg5dkXfFRz56JmcdgxAHGWX2vD9XRuFi5nitPc6iTw8PV
-                        u7GvS3+MC0oO+1pRkTAhOGv3RDK3Uqmy2zrMUuWkEsz6TVId6gPl7+biRJcP+aER
-                        plJkeC9J9nSizbQPwErGByzoHGLjADgBs9hwqYkPcN38b6jR5S/VDQ+RncCyI87h
-                        s/0pIs/fNlfw4LtpBrolP6g++vo6KUufmE3kRNN9dN4lNOoKjUGkcmX6MGnwxiw6
-                        NN/uEqf9+CKQele1XeUhRPNJc9Gv+3Ly5y/wEi6FjfVQmCK4hNrl3tvuZw+qkGbq
-                        Au9Jhk7wV81An7fbhBRIXrwOY9AbOKNqUfY+wpKi5vyJFS1yzkFaYSTKTBspkuHW
-                        pWbohO+KreREwaR5HOMK8tQMTLEAeE3taXGsQMJSJ15lRrLc7QKCAQEA68TV/R8O
-                        C4p+vnGJyhcfDJt6+KBKWlroBy75BG7Dg7/rUXaj+MXcqHi+whRNXMqZchSwzUfS
-                        B2WK/HrOBye8JLKDeA3B5TumJaF19vV7EY/nBF2QdRmI1r33Cp+RWUvAcjKa/v2u
-                        KksV3btnJKXCu/stdAyTK7nU0on4qBzm5WZxuIJv6VMHLDNPFdCk+4gM8LuJ3ITU
-                        l7XuZd4gXccPNj0VTeOYiMjIwxtNmE9RpCkTLm92Z7MI+htciGk1xvV0N4m1BXwA
-                        7qhl1nBgVuJyux4dEYFIeQNhLpHozkEz913QK2gDAHL9pAeiUYJntq4p8HNvfHiQ
-                        vE3wTzil3aUFnwKCAQEA/qQm1Nx5By6an5UunrOvltbTMjsZSDnWspSQbX//j6mL
-                        2atQLe3y/Nr7E5SGZ1kFD9tgAHTuTGVqjvTqp5dBPw4uo146K2RJwuvaYUzNK26c
-                        VoGfMfsI+/bfMfjFnEmGRARZdMr8cvhU+2m04hglsSnNGxsvvPdsiIbRaVDx+JvN
-                        C5C281WlN0WeVd7zNTZkdyUARNXfCxBHQPuYkP5Mz2roZeYlJMWU04i8Cx0/SEuu
-                        bhZQDaNTccSdPDFYcyDDlpqp+mN+U7m+yUPOkVpaxQiSYJZ+NOQsNcAVYfjzyY0E
-                        /VP3s2GddjCJs0amf9SeW0LiMAHPgTp8vbMSRPVVbwKCAQEAmZsSd+llsys2TEmY
-                        pivONN6PjbCRALE9foCiCLtJcmr1m4uaZRg0HScd0UB87rmoo2TLk9L5CYyksr4n
-                        wQ2oTJhpgywjaYAlTVsWiiGBXv3MW1HCLijGuHHno+o2PmFWLpC93ufUMwXcZywT
-                        lRLR/rs07+jJcbGO8OSnNpAt9sN5z+Zblz5a6/c5zVK0SpRnKehld2CrSXRkr8W6
-                        fJ6WUJYXbTmdRXDbLBJ7yYHUBQolzxkboZBJhvmQnec9/DQq1YxIfhw+Vz8rqjxo
-                        5/J9IWALPD5owz7qb/bsIITmoIFkgQMxAXfpvJaksEov3Bs4g8oRlpzOX4C/0j1s
-                        Ay3irQKCAQEAwRJ/qufcEFkCvjsj1QsS+MC785shyUSpiE/izlO91xTLx+f/7EM9
-                        +QCkXK1B1zyE/Qft24rNYDmJOQl0nkuuGfxL2mzImDv7PYMM2reb3PGKMoEnzoKz
-                        xi/h/YbNdnm9BvdxSH/cN+QYs2Pr1X5Pneu+622KnbHQphfq0fqg7Upchwdb4Faw
-                        5Z6wthVMvK0YMcppUMgEzOOz0w6xGEbowGAkA5cj1KTG+jjzs02ivNM9V5Utb5nF
-                        3D4iphAYK3rNMfTlKsejciIlCX+TMVyb9EdSjU+uM7ZJ2xtgWx+i4NA+10GCT42V
-                        EZct4TORbN0ukK2+yH2m8yoAiOks0gJemwKCAQAMGROGt8O4HfhpUdOq01J2qvQL
-                        m5oUXX8w1I95XcoAwCqb+dIan8UbCyl/79lbqNpQlHbRy3wlXzWwH9aHKsfPlCvk
-                        5dE1qrdMdQhLXwP109bRmTiScuU4zfFgHw3XgQhMFXxNp9pze197amLws0TyuBW3
-                        fupS4kM5u6HKCeBYcw2WP5ukxf8jtn29tohLBiA2A7NYtml9xTer6BBP0DTh+QUn
-                        IJL6jSpuCNxBPKIK7p6tZZ0nMBEdAWMxglYm0bmHpTSd3pgu3ltCkYtDlDcTIaF0
-                        Q4k44lxUTZQYwtKUVQXBe4ZvaT/jIEMS7K5bsAy7URv/toaTaiEh1hguwSmf
-                        -----END RSA PRIVATE KEY-----
-                    "},
-                )?;
-                jail.create_file(
-                    "keys/key2",
-                    indoc::indoc! {r"
-                        -----BEGIN EC PRIVATE KEY-----
-                        MHcCAQEEIKlZz/GnH0idVH1PnAF4HQNwRafgBaE2tmyN1wjfdOQqoAoGCCqGSM49
-                        AwEHoUQDQgAEHrgPeG+Mt8eahih1h4qaPjhl7jT25cdzBkg3dbVks6gBR2Rx4ug9
-                        h27LAir5RqxByHvua2XsP46rSTChof78uw==
-                        -----END EC PRIVATE KEY-----
-                    "},
-                )?;
+    #[derive(Default)]
+    struct TestKeyStore {
+        keys: Mutex<BTreeMap<String, Vec<u8>>>,
+    }
 
-                let config = Figment::new()
-                    .merge(Yaml::file("config.yaml"))
-                    .extract_inner::<SecretsConfig>("secrets")?;
+    impl KeyStore for TestKeyStore {
+        fn load(&self, id: &str) -> std::result::Result<KeyBytes, KeyStoreError> {
+            self.keys
+                .lock()
+                .unwrap()
+                .get(id)
+                .cloned()
+                .map(KeyBytes::new)
+                .ok_or_else(|| KeyStoreError::not_found(id))
+        }
 
-                Handle::current().block_on(async move {
-                    assert!(
-                        matches!(config.encryption, EncryptionKey::File(ref p) if p == "encryption")
-                    );
-                    assert_eq!(
-                        config.encryption().await.unwrap(),
-                        [
-                            0, 0, 17, 17, 34, 34, 51, 51, 68, 68, 85, 85, 102, 102, 119, 119, 136,
-                            136, 153, 153, 170, 170, 187, 187, 204, 204, 221, 221, 238, 238, 255,
-                            255
-                        ]
-                    );
+        fn store(&self, id: &str, key: &[u8]) -> std::result::Result<(), KeyStoreError> {
+            arkret_keystore::validate_id(id)?;
+            self.keys
+                .lock()
+                .unwrap()
+                .insert(id.to_owned(), key.to_vec());
+            Ok(())
+        }
 
-                    let mut key_config = config.collect_key_configs().await.unwrap();
-                    key_config.sort_by_key(|a| {
-                        if let Key::File(p) = &a.key {
-                            Some(p.clone())
-                        } else {
-                            None
-                        }
-                    });
-                    let key_store = config.key_store().await.unwrap();
+        fn list(&self) -> std::result::Result<Vec<String>, KeyStoreError> {
+            Ok(self.keys.lock().unwrap().keys().cloned().collect())
+        }
 
-                    assert!(key_config[0].kid.is_none());
-                    assert!(matches!(&key_config[0].key, Key::File(p) if p == "keys/key1"));
-                    assert!(key_store.iter().any(|k| k.kid() == Some("xmgGCzGtQFmhEOP0YAqBt-oZyVauSVMXcf4kwcgGZLc")));
-                    assert!(key_config[1].kid.is_none());
-                    assert!(matches!(&key_config[1].key, Key::File(p) if p == "keys/key2"));
-                    assert!(key_store.iter().any(|k| k.kid() == Some("ONUCn80fsiISFWKrVMEiirNVr-QEvi7uQI0QH9q9q4o")));
-                });
-
-                Ok(())
-            });
-        })
-        .await
-        .unwrap();
+        fn delete(&self, id: &str) -> std::result::Result<(), KeyStoreError> {
+            arkret_keystore::validate_id(id)?;
+            self.keys.lock().unwrap().remove(id);
+            Ok(())
+        }
     }
 
     #[tokio::test]
-    async fn load_config_inline_secrets() {
-        task::spawn_blocking(|| {
-            Jail::expect_with(|jail| {
-                jail.create_file(
-                    "config.yaml",
-                    indoc::indoc! {r"
-                        secrets:
-                          encryption: >-
-                            0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff
-                          keys:
-                            - kid: lekid0
-                              key: |
-                                -----BEGIN EC PRIVATE KEY-----
-                                MHcCAQEEIOtZfDuXZr/NC0V3sisR4Chf7RZg6a2dpZesoXMlsPeRoAoGCCqGSM49
-                                AwEHoUQDQgAECfpqx64lrR85MOhdMxNmIgmz8IfmM5VY9ICX9aoaArnD9FjgkBIl
-                                fGmQWxxXDSWH6SQln9tROVZaduenJqDtDw==
-                                -----END EC PRIVATE KEY-----
-                            - key: |
-                                -----BEGIN EC PRIVATE KEY-----
-                                MHcCAQEEIKlZz/GnH0idVH1PnAF4HQNwRafgBaE2tmyN1wjfdOQqoAoGCCqGSM49
-                                AwEHoUQDQgAEHrgPeG+Mt8eahih1h4qaPjhl7jT25cdzBkg3dbVks6gBR2Rx4ug9
-                                h27LAir5RqxByHvua2XsP46rSTChof78uw==
-                                -----END EC PRIVATE KEY-----
-                    "},
-                )?;
+    async fn test_store_provisions_once_and_reloads_same_jwks() {
+        let store = TestKeyStore::default();
+        let first = load_runtime_from_store(&store, true).await.unwrap();
+        let repeated_provisioning = load_runtime_from_store(&store, true).await.unwrap();
+        let read_only = load_runtime_from_store(&store, false).await.unwrap();
 
-                let config = Figment::new()
-                    .merge(Yaml::file("config.yaml"))
-                    .extract_inner::<SecretsConfig>("secrets")?;
-
-                Handle::current().block_on(async move {
-                    assert_eq!(
-                        config.encryption().await.unwrap(),
-                        [
-                            0, 0, 17, 17, 34, 34, 51, 51, 68, 68, 85, 85, 102, 102, 119, 119, 136,
-                            136, 153, 153, 170, 170, 187, 187, 204, 204, 221, 221, 238, 238, 255,
-                            255
-                        ]
-                    );
-
-                    let key_store = config.key_store().await.unwrap();
-                    assert!(key_store.iter().any(|k| k.kid() == Some("lekid0")));
-                    assert!(key_store.iter().any(|k| k.kid() == Some("ONUCn80fsiISFWKrVMEiirNVr-QEvi7uQI0QH9q9q4o")));
-                });
-
-                Ok(())
-            });
-        })
-        .await
-        .unwrap();
-    }
-
-    #[tokio::test]
-    async fn load_config_mixed_key_sources() {
-        task::spawn_blocking(|| {
-            Jail::expect_with(|jail| {
-                jail.create_file(
-                    "config.yaml",
-                    indoc::indoc! {r"
-                        secrets:
-                          encryption_file: encryption
-                          keys_dir: keys
-                          keys:
-                            - kid: lekid0
-                              key: |
-                                -----BEGIN EC PRIVATE KEY-----
-                                MHcCAQEEIOtZfDuXZr/NC0V3sisR4Chf7RZg6a2dpZesoXMlsPeRoAoGCCqGSM49
-                                AwEHoUQDQgAECfpqx64lrR85MOhdMxNmIgmz8IfmM5VY9ICX9aoaArnD9FjgkBIl
-                                fGmQWxxXDSWH6SQln9tROVZaduenJqDtDw==
-                                -----END EC PRIVATE KEY-----
-                    "},
-                )?;
-                jail.create_dir("keys")?;
-                jail.create_file(
-                    "keys/key_from_file",
-                    indoc::indoc! {r"
-                        -----BEGIN EC PRIVATE KEY-----
-                        MHcCAQEEIKlZz/GnH0idVH1PnAF4HQNwRafgBaE2tmyN1wjfdOQqoAoGCCqGSM49
-                        AwEHoUQDQgAEHrgPeG+Mt8eahih1h4qaPjhl7jT25cdzBkg3dbVks6gBR2Rx4ug9
-                        h27LAir5RqxByHvua2XsP46rSTChof78uw==
-                        -----END EC PRIVATE KEY-----
-                    "},
-                )?;
-
-                let config = Figment::new()
-                    .merge(Yaml::file("config.yaml"))
-                    .extract_inner::<SecretsConfig>("secrets")?;
-
-                Handle::current().block_on(async move {
-                    let key_config = config.collect_key_configs().await.unwrap();
-                    let key_store = config.key_store().await.unwrap();
-
-                    assert!(key_config[0].kid.is_none());
-                    assert!(matches!(&key_config[0].key, Key::File(p) if p == "keys/key_from_file"));
-                    assert!(key_store.iter().any(|k| k.kid() == Some("ONUCn80fsiISFWKrVMEiirNVr-QEvi7uQI0QH9q9q4o")));
-                    assert!(key_store.iter().any(|k| k.kid() == Some("lekid0")));
-                });
-
-                Ok(())
-            });
-        })
-        .await
-        .unwrap();
-    }
-
-    #[tokio::test]
-    async fn generate_config_includes_extended_signing_keys() {
-        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(42);
-        let config = SecretsConfig::generate(&mut rng).await.unwrap();
-        let key_store = config.key_store().await.unwrap();
-        let algs = key_store.available_signing_algorithms();
-
-        assert!(algs.contains(&JsonWebSignatureAlg::Es512));
-        assert!(algs.contains(&JsonWebSignatureAlg::Ed25519));
-        assert!(key_store.account_authority_seed().is_ok());
-        assert!(
-            key_store
-                .iter()
-                .any(|key| key.kid() == Some(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID))
+        assert_eq!(
+            serde_json::to_value(first.keyring().public_jwks()).unwrap(),
+            serde_json::to_value(repeated_provisioning.keyring().public_jwks()).unwrap()
         );
-        // The audit signer is designated by name; a generated config must not
-        // leave it to fall back to "whichever Ed25519 key is last".
-        assert!(key_store.audit_signing_seed().is_ok());
-        assert!(
-            key_store
-                .iter()
-                .any(|key| key.kid() == Some(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID))
+        assert_eq!(
+            serde_json::to_value(first.keyring().public_jwks()).unwrap(),
+            serde_json::to_value(read_only.keyring().public_jwks()).unwrap()
+        );
+        let ciphertext = first.encrypter().encrypt_to_string(b"persistent").unwrap();
+        assert_eq!(
+            read_only.encrypter().decrypt_string(&ciphertext).unwrap(),
+            b"persistent"
         );
     }
 
     #[tokio::test]
-    async fn key_store_reports_missing_key_file_path() {
-        task::spawn_blocking(|| {
-            Jail::expect_with(|jail| {
-                jail.create_file(
-                    "config.yaml",
-                    indoc::indoc! {r"
-                        secrets:
-                          encryption: >-
-                            0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff
-                          keys:
-                            - kid: missing-file
-                              key_file: missing-key.pem
-                    "},
-                )?;
-
-                let config = Figment::new()
-                    .merge(Yaml::file("config.yaml"))
-                    .extract_inner::<SecretsConfig>("secrets")?;
-
-                Handle::current().block_on(async move {
-                    let error = match config.key_store().await {
-                        Ok(_) => panic!("expected missing key file to fail"),
-                        Err(error) => format!("{error:#}"),
-                    };
-                    assert!(
-                        error.contains(
-                            "loading secrets key file missing-key.pem (kid=missing-file)"
-                        )
-                    );
-                    assert!(error.contains("reading secrets key file missing-key.pem"));
-                });
-
-                Ok(())
-            });
-        })
-        .await
-        .unwrap();
+    async fn missing_bundle_fails_without_first_provisioning() {
+        let error = load_runtime_from_store(&TestKeyStore::default(), false)
+            .await
+            .err()
+            .expect("missing bundle must fail");
+        assert!(
+            error
+                .to_string()
+                .contains("coauth_runtime_keys_first_provisioning_required")
+        );
     }
 
     #[tokio::test]
-    async fn key_store_reports_inline_key_identity() {
-        task::spawn_blocking(|| {
-            Jail::expect_with(|jail| {
-                jail.create_file(
-                    "config.yaml",
-                    indoc::indoc! {r"
-                        secrets:
-                          encryption: >-
-                            0000111122223333444455556666777788889999aaaabbbbccccddddeeeeffff
-                          keys:
-                            - kid: broken-inline
-                              key: |
-                                not a private key
-                    "},
-                )?;
+    async fn encrypted_file_reopens_with_same_keys_and_encryption_secret() {
+        let directory = tempdir().unwrap();
+        let path = directory.path().join("coauth-runtime-keys.v1");
+        let master_key = [0xA7; 32];
 
-                let config = Figment::new()
-                    .merge(Yaml::file("config.yaml"))
-                    .extract_inner::<SecretsConfig>("secrets")?;
+        let first_store =
+            EncryptedFileKeyStore::new(&path, KEYSTORE_APPLICATION_ID, master_key).unwrap();
+        let first = load_runtime_from_store(&first_store, true).await.unwrap();
+        let expected_jwks = serde_json::to_value(first.keyring().public_jwks()).unwrap();
+        let ciphertext = first
+            .encrypter()
+            .encrypt_to_string(b"after restart")
+            .unwrap();
+        drop(first);
+        drop(first_store);
 
-                Handle::current().block_on(async move {
-                    let error = match config.key_store().await {
-                        Ok(_) => panic!("expected invalid inline key to fail"),
-                        Err(error) => format!("{error:#}"),
-                    };
-                    assert!(error.contains("loading inline secrets key (kid=broken-inline)"));
-                });
+        let reopened_store =
+            EncryptedFileKeyStore::new(&path, KEYSTORE_APPLICATION_ID, master_key).unwrap();
+        let reopened = load_runtime_from_store(&reopened_store, false)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(reopened.keyring().public_jwks()).unwrap(),
+            expected_jwks
+        );
+        assert_eq!(
+            reopened.encrypter().decrypt_string(&ciphertext).unwrap(),
+            b"after restart"
+        );
+    }
 
-                Ok(())
-            });
-        })
-        .await
-        .unwrap();
+    #[test]
+    fn encrypted_file_requires_exactly_one_master_key_source() {
+        let no_key = KeyStoreConfig {
+            backend: KeyStoreBackend::EncryptedFile,
+            path: Some("keys.v1".into()),
+            master_key: None,
+            master_key_file: None,
+        };
+        assert!(no_key.validate_backend().is_err());
+
+        let two_keys = KeyStoreConfig {
+            backend: KeyStoreBackend::EncryptedFile,
+            path: Some("keys.v1".into()),
+            master_key: Some(Zeroizing::new("unused".to_owned())),
+            master_key_file: Some("master.key".into()),
+        };
+        assert!(two_keys.validate_backend().is_err());
+    }
+
+    #[test]
+    fn debug_redacts_inline_master_key() {
+        let config = KeyStoreConfig {
+            backend: KeyStoreBackend::EncryptedFile,
+            path: Some("keys.v1".into()),
+            master_key: Some(Zeroizing::new("must-not-appear".to_owned())),
+            master_key_file: None,
+        };
+        let debug = format!("{config:?}");
+        assert!(!debug.contains("must-not-appear"));
+        assert!(debug.contains("<redacted>"));
+    }
+
+    #[test]
+    fn serialized_config_rejects_retired_inline_key_fields() {
+        let retired = serde_json::json!({
+            "backend": "platform",
+            "encryption": "00",
+            "keys": []
+        });
+        assert!(serde_json::from_value::<KeyStoreConfig>(retired).is_err());
+    }
+
+    #[test]
+    fn platform_backend_round_trips_without_key_material() {
+        let encoded = serde_json::to_value(KeyStoreConfig::platform()).unwrap();
+        assert_eq!(encoded, serde_json::json!({"backend": "platform"}));
+        assert!(serde_json::from_value::<KeyStoreConfig>(encoded).is_ok());
     }
 }

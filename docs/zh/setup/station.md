@@ -13,31 +13,25 @@ arkret:
   stations:
     - name: soland
       endpoint: https://soland.example.com/
-      service_id: ak:did_core:webvh:<soland-scid>
+      trust_domain: ak:trust_domain:soland.example.com
+      internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 - `name`：面向运维的 Station 标识。
 - `endpoint`：通过 Arkret/OIDC discovery 发布的基础 URL。
-- `service_id`：可选的显式身份 pin(`ak:did_core:webvh:<scid>`)。配置后优先级
-  最高；省略时 pin 来自一次性 bootstrap 持久化的 trust enrollment(见下文)。
+- `trust_domain` 与 `internal_authority_shared_secret{_file}`：部署内固定通道的
+  显式边界；文件在启动时只读取一次。
 - `embedded_webvh_registration_bearer`：coauth 执行部署私有 Station-to-component
   调用的凭据；它不是公开服务角色凭据。
 
-## 一次性 trust bootstrap
+## 自动验证与耐久绑定
 
-Station 的 DID/audience 绝不直接信任裸的 `/_arkret/describe` 响应。
-coauth 在为某 Station audience 接受 token 或 session grant 之前，该
-audience 必须由配置的 `service_id` 或持久化的 trust enrollment 固定。每个部署
-执行一次：
-
-```console
-$ coauth station trust bootstrap --name soland
-```
-
-bootstrap 在线完整验证 Station 身份链（WebVH 历史、service-identity
-绑定、resolution record 与 endpoint binding)，随后持久化验证后的 pin 并写入
-审计。它是幂等的：身份未变时重复执行不会改动 pin。
+首次启动不要求管理员知道 Station service ID，也不要求执行初始化命令。coauth 从
+配置的 exact endpoint 在线完整验证 WebVH 历史、service-identity binding、
+authenticated resolution、role 与 endpoint binding，随后原子持久化 pin、防回滚
+floor 和审计记录。裸 `/_arkret/describe` 响应或 shared secret 单独都不能建立身份；
+并发实例只有验证出完全相同 tuple 才能幂等收敛。
 
 Coauth HTTP 服务不会等待这项验证完成才开始监听。它会先发布 OIDC discovery、
 公开 JWKS 和健康检查端点，让全新的 Station 能够取得 Account Authority 公钥；
@@ -54,7 +48,7 @@ $ coauth station trust replace --name soland \
 
 替换会在同一事务中吊销绑定旧 audience 的 session grant。
 `coauth station trust revoke --name soland` 则整体移除 pin；此后服务在
-重新存在 pin 之前拒绝提供服务。
+下一轮自动完整验证重新建立 binding 之前拒绝提供服务。
 
 ## 部署私有 Account Authority 签名方
 
@@ -81,11 +75,10 @@ coauth 作为 Station 的私有账号认证组件，向 Station 发起两类**�
 
 两条边都用对应 `stations` 条目上配置的共享 bearer 鉴权：
 
-`service_id` 是显式配置 pin，配置后优先级最高；省略时以
-`coauth station trust bootstrap` 持久化的 trust enrollment 作为授权
-pin。任何需要认证该 Station 的操作都必须存在二者之一，否则运行时
-fail closed。`/_arkret/describe` 只用于能力与元数据校验，远端自报的 Describe
-响应不能建立或替换 pin。
+运行时只使用已经完整验证并耐久保存的 Station binding。endpoint 变化只有在同一
+service core 证明连续、非回退的 WebVH history 后才会自动 CAS 更新；新 core/genesis
+必须执行上面的显式 replace。shared secret 只认证该 binding 对应的配置槽，不能建立
+或替换 pin。
 
 ```yaml
 arkret:

@@ -7,7 +7,7 @@ use arkret_wire::{Audience, PayloadProof, PayloadProofPurpose, SchemaId, proof_k
 use chrono::{DateTime, Duration, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{Clock, UrlBuilder, User};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 
 use super::*;
 use crate::arkret_key_bridge::{SdkSigningKey, sdk_signing_key_from_seed_bytes};
@@ -32,7 +32,7 @@ fn hash_for_handle_claim(value: impl Into<String>) -> Result<Hash, SessionGrantE
 
 /// `<service DID>#<kid>` as a strongly typed DID URL.
 ///
-/// The issuer service id is a DID and the keystore `kid` is the JWS `kid`;
+/// The issuer service id is a DID and the keyring `kid` is the JWS `kid`;
 /// a deployment whose `kid` uses characters outside the spec `did_url`
 /// fragment charset fails closed here instead of emitting a wire-invalid
 /// `verification_method`.
@@ -52,7 +52,7 @@ pub(crate) fn issue_handle_claim(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     user: &User,
     account_id: &arkret_wire::AccountId,
     claim_kind: HandleClaimKind,
@@ -86,14 +86,14 @@ pub(crate) fn issue_handle_claim(
         }
     };
     let signing_key = sdk_signing_key_from_seed_bytes(
-        &key_store
+        &keyring
             .account_authority_seed()
             .map_err(|error| SessionGrantError::Other(error.into()))?,
     );
     // `issuer_did` is the owning Station; the Station's DID document authorizes
     // this Account Authority under the shared fragment, not under coauth's
-    // internal keystore `kid`. A verifier resolves the fragment from that
-    // document, so the keystore name would be unresolvable there.
+    // internal keyring `kid`. A verifier resolves the fragment from that
+    // document, so the keyring name would be unresolvable there.
     let verification_method = did_url_for_handle_claim(format!(
         "{issuer_did}#{}",
         crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT

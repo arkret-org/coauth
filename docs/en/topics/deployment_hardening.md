@@ -18,7 +18,7 @@ read/export surfaces return `signature_status`:
   cannot verify.
 
 `ak.session.grant` credentials are signed with the key whose kid is
-`coauth-session-grant-v1`, also selected by name. A keystore that does not
+`coauth-session-grant-v1`, also selected by name. A keyring that does not
 carry that kid issues no grants at all: selecting by algorithm order instead
 would move the signing key - and the kid clients read out of a grant -
 whenever another key is added or reordered. Configure the designated key
@@ -26,7 +26,7 @@ before serving traffic, and keep a retired public key in the JWKS until every
 grant it signed has expired.
 
 Audit rows are signed with the Ed25519 key whose kid is
-`coauth-audit-signing-v1` in `secrets.keys`. It is selected by name, never by
+`coauth-audit-signing-v1` in the durable runtime key bundle. It is selected by name, never by
 algorithm: an algorithm lookup returns the *last* matching key, so selecting
 by algorithm would let the audit signer change silently whenever an Ed25519
 key is added or reordered, and the kid recorded in every row's signature would

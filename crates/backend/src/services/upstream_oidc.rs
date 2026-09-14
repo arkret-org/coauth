@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
 use coauth_data::{UpstreamOAuthProvider, UrlBuilder};
 use coauth_jose::claims::{self, TokenHash};
-use coauth_keystore::{Encrypter, Keystore};
+use coauth_keyring::{Encrypter, Keyring};
 use coauth_oauth_types::oidc::VerifiedProviderMetadata;
 use coauth_oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant,
@@ -115,7 +115,7 @@ pub trait UpstreamOidcService: Send + Sync {
     async fn fetch_local_oidc_userinfo(
         &self,
         http_client: &reqwest::Client,
-        key_store: &coauth_keystore::Keystore,
+        keyring: &coauth_keyring::Keyring,
         userinfo_endpoint: &url::Url,
         issuer: &url::Url,
         access_token: &str,
@@ -127,7 +127,7 @@ pub trait UpstreamOidcService: Send + Sync {
     async fn exchange_federated_authorization_code(
         &self,
         http_client: &reqwest::Client,
-        key_store: &Keystore,
+        keyring: &Keyring,
         encrypter: &Encrypter,
         provider: &UpstreamOAuthProvider,
         issuer: &Url,
@@ -347,14 +347,14 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
     async fn fetch_local_oidc_userinfo(
         &self,
         http_client: &reqwest::Client,
-        key_store: &coauth_keystore::Keystore,
+        keyring: &coauth_keyring::Keyring,
         userinfo_endpoint: &url::Url,
         issuer: &url::Url,
         access_token: &str,
         expected_client_id: &String,
         expected_signed_alg: Option<&coauth_iana::jose::JsonWebSignatureAlg>,
     ) -> Result<(OidcUserinfoClaims, bool), String> {
-        let jwks = key_store.public_jwks();
+        let jwks = keyring.public_jwks();
         fetch_oidc_userinfo(
             http_client,
             userinfo_endpoint,
@@ -370,7 +370,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
     async fn exchange_federated_authorization_code(
         &self,
         http_client: &reqwest::Client,
-        key_store: &Keystore,
+        keyring: &Keyring,
         encrypter: &Encrypter,
         provider: &UpstreamOAuthProvider,
         issuer: &Url,
@@ -387,7 +387,7 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
         let client_credentials = crate::handlers::upstream_oauth::client_credentials_for_provider(
             provider,
             token_endpoint,
-            key_store,
+            keyring,
             encrypter,
         )
         .map_err(|error| format!("failed to load upstream provider credentials: {error}"))?;
@@ -586,10 +586,7 @@ mod tests {
             stations: vec![StationConfig {
                 name: "soland".to_owned(),
                 endpoint: endpoint.clone(),
-                service_id: Some(
-                    arkret_identifiers::DidCoreId::new("ak:did_core:webvh:current").unwrap(),
-                ),
-                session_grant_introspection_bearer: None,
+                internal_authority_shared_secret: None,
                 embedded_webvh_registration_bearer: None,
                 trust_domain: None,
             }],
@@ -598,13 +595,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn oidc_target_uses_configured_principal_audience_without_describe_discovery() {
+    async fn oidc_target_uses_verified_principal_audience_without_request_path_discovery() {
         let server = MockServer::start().await;
         let endpoint = Url::parse(&server.uri()).unwrap();
-        let config = station_config_for(endpoint);
+        let config = station_config_for(endpoint.clone());
         let service_id = arkret_identifiers::DidCoreId::new("ak:did_core:webvh:current").unwrap();
 
         let resolved = StationTrustResolver::new();
+        resolved.insert_for_test(&endpoint, service_id.to_string());
         let url_builder = UrlBuilder::new("https://auth.example/".parse().unwrap(), None, None);
         let target = DefaultUpstreamOidcService
             .session_grant_target_for_requested_audience(

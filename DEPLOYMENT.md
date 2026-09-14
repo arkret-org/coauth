@@ -10,7 +10,9 @@
 
 - PostgreSQL 14+ (primary) — `coauth-backend` uses Diesel migrations.
 - Optional: OIDC upstream provider (Keycloak, Auth0, Azure AD, etc.) for `ak.account.oidc_*` strands.
-- Optional: HSM / KMS for signing keys (production).
+- A durable `arkret-keystore` backend: platform credential storage for a
+  single host, or encrypted-file storage plus a separately custodied master
+  key for containers and replicas.
 - Rust toolchain matching workspace MSRV (see root `Cargo.toml`).
 
 ## Configuration
@@ -28,6 +30,10 @@ http:
   issuer: https://auth.acme.example/
 database:
   uri: ${COAUTH_DATABASE_URI}
+secrets:
+  backend: encrypted_file
+  path: /var/lib/coauth/keystore.v1
+  master_key_file: /run/secrets/coauth_runtime_keys_master_key
 arkret:
   trust_domain: ak:trust_domain:acme.example
   stations:
@@ -36,7 +42,11 @@ arkret:
     embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
-Secrets (OIDC client secret, signing keys, DB password) MUST come from environment variables, sealed secrets, or a secrets manager — NEVER committed `.env`.
+The KeyStore master key, OIDC client secrets, and DB password MUST come from
+mounted secrets or a secrets manager — never a committed `.env`. Run exactly
+one initial server with `--first-provisioning`; all later server and worker
+processes load the existing bundle without that flag. Multi-replica deployments
+must share the same encrypted file and master key.
 
 ## Database bootstrap
 

@@ -15,7 +15,7 @@ use coauth_data::{
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, PkceCodeChallengeMethod};
 use coauth_jose::jwt::Jwt;
-use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+use coauth_keyring::{JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
 use coauth_oauth_types::pkce::CodeChallengeMethodExt as _;
 use coauth_oauth_types::requests::{
     AccessTokenResponse, AuthorizationCodeGrant, GrantType, RefreshTokenGrant, ResponseMode,
@@ -60,11 +60,11 @@ fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> C
     }
 }
 
-fn ed25519_keystore() -> Keystore {
+fn ed25519_keyring() -> Keyring {
     let mut rng = ChaChaRng::seed_from_u64(701);
     let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID);
-    Keystore::new(JsonWebKeySet::new(vec![key]))
+        .with_kid(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID);
+    Keyring::new(JsonWebKeySet::new(vec![key]))
 }
 
 async fn test_templates(url_builder: UrlBuilder) -> Templates {
@@ -128,7 +128,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_id_row() 
     let url_builder = UrlBuilder::new("https://auth.local.host/".parse().unwrap(), None, None);
     let arkret_config = ArkretConfig::default();
     let templates = test_templates(url_builder.clone()).await;
-    let key_store = ed25519_keystore();
+    let keyring = ed25519_keyring();
     let station: Arc<dyn ConnectorAdmin> = Arc::new(DbConnectorAdmin::new(
         "example.com",
         factory.clone().boxed(),
@@ -229,7 +229,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_id_row() 
         &activity_tracker,
         &grant,
         &client,
-        &key_store,
+        &keyring,
         &url_builder,
         &arkret_config,
         &site_config,
@@ -247,7 +247,7 @@ async fn authorization_code_openid_exchange_does_not_require_principal_id_row() 
         .expect("openid exchange should return id_token");
     let jwt = Jwt::<std::collections::HashMap<String, Value>>::try_from(id_token.as_str())
         .expect("id_token should be a JWT");
-    jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
+    jwt.verify_with_jwks(&keyring.public_jwks()).unwrap();
 
     let expected_subject = crate::handlers::arkret::oidc_subject_for_user(&arkret_config, &user);
     assert_eq!(
@@ -353,7 +353,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
         ..ArkretConfig::default()
     };
-    let grant_keystore = ed25519_keystore();
+    let grant_keyring = ed25519_keyring();
     let grant_url_builder = UrlBuilder::new("https://issuer.example/".parse().unwrap(), None, None);
     let grant_public_jwk = coauth_jose::jwk::PublicJsonWebKey::new(
         coauth_jose::jwk::JsonWebKeyPublicParameters::from(&PrivateKey::generate_ed25519(&mut rng)),
@@ -370,7 +370,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         &*clock,
         &grant_url_builder,
         &grant_config,
-        &grant_keystore,
+        &grant_keyring,
         &browser_session,
         grant_public_jwk,
         principal_id,

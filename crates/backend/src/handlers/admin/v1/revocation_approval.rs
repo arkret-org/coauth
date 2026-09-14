@@ -84,7 +84,7 @@ pub(super) async fn verify_revocation_approval_proof(
 
     let arkret_config = depot.arkret_config()?;
     let did_resolver = depot.did_resolver_service()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let url_builder = depot.url_builder()?;
     let http_client = depot.http_client().map_err(AppError::internal)?;
 
@@ -112,7 +112,7 @@ pub(super) async fn verify_revocation_approval_proof(
         &http_client,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),

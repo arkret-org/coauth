@@ -25,7 +25,11 @@ impl Options {
         let lifecycle = LifecycleManager::new()?;
         let _guard = info_span!("cli.worker.init").entered();
 
-        let app_cfg = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+        let mut app_cfg = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+        app_cfg
+            .arkret
+            .resolve_internal_authority_shared_secrets()
+            .await?;
 
         // ── Database ────────────────────────────────────────────────────
         info!("Connecting to the database");
@@ -65,11 +69,12 @@ impl Options {
 
         // ── Principal account facade ───────────────────────────────────
         let arkret_http_client = coauth_backend::reqwest_client_for_arkret(&app_cfg.arkret);
-        let key_store = app_cfg
+        let runtime_secrets = app_cfg
             .secrets
-            .key_store()
+            .runtime(false)
             .await
-            .context("could not import keys from config")?;
+            .context("could not load runtime keys from the configured KeyStore")?;
+        let keyring = runtime_secrets.keyring();
         coauth_backend::services::station_trust::preflight_and_spawn(
             PgRepositoryFactory::new(db_pool.clone()),
             app_cfg.arkret.clone(),
@@ -84,7 +89,7 @@ impl Options {
             PgRepositoryFactory::new(db_pool.clone()).boxed(),
             app_cfg.arkret.clone(),
             arkret_http_client,
-            &key_store,
+            &keyring,
             &urls,
         )?;
 

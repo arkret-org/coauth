@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use anyhow::bail;
 use camino::Utf8PathBuf;
-use coauth_keystore::PrivateKey;
+use coauth_keyring::PrivateKey;
 use ipnetwork::IpNetwork;
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};

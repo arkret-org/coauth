@@ -241,8 +241,8 @@ pub trait DepotExt {
     fn metadata_cache(&self) -> Result<crate::handlers::MetadataCache, RouteError>;
     fn jwks_cache(&self) -> Result<crate::handlers::JwksCache, RouteError>;
     fn http_client(&self) -> Result<reqwest::Client, RouteError>;
-    fn encrypter(&self) -> Result<coauth_keystore::Encrypter, RouteError>;
-    fn key_store(&self) -> Result<coauth_keystore::Keystore, RouteError>;
+    fn encrypter(&self) -> Result<coauth_keyring::Encrypter, RouteError>;
+    fn keyring(&self) -> Result<coauth_keyring::Keyring, RouteError>;
     fn app_version(&self) -> Result<coauth_data::AppVersion, RouteError>;
     fn risk_action_state_service(
         &self,
@@ -355,12 +355,12 @@ impl DepotExt for Depot {
         depot_get(self, "http_client")
     }
 
-    fn encrypter(&self) -> Result<coauth_keystore::Encrypter, RouteError> {
+    fn encrypter(&self) -> Result<coauth_keyring::Encrypter, RouteError> {
         depot_get(self, "encrypter")
     }
 
-    fn key_store(&self) -> Result<coauth_keystore::Keystore, RouteError> {
-        depot_get(self, "keystore")
+    fn keyring(&self) -> Result<coauth_keyring::Keyring, RouteError> {
+        depot_get(self, "keyring")
     }
 
     fn app_version(&self) -> Result<coauth_data::AppVersion, RouteError> {

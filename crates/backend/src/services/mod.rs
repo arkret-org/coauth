@@ -30,21 +30,21 @@ pub mod webauthn;
 /// organization statements).
 ///
 /// Every service signer resolves its key through this one function so a
-/// keystore that offers several algorithms cannot make two coauth surfaces
+/// keyring that offers several algorithms cannot make two coauth surfaces
 /// sign with different keys.
 pub(crate) fn preferred_service_signing_key(
-    key_store: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
 ) -> Option<(
     coauth_iana::jose::JsonWebSignatureAlg,
-    &coauth_keystore::JsonWebKey<coauth_keystore::PrivateKey>,
+    &coauth_keyring::JsonWebKey<coauth_keyring::PrivateKey>,
 )> {
-    key_store.session_grant_signing_key()
+    keyring.session_grant_signing_key()
 }
 
 #[cfg(test)]
 mod tests {
     use coauth_jose::constraints::Constrainable as _;
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng as _;
 
@@ -62,7 +62,7 @@ mod tests {
     /// reordered. Both orders must now name the designated key.
     #[test]
     fn session_grant_signer_is_the_designated_key_regardless_of_key_order() {
-        let designated = coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID;
+        let designated = coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID;
 
         for order in [
             [("other-a", 21_u64), (designated, 22), ("other-z", 23)],
@@ -72,9 +72,9 @@ mod tests {
                 .iter()
                 .map(|(kid, seed)| ed25519(*seed, kid))
                 .collect();
-            let key_store = Keystore::new(JsonWebKeySet::new(keys));
+            let keyring = Keyring::new(JsonWebKeySet::new(keys));
             let (alg, key) =
-                preferred_service_signing_key(&key_store).expect("a signing key is available");
+                preferred_service_signing_key(&keyring).expect("a signing key is available");
             assert_eq!(key.kid(), Some(designated));
             assert_eq!(alg, coauth_iana::jose::JsonWebSignatureAlg::Ed25519);
         }

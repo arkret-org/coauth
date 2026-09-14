@@ -1,7 +1,7 @@
 //! Station trust enrollment commands
 //!
-//! Machine-executable one-time bootstrap and explicit replacement of the
-//! persisted Station authorization pins. The endpoint, egress, TLS
+//! Explicit high-risk replacement and revocation of persisted Station
+//! authorization pins. The endpoint, egress, TLS
 //! and Provider settings all come from the same configuration the server
 //! uses, so operators never re-enter a second, drift-prone URL set.
 
@@ -11,7 +11,6 @@ use anyhow::Context;
 use clap::Parser;
 use coauth_backend::util::diesel_pool_from_config;
 use coauth_config::{AppConfig, ConfigurationSection, StationConfig};
-use coauth_data::storage::station_trust::StationTrustSource;
 use coauth_storage_postgres::PgRepositoryFactory;
 use figment::Figment;
 use tracing::{info, info_span};
@@ -36,19 +35,10 @@ struct TrustOptions {
 
 #[derive(Parser, Debug)]
 enum TrustSubcommand {
-    /// One-time idempotent trust bootstrap of a configured Station
-    Bootstrap(BootstrapOptions),
     /// Explicitly replace an enrolled pin after a legitimate identity genesis
     Replace(ReplaceOptions),
     /// Revoke an enrolled pin
     Revoke(RevokeOptions),
-}
-
-#[derive(Parser, Debug)]
-struct BootstrapOptions {
-    /// Name of the `arkret.stations[]` entry to enroll
-    #[arg(long)]
-    name: String,
 }
 
 #[derive(Parser, Debug)]
@@ -93,27 +83,6 @@ struct CommandContext {
 impl TrustOptions {
     async fn run(self, figment: &Figment) -> anyhow::Result<ExitCode> {
         match &self.subcommand {
-            TrustSubcommand::Bootstrap(options) => {
-                let context = load_context(figment, &options.name).await?;
-                let outcome = coauth_backend::services::station_trust::bootstrap(
-                    &context.repository_factory,
-                    &context.http_client,
-                    &context.server,
-                    StationTrustSource::OperatorCli,
-                )
-                .await
-                .context("station trust bootstrap failed")?;
-                print_summary(serde_json::json!({
-                    "action": if outcome.already_enrolled { "verified" } else { "enrolled" },
-                    "name": outcome.enrollment.name,
-                    "canonical_endpoint": outcome.enrollment.canonical_endpoint,
-                    "service_id": outcome.enrollment.service_id.as_str(),
-                    "did": outcome.enrollment.did.as_str(),
-                    "method_history_head": outcome.enrollment.method_history_head,
-                    "version_id": outcome.enrollment.version_id,
-                    "source": outcome.enrollment.source.as_str(),
-                }));
-            }
             TrustSubcommand::Replace(options) => {
                 let context = load_context(figment, &options.name).await?;
                 let expect_old = arkret_identifiers::DidCoreId::new(options.expect_old.clone())

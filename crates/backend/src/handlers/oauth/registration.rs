@@ -5,7 +5,7 @@ use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, LocalizedClientMetadata, SystemClock,
 };
 use coauth_iana::oauth::OAuthClientAuthenticationMethod;
-use coauth_keystore::Encrypter;
+use coauth_keyring::Encrypter;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::registration::{
     ClientMetadata, ClientMetadataVerificationError, ClientRegistrationResponse, Localized,
@@ -57,7 +57,7 @@ pub(crate) enum RouteError {
 impl_from_error_for_route!(coauth_data::RepositoryError);
 impl_from_error_for_route!(crate::policy::LoadError);
 impl_from_error_for_route!(crate::policy::EvaluationError);
-impl_from_error_for_route!(coauth_keystore::aead::Error);
+impl_from_error_for_route!(coauth_keyring::aead::Error);
 impl_from_error_for_route!(serde_json::Error);
 
 impl Scribe for RouteError {

@@ -8,12 +8,12 @@
 | 项目 | 位置 | 说明 |
 | --- | --- | --- |
 | Postgres 数据库 | `database.uri` | 用户、会话、OAuth client、审计日志等。 |
-| 长期 JWS 签名密钥 | `secrets.keys[*].key_file` | 丢失后所有现存 token / session grant 都无法验证。 |
-| 加密密钥 (`secrets.encryption`) | `secrets.encryption` | 解密 cookie 和加密列。丢失意味着活跃会话不可读。 |
+| 加密运行时密钥包 | `secrets.path` | 同时包含长期 JWS 私钥和应用加密密钥；丢失会使 token 失效并使加密状态不可读。 |
+| KeyStore master key | `secrets.master_key_file`（或外部 secret source） | 必须与加密密钥包配套恢复，并应分开备份。 |
 | 配置 | `config.yaml` | 当作源代码处理：放进私有仓或密钥管理系统。 |
 | 自定义模板 / 策略 | `templates.path`、`policy.path` | 可选，默认随容器镜像和 `share/` 一同发布。 |
 
-> **数据库 + 签名密钥 + 加密密钥** 是最小可恢复集合。少一个都算不完整。
+> **数据库 + 加密 KeyStore 文件 + master key** 是最小可恢复集合。少一个都算不完整。
 
 ## Postgres dump
 
@@ -33,8 +33,8 @@ OAuth client 密钥和恢复凭证。
 
 1. 准备一台新的 Postgres 实例，建立空目标库。
 2. `pg_restore --create --clean --no-owner --no-privileges --dbname=postgres dump.bin`。
-3. 把 `secrets.encryption` 与所有 `secrets.keys[*].key_file` **逐字节地**
-   还原到新主机；加密密钥差一字节，所有 cookie 都会失效。
+3. 把 encrypted KeyStore 文件与单独托管的 master key **逐字节地**还原到新主机；
+   两者缺一都无法恢复签名密钥和应用加密密钥。
 4. 还原 `config.yaml`，仅修改 `database.uri`。
 5. `coauth database migrate --config /etc/coauth/config.yaml`。
 6. 启动服务并观察 `coauth doctor` 输出。

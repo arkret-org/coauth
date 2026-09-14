@@ -24,7 +24,7 @@ use coauth_jose::claims::{self, ClaimError};
 use coauth_jose::constraints::Constrainable;
 use coauth_jose::jwa::{AsymmetricSigningKey, SymmetricKey};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use rand_core::RngCore as Rng;
 use serde::Serialize;
 use serde_json::Value;
@@ -83,8 +83,8 @@ pub enum ClientCredentials {
         /// The unique ID for the client.
         client_id: String,
 
-        /// The keystore used to sign the JWT.
-        keystore: Keystore,
+        /// The keyring used to sign the JWT.
+        keyring: Keyring,
 
         /// The algorithm used to sign the JWT.
         signing_algorithm: JsonWebSignatureAlg,
@@ -275,7 +275,7 @@ impl ClientCredentials {
 
             ClientCredentials::PrivateKeyJwt {
                 client_id,
-                keystore,
+                keyring,
                 signing_algorithm,
                 token_endpoint,
             } => {
@@ -286,10 +286,10 @@ impl ClientCredentials {
                     rng,
                 )?;
 
-                let key = keystore
+                let key = keyring
                     .signing_key_for_algorithm(signing_algorithm)
                     .ok_or(CredentialsError::NoPrivateKeyFound)?;
-                let signer = keystore
+                let signer = keyring
                     .signer_for_algorithm(signing_algorithm)
                     .map_err(|_| CredentialsError::JwtWrongAlgorithm)?;
                 let mut header = JsonWebSignatureHeader::new(signing_algorithm.clone());

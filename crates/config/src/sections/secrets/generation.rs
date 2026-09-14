@@ -1,163 +1,240 @@
-// ── Key Generation Routines ──
-//
-// Provides functions to generate fresh cryptographic keys for all
-// supported algorithms, as well as a deterministic test fixture.
+//! Generation and binary envelope for the complete Coauth runtime key bundle.
 
-use anyhow::Context;
-use coauth_keystore::PrivateKey;
+use anyhow::{Context, ensure};
+use coauth_keyring::PrivateKey;
 use rand_core::{RngCore, SeedableRng};
 use tokio::task;
-use tracing::info;
+use zeroize::Zeroizing;
 
-use super::SecretsConfig;
-use super::encryption::EncryptionKey;
-use super::key_config::{Key, KeyConfig};
+const MAGIC: &[u8; 8] = b"COAUTHK1";
+const FORMAT_VERSION: u16 = 1;
+const INITIAL_KEY_COUNT: usize = 8;
+const MAX_KEY_COUNT: usize = 64;
 
-/// Holds the generation logic for [`SecretsConfig`].
-impl SecretsConfig {
-    /// Creates a fresh configuration with randomly-generated keys covering
-    /// RSA, EC P-256, EC P-384, EC P-521, EC secp256k1, and Ed25519.
-    #[expect(
-        clippy::similar_names,
-        reason = "Key type names are necessarily similar"
-    )]
-    #[tracing::instrument(skip_all)]
-    pub(crate) async fn generate<R>(mut rng: R) -> anyhow::Result<Self>
-    where
-        R: RngCore + Send,
-    {
-        info!("Generating keys...");
+pub(super) struct StoredKey {
+    pub(super) kid: Option<String>,
+    pub(super) der: Zeroizing<Vec<u8>>,
+}
 
-        let rsa_key = {
-            let span = tracing::info_span!("rsa");
-            let key_rng = rand_chacha::ChaChaRng::from_rng(&mut rng)?;
-            task::spawn_blocking(move || {
-                let _entered = span.enter();
-                let ret = PrivateKey::generate_rsa(key_rng).unwrap();
-                info!("Done generating RSA key");
-                ret
-            })
-            .await
-            .context("could not join blocking task")?
-        };
+pub(super) struct StoredKeyBundle {
+    pub(super) encryption_key: Zeroizing<[u8; 32]>,
+    pub(super) keys: Vec<StoredKey>,
+}
 
-        let ec_p256_key =
-            spawn_ec_keygen(&mut rng, "ec_p256", PrivateKey::generate_ec_p256).await?;
-        let ec_p384_key =
-            spawn_ec_keygen(&mut rng, "ec_p384", PrivateKey::generate_ec_p384).await?;
-        let ec_p521_key =
-            spawn_ec_keygen(&mut rng, "ec_p521", PrivateKey::generate_ec_p521).await?;
-        let ec_k256_key =
-            spawn_ec_keygen(&mut rng, "ec_k256", PrivateKey::generate_ec_k256).await?;
-        let ed25519_key =
-            spawn_ec_keygen(&mut rng, "ed25519", PrivateKey::generate_ed25519).await?;
-        let audit_signing_key =
-            spawn_ec_keygen(&mut rng, "ed25519", PrivateKey::generate_ed25519).await?;
-        let session_grant_key =
-            spawn_ec_keygen(&mut rng, "ed25519", PrivateKey::generate_ed25519).await?;
-        Ok(Self {
-            encryption: EncryptionKey::Value({
-                let mut key = [0u8; 32];
-                rng.fill_bytes(&mut key);
-                key
-            }),
-            keys: Some(vec![
-                into_key_config(rsa_key)?,
-                into_key_config(ec_p256_key)?,
-                into_key_config(ec_p384_key)?,
-                into_key_config(ec_p521_key)?,
-                into_key_config(ec_k256_key)?,
-                into_key_config_with_kid(ed25519_key, coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID)?,
-                into_key_config_with_kid(audit_signing_key, coauth_keystore::AUDIT_SIGNING_KEY_ID)?,
-                into_key_config_with_kid(
-                    session_grant_key,
-                    coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
-                )?,
-            ]),
-            keys_dir: None,
-        })
+impl StoredKeyBundle {
+    pub(super) fn encode(&self) -> anyhow::Result<Zeroizing<Vec<u8>>> {
+        ensure!(
+            (1..=MAX_KEY_COUNT).contains(&self.keys.len()),
+            "runtime key bundle must contain between 1 and {MAX_KEY_COUNT} keys"
+        );
+        let mut output = Zeroizing::new(Vec::new());
+        output.extend_from_slice(MAGIC);
+        output.extend_from_slice(&FORMAT_VERSION.to_be_bytes());
+        output.extend_from_slice(self.encryption_key.as_ref());
+        output.extend_from_slice(
+            &u16::try_from(self.keys.len())
+                .context("too many stored keys")?
+                .to_be_bytes(),
+        );
+        for key in &self.keys {
+            let kid = key.kid.as_deref().unwrap_or_default().as_bytes();
+            output.extend_from_slice(
+                &u16::try_from(kid.len())
+                    .context("stored key id is too long")?
+                    .to_be_bytes(),
+            );
+            output.extend_from_slice(kid);
+            output.extend_from_slice(
+                &u32::try_from(key.der.len())
+                    .context("stored private key is too large")?
+                    .to_be_bytes(),
+            );
+            output.extend_from_slice(&key.der);
+        }
+        Ok(output)
     }
 
-    /// Returns a deterministic test configuration with hardcoded keys
-    pub(crate) fn test() -> Self {
-        let rsa_key = KeyConfig {
-            kid: None,
-            password: None,
-            key: Key::Value(
-                indoc::indoc! {r"
-                  -----BEGIN PRIVATE KEY-----
-                  MIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8wggE7AgEAAkEAymS2RkeIZo7pUeEN
-                  QUGCG4GLJru5jzxomO9jiNr5D/oRcerhpQVc9aCpBfAAg4l4a1SmYdBzWqX0X5pU
-                  scgTtQIDAQABAkEArNIMlrxUK4bSklkCcXtXdtdKE9vuWfGyOw0GyAB69fkEUBxh
-                  3j65u+u3ZmW+bpMWHgp1FtdobE9nGwb2VBTWAQIhAOyU1jiUEkrwKK004+6b5QRE
-                  vC9UI2vDWy5vioMNx5Y1AiEA2wGAJ6ETF8FF2Vd+kZlkKK7J0em9cl0gbJDsWIEw
-                  N4ECIEyWYkMurD1WQdTQqnk0Po+DMOihdFYOiBYgRdbnPxWBAiEAmtd0xJAd7622
-                  tPQniMnrBtiN2NxqFXHCev/8Gpc8gAECIBcaPcF59qVeRmYrfqzKBxFm7LmTwlAl
-                  Gh7BNzCeN+D6
-                  -----END PRIVATE KEY-----
-                "}
-                .to_owned(),
-            ),
-        };
-        let ecdsa_key = KeyConfig {
-            kid: None,
-            password: None,
-            key: Key::Value(
-                indoc::indoc! {r"
-                  -----BEGIN PRIVATE KEY-----
-                  MIGEAgEAMBAGByqGSM49AgEGBSuBBAAKBG0wawIBAQQgqfn5mYO/5Qq/wOOiWgHA
-                  NaiDiepgUJ2GI5eq2V8D8nahRANCAARMK9aKUd/H28qaU+0qvS6bSJItzAge1VHn
-                  OhBAAUVci1RpmUA+KdCL5sw9nadAEiONeiGr+28RYHZmlB9qXnjC
-                  -----END PRIVATE KEY-----
-                "}
-                .to_owned(),
-            ),
-        };
-
-        Self {
-            encryption: EncryptionKey::Value([0xEA; 32]),
-            keys: Some(vec![rsa_key, ecdsa_key]),
-            keys_dir: None,
+    pub(super) fn decode(input: &[u8]) -> anyhow::Result<Self> {
+        let mut cursor = Cursor::new(input);
+        ensure!(
+            cursor.take(MAGIC.len())? == MAGIC,
+            "invalid Coauth key-bundle magic"
+        );
+        ensure!(
+            cursor.u16()? == FORMAT_VERSION,
+            "unsupported Coauth key-bundle format version"
+        );
+        let mut encryption_key = [0u8; 32];
+        encryption_key.copy_from_slice(cursor.take(32)?);
+        let key_count = usize::from(cursor.u16()?);
+        ensure!(
+            (1..=MAX_KEY_COUNT).contains(&key_count),
+            "Coauth key bundle must contain between 1 and {MAX_KEY_COUNT} keys (got {key_count})"
+        );
+        let mut keys = Vec::with_capacity(key_count);
+        for _ in 0..key_count {
+            let kid_len = usize::from(cursor.u16()?);
+            let kid = if kid_len == 0 {
+                None
+            } else {
+                Some(
+                    std::str::from_utf8(cursor.take(kid_len)?)
+                        .context("stored key id is not UTF-8")?
+                        .to_owned(),
+                )
+            };
+            let der_len = usize::try_from(cursor.u32()?).context("invalid private-key length")?;
+            ensure!(der_len > 0, "stored private key must not be empty");
+            keys.push(StoredKey {
+                kid,
+                der: Zeroizing::new(cursor.take(der_len)?.to_vec()),
+            });
         }
+        ensure!(
+            cursor.remaining() == 0,
+            "trailing bytes in Coauth key bundle"
+        );
+        Ok(Self {
+            encryption_key: Zeroizing::new(encryption_key),
+            keys,
+        })
     }
 }
 
-// ── Internal Helpers ──
+pub(super) async fn generate_key_bundle<R>(rng: &mut R) -> anyhow::Result<StoredKeyBundle>
+where
+    R: RngCore + Send,
+{
+    let rsa_key = {
+        let key_rng = rand_chacha::ChaChaRng::from_rng(&mut *rng)?;
+        task::spawn_blocking(move || PrivateKey::generate_rsa(key_rng))
+            .await
+            .context("joining RSA key-generation task")??
+    };
+    let ec_p256_key = spawn_keygen(rng, PrivateKey::generate_ec_p256).await?;
+    let ec_p384_key = spawn_keygen(rng, PrivateKey::generate_ec_p384).await?;
+    let ec_p521_key = spawn_keygen(rng, PrivateKey::generate_ec_p521).await?;
+    let ec_k256_key = spawn_keygen(rng, PrivateKey::generate_ec_k256).await?;
+    let account_authority_key = spawn_keygen(rng, PrivateKey::generate_ed25519).await?;
+    let audit_signing_key = spawn_keygen(rng, PrivateKey::generate_ed25519).await?;
+    let session_grant_key = spawn_keygen(rng, PrivateKey::generate_ed25519).await?;
 
-/// Spawns a blocking task that generates a single elliptic-curve or
-/// Edwards-curve private key using the provided `gen_fn`, seeded from `rng`.
-async fn spawn_ec_keygen<R, F>(rng: &mut R, label: &str, gen_fn: F) -> anyhow::Result<PrivateKey>
+    let mut encryption_key = [0u8; 32];
+    rng.fill_bytes(&mut encryption_key);
+    let keys = vec![
+        stored_key(rsa_key, None)?,
+        stored_key(ec_p256_key, None)?,
+        stored_key(ec_p384_key, None)?,
+        stored_key(ec_p521_key, None)?,
+        stored_key(ec_k256_key, None)?,
+        stored_key(
+            account_authority_key,
+            Some(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID),
+        )?,
+        stored_key(
+            audit_signing_key,
+            Some(coauth_keyring::AUDIT_SIGNING_KEY_ID),
+        )?,
+        stored_key(
+            session_grant_key,
+            Some(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID),
+        )?,
+    ];
+    debug_assert_eq!(keys.len(), INITIAL_KEY_COUNT);
+    Ok(StoredKeyBundle {
+        encryption_key: Zeroizing::new(encryption_key),
+        keys,
+    })
+}
+
+async fn spawn_keygen<R, F>(rng: &mut R, generate: F) -> anyhow::Result<PrivateKey>
 where
     R: RngCore,
     F: FnOnce(rand_chacha::ChaChaRng) -> PrivateKey + Send + 'static,
 {
-    let span = tracing::info_span!(target: "secrets_keygen", "keygen", algorithm = label);
-    let child_rng = rand_chacha::ChaChaRng::from_rng(rng)?;
-    let algo_label = label.to_owned();
-
-    task::spawn_blocking(move || {
-        let _entered = span.enter();
-        let pk = gen_fn(child_rng);
-        info!("Done generating {algo_label} key");
-        pk
-    })
-    .await
-    .context("could not join blocking key generation task")
+    let key_rng = rand_chacha::ChaChaRng::from_rng(rng)?;
+    task::spawn_blocking(move || generate(key_rng))
+        .await
+        .context("joining private-key generation task")
 }
 
-/// Wraps a [`PrivateKey`] into a [`KeyConfig`] carrying its PEM encoding
-fn into_key_config(pk: PrivateKey) -> anyhow::Result<KeyConfig> {
-    Ok(KeyConfig {
-        kid: None,
-        password: None,
-        key: Key::Value(pk.to_pem(pem_rfc7468::LineEnding::LF)?.to_string()),
+fn stored_key(key: PrivateKey, kid: Option<&str>) -> anyhow::Result<StoredKey> {
+    Ok(StoredKey {
+        kid: kid.map(str::to_owned),
+        der: key
+            .to_pkcs8_der()
+            .context("encoding generated private key")?,
     })
 }
 
-fn into_key_config_with_kid(pk: PrivateKey, kid: &str) -> anyhow::Result<KeyConfig> {
-    Ok(KeyConfig {
-        kid: Some(kid.to_owned()),
-        password: None,
-        key: Key::Value(pk.to_pem(pem_rfc7468::LineEnding::LF)?.to_string()),
-    })
+struct Cursor<'a> {
+    input: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> Cursor<'a> {
+    const fn new(input: &'a [u8]) -> Self {
+        Self { input, offset: 0 }
+    }
+
+    fn take(&mut self, length: usize) -> anyhow::Result<&'a [u8]> {
+        let end = self
+            .offset
+            .checked_add(length)
+            .ok_or_else(|| anyhow::anyhow!("key-bundle length overflow"))?;
+        let value = self
+            .input
+            .get(self.offset..end)
+            .ok_or_else(|| anyhow::anyhow!("truncated Coauth key bundle"))?;
+        self.offset = end;
+        Ok(value)
+    }
+
+    fn u16(&mut self) -> anyhow::Result<u16> {
+        Ok(u16::from_be_bytes(self.take(2)?.try_into().map_err(
+            |_| anyhow::anyhow!("invalid u16 in key bundle"),
+        )?))
+    }
+
+    fn u32(&mut self) -> anyhow::Result<u32> {
+        Ok(u32::from_be_bytes(self.take(4)?.try_into().map_err(
+            |_| anyhow::anyhow!("invalid u32 in key bundle"),
+        )?))
+    }
+
+    const fn remaining(&self) -> usize {
+        self.input.len() - self.offset
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand_core::SeedableRng;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn binary_bundle_round_trips_and_rejects_trailing_data() {
+        let mut rng = rand_chacha::ChaChaRng::from_seed([4; 32]);
+        let bundle = generate_key_bundle(&mut rng).await.unwrap();
+        let encoded = bundle.encode().unwrap();
+        let decoded = StoredKeyBundle::decode(&encoded).unwrap();
+        assert_eq!(decoded.keys.len(), INITIAL_KEY_COUNT);
+        assert_eq!(
+            decoded.encryption_key.as_ref(),
+            bundle.encryption_key.as_ref()
+        );
+
+        let mut trailing = encoded.to_vec();
+        trailing.push(0);
+        assert!(StoredKeyBundle::decode(&trailing).is_err());
+    }
+
+    #[test]
+    fn binary_bundle_rejects_wrong_magic() {
+        let mut invalid = vec![0; 44];
+        invalid[..8].copy_from_slice(b"INVALID!");
+        let error = StoredKeyBundle::decode(&invalid).err().unwrap();
+        assert!(error.to_string().contains("magic"));
+    }
 }

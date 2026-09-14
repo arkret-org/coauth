@@ -15,36 +15,29 @@ arkret:
   stations:
     - name: soland
       endpoint: https://soland.example.com/
-      service_id: ak:did_core:webvh:<soland-scid>
+      trust_domain: ak:trust_domain:soland.example.com
+      internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
       embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 - `name`: operator-facing identifier for the Station.
 - `endpoint`: base URL advertised through Arkret/OIDC discovery.
-- `service_id`: optional explicit identity pin (`ak:did_core:webvh:<scid>`).
-  When present it has the highest priority. When omitted, the pin comes from
-  the persisted trust enrollment created by the one-time bootstrap (see
-  below).
+- `trust_domain` and `internal_authority_shared_secret{_file}`: explicit
+  deployment boundaries for the fixed internal channel. A file is read only
+  once during startup.
 - `embedded_webvh_registration_bearer`: deployment credential used by coauth
   for private Station-to-component calls. It is not a public service-role credential.
 
-## One-time trust bootstrap
+## Automatic verified durable binding
 
-The Station DID/audience is never trusted from a bare
-`/_arkret/describe` response. Before coauth accepts tokens or session grants
-for a Station audience, that audience must be pinned by either the
-configured `service_id` or a persisted trust enrollment. Create the
-enrollment once per deployment:
-
-```console
-$ coauth station trust bootstrap --name soland
-```
-
-Bootstrap performs a full online verification of the Station
-identity chain (WebVH history, service-identity binding, resolution record
-and endpoint bindings) and persists the verified pin plus an audit entry.
-It is idempotent: re-running it with an unchanged identity succeeds without
-altering the pin.
+First startup requires neither advance knowledge of the Station service ID nor
+an administrator initialization command. Coauth performs full online
+verification from the configured exact endpoint (WebVH history,
+service-identity binding, authenticated resolution, role and endpoint
+bindings), then atomically persists the pin, anti-rollback floor and audit
+entry. A bare `/_arkret/describe` response or shared secret alone cannot
+establish identity; concurrent replicas converge only on an identical verified
+tuple.
 
 The Coauth HTTP server does not wait for this verification before binding. It
 publishes OIDC discovery, its public JWKS and health endpoints first so a fresh
@@ -63,7 +56,8 @@ $ coauth station trust replace --name soland \
 
 Replacement revokes session grants bound to the old audience in the same
 transaction. `coauth station trust revoke --name soland` removes the
-pin entirely; the server then refuses to serve until a pin exists again.
+pin entirely; the server then refuses to serve until the next full automatic
+verification establishes a binding again.
 
 ## Deployment-private Account Authority signer
 
@@ -96,12 +90,12 @@ v1 protocol operations:
 Both edges are authenticated with the shared bearer configured on the matching
 `stations` entry:
 
-`service_id` is the explicit configuration pin and takes priority when
-present. When it is absent, the persisted trust enrollment created by
-`coauth station trust bootstrap` is the authorization pin. Any
-operation that authenticates this Station requires one of the two
-and fails closed when neither exists. `/_arkret/describe` is capability and
-metadata only; a remote Describe response cannot establish or replace a pin.
+Runtime authorization uses only the fully verified durable Station binding. An
+endpoint change is updated with CAS only when the same service core proves
+continuous, non-rollback WebVH history; a new core/genesis requires the
+explicit replace command above. The shared secret authenticates only the
+configuration slot corresponding to that binding and cannot establish or
+replace the pin.
 
 ```yaml
 arkret:

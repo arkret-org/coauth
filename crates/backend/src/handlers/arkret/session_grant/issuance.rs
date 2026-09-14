@@ -14,7 +14,7 @@ use coauth_data::oauth::NewSessionGrant;
 use coauth_data::{BrowserSession, Clock, LocalAccountId, RepositoryAccess, SessionGrant};
 use coauth_jose::jwk::PublicJsonWebKey;
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_oauth_types::scope::{Scope, ScopeToken};
 #[cfg(test)]
 use rand_core::CryptoRngCore;
@@ -32,7 +32,7 @@ pub(crate) fn issue_session_grant(
     clock: &dyn Clock,
     url_builder: &UrlBuilder,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     subject_id: &str,
@@ -43,7 +43,7 @@ pub(crate) fn issue_session_grant(
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let mut nonce = [0_u8; 32];
     rng.fill_bytes(&mut nonce);
-    let (_, signing_key) = crate::services::preferred_service_signing_key(key_store)
+    let (_, signing_key) = crate::services::preferred_service_signing_key(keyring)
         .ok_or(SessionGrantError::NoSigningKey)?;
     let signing_key_id = signing_key.kid().ok_or(SessionGrantError::NoSigningKey)?;
     let issuance_seed = SessionGrantIssuanceSeed::new(
@@ -65,7 +65,7 @@ pub(crate) fn issue_session_grant(
         &issuance_seed,
         clock,
         arkret_config,
-        key_store,
+        keyring,
         browser_session,
         session_public_key,
         DidCoreId::new(required_audience_for(url_builder, arkret_config))?,
@@ -86,7 +86,7 @@ pub(crate) fn issue_session_grant_for_audience(
     issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     audience_id: DidCoreId,
@@ -160,7 +160,7 @@ pub(crate) fn issue_session_grant_for_audience(
     };
     payload.validate()?;
 
-    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+    let (alg, key) = reserved_signing_key(keyring, &issuance_seed.signing_key_id)
         .ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = issuance_seed.signing_key_id.clone();
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
@@ -195,7 +195,7 @@ pub(crate) fn issue_session_grant_for_audience(
 pub(crate) fn issue_pairwise_session_grant_for_audience(
     issuance_seed: &SessionGrantIssuanceSeed,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     audience_id: DidCoreId,
@@ -262,7 +262,7 @@ pub(crate) fn issue_pairwise_session_grant_for_audience(
         scope_details: preimage.scope_details,
     };
     payload.validate()?;
-    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+    let (alg, key) = reserved_signing_key(keyring, &issuance_seed.signing_key_id)
         .ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = issuance_seed.signing_key_id.clone();
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
@@ -296,7 +296,7 @@ pub(crate) fn issue_pairwise_session_grant_for_audience(
 pub(crate) fn issue_recovery_session_grant_for_audience(
     issuance_seed: &SessionGrantIssuanceSeed,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     session_public_key: PublicJsonWebKey,
     audience_id: DidCoreId,
     device_id: DeviceId,
@@ -368,7 +368,7 @@ pub(crate) fn issue_recovery_session_grant_for_audience(
         scope_details: preimage.scope_details,
     };
     payload.validate()?;
-    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+    let (alg, key) = reserved_signing_key(keyring, &issuance_seed.signing_key_id)
         .ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = issuance_seed.signing_key_id.clone();
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
@@ -404,7 +404,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
     issuance_seed: &SessionGrantIssuanceSeed,
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     browser_session: &BrowserSession,
     session_public_key: PublicJsonWebKey,
     audience_id: DidCoreId,
@@ -420,7 +420,7 @@ pub(crate) fn issue_test_session_grant_for_audience(
         issuance_seed,
         clock,
         arkret_config,
-        key_store,
+        keyring,
         browser_session,
         session_public_key,
         audience_id,
@@ -647,7 +647,7 @@ where
 pub(crate) fn mint_agent_session_grant(
     issuance_seed: &SessionGrantIssuanceSeed,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     agent_id: &DidCoreId,
     local_account_id: LocalAccountId,
     device_id: &DeviceId,
@@ -718,7 +718,7 @@ pub(crate) fn mint_agent_session_grant(
     };
     payload.validate()?;
 
-    let (alg, key) = reserved_signing_key(key_store, &issuance_seed.signing_key_id)
+    let (alg, key) = reserved_signing_key(keyring, &issuance_seed.signing_key_id)
         .ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = issuance_seed.signing_key_id.clone();
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
@@ -760,15 +760,15 @@ fn compact_agent_scope_details(
 }
 
 fn reserved_signing_key<'a>(
-    key_store: &'a Keystore,
+    keyring: &'a Keyring,
     signing_key_id: &str,
 ) -> Option<(
     coauth_iana::jose::JsonWebSignatureAlg,
-    &'a coauth_keystore::JsonWebKey<coauth_keystore::PrivateKey>,
+    &'a coauth_keyring::JsonWebKey<coauth_keyring::PrivateKey>,
 )> {
     use coauth_iana::jose::JsonWebSignatureAlg;
 
-    let key = key_store
+    let key = keyring
         .iter()
         .find(|key| key.kid() == Some(signing_key_id))?;
     [
@@ -791,7 +791,7 @@ fn reserved_signing_key<'a>(
 #[cfg(test)]
 mod reserved_signing_key_tests {
     use coauth_jose::constraints::Constrainable as _;
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng as _;
 
@@ -803,13 +803,13 @@ mod reserved_signing_key_tests {
 
     #[test]
     fn reservation_lookup_uses_kid_before_algorithm() {
-        let designated = coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID;
+        let designated = coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID;
         for keys in [
             vec![ed25519(1, designated), ed25519(2, "later-ed25519")],
             vec![ed25519(2, "earlier-ed25519"), ed25519(1, designated)],
         ] {
-            let key_store = Keystore::new(JsonWebKeySet::new(keys));
-            let (algorithm, key) = reserved_signing_key(&key_store, designated)
+            let keyring = Keyring::new(JsonWebKeySet::new(keys));
+            let (algorithm, key) = reserved_signing_key(&keyring, designated)
                 .expect("the reserved key is present and usable");
             assert_eq!(algorithm, coauth_iana::jose::JsonWebSignatureAlg::Ed25519);
             assert_eq!(key.kid(), Some(designated));

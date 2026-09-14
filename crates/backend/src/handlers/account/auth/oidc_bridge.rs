@@ -656,7 +656,7 @@ async fn exchange_oidc_code(
     let clock = make_clock();
     let url_builder = depot.url_builder().map_err(exchange_internal_error)?;
     let arkret_config = depot.arkret_config().map_err(exchange_internal_error)?;
-    let key_store = depot.key_store().map_err(exchange_internal_error)?;
+    let keyring = depot.keyring().map_err(exchange_internal_error)?;
     let encrypter = depot.encrypter().map_err(exchange_internal_error)?;
     let upstream_oidc = depot
         .upstream_oidc_service()
@@ -770,7 +770,7 @@ async fn exchange_oidc_code(
         let federated_exchange = upstream_oidc
             .exchange_federated_authorization_code(
                 &http_client,
-                &key_store,
+                &keyring,
                 &encrypter,
                 &provider,
                 &issuer,
@@ -1292,7 +1292,7 @@ async fn exchange_oidc_code(
     let (oauth_userinfo, _userinfo_response_signed) = upstream_oidc
         .fetch_local_oidc_userinfo(
             &http_client,
-            &key_store,
+            &keyring,
             &userinfo_endpoint,
             &expected_issuer,
             &oauth_token_reply.access_token,

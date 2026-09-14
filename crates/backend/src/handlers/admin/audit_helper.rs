@@ -14,7 +14,7 @@ use coauth_data::{BoxRepository, RepositoryAccess, RepositoryError};
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_jose::constraints::Constrainable as _;
 use coauth_jose::jwa::{AsymmetricVerifyingKey, Signature as JoseSignature};
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use rand_chacha::ChaChaRng;
 use rand_core::{RngCore, SeedableRng as _};
 use serde::Serialize;
@@ -31,7 +31,7 @@ pub use coauth_admin_types::AuditSignatureStatus;
 /// Runtime signing inputs for admin audit helpers.
 #[derive(Clone, Copy)]
 pub struct AdminAuditSigning<'a> {
-    pub keystore: &'a Keystore,
+    pub keyring: &'a Keyring,
     pub service_id: &'a DidCoreId,
     pub service_did: &'a Did,
     pub fail_closed: bool,
@@ -74,7 +74,7 @@ pub async fn record_admin_operation_signed(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn coauth_data::Clock,
-    keystore: &Keystore,
+    keyring: &Keyring,
     service_did: &Did,
     fail_closed: bool,
     admin_user: Option<&coauth_data::User>,
@@ -93,7 +93,7 @@ pub async fn record_admin_operation_signed(
     }
 
     let log = repo.audit().add_admin_operation(rng, clock, params).await?;
-    sign_persisted_admin_operation(repo, keystore, service_did, fail_closed, &log).await
+    sign_persisted_admin_operation(repo, keyring, service_did, fail_closed, &log).await
 }
 
 /// Record a signed service-originated admin audit row.
@@ -107,7 +107,7 @@ pub(crate) async fn record_service_admin_operation_signed(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn coauth_data::Clock,
-    keystore: &Keystore,
+    keyring: &Keyring,
     service_did: &Did,
     fail_closed: bool,
     operation: AdminOperation,
@@ -122,17 +122,17 @@ pub(crate) async fn record_service_admin_operation_signed(
     }
 
     let log = repo.audit().add_admin_operation(rng, clock, params).await?;
-    sign_persisted_admin_operation(repo, keystore, service_did, fail_closed, &log).await
+    sign_persisted_admin_operation(repo, keyring, service_did, fail_closed, &log).await
 }
 
 async fn sign_persisted_admin_operation(
     repo: &mut BoxRepository,
-    keystore: &Keystore,
+    keyring: &Keyring,
     service_did: &Did,
     fail_closed: bool,
     log: &AdminOperationLog,
 ) -> Result<(), RepositoryError> {
-    let signature = match sign_admin_operation_log(keystore, service_did, log) {
+    let signature = match sign_admin_operation_log(keyring, service_did, log) {
         Ok(signature) => signature,
         Err(err) if fail_closed => return Err(RepositoryError::from_error(err)),
         Err(err) => {
@@ -140,7 +140,7 @@ async fn sign_persisted_admin_operation(
                 error = %err,
                 audit_log_id = %log.id,
                 resource_type = %log.resource_type,
-                "audit row written unsigned: keystore could not produce a signature"
+                "audit row written unsigned: keyring could not produce a signature"
             );
             return Ok(());
         }
@@ -179,7 +179,7 @@ pub(crate) fn service_admin_user_id(service_did: &Did) -> Ulid {
 #[must_use]
 pub fn verify_admin_operation_signature(
     log: &AdminOperationLog,
-    keystore: &Keystore,
+    keyring: &Keyring,
     service_did: &Did,
 ) -> AuditSignatureStatus {
     let Some(signature_value) = log
@@ -198,7 +198,7 @@ pub fn verify_admin_operation_signature(
         return AuditSignatureStatus::KeyUnavailable;
     }
 
-    let public_jwks = keystore.public_jwks();
+    let public_jwks = keyring.public_jwks();
     let Some(public_key) = public_jwks
         .iter()
         .find(|candidate| candidate.kid() == Some(parsed.kid))
@@ -270,9 +270,9 @@ fn transcript_for_log(log: &AdminOperationLog) -> AuditTranscript<'_> {
 
 #[derive(Debug, thiserror::Error)]
 enum SignError {
-    #[error("no usable service signing key in keystore")]
+    #[error("no usable service signing key in keyring")]
     NoSigningKey,
-    #[error("keystore signing key rejected the audit algorithm")]
+    #[error("keyring signing key rejected the audit algorithm")]
     KeyAlgMismatch,
     #[error("canonical-JSON encoding failed: {0}")]
     Canonical(String),
@@ -281,7 +281,7 @@ enum SignError {
 }
 
 fn sign_admin_operation_log(
-    keystore: &Keystore,
+    keyring: &Keyring,
     service_did: &Did,
     log: &AdminOperationLog,
 ) -> Result<String, SignError> {
@@ -295,11 +295,11 @@ fn sign_admin_operation_log(
     // added or reordered - and the `kid` written into every row silently
     // changed with it. Verification still walks `audit_signature_algorithms`
     // so rows signed before this key existed keep verifying.
-    let kid = coauth_keystore::AUDIT_SIGNING_KEY_ID;
-    let signer = keystore.audit_signer().map_err(|error| match error {
-        coauth_keystore::AuditSigningKeyError::Missing
-        | coauth_keystore::AuditSigningKeyError::Ambiguous => SignError::NoSigningKey,
-        coauth_keystore::AuditSigningKeyError::WrongKeyType => SignError::KeyAlgMismatch,
+    let kid = coauth_keyring::AUDIT_SIGNING_KEY_ID;
+    let signer = keyring.audit_signer().map_err(|error| match error {
+        coauth_keyring::AuditSigningKeyError::Missing
+        | coauth_keyring::AuditSigningKeyError::Ambiguous => SignError::NoSigningKey,
+        coauth_keyring::AuditSigningKeyError::WrongKeyType => SignError::KeyAlgMismatch,
     })?;
 
     let mut rng = ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| SignError::Sign)?;
@@ -357,22 +357,22 @@ mod tests {
     use coauth_data::RepositoryFactory as _;
     use coauth_data::audit::{AdminOperation, AdminOperationFilter, AdminOperationLog};
     use coauth_data::clock::MockClock;
-    use coauth_keystore::{JsonWebKey, JsonWebKeySet, Keystore, PrivateKey};
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
     use rand_chacha::ChaChaRng;
 
     use super::*;
 
-    fn test_keystore() -> Keystore {
+    fn test_keyring() -> Keyring {
         let mut rng = ChaChaRng::seed_from_u64(7);
         let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(coauth_keystore::AUDIT_SIGNING_KEY_ID);
-        Keystore::new(JsonWebKeySet::new(vec![key]))
+            .with_kid(coauth_keyring::AUDIT_SIGNING_KEY_ID);
+        Keyring::new(JsonWebKeySet::new(vec![key]))
     }
 
-    fn other_keystore() -> Keystore {
+    fn other_keyring() -> Keyring {
         let mut rng = ChaChaRng::seed_from_u64(99);
         let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("other-key");
-        Keystore::new(JsonWebKeySet::new(vec![key]))
+        Keyring::new(JsonWebKeySet::new(vec![key]))
     }
 
     fn test_log(audit_signature: Option<String>) -> AdminOperationLog {
@@ -400,11 +400,11 @@ mod tests {
         Did::new("did:web:coauth.example".to_owned()).unwrap()
     }
 
-    fn signed_test_log(service_did: &Did) -> (Keystore, AdminOperationLog) {
-        let keystore = test_keystore();
+    fn signed_test_log(service_did: &Did) -> (Keyring, AdminOperationLog) {
+        let keyring = test_keyring();
         let mut log = test_log(None);
-        log.audit_signature = Some(sign_admin_operation_log(&keystore, service_did, &log).unwrap());
-        (keystore, log)
+        log.audit_signature = Some(sign_admin_operation_log(&keyring, service_did, &log).unwrap());
+        (keyring, log)
     }
 
     /// The keyset legitimately holds several Ed25519 keys. Before the signer
@@ -420,31 +420,31 @@ mod tests {
             let mut rng = ChaChaRng::seed_from_u64(seed);
             JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid(kid)
         };
-        let designated = coauth_keystore::AUDIT_SIGNING_KEY_ID;
+        let designated = coauth_keyring::AUDIT_SIGNING_KEY_ID;
 
         for order in [
             [("other-a", 11u64), (designated, 12), ("other-z", 13)],
             [("other-z", 13), (designated, 12), ("other-a", 11)],
         ] {
             let keys = order.iter().map(|(kid, seed)| key(*seed, kid)).collect();
-            let keystore = Keystore::new(JsonWebKeySet::new(keys));
+            let keyring = Keyring::new(JsonWebKeySet::new(keys));
             let log = test_log(None);
-            let signature = sign_admin_operation_log(&keystore, &service_did, &log).unwrap();
+            let signature = sign_admin_operation_log(&keyring, &service_did, &log).unwrap();
             let parsed = parse_audit_signature(&signature).unwrap();
-            assert_eq!(parsed.kid, coauth_keystore::AUDIT_SIGNING_KEY_ID);
+            assert_eq!(parsed.kid, coauth_keyring::AUDIT_SIGNING_KEY_ID);
             let mut signed = log;
             signed.audit_signature = Some(signature);
             assert_eq!(
-                verify_admin_operation_signature(&signed, &keystore, &service_did),
+                verify_admin_operation_signature(&signed, &keyring, &service_did),
                 AuditSignatureStatus::Verified
             );
         }
 
         // No designated key at all: the row is reported unsignable rather than
         // signed by whichever key happens to be around.
-        let keystore = Keystore::new(JsonWebKeySet::new(vec![key(14, "stray")]));
+        let keyring = Keyring::new(JsonWebKeySet::new(vec![key(14, "stray")]));
         assert!(matches!(
-            sign_admin_operation_log(&keystore, &service_did, &test_log(None)),
+            sign_admin_operation_log(&keyring, &service_did, &test_log(None)),
             Err(SignError::NoSigningKey)
         ));
     }
@@ -452,9 +452,9 @@ mod tests {
     #[test]
     fn signed_row_verifies() {
         let service_did = test_service_did();
-        let (keystore, log) = signed_test_log(&service_did);
+        let (keyring, log) = signed_test_log(&service_did);
         assert_eq!(
-            verify_admin_operation_signature(&log, &keystore, &service_did),
+            verify_admin_operation_signature(&log, &keyring, &service_did),
             AuditSignatureStatus::Verified
         );
     }
@@ -462,10 +462,10 @@ mod tests {
     #[test]
     fn details_tamper_invalidates_signature() {
         let service_did = test_service_did();
-        let (keystore, mut log) = signed_test_log(&service_did);
+        let (keyring, mut log) = signed_test_log(&service_did);
         log.details["ticket"] = serde_json::json!("SEC-999");
         assert_eq!(
-            verify_admin_operation_signature(&log, &keystore, &service_did),
+            verify_admin_operation_signature(&log, &keyring, &service_did),
             AuditSignatureStatus::Invalid
         );
     }
@@ -473,10 +473,10 @@ mod tests {
     #[test]
     fn resource_id_tamper_invalidates_signature() {
         let service_did = test_service_did();
-        let (keystore, mut log) = signed_test_log(&service_did);
+        let (keyring, mut log) = signed_test_log(&service_did);
         log.resource_id = Some(Ulid::from(Uuid::from_bytes([4; 16])));
         assert_eq!(
-            verify_admin_operation_signature(&log, &keystore, &service_did),
+            verify_admin_operation_signature(&log, &keyring, &service_did),
             AuditSignatureStatus::Invalid
         );
     }
@@ -484,19 +484,19 @@ mod tests {
     #[test]
     fn row_id_or_created_at_replay_invalidates_signature() {
         let service_did = test_service_did();
-        let (keystore, log) = signed_test_log(&service_did);
+        let (keyring, log) = signed_test_log(&service_did);
 
         let mut replayed_id = log.clone();
         replayed_id.id = Ulid::from(Uuid::from_bytes([5; 16]));
         assert_eq!(
-            verify_admin_operation_signature(&replayed_id, &keystore, &service_did),
+            verify_admin_operation_signature(&replayed_id, &keyring, &service_did),
             AuditSignatureStatus::Invalid
         );
 
         let mut replayed_time = log;
         replayed_time.created_at += chrono::Duration::seconds(1);
         assert_eq!(
-            verify_admin_operation_signature(&replayed_time, &keystore, &service_did),
+            verify_admin_operation_signature(&replayed_time, &keyring, &service_did),
             AuditSignatureStatus::Invalid
         );
     }
@@ -504,11 +504,7 @@ mod tests {
     #[test]
     fn unsigned_status_is_reported() {
         assert_eq!(
-            verify_admin_operation_signature(
-                &test_log(None),
-                &test_keystore(),
-                &test_service_did()
-            ),
+            verify_admin_operation_signature(&test_log(None), &test_keyring(), &test_service_did()),
             AuditSignatureStatus::Unsigned
         );
     }
@@ -516,9 +512,9 @@ mod tests {
     #[test]
     fn key_unavailable_status_is_reported() {
         let service_did = test_service_did();
-        let (_keystore, log) = signed_test_log(&service_did);
+        let (_keyring, log) = signed_test_log(&service_did);
         assert_eq!(
-            verify_admin_operation_signature(&log, &other_keystore(), &service_did),
+            verify_admin_operation_signature(&log, &other_keyring(), &service_did),
             AuditSignatureStatus::KeyUnavailable
         );
     }
@@ -535,13 +531,13 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(8);
         let service_did = test_service_did();
-        let keystore = test_keystore();
+        let keyring = test_keyring();
 
         record_service_admin_operation_signed(
             &mut repo,
             &mut rng,
             &clock,
-            &keystore,
+            &keyring,
             &service_did,
             false,
             AdminOperation::Other("accountability_grant_issued".to_owned()),
@@ -573,7 +569,7 @@ mod tests {
         let expected_prefix = format!(
             "{}#{}:",
             service_did.as_str(),
-            coauth_keystore::AUDIT_SIGNING_KEY_ID
+            coauth_keyring::AUDIT_SIGNING_KEY_ID
         );
         assert!(
             rows[0]
@@ -584,7 +580,7 @@ mod tests {
             rows[0].audit_signature
         );
         assert_eq!(
-            verify_admin_operation_signature(&rows[0], &keystore, &service_did),
+            verify_admin_operation_signature(&rows[0], &keyring, &service_did),
             AuditSignatureStatus::Verified
         );
 

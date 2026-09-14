@@ -216,13 +216,16 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     };
     let peer = MockServer::start().await;
     state.arkret_config.stations[0].endpoint = peer.uri().parse().unwrap();
-    state.arkret_config.stations[0].service_id = Some(REGISTRATION_STATION_ID.parse().unwrap());
+    crate::services::station_trust::shared().insert_for_test(
+        &state.arkret_config.stations[0].endpoint,
+        REGISTRATION_STATION_ID,
+    );
     // The device-revocation gate runs on the registered deployment-internal
     // authenticated channel (`service-http-binding.md` §2.2.3); without the
     // configured channel credential the call fails closed instead of falling
     // back to an unauthenticated request.
-    state.arkret_config.stations[0].session_grant_introspection_bearer =
-        Some("registration-internal-channel".to_owned());
+    state.arkret_config.stations[0].internal_authority_shared_secret =
+        Some("registration-internal-channel".to_owned().into());
     state.arkret_config.deployment_profile = coauth_config::DeploymentProfileConfig::PersonalNode;
     state.station_admin =
         std::sync::Arc::new(crate::services::principal_facade::DbConnectorAdmin::new(

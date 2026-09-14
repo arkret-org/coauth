@@ -5,7 +5,6 @@
 
 use anyhow::bail;
 use camino::Utf8PathBuf;
-use rand_core::RngCore as Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -56,7 +55,7 @@ pub use self::http::{HttpConfig, UnixOrTcp};
 pub use self::passwords::PasswordsConfig;
 pub use self::policy::{PolicyConfig, PolicyEngine};
 pub use self::rate_limiting::{LoginLockoutConfig, RateLimiterConfiguration, RateLimitingConfig};
-pub use self::secrets::SecretsConfig;
+pub use self::secrets::KeyStoreConfig;
 pub use self::sms::{
     AliyunSmsProviderConfig, HttpWebhookSmsProviderConfig, PaloudInternalSmsProviderConfig,
     SmsConfig, SmsProviderConfig, TencentCloudSmsProviderConfig, TwilioSmsProviderConfig,
@@ -81,6 +80,12 @@ pub enum ClientSecret {
 
     /// Client secret value.
     Value(String),
+}
+
+impl From<String> for ClientSecret {
+    fn from(value: String) -> Self {
+        Self::Value(value)
+    }
 }
 
 impl ClientSecret {
@@ -186,8 +191,8 @@ pub struct RootConfig {
     #[serde(default, skip_serializing_if = "SmsConfig::is_default")]
     pub sms: SmsConfig,
 
-    /// Application secrets
-    pub secrets: SecretsConfig,
+    /// Durable runtime-key storage backend
+    pub secrets: KeyStoreConfig,
 
     /// Configuration related to user passwords
     #[serde(default)]
@@ -271,18 +276,11 @@ impl ConfigurationSection for RootConfig {
 }
 
 impl RootConfig {
-    /// Generate a new configuration with random secrets
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the secrets could not be generated
-    pub async fn generate<R>(mut rng: R) -> anyhow::Result<Self>
-    where
-        R: Rng + Send,
-    {
-        let secrets = SecretsConfig::generate(&mut rng).await?;
-        Ok(Self {
-            secrets,
+    /// Generate a new configuration without embedding private key material.
+    #[must_use]
+    pub fn generate() -> Self {
+        Self {
+            secrets: KeyStoreConfig::platform(),
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
@@ -300,14 +298,14 @@ impl RootConfig {
             account: AccountConfig::default(),
             experimental: ExperimentalConfig::default(),
             storage: StorageConfig::default(),
-        })
+        }
     }
 
     /// Configuration used in tests
     #[must_use]
     pub fn test() -> Self {
         Self {
-            secrets: SecretsConfig::test(),
+            secrets: KeyStoreConfig::platform(),
             clients: ClientsConfig::default(),
             http: HttpConfig::default(),
             database: DatabaseConfig::default(),
@@ -353,7 +351,7 @@ pub struct AppConfig {
     #[serde(default)]
     pub sms: SmsConfig,
 
-    pub secrets: SecretsConfig,
+    pub secrets: KeyStoreConfig,
 
     #[serde(default)]
     pub passwords: PasswordsConfig,
@@ -416,7 +414,7 @@ pub struct SyncConfig {
     #[serde(default)]
     pub database: DatabaseConfig,
 
-    pub secrets: SecretsConfig,
+    pub secrets: KeyStoreConfig,
 
     #[serde(default)]
     pub clients: ClientsConfig,

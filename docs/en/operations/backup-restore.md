@@ -9,12 +9,12 @@ to fully restore a deployment.
 | Item                              | Where it lives                                         | Notes |
 | ---                               | ---                                                     | --- |
 | Postgres database                 | `database.uri` in `config.yaml`                         | Holds users, sessions, OAuth clients, audit log, etc. |
-| Long-lived JWS signing keys       | `secrets.keys[*].key_file` (or inline `key`)            | Without these, every existing token / session grant verifies as invalid. Rotate carefully. |
-| Encryption secret                 | `secrets.encryption`                                    | Decrypts cookies and any encrypted column. Lose it and active sessions become unreadable. |
+| Encrypted runtime key bundle      | `secrets.path`                                          | Contains long-lived JWS keys and the application encryption key. Losing it invalidates tokens and makes encrypted state unreadable. |
+| KeyStore master key               | `secrets.master_key_file` (or external secret source)   | Required together with the encrypted bundle; back it up separately. |
 | Configuration                     | `config.yaml` (and any layered files)                   | Treat as source code; commit to a private repo or a sealed-secrets store. |
 | Templates / policies (if customised) | `templates.path`, `policy.path`                       | Optional; default copies ship in the container image / `share/`. |
 
-> Database, signing keys, and the encryption secret form the **minimum
+> Database, encrypted key bundle, and its master key form the **minimum
 > recoverable set**. A backup that misses any of them is incomplete.
 
 ## Postgres dump
@@ -61,10 +61,9 @@ configuration against the runtime state.
      --dbname=postgres /path/to/backup.dump
    ```
 
-3. **Restore** `secrets.encryption` and every `secrets.keys[*].key_file`
-   to the new host with the same paths and the same content. The
-   encryption secret must be **byte-identical** to the original — even
-   one wrong byte invalidates every encrypted cookie.
+3. **Restore** both the encrypted KeyStore file and its separately custodied
+   master key to the new host with the same paths and byte-identical content.
+   Neither half can recover the signing or application-encryption keys alone.
 4. **Restore** `config.yaml` (with `database.uri` adjusted to the new
    host).
 5. **Run migrations** explicitly to confirm the schema matches the

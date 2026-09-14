@@ -192,4 +192,4 @@ config-generate *ARGS:
 # crates to this list; a stale name fails loudly with `did not match any
 # packages`.
 clean:
-    cargo clean         -p coauth -p coauth-frontend -p coauth-backend -p coauth-config         -p coauth-account-types -p coauth-admin-types -p coauth-data-model         -p coauth-data -p coauth-email-types -p coauth-i18n -p coauth-iana         -p coauth-jose -p coauth-keystore -p coauth-messaging         -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres         -p coauth-tasks -p coauth-templates
+    cargo clean         -p coauth -p coauth-frontend -p coauth-backend -p coauth-config         -p coauth-account-types -p coauth-admin-types -p coauth-data-model         -p coauth-data -p coauth-email-types -p coauth-i18n -p coauth-iana         -p coauth-jose -p coauth-keyring -p coauth-messaging         -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres         -p coauth-tasks -p coauth-templates

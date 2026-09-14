@@ -16,10 +16,10 @@ branch, copy it from
 [`arkret-rust-sdk`](https://github.com/arkret-org/arkret-rust-sdk) and
 adapt the package list to coauth's workspace.
 
-> **DO NOT commit secrets.** Files like `config.dev.yaml`, `config.local.*`,
-> `*.log`, and unencrypted private keys are gitignored and must stay local.
-> Use [`config.example.yaml`](config.example.yaml) as a template and source
-> real values from environment variables. A CI `gitleaks` job (see
+> **DO NOT commit secrets.** Files like `config.local.*`, KeyStore master-key
+> files, `*.log`, and unencrypted private keys are gitignored and must stay
+> local. Use [`config.example.yaml`](config.example.yaml) as a template and
+> source real values from environment variables or mounted secret files. A CI `gitleaks` job (see
 > [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
 > if anything that looks like a credential lands in a tracked path.
 
@@ -156,9 +156,9 @@ arkret:
   admin_audience: ak:did_core:web:auth.example.com
 
 secrets:
-  encryption: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  keys:
-    - key_file: ./keys/signing.pem
+  backend: encrypted_file
+  path: /var/lib/coauth/keystore.v1
+  master_key_file: /run/secrets/coauth_runtime_keys_master_key
 
 passwords:
   enabled: true
@@ -173,11 +173,14 @@ the selected entry name.
 ### 3. Start the server
 
 ```bash
-coauth server -c config.yaml
+coauth server --first-provisioning -c config.yaml
 ```
 
-This runs migrations, syncs config-backed state, starts the HTTP service, and
-launches the background worker unless disabled with flags.
+Run the command with `--first-provisioning` exactly once when the configured
+KeyStore is empty. Later server and worker starts omit the flag and load the
+same durable key bundle. This runs migrations, syncs config-backed state,
+starts the HTTP service, and launches the background worker unless disabled
+with flags.
 
 ## Build from source
 

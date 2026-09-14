@@ -712,18 +712,18 @@ mod tests {
     use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig};
     use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse};
     use coauth_jose::jwk::JsonWebKeyPublicParameters;
-    use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
+    use coauth_keyring::{JsonWebKeySet, Keyring, PrivateKey};
     use coauth_oauth_types::scope::Scope;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
     use super::*;
 
-    fn test_keystore() -> Keystore {
+    fn test_keyring() -> Keyring {
         let mut rng = ChaChaRng::seed_from_u64(0x4e17);
-        let ed25519 = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        let ed25519 = coauth_keyring::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
             .with_kid("test-ed25519");
-        Keystore::new(JsonWebKeySet::new(vec![ed25519]))
+        Keyring::new(JsonWebKeySet::new(vec![ed25519]))
     }
 
     fn personal_did_web_config() -> ArkretConfig {
@@ -742,7 +742,7 @@ mod tests {
         let mut session_rng = ChaChaRng::seed_from_u64(0x4e18);
         let session_key = PrivateKey::generate_ed25519(&mut session_rng);
         let session_public_key = serde_json::to_string(
-            &coauth_keystore::JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
+            &coauth_keyring::JsonWebKey::new(JsonWebKeyPublicParameters::from(&session_key))
                 .with_use(JsonWebKeyUse::Sig)
                 .with_key_ops(vec![JsonWebKeyOperation::Verify])
                 .with_kid("agent-revoke-session-key"),
@@ -759,7 +759,7 @@ mod tests {
         let material = mint_agent_session_grant(
             &issuance_seed,
             &personal_did_web_config(),
-            &test_keystore(),
+            &test_keyring(),
             &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
             coauth_data::LocalAccountId::new("test-account").unwrap(),
             &DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000006").unwrap(),

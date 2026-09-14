@@ -15,6 +15,7 @@ coauth server [选项] -c <配置文件>
 | `--no-migrate` | 启动时不自动执行数据库迁移 |
 | `--no-worker` | 不启动后台任务 Worker |
 | `--no-sync` | 不将配置文件中的 OAuth 客户端和上游提供商同步到数据库 |
+| `--first-provisioning` | durable KeyStore 为空时生成运行时密钥包；生产首次部署只能在一个 server 上使用 |
 
 ## 启动流程
 
@@ -22,7 +23,7 @@ coauth server [选项] -c <配置文件>
 
 1. **数据库迁移** — 应用所有待执行的 Schema 迁移（除非使用 `--no-migrate`）
 2. **配置同步** — 将 OAuth 客户端和上游提供商定义同步到数据库（除非使用 `--no-sync`）
-3. **密钥加载** — 加载签名密钥
+3. **密钥加载** — 从配置的 durable KeyStore 加载完整运行时密钥包
 4. **模板编译** — 加载并编译页面模板
 5. **Worker 启动** — 启动后台任务 Worker（除非使用 `--no-worker`）
 6. **HTTP 监听** — 开始接受连接
@@ -33,7 +34,7 @@ HTTP 监听不等待 Station trust 验证完成。OIDC discovery、公开 JWKS �
 ## 健康与就绪检查
 
 服务通过 `/health` 和 `/healthz` 提供存活检查，通过 `/readyz` 提供就绪检查。
-`/readyz` 会检查 PostgreSQL、公开 JWKS 所需签名密钥以及 Station trust 是否就绪。
+`/readyz` 会检查 PostgreSQL、KeyStore 中公开 JWKS 所需签名密钥以及 Station trust 是否就绪。
 
 ## 优雅关闭
 

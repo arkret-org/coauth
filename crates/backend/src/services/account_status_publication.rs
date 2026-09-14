@@ -36,7 +36,7 @@ pub struct AccountStatusPublicationPlan {
 pub async fn author_transition_plan(
     repo: &mut BoxRepository,
     station: &dyn coauth_principal::ConnectorAdmin,
-    keystore: &coauth_keystore::Keystore,
+    keyring: &coauth_keyring::Keyring,
     service_id: &str,
     user: &User,
     binding: &PrincipalDidBinding,
@@ -103,7 +103,7 @@ pub async fn author_transition_plan(
         effective_at: now,
         expires_at: None,
     };
-    let signing_seed = keystore
+    let signing_seed = keyring
         .account_authority_seed()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let record = arkret_signatures::account_status::sign_account_status_record(

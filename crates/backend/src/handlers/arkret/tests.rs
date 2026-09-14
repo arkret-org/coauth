@@ -12,7 +12,7 @@ use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant, SystemC
 use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse, JsonWebSignatureAlg};
 use coauth_jose::jwk::{JsonWebKey, JsonWebKeyPublicParameters, PublicJsonWebKey};
 use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
-use coauth_keystore::{JsonWebKeySet, Keystore, PrivateKey};
+use coauth_keyring::{JsonWebKeySet, Keyring, PrivateKey};
 use hyper::{Request, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -129,19 +129,18 @@ async fn human_approval_endpoint_renders_closed_claim_required_details() {
     }
 }
 
-fn test_keystore() -> Keystore {
+fn test_keyring() -> Keyring {
     let mut rng = ChaChaRng::seed_from_u64(42);
-    let ed25519 = coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid(coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID);
-    Keystore::new(JsonWebKeySet::new(vec![ed25519]))
+    let ed25519 = coauth_keyring::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        .with_kid(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID);
+    Keyring::new(JsonWebKeySet::new(vec![ed25519]))
 }
 
-fn test_account_authority_keystore() -> Keystore {
+fn test_account_authority_keyring() -> Keyring {
     let mut rng = ChaChaRng::seed_from_u64(43);
-    let account_authority =
-        coauth_keystore::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
-    Keystore::new(JsonWebKeySet::new(vec![account_authority]))
+    let account_authority = coauth_keyring::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+        .with_kid(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID);
+    Keyring::new(JsonWebKeySet::new(vec![account_authority]))
 }
 
 /// The `cnf_jkt` introspection reports.
@@ -248,12 +247,12 @@ fn debug_dpop_grant_outcome_carries_typed_local_account_id() {
     assert!(serde_json::from_value::<DebugIssueDpopGrantOutcome>(invalid).is_err());
 }
 
-/// Static server-to-server bearer the configured Station presents on
-/// the session-grant introspection endpoint.
-const SESSION_GRANT_INTROSPECTION_BEARER: &str = "principal-example-introspection";
+/// Shared per-edge secret the configured Station presents as a Bearer token on
+/// registered internal-authority operations.
+const INTERNAL_AUTHORITY_SHARED_SECRET: &str = "principal-example-introspection";
 
 fn personal_node_did_web_config() -> ArkretConfig {
-    ArkretConfig {
+    let config = ArkretConfig {
         // Personal-node no-history profile legitimately advertises a did:web
         // service DID (spec identity-did.md §3.1 personal_node exception).
         runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
@@ -267,22 +266,24 @@ fn personal_node_did_web_config() -> ArkretConfig {
         stations: vec![StationConfig {
             name: "principal-example".to_owned(),
             endpoint: "https://principal.example.com/".parse().unwrap(),
-            service_id: Some(
-                arkret_identifiers::DidCoreId::new("ak:did_core:web:principal.example.com")
-                    .unwrap(),
+            internal_authority_shared_secret: Some(
+                INTERNAL_AUTHORITY_SHARED_SECRET.to_owned().into(),
             ),
-            session_grant_introspection_bearer: Some(SESSION_GRANT_INTROSPECTION_BEARER.to_owned()),
             embedded_webvh_registration_bearer: None,
             trust_domain: Some("ak:trust_domain:principal.example.com".to_owned()),
         }],
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
         ..ArkretConfig::default()
-    }
+    };
+    crate::services::station_trust::shared().insert_for_test(
+        &config.stations[0].endpoint,
+        "ak:did_core:web:principal.example.com",
+    );
+    config
 }
 
-/// Test config with the now-mandatory service_id set (the backend no longer
-/// derives a did:web default; startup validation enforces it in production).
+/// Test config with a delegated owning-Station runtime identity.
 fn test_arkret_config() -> ArkretConfig {
     ArkretConfig {
         runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
@@ -303,9 +304,8 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     let now = Utc::now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
 
-    // There is no host-derived `did:web` fallback any more: the service DID
-    // is always the explicitly configured one (did:webvh by default; startup
-    // validation fails fast when it is missing).
+    // There is no host-derived `did:web` fallback: the owning Station DID is
+    // the identity delegated only after verified durable binding.
     let arkret_config = ArkretConfig {
         runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:webvh:ztest:auth.example.com:webvh:service",
@@ -330,8 +330,8 @@ fn service_and_user_identifiers_follow_arkret_shape() {
     );
 }
 
-fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
-    ArkretConfig {
+fn config_with_internal_authority_shared_secret(bearer: &str) -> ArkretConfig {
+    let config = ArkretConfig {
         runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
             "did:webvh:z2dmjYwAPJzv5CZsnAzt8auVZRn1GfuxhpK2t3Q3K3rj4B1x:local.host:webvh:coauth",
         ),
@@ -339,22 +339,23 @@ fn config_with_static_session_grant_bearer(bearer: &str) -> ArkretConfig {
         stations: vec![StationConfig {
             name: "soland-dev".to_owned(),
             endpoint: "https://session-grant-static.test/".parse().unwrap(),
-            service_id: Some(
-                arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static.test")
-                    .unwrap(),
-            ),
-            session_grant_introspection_bearer: Some(bearer.to_owned()),
+            internal_authority_shared_secret: Some(bearer.to_owned().into()),
             embedded_webvh_registration_bearer: None,
             trust_domain: Some("ak:trust_domain:station.example".to_owned()),
         }],
         ..ArkretConfig::default()
-    }
+    };
+    crate::services::station_trust::shared().insert_for_test(
+        &config.stations[0].endpoint,
+        "ak:did_core:web:session-grant-static.test",
+    );
+    config
 }
 
 #[test]
-fn station_static_session_grant_bearer_matches_exact_token() {
-    let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    assert!(station_static_session_grant_bearer_matches(
+fn station_internal_authority_shared_secret_matches_exact_token() {
+    let config = config_with_internal_authority_shared_secret("local-coauth-session-grant");
+    assert!(station_internal_authority_shared_secret_matches(
         &config,
         "local-coauth-session-grant"
     ));
@@ -362,45 +363,49 @@ fn station_static_session_grant_bearer_matches_exact_token() {
 
 #[test]
 fn shared_static_bearer_is_rejected_as_ambiguous() {
-    let mut config = config_with_static_session_grant_bearer("shared-cluster-token");
+    let mut config = config_with_internal_authority_shared_secret("shared-cluster-token");
     config.stations.push(StationConfig {
         name: "soland-beta".to_owned(),
         endpoint: "https://session-grant-static-beta.test/".parse().unwrap(),
-        service_id: Some(
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static-beta.test")
-                .unwrap(),
-        ),
-        session_grant_introspection_bearer: Some("shared-cluster-token".to_owned()),
+        internal_authority_shared_secret: Some("shared-cluster-token".to_owned().into()),
         embedded_webvh_registration_bearer: None,
         trust_domain: Some("ak:trust_domain:station-beta.example".to_owned()),
     });
+    crate::services::station_trust::shared().insert_for_test(
+        &config.stations[1].endpoint,
+        "ak:did_core:web:session-grant-static-beta.test",
+    );
     assert!(station_internal_channel_caller(&config, "shared-cluster-token").is_none());
 }
 
 #[test]
-fn station_static_session_grant_bearer_rejects_other_tokens() {
-    let config = config_with_static_session_grant_bearer("local-coauth-session-grant");
-    assert!(!station_static_session_grant_bearer_matches(
+fn station_internal_authority_shared_secret_rejects_other_tokens() {
+    let config = config_with_internal_authority_shared_secret("local-coauth-session-grant");
+    assert!(!station_internal_authority_shared_secret_matches(
         &config,
         "other-token"
     ));
-    assert!(!station_static_session_grant_bearer_matches(&config, ""));
-    assert!(!station_static_session_grant_bearer_matches(&config, "   "));
+    assert!(!station_internal_authority_shared_secret_matches(
+        &config, ""
+    ));
+    assert!(!station_internal_authority_shared_secret_matches(
+        &config, "   "
+    ));
 }
 
 #[test]
-fn station_static_session_grant_bearer_ignores_unset_field() {
-    let mut config = config_with_static_session_grant_bearer("placeholder");
-    config.stations[0].session_grant_introspection_bearer = None;
-    assert!(!station_static_session_grant_bearer_matches(
+fn station_internal_authority_shared_secret_ignores_unset_field() {
+    let mut config = config_with_internal_authority_shared_secret("placeholder");
+    config.stations[0].internal_authority_shared_secret = None;
+    assert!(!station_internal_authority_shared_secret_matches(
         &config,
         "placeholder"
     ));
 }
 
 #[test]
-fn internal_authority_peer_requires_configured_identity_and_domains() {
-    let mut config = config_with_static_session_grant_bearer("channel-key");
+fn internal_authority_peer_requires_verified_identity_and_domains() {
+    let mut config = config_with_internal_authority_shared_secret("channel-key");
     assert_eq!(
         station_internal_channel_caller(&config, "channel-key"),
         Some("ak:did_core:web:session-grant-static.test".to_owned())
@@ -409,12 +414,12 @@ fn internal_authority_peer_requires_configured_identity_and_domains() {
     config.stations[0].trust_domain = None;
     assert!(station_internal_channel_caller(&config, "channel-key").is_none());
 
-    let mut config = config_with_static_session_grant_bearer("channel-key");
+    let mut config = config_with_internal_authority_shared_secret("channel-key");
     config.trust_domain = None;
     assert!(station_internal_channel_caller(&config, "channel-key").is_none());
 
-    let mut config = config_with_static_session_grant_bearer("channel-key");
-    config.stations[0].service_id = None;
+    let mut config = config_with_internal_authority_shared_secret("channel-key");
+    config.stations[0].endpoint = "https://unverified-station.test/".parse().unwrap();
     assert!(station_internal_channel_caller(&config, "channel-key").is_none());
 }
 
@@ -423,7 +428,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let arkret_config = personal_node_did_web_config();
-    let key_store = test_keystore();
+    let keyring = test_keyring();
     let now = clock.now();
     let mut fixture_rng = ChaChaRng::seed_from_u64(9);
     let browser_session = BrowserSession::samples(now, &mut fixture_rng)
@@ -448,7 +453,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
         &clock,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         &browser_session,
         session_public_key,
         &principal_id,
@@ -463,7 +468,7 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     .unwrap();
 
     let jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str()).unwrap();
-    jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
+    jwt.verify_with_jwks(&keyring.public_jwks()).unwrap();
 
     let payload = jwt.payload();
     assert_eq!(payload.kind, "ak.session.grant");
@@ -502,14 +507,14 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
 fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let arkret_config = personal_node_did_web_config();
-    let key_store = test_keystore();
+    let keyring = test_keyring();
     let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let seed = SessionGrantIssuanceSeed::new(
         arkret_canonical::base64url_encode([0x33; 32]),
         "recovery-session-chain-1",
         now,
         now + Duration::minutes(15),
-        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
+        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     let mut signing_rng = ChaChaRng::seed_from_u64(77);
@@ -526,7 +531,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     let material = issue_recovery_session_grant_for_audience(
         &seed,
         &arkret_config,
-        &key_store,
+        &keyring,
         holder_jwk,
         arkret_identifiers::DidCoreId::new(audience).unwrap(),
         device_id.clone(),
@@ -541,7 +546,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     .unwrap();
 
     let jwt = Jwt::<SignedSessionGrantClaims>::try_from(material.grant_jwt.as_str()).unwrap();
-    jwt.verify_with_jwks(&key_store.public_jwks()).unwrap();
+    jwt.verify_with_jwks(&keyring.public_jwks()).unwrap();
     let payload = jwt.payload();
     assert_eq!(
         payload.credential_class,
@@ -567,14 +572,14 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
         "recovery-session-chain-2",
         now,
         now + Duration::minutes(15) + Duration::milliseconds(1),
-        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
+        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     assert!(
         issue_recovery_session_grant_for_audience(
             &overlong_seed,
             &arkret_config,
-            &key_store,
+            &keyring,
             test_session_public_jwk(&holder_key, "recovery-holder-key"),
             arkret_identifiers::DidCoreId::new(
                 required_audience_for(&url_builder, &arkret_config,)
@@ -610,7 +615,7 @@ fn session_grant_uses_configured_ttl() {
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..ArkretConfig::default()
     };
-    let key_store = test_keystore();
+    let keyring = test_keyring();
     let now = clock.now();
     let mut fixture_rng = ChaChaRng::seed_from_u64(9);
     let browser_session = BrowserSession::samples(now, &mut fixture_rng)
@@ -634,7 +639,7 @@ fn session_grant_uses_configured_ttl() {
         &clock,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         &browser_session,
         session_public_key,
         &principal_id,
@@ -690,7 +695,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         issuance_nonce: arkret_canonical::base64url_encode([0x11; 32]),
         issuance_preimage: Vec::new(),
         issuance_digest: [0_u8; 32],
-        signing_key_id: coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
+        signing_key_id: coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
         created_at: now,
@@ -750,7 +755,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         issuance_nonce: arkret_canonical::base64url_encode([0x22; 32]),
         issuance_preimage: Vec::new(),
         issuance_digest: [0_u8; 32],
-        signing_key_id: coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
+        signing_key_id: coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
         session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
         credential_class: "standard".to_owned(),
         created_at: now,
@@ -845,7 +850,7 @@ async fn seed_persisted_session_grant(
         &grant_clock,
         &state.url_builder,
         &grant_config,
-        &state.key_store,
+        &state.keyring,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         &principal_id,
@@ -893,7 +898,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
     let response = state
         .request(
             Request::post("/_arkret/gate/account/auth-sessions/logout")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(&logout_body),
         )
         .await;
@@ -931,7 +936,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
                     "audience_id": grant.audience_id,
@@ -948,7 +953,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
     let response = state
         .request(
             Request::post("/_arkret/gate/account/auth-sessions/logout")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(&logout_body),
         )
         .await;
@@ -987,13 +992,14 @@ async fn auth_session_logout_rejects_unbound_bearers_without_state_change() {
     state.arkret_config.stations.push(StationConfig {
         name: "other-station".to_owned(),
         endpoint: "https://other-station.example/".parse().unwrap(),
-        service_id: Some(
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:other-station.example").unwrap(),
-        ),
-        session_grant_introspection_bearer: Some("other-station-channel".to_owned()),
+        internal_authority_shared_secret: Some("other-station-channel".to_owned().into()),
         embedded_webvh_registration_bearer: None,
         trust_domain: Some("ak:trust_domain:other-station.example".to_owned()),
     });
+    crate::services::station_trust::shared().insert_for_test(
+        &state.arkret_config.stations.last().unwrap().endpoint,
+        "ak:did_core:web:other-station.example",
+    );
     let logout_body = serde_json::json!({
         "grant_jwt": material.grant_jwt,
         "reason_code": "account_logout",
@@ -1082,7 +1088,7 @@ async fn session_grant_http_list_and_filter_work() {
     let response = state
         .request(
             Request::get("/_coauth/account/session-grants")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .empty(),
         )
         .await;
@@ -1105,7 +1111,7 @@ async fn session_grant_http_list_and_filter_work() {
                 "/_coauth/account/session-grants?browser_session_id={}&active_only=true",
                 browser_session.id
             ))
-            .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+            .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
             .empty(),
         )
         .await;
@@ -1116,7 +1122,7 @@ async fn session_grant_http_list_and_filter_work() {
     let response = state
         .request(
             Request::get("/_coauth/account/session-grants?browser_session_id=not-a-ulid")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .empty(),
         )
         .await;
@@ -1139,7 +1145,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
                     "audience_id": grant.audience_id,
@@ -1182,7 +1188,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
                     "audience_id": grant.audience_id,
@@ -1201,7 +1207,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
                     "audience_id": grant.audience_id,
@@ -1221,7 +1227,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
                     "audience_id": "ak:did_core:web:other.example.com",
@@ -1277,7 +1283,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         browser_session.id.to_string(),
         issued_at,
         issued_at + grant_config.session_grant_ttl,
-        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
+        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     let principal_id = arkret_identifiers::DidCoreId::new(format!(
@@ -1291,7 +1297,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
         &issuance_seed,
         &grant_clock,
         &grant_config,
-        &state.key_store,
+        &state.keyring,
         &browser_session,
         test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
         arkret_identifiers::DidCoreId::new(audience).unwrap(),
@@ -1338,7 +1344,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
                     "audience_id": grant.audience_id,
@@ -1362,7 +1368,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
                     "audience_id": grant.audience_id,
@@ -1394,7 +1400,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     state.arkret_config = ArkretConfig {
         deployment_profile: DeploymentProfileConfig::PersonalNode,
         principal_method: PrincipalMethodConfig::DidWeb,
-        ..config_with_static_session_grant_bearer(bearer)
+        ..config_with_internal_authority_shared_secret(bearer)
     };
 
     // The agent use-time gate (key-management §3.6.1) resolves the
@@ -1452,7 +1458,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         serde_json::to_string(&test_session_public_jwk(&session_key, "agent-session-key")).unwrap();
     // Both the agent subject and the audience are core DIDs on the wire (the
     // grant claims are typed `DidCoreId`), and the audience must be the
-    // Station whose static introspection bearer is configured above.
+    // Station whose internal-authority shared secret is configured above.
     let audience =
         arkret_identifiers::DidCoreId::new("ak:did_core:web:session-grant-static.test").unwrap();
     // Grant liveness is evaluated against the wall clock the handlers read.
@@ -1481,13 +1487,13 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         "agent-test-session",
         now,
         now + Duration::try_minutes(15).unwrap(),
-        coauth_keystore::SESSION_GRANT_SIGNING_KEY_ID,
+        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     let material = mint_agent_session_grant(
         &issuance_seed,
         &state.arkret_config,
-        &state.key_store,
+        &state.keyring,
         &arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
         coauth_data::LocalAccountId::new("test-account").unwrap(),
         &arkret_identifiers::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005")
@@ -1661,7 +1667,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
                     "grant_jwt": material.grant_jwt,
@@ -1677,7 +1683,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({ "audience_id": grant.audience_id })),
         )
         .await;
@@ -1717,7 +1723,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
     let response = state
         .request(
             Request::post("/_arkret/gate/account/session-grants/introspect")
-                .bearer(SESSION_GRANT_INTROSPECTION_BEARER)
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
                     "audience_id": grant.audience_id,
@@ -1949,7 +1955,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let clock = MockClock::default();
     let now = clock.now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
-    let key_store = test_account_authority_keystore();
+    let keyring = test_account_authority_keyring();
 
     // Subject is the client-created webvh principal DID, passed by the caller.
     let subject_id = "ak:did_core:webvh:zQmExampleScid:soland.example";
@@ -1961,13 +1967,13 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
         &clock,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         &user,
         &account_id,
         arkret_models_identity::HandleClaimKind::HandleBinding,
         "did:web:space.example".to_owned(),
     )
-    .expect("handle claim must mint with the test keystore");
+    .expect("handle claim must mint with the test keyring");
     assert_eq!(
         material
             .payload
@@ -2046,7 +2052,7 @@ fn issue_handle_claim_rejects_organization_kind_without_organization_id() {
     let clock = MockClock::default();
     let now = clock.now();
     let user = User::samples(now, &mut rng).into_iter().next().unwrap();
-    let key_store = test_keystore();
+    let keyring = test_keyring();
 
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zQmExampleScid:soland.example")
@@ -2057,7 +2063,7 @@ fn issue_handle_claim_rejects_organization_kind_without_organization_id() {
         &clock,
         &url_builder,
         &arkret_config,
-        &key_store,
+        &keyring,
         &user,
         &account_id,
         arkret_models_identity::HandleClaimKind::OrganizationHandle,

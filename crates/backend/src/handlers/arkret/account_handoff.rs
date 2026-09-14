@@ -68,7 +68,7 @@ pub async fn issue_did_binding_challenge(
         grant.local_account_id,
     )?;
     let url_builder = depot.url_builder()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let resolver = depot.did_resolver_service()?;
     let mut repo = depot.repo().await?;
     let resolution = resolver
@@ -76,7 +76,7 @@ pub async fn issue_did_binding_challenge(
             &depot.http_client()?,
             &url_builder,
             &arkret_config,
-            &key_store,
+            &keyring,
             &mut repo,
             body.did.as_str(),
         )

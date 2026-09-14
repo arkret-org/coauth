@@ -1,7 +1,7 @@
 //! The only place this crate names the Arkret SDK's Ed25519 generation.
 //!
 //! `coauth-backend` owns the real boundary between `ed25519-dalek` 2.x
-//! (`coauth-jose` / `coauth-keystore`) and `ed25519-dalek` 3.x (the Arkret
+//! (`coauth-jose` / `coauth-keyring`) and `ed25519-dalek` 3.x (the Arkret
 //! SDK) in `coauth_backend::arkret_key_bridge`. This crate sits *below* the
 //! backend in the dependency graph — the backend depends on it, not the other
 //! way round — so it cannot import that module and keeps a deliberately

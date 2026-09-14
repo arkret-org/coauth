@@ -51,7 +51,7 @@ coauth 是 Station 内部的部署私有 Account Authority 组件，负责账号
 |-------|------|
 | `coauth-oauth-types` | OAuth / OIDC 类型 |
 | `coauth-jose` | JWT/JWS/JWK |
-| `coauth-keystore` | 密钥管理 |
+| `coauth-keyring` | 进程内 JOSE 签名、验签与加解密；持久托管由 `arkret-keystore` 提供 |
 | `coauth-iana` | IANA JOSE / OAuth 注册表枚举（本仓手工维护，由 `open_enum!` / `closed_enum!` 宏声明） |
 
 ### 产品面契约

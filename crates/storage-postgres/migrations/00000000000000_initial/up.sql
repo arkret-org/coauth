@@ -987,10 +987,10 @@ CREATE TABLE public.station_trust_enrollments (
     CONSTRAINT station_trust_enrollments_did_non_empty CHECK ((btrim(did) <> ''::text)),
     CONSTRAINT station_trust_enrollments_method_history_head_non_empty CHECK ((btrim(method_history_head) <> ''::text)),
     CONSTRAINT station_trust_enrollments_version_id_non_empty CHECK ((btrim(version_id) <> ''::text)),
-    CONSTRAINT station_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['operator_cli'::text, 'deployment_artifact'::text])))
+    CONSTRAINT station_trust_enrollments_source_valid CHECK ((source = ANY (ARRAY['automatic_verified'::text, 'operator_replacement'::text])))
 );
 
-COMMENT ON TABLE public.station_trust_enrollments IS 'Deployment-local station trust enrollment: the accepted authorization pin per canonical endpoint, written only by explicit bootstrap/replace or trusted deployment provisioning.';
+COMMENT ON TABLE public.station_trust_enrollments IS 'Deployment-local Station trust binding established by full method-native verification, with explicit operator replacement reserved for recovery.';
 
 CREATE TABLE public.station_trust_audits (
     id uuid NOT NULL,
@@ -1000,10 +1000,10 @@ CREATE TABLE public.station_trust_audits (
     previous_service_id text,
     detail text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT station_trust_audits_action_valid CHECK ((action = ANY (ARRAY['enrolled'::text, 'verification_failed'::text, 'replaced'::text, 'revoked'::text])))
+    CONSTRAINT station_trust_audits_action_valid CHECK ((action = ANY (ARRAY['enrolled'::text, 'verification_failed'::text, 'replaced'::text, 'endpoint_relocated'::text, 'revoked'::text])))
 );
 
-COMMENT ON TABLE public.station_trust_audits IS 'Append-only audit log covering station trust enrollment creation, verification failures, explicit replacement and revocation.';
+COMMENT ON TABLE public.station_trust_audits IS 'Append-only audit log covering automatic trust enrollment, verification failures, verified endpoint relocation, explicit identity replacement and revocation.';
 
 CREATE TABLE public.upstream_oauth_authorization_sessions (
     id uuid NOT NULL,

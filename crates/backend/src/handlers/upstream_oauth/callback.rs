@@ -278,7 +278,7 @@ pub async fn handler(
     let mut repo = depot.repo().await?;
     let url_builder = depot.url_builder()?;
     let encrypter = depot.encrypter()?;
-    let keystore = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let client = depot.http_client()?;
     let templates = depot.templates()?;
     let locale = crate::handlers::preferred_language(req, depot);
@@ -407,7 +407,7 @@ pub async fn handler(
     let client_credentials = client_credentials_for_provider(
         &provider,
         lazy_metadata.token_endpoint().await?,
-        &keystore,
+        &keyring,
         &encrypter,
     )?;
 

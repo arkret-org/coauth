@@ -511,7 +511,7 @@ mod station_trust_gate_tests {
     use super::is_station_trust_bootstrap_path;
 
     #[test]
-    fn permits_only_bootstrap_and_health_paths() {
+    fn permits_only_cold_start_and_health_paths() {
         assert!(is_station_trust_bootstrap_path(
             "/.well-known/openid-configuration"
         ));

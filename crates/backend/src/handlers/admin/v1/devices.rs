@@ -510,7 +510,7 @@ mod tests {
             admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
             ..coauth_config::ArkretConfig::default()
         };
-        let session_private = coauth_keystore::PrivateKey::generate_ed25519(&mut rng);
+        let session_private = coauth_keyring::PrivateKey::generate_ed25519(&mut rng);
         let session_public = coauth_jose::jwk::PublicJsonWebKey::new(
             coauth_jose::jwk::JsonWebKeyPublicParameters::from(&session_private),
         );
@@ -530,7 +530,7 @@ mod tests {
             &grant_clock,
             &state.url_builder,
             &grant_config,
-            &state.key_store,
+            &state.keyring,
             &browser_session,
             session_public,
             principal_id,

@@ -65,7 +65,7 @@ pub enum RouteError {
 }
 
 impl_from_error_for_route!(coauth_data::RepositoryError);
-impl_from_error_for_route!(coauth_keystore::WrongAlgorithmError);
+impl_from_error_for_route!(coauth_keyring::WrongAlgorithmError);
 impl_from_error_for_route!(coauth_jose::jwt::JwtSignatureError);
 
 impl From<crate::handlers::common::RouteError> for RouteError {
@@ -139,7 +139,7 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
     // `RouteError::Internal` via the `From` impl above.
     let url_builder = depot.url_builder()?;
     let arkret_config: ArkretConfig = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 
     #[allow(clippy::box_default)] // Box::default() doesn't apply to dyn Clock+Send
@@ -195,11 +195,11 @@ async fn handle_get(req: &mut Request, depot: &mut Depot) -> Result<UserinfoOutc
     repo.save().await?;
 
     if let Some(alg) = client.userinfo_signed_response_alg {
-        let key = key_store
+        let key = keyring
             .signing_key_for_algorithm(&alg)
             .ok_or(RouteError::InvalidSigningKey)?;
 
-        let signer = key_store.signer_for_algorithm(&alg)?;
+        let signer = keyring.signer_for_algorithm(&alg)?;
         let header = JsonWebSignatureHeader::new(alg)
             .with_kid(key.kid().ok_or(RouteError::InvalidSigningKey)?);
 

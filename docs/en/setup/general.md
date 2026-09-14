@@ -2,8 +2,9 @@
 
 ## Generate an initial config
 
-The service needs signing keys, an encryption secret, database settings, and
-Arkret deployment metadata before it can start.
+The service needs a durable KeyStore backend, database settings, and Arkret
+deployment metadata before it can start. Signing and application-encryption
+keys are generated into that KeyStore, never into the generated YAML.
 
 Use the generator to produce a complete config file with defaults:
 
@@ -13,6 +14,10 @@ coauth config generate > config.yaml
 
 The generated file is intentionally verbose. In practice you usually keep the
 sections you override and remove the untouched defaults.
+
+After selecting `secrets.backend`, run one initial production server with
+`--first-provisioning`. Later servers, workers, and `config sync` only load the
+persisted key bundle.
 
 ## Sections you will almost always edit
 

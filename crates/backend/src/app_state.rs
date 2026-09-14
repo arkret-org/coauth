@@ -3,7 +3,7 @@ use std::sync::Arc;
 use coauth_config::ArkretConfig;
 use coauth_data::{AppVersion, BoxRepositoryFactory, RepositoryFactory, SiteConfig, UrlBuilder};
 use coauth_i18n::Translator;
-use coauth_keystore::{Encrypter, Keystore};
+use coauth_keyring::{Encrypter, Keyring};
 use coauth_principal::{ConnectorAdmin, ConnectorRegistry};
 use coauth_storage_postgres::PgRepositoryFactory;
 use coauth_templates::Templates;
@@ -46,7 +46,7 @@ pub struct AppState {
     pub repository_factory: PgRepositoryFactory,
     pub templates: Templates,
     pub arkret_config: ArkretConfig,
-    pub key_store: Keystore,
+    pub keyring: Keyring,
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
     pub url_builder: UrlBuilder,
@@ -196,7 +196,7 @@ pub async fn inject_app_state(
     depot.insert("templates", state.templates.clone());
     depot.insert("translator", state.templates.translator());
     depot.insert("arkret_config", state.arkret_config.clone());
-    depot.insert("keystore", state.key_store.clone());
+    depot.insert("keyring", state.keyring.clone());
     depot.insert("encrypter", state.encrypter.clone());
     depot.insert("url_builder", state.url_builder.clone());
     depot.insert("http_client", state.http_client.clone());
@@ -300,7 +300,7 @@ pub trait DepotExt {
     fn get_templates(&self) -> Option<&Templates>;
     fn get_translator(&self) -> Option<&Arc<Translator>>;
     fn get_arkret_config(&self) -> Option<&ArkretConfig>;
-    fn get_keystore(&self) -> Option<&Keystore>;
+    fn get_keyring(&self) -> Option<&Keyring>;
     fn get_encrypter(&self) -> Option<&Encrypter>;
     fn get_url_builder(&self) -> Option<&UrlBuilder>;
     fn get_http_client(&self) -> Option<&reqwest::Client>;
@@ -340,8 +340,8 @@ impl DepotExt for Depot {
         self.get::<ArkretConfig>("arkret_config").ok()
     }
 
-    fn get_keystore(&self) -> Option<&Keystore> {
-        self.get::<Keystore>("keystore").ok()
+    fn get_keyring(&self) -> Option<&Keyring> {
+        self.get::<Keyring>("keyring").ok()
     }
 
     fn get_encrypter(&self) -> Option<&Encrypter> {

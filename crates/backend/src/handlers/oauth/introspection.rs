@@ -3,7 +3,7 @@ use std::sync::{Arc, LazyLock};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxClock, BoxRepository, BoxRepositoryFactory, SystemClock, UrlBuilder};
 use coauth_iana::oauth::{OAuthClientAuthenticationMethod, OAuthTokenTypeHint};
-use coauth_keystore::Encrypter;
+use coauth_keyring::Encrypter;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{IntrospectionRequest, IntrospectionResponse};
 use coauth_principal::ConnectorAdmin;

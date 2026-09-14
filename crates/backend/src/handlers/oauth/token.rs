@@ -4,7 +4,7 @@ use coauth_config::ArkretConfig;
 use coauth_data::{
     BoxClock, BoxRepository, BoxRepositoryFactory, BoxRng, SiteConfig, SystemClock, UrlBuilder,
 };
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{AccessTokenRequest, AccessTokenResponse};
 use coauth_principal::ConnectorAdmin;
@@ -334,9 +334,9 @@ async fn handle_post(
     let http_client = depot
         .get::<reqwest::Client>("http_client")
         .expect("reqwest::Client not found in depot");
-    let key_store = depot
-        .get::<Keystore>("keystore")
-        .expect("Keystore not found in depot");
+    let keyring = depot
+        .get::<Keyring>("keyring")
+        .expect("Keyring not found in depot");
     let url_builder = depot
         .get::<UrlBuilder>("url_builder")
         .expect("UrlBuilder not found in depot");
@@ -355,7 +355,7 @@ async fn handle_post(
         .get::<SiteConfig>("site_config")
         .expect("SiteConfig not found in depot");
     let encrypter = depot
-        .get::<coauth_keystore::Encrypter>("encrypter")
+        .get::<coauth_keyring::Encrypter>("encrypter")
         .expect("Encrypter not found in depot");
     let templates = depot
         .get::<Templates>("templates")
@@ -437,7 +437,7 @@ async fn handle_post(
                 &activity_tracker,
                 &grant,
                 &client,
-                key_store,
+                keyring,
                 url_builder,
                 &arkret_config,
                 site_config,
@@ -485,7 +485,7 @@ async fn handle_post(
                 &activity_tracker,
                 &grant,
                 &client,
-                key_store,
+                keyring,
                 url_builder,
                 &arkret_config,
                 site_config,

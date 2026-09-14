@@ -40,7 +40,7 @@ use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{
     BoxRepository, Clock, NewUserErasureRequest, RepositoryAccess as _, User, UserPatch,
 };
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use coauth_principal::ConnectorAdmin;
 use rand_core::RngCore;
 use salvo::prelude::*;
@@ -84,7 +84,7 @@ pub async fn request_account_erasure(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let station = depot.station()?;
     let clock = make_clock();
     let mut rng = make_rng();
@@ -132,7 +132,7 @@ pub async fn request_account_erasure(
         &mut *rng,
         &*clock,
         &arkret_config,
-        &key_store,
+        &keyring,
         station.as_ref(),
         &user,
         last_authenticated_at,
@@ -167,7 +167,7 @@ pub(crate) async fn accept_erasure_request(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     arkret_config: &ArkretConfig,
-    key_store: &Keystore,
+    keyring: &Keyring,
     station: &dyn ConnectorAdmin,
     user: &User,
     last_authenticated_at: Option<DateTime<Utc>>,
@@ -317,7 +317,7 @@ pub(crate) async fn accept_erasure_request(
     let plan = author_transition_plan(
         repo,
         station,
-        key_store,
+        keyring,
         owning_station_id_for(arkret_config).as_str(),
         user,
         &binding,
@@ -494,7 +494,7 @@ mod tests {
         author_transition_plan(
             &mut repo,
             state.station_admin.as_ref(),
-            &state.key_store,
+            &state.keyring,
             owning_station_id_for(&state.arkret_config).as_str(),
             user,
             &binding,
@@ -536,7 +536,7 @@ mod tests {
             &mut rng,
             &clock,
             config,
-            &state.key_store,
+            &state.keyring,
             state.station_admin.as_ref(),
             user,
             last_authenticated_at,

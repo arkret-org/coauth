@@ -126,7 +126,7 @@ pub async fn patch_user(
                 author_transition_plan(
                     repo,
                     station,
-                    signing.keystore,
+                    signing.keyring,
                     signing.service_id.as_str(),
                     &user,
                     &binding,
@@ -241,7 +241,7 @@ pub async fn patch_user(
             repo,
             rng,
             clock,
-            signing.keystore,
+            signing.keyring,
             signing.service_did,
             signing.fail_closed,
             admin_user,

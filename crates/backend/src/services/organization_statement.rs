@@ -37,7 +37,7 @@ use arkret_policy::{
 use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
-use coauth_keystore::Keystore;
+use coauth_keyring::Keyring;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng as _;
 use signature::RandomizedSigner as _;
@@ -45,9 +45,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum OrganizationStatementError {
-    #[error("no usable service signing key in keystore")]
+    #[error("no usable service signing key in keyring")]
     NoSigningKey,
-    #[error("keystore signing key rejected the statement algorithm")]
+    #[error("keyring signing key rejected the statement algorithm")]
     KeyAlgMismatch,
     #[error("canonical-JSON encoding of the organization statement failed: {0}")]
     Canonical(String),
@@ -98,7 +98,7 @@ pub struct OrganizationStatementRequest {
 /// `authorization.proof` is a detached base64url signature over the canonical
 /// transcript.
 pub fn issue_organization_statement<R>(
-    key_store: &Keystore,
+    keyring: &Keyring,
     service_did: &str,
     request: OrganizationStatementRequest,
     now: chrono::DateTime<chrono::Utc>,
@@ -123,11 +123,11 @@ where
     // `service_did` is the owning Station, whose DID document authorizes this
     // Account Authority under one fragment holding the designated key. The
     // verifier resolves the method from that document, so an algorithm-chosen
-    // key named by its keystore `kid` is unverifiable by construction.
-    let signer = key_store
+    // key named by its keyring `kid` is unverifiable by construction.
+    let signer = keyring
         .account_authority_signer()
         .map_err(|error| match error {
-            coauth_keystore::AccountAuthorityKeyError::WrongKeyType => {
+            coauth_keyring::AccountAuthorityKeyError::WrongKeyType => {
                 OrganizationStatementError::KeyAlgMismatch
             }
             _ => OrganizationStatementError::NoSigningKey,
@@ -266,8 +266,8 @@ mod tests {
         Utc.with_ymd_and_hms(2026, 6, 25, 12, 0, 0).unwrap()
     }
 
-    fn keystore() -> Keystore {
-        use coauth_keystore::{JsonWebKey, JsonWebKeySet, PrivateKey};
+    fn keyring() -> Keyring {
+        use coauth_keyring::{JsonWebKey, JsonWebKeySet, PrivateKey};
         use rand_chacha::ChaChaRng;
         use rand_core::SeedableRng;
 
@@ -278,8 +278,8 @@ mod tests {
         let stray =
             JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("service-signing");
         let account_authority = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(coauth_keystore::ACCOUNT_AUTHORITY_KEY_ID);
-        Keystore::new(JsonWebKeySet::new(vec![stray, account_authority]))
+            .with_kid(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID);
+        Keyring::new(JsonWebKeySet::new(vec![stray, account_authority]))
     }
 
     fn base_request() -> OrganizationStatementRequest {
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn direct_organization_statement_self_verifies() {
         let payload = issue_organization_statement(
-            &keystore(),
+            &keyring(),
             "did:web:coauth.example",
             base_request(),
             now(),
@@ -356,7 +356,7 @@ mod tests {
         let mut request = base_request();
         request.issuer_role = RealmOrganizationIssuerRole::GovernanceService;
         let err = issue_organization_statement(
-            &keystore(),
+            &keyring(),
             "did:web:coauth.example",
             request,
             now(),
@@ -377,7 +377,7 @@ mod tests {
         request.delegation_ref = Some(reference.to_owned());
         let resolver = RepositoryDelegationResolver::new(Some(live_delegation(reference)), now());
         let payload = issue_organization_statement(
-            &keystore(),
+            &keyring(),
             "did:web:coauth.example",
             request,
             now(),
@@ -400,7 +400,7 @@ mod tests {
         delegation.valid_until = Some(Utc.with_ymd_and_hms(2026, 6, 1, 0, 0, 0).unwrap());
         let resolver = RepositoryDelegationResolver::new(Some(delegation), now());
         let err = issue_organization_statement(
-            &keystore(),
+            &keyring(),
             "did:web:coauth.example",
             request,
             now(),
@@ -421,7 +421,7 @@ mod tests {
             DidCoreId::new("ak:did_core:web:other.example".to_owned()).unwrap();
         let resolver = RepositoryDelegationResolver::new(Some(delegation), now());
         let err = issue_organization_statement(
-            &keystore(),
+            &keyring(),
             "did:web:coauth.example",
             request,
             now(),

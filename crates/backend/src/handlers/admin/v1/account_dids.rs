@@ -159,7 +159,7 @@ pub async fn add_account_did(
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let key_store = depot.key_store()?;
+    let keyring = depot.keyring()?;
     let http_client = depot.http_client()?;
     let did_resolver = depot.did_resolver_service()?;
     let binding_store = depot.verified_did_binding_store()?;
@@ -200,7 +200,7 @@ pub async fn add_account_did(
             &http_client,
             &url_builder,
             &arkret_config,
-            &key_store,
+            &keyring,
             &mut repo,
             &did,
         )
