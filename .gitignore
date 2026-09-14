@@ -2,6 +2,10 @@
 target
 /target-*/
 
+# Local runtime state. Keep encrypted KeyStore data, its separately custodied
+# master key, uploaded media, and other developer-only artifacts out of Git.
+.local/
+
 # Frontend build output
 dist
 

@@ -5,7 +5,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Args, Parser, Subcommand};
 use coauth_backend::util::{database_url_from_config, diesel_pool_from_config};
 use coauth_config::{
-    ConfigurationSection, IdentityRegistryConfig, RootConfig, StationConfig, SyncConfig,
+    ConfigurationSection, IdentityRegistryConfig, KeyStoreConfig, RootConfig, StationConfig,
+    StorageConfig, SyncConfig,
 };
 use coauth_data::SystemClock;
 use figment::Figment;
@@ -25,6 +26,9 @@ const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registrat
 /// Station entry and is never derived from the endpoint host.
 const DEV_SOLAND_TRUST_DOMAIN: &str = "ak:trust_domain:local.host";
 const DEV_COAUTH_TRUST_DOMAIN: &str = "ak:trust_domain:auth.local.host";
+const DEV_KEYSTORE_PATH: &str = "./.local/keystore/coauth.v1";
+const DEV_KEYSTORE_MASTER_KEY_FILE: &str = "./.local/secrets/coauth-keystore-master-key";
+const DEV_STORAGE_ROOT: &str = "./.local/media";
 
 #[derive(Parser, Debug)]
 pub(super) struct Options {
@@ -161,6 +165,11 @@ fn apply_generated_config_options(
     options: &GenerateOptions,
 ) -> anyhow::Result<()> {
     if options.dev {
+        config.secrets =
+            KeyStoreConfig::encrypted_file(DEV_KEYSTORE_PATH, DEV_KEYSTORE_MASTER_KEY_FILE);
+        config.storage = StorageConfig::Fs {
+            root: DEV_STORAGE_ROOT.to_owned(),
+        };
         config.database.uri = Some(
             options
                 .database_url
@@ -251,10 +260,15 @@ mod tests {
         );
         assert!(station.has_internal_authority_peer());
         let serialized = serde_json::to_value(&config).expect("dev config should serialize");
+        assert_eq!(serialized["secrets"]["backend"], "encrypted_file");
+        assert_eq!(serialized["secrets"]["path"], DEV_KEYSTORE_PATH);
         assert_eq!(
-            serialized["secrets"],
-            serde_json::json!({"backend": "platform"})
+            serialized["secrets"]["master_key_file"],
+            DEV_KEYSTORE_MASTER_KEY_FILE
         );
+        assert!(serialized["secrets"].get("master_key").is_none());
+        assert_eq!(serialized["storage"]["backend"], "fs");
+        assert_eq!(serialized["storage"]["root"], DEV_STORAGE_ROOT);
         assert!(serialized["secrets"].get("encryption").is_none());
         assert!(serialized["secrets"].get("keys").is_none());
         let serialized_server = &serialized["arkret"]["stations"][0];

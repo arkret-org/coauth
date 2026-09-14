@@ -47,10 +47,15 @@ database:
 #     password: PASSWORD
 secrets:
   # Local development uses the same restart-persistent encrypted backend as
-  # container tests. This fixed wrapping key is development-only.
+  # production. `just init-dev` creates the separately stored master key
+  # idempotently; every local artifact stays below the gitignored `.local/`.
   backend: encrypted_file
-  path: ./data/coauth-runtime-keys.v1
-  master_key: ZGV2LWNvYXV0aC1ydW50aW1lLWtleXMtdjEhISEhISE=
+  path: ./.local/keystore/coauth.v1
+  master_key_file: ./.local/secrets/coauth-keystore-master-key
+
+storage:
+  backend: fs
+  root: ./.local/media
 
 sms:
   transport: blackhole

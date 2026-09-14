@@ -23,6 +23,10 @@ adapt the package list to coauth's workspace.
 > [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
 > if anything that looks like a credential lands in a tracked path.
 
+Local development follows Soland's repository layout: all file-backed runtime
+state lives below the gitignored `.local/` directory. The encrypted KeyStore
+and its master key are separate files; neither is source configuration.
+
 `coauth` is the Station's internal authentication and account-management
 component. It provides OIDC/OAuth login, account lifecycle management,
 short-lived session grants, policy hooks, notifications, and an admin API.
@@ -129,6 +133,28 @@ verified via the introspection endpoints and the OAuth JWKS.
   and policy enforcement
 
 ## Quick start
+
+### Local persistent profile
+
+```bash
+just init-dev
+just dev
+```
+
+`just dev` also runs `init-dev` automatically. Initialization creates a random
+32-byte master key only when missing, validates and retains an existing key,
+and refuses to overwrite malformed data. The checked-in `config.dev.yaml`
+uses:
+
+```text
+.local/secrets/coauth-keystore-master-key  # separately stored master key
+.local/keystore/coauth.v1                  # encrypted runtime key bundle
+.local/media/                              # local file-backed media
+```
+
+Account, OAuth and registration rows remain in PostgreSQL, just as Soland's
+relational state does; `.local/` contains only Coauth's file-backed local
+artifacts.
 
 ### 1. Generate configuration
 

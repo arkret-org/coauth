@@ -23,14 +23,21 @@ export COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS := "1"
 # stays on for every other target. NEVER set in production.
 export COAUTH_OUTBOUND_HTTP_PRIVATE_ALLOWLIST := "auth.local.host,local.host"
 
+dev_keystore_master_key_file := "./.local/secrets/coauth-keystore-master-key"
+
 # Default recipe: show available commands
 default:
     @just --list
 
 # ── Development ──────────────────────────────────────────────
 
+# Provision the local encrypted-file KeyStore master key idempotently. Existing
+# valid keys are retained; malformed files fail closed.
+init-dev:
+    cargo run --quiet -p coauth-keystore-keygen -- --output "{{ dev_keystore_master_key_file }}" --if-missing
+
 # One-click: start PostgreSQL + backend with dev config
-dev: frontend-assets
+dev: init-dev frontend-assets
     # docker compose -f .devcontainer/compose.yml up -d postgres
     # @echo "Waiting for PostgreSQL..."
     # @until docker compose -f .devcontainer/compose.yml exec -T postgres pg_isready -U coauth > /dev/null 2>&1; do sleep 1; done
@@ -48,7 +55,7 @@ config-dev-generate:
     @echo "Created config.dev.yaml"
 
 # Start the backend server (auto-migrates DB)
-backend *ARGS: frontend-assets
+backend *ARGS: init-dev frontend-assets
     if (!(Test-Path config.dev.yaml)) { just config-dev-generate }
     cargo run -p coauth --features cedar -- --development-mode server -c config.dev.yaml {{ARGS}}
 

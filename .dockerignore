@@ -15,6 +15,7 @@ dist/
 .gitea/
 .devcontainer/
 .git/
+.local/
 .codex-*.log
 *.log
 

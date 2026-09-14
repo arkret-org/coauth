@@ -2141,6 +2141,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "coauth-keystore-keygen"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "base64 0.23.1",
+ "camino",
+ "getrandom 0.4.3",
+ "tempfile",
+ "zeroize",
+]
+
+[[package]]
 name = "coauth-messaging"
 version = "0.3.0"
 dependencies = [

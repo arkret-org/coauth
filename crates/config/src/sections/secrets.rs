@@ -101,6 +101,23 @@ impl KeyStoreConfig {
         }
     }
 
+    /// Encrypted-file backend with a separately stored master key.
+    ///
+    /// This is the local-development and container-friendly durable shape;
+    /// neither file is created or silently replaced by configuration loading.
+    #[must_use]
+    pub fn encrypted_file(
+        path: impl Into<Utf8PathBuf>,
+        master_key_file: impl Into<Utf8PathBuf>,
+    ) -> Self {
+        Self {
+            backend: KeyStoreBackend::EncryptedFile,
+            path: Some(path.into()),
+            master_key: None,
+            master_key_file: Some(master_key_file.into()),
+        }
+    }
+
     fn validate_backend(&self) -> anyhow::Result<()> {
         match self.backend {
             KeyStoreBackend::Platform => {
