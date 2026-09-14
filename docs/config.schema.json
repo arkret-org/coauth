@@ -3489,44 +3489,44 @@
           "const": "private_key_jwt"
         },
         {
-          "description": "`sign_in_with_apple`: Apple-specific authentication strand",
+          "description": "`sign_in_with_apple`: Apple-specific authentication flow",
           "type": "string",
           "const": "sign_in_with_apple"
         },
         {
-          "description": "`qq_connect`: QQ Connect OAuth strand",
+          "description": "`qq_connect`: QQ Connect OAuth flow",
           "type": "string",
           "const": "q_q_connect"
         },
         {
-          "description": "`feishu`: Feishu (Lark China) OAuth strand",
+          "description": "`feishu`: Feishu (Lark China) OAuth flow",
           "type": "string",
           "const": "feishu"
         },
         {
-          "description": "`lark`: Lark (international Feishu) OAuth strand",
+          "description": "`lark`: Lark (international Feishu) OAuth flow",
           "type": "string",
           "const": "lark"
         },
         {
-          "description": "`dingtalk`: `DingTalk` OAuth strand",
+          "description": "`dingtalk`: `DingTalk` OAuth flow",
           "type": "string",
           "const": "ding_talk"
         },
         {
-          "description": "`wechat`: `WeChat` Open Platform OAuth strand",
+          "description": "`wechat`: `WeChat` Open Platform OAuth flow",
           "type": "string",
           "const": "we_chat"
         },
         {
-          "description": "`wecom`: `WeCom` (Enterprise `WeChat`) OAuth strand",
+          "description": "`wecom`: `WeCom` (Enterprise `WeChat`) OAuth flow",
           "type": "string",
           "const": "we_com"
         }
       ]
     },
     "SignInWithApple": {
-      "description": "Additional parameters required for Apple's authentication strand",
+      "description": "Additional parameters required for Apple's authentication flow",
       "type": "object",
       "properties": {
         "private_key_file": {
@@ -3578,7 +3578,7 @@
       ]
     },
     "PkceMethod": {
-      "description": "Controls whether Proof Key for Code Exchange is used during the\nauthorization code strand",
+      "description": "Controls whether Proof Key for Code Exchange is used during the\nauthorization code flow",
       "oneOf": [
         {
           "description": "Use PKCE if the provider supports it.\n\nFalls back to no PKCE when provider discovery is disabled.",
@@ -3974,7 +3974,7 @@
           "type": "boolean"
         },
         "registration_email_delivery_bypass_allowed": {
-          "description": "Allow registration strands to bypass delivery of verification email in\ndev/test deployments (default: `false`). Verification/recovery policy\nremains in coauth; soland only provides DID/webvh primitives.",
+          "description": "Allow registration flows to bypass delivery of verification email in\ndev/test deployments (default: `false`). Verification/recovery policy\nremains in coauth; soland only provides DID/webvh primitives.",
           "type": "boolean"
         },
         "password_change_allowed": {

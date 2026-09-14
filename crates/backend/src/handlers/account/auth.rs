@@ -1,4 +1,4 @@
-//! REST API endpoints for authentication strands (login, logout, providers).
+//! REST API endpoints for authentication flows (login, logout, providers).
 //!
 //! These endpoints are consumed by the Dioxus SPA frontend and return JSON
 //! responses. Session cookies are set/cleared as side effects.

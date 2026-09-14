@@ -799,7 +799,7 @@ async fn exchange_oidc_code(
             })?;
 
         // Trusted-issuer mapping (advisory): emit a typed mapping event when a
-        // policy is configured; the `find_by_subject` strand stays the source
+        // policy is configured; the `find_by_subject` flow stays the source
         // of truth.
         if let (Ok(trusted_issuers), Some(id_token)) = (
             depot.get::<TrustedIssuerPolicySet>("upstream_oidc_trusted_issuers"),

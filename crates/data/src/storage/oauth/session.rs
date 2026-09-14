@@ -457,7 +457,7 @@ repository_impl! {
             }
 
             /// Create a new [`Session`] for a [`Client`] using the client credentials
-            /// strand
+            /// flow
             ///
             /// Returns the newly created [`Session`]
             ///

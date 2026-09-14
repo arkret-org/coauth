@@ -149,9 +149,9 @@ pub struct StepOutcome {
     pub next_step: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
-    /// Set when the registration was started as part of another strand
+    /// Set when the registration was started as part of another flow
     /// (e.g. an OAuth authorization grant continuation). The frontend
-    /// uses this to resume the original strand after the account is created.
+    /// uses this to resume the original flow after the account is created.
     #[serde(default)]
     pub post_auth_action: Option<coauth_account_types::PostAuthAction>,
 }

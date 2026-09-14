@@ -3,13 +3,13 @@
 //! Round 25 introduces a typed mapping layer between an upstream OIDC
 //! provider's raw `id_token` claims and the local Arkret identity model.
 //!
-//! Unlike the existing `upstream_oidc.rs` strand — which orchestrates the OAuth
+//! Unlike the existing `upstream_oidc.rs` flow — which orchestrates the OAuth
 //! authorization-code dance with a *configured* upstream provider — this
 //! module is the policy-decision point: a small `TrustedIssuerPolicy` set
 //! says "if you receive a token signed by issuer X with audience Y, here is
 //! how to map its claims into a typed `MappedUpstreamIdentity`". This is the
 //! shape consumed by experimental token-exchange and "bring-your-own-OIDC"
-//! strands.
+//! flows.
 //!
 //! Validation guarantees (any failure → `MappingError`):
 //!

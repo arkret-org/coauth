@@ -11,8 +11,8 @@
 //! - **Accounts** — [`AccountContactPoint`], [`AccountIdentityBinding`]
 //! - **Users** — [`User`], [`BrowserSession`], [`Password`], [`UserEmail`], [`UserRegistration`],
 //!   [`UserRecoveryTicket`]
-//! - **Strands** — [`StrandDefinition`], [`StrandStageBinding`], [`StageKind`], [`StrandSession`],
-//!   [`StageChallenge`], [`StageSubmission`], [`StageOutcome`]
+//! - **Journeys** — [`JourneyDefinition`], [`JourneyStageBinding`], [`StageKind`],
+//!   [`JourneySession`], [`StageChallenge`], [`StageSubmission`], [`StageOutcome`]
 //! - **OAuth** — [`Client`], [`Session`], [`AuthorizationGrant`], [`AccessToken`],
 //!   [`RefreshToken`], [`DeviceCodeGrant`]
 //! - **Upstream SSO** — [`UpstreamOAuthProvider`], [`UpstreamOAuthLink`],
@@ -55,6 +55,9 @@ pub mod did_binding;
 pub mod dpop_replay;
 /// Durable self-service account erasure intents (account-lifecycle.md §8.1).
 pub mod erasure_request;
+/// Journey engine data model — multi-step user interaction definitions, stage
+/// bindings, and runtime session tracking.
+pub mod journey;
 /// Persisted notification request, delivery, and audit event models.
 pub mod notification;
 /// OAuth client and session models.
@@ -71,9 +74,6 @@ pub mod recovery_authority;
 mod site_config;
 /// Storage repository abstractions and pagination helpers.
 pub mod storage;
-/// Strand engine data model — multi-step user interaction definitions, stage
-/// bindings, and runtime session tracking.
-pub mod strand;
 pub(crate) mod tokens;
 pub mod upstream_oauth;
 mod url_builder;
@@ -167,6 +167,11 @@ pub use self::dpop_replay::{DpopReplayRepository, NewDpopJtiReplay};
 pub use self::erasure_request::{
     NewUserErasureRequest, UserErasureRequest, UserErasureRequestRepository,
 };
+pub use self::journey::{
+    IdentificationField, JourneyDefinition, JourneyDesignation, JourneySession,
+    JourneySessionStatus, JourneyStageBinding, PromptField, PromptFieldType, StageChallenge,
+    StageKind, StageOutcome, StageSubmission, StageValidationError,
+};
 pub use self::notification::{
     NotificationChannel, NotificationDelivery, NotificationDeliveryFailure,
     NotificationDeliveryStatus, NotificationDestination, NotificationEventActor,
@@ -195,11 +200,6 @@ pub use self::recovery_authority::{
 };
 pub use self::site_config::{
     CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
-};
-pub use self::strand::{
-    IdentificationField, PromptField, PromptFieldType, StageChallenge, StageKind, StageOutcome,
-    StageSubmission, StageValidationError, StrandDefinition, StrandDesignation, StrandSession,
-    StrandSessionStatus, StrandStageBinding,
 };
 pub use self::tokens::{
     AccessToken, AccessTokenState, RefreshToken, RefreshTokenChainRevokeOutcome, RefreshTokenState,

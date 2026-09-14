@@ -1,6 +1,6 @@
 //! `WeCom` OAuth specific request implementations.
 //!
-//! `WeCom` uses a non-standard OAuth strand:
+//! `WeCom` uses a non-standard OAuth flow:
 //! - First obtain a corp `access_token` using corpid + corpsecret
 //! - Then use the authorization code to get user identity (userid)
 //! - Optionally fetch full user profile

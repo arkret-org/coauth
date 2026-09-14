@@ -3,7 +3,7 @@
 #
 # Usage: ./device-code-grant.sh <coauth-url> [scope ...]
 #
-# This script performs the full device authorization grant strand:
+# This script performs the full device authorization grant flow:
 #   1. Discovers OIDC metadata from the server
 #   2. Dynamically registers a client
 #   3. Initiates device authorization

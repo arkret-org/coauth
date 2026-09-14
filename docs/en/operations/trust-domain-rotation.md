@@ -21,7 +21,7 @@ During rotation:
    `/_arkret/describe` advertises the coordinated new value. Coauth has no
    independent role-local Describe.
 3. Roll the remaining replicas.
-4. Reissue reset proofs through the device recovery strand. The affected
+4. Reissue reset proofs through the device recovery flow. The affected
    proof families are `did_root`, `recovery_unlock`,
    `device_quorum`, and `trusted_recovery_service`.
 5. Complete the root-anchored device re-anchor after the new proofs are

@@ -1,7 +1,7 @@
-# Authentication Strands
+# Authentication Flows
 
 ASCII sequence diagrams for the four primary `coauth` authentication
-strands: OpenID Connect (authorization code), OAuth 2.0 device
+flows: OpenID Connect (authorization code), OAuth 2.0 device
 authorization grant, WebAuthn / passkey, and account recovery.
 
 These diagrams describe the wire-level happy-path. Failure branches
@@ -153,4 +153,4 @@ User              coauth                Email Service       Device Quorum
 ```
 
 See [`docs/en/topics/password-reset.md`](./topics/password-reset.md)
-for the security model behind the recovery strand.
+for the security model behind the recovery flow.

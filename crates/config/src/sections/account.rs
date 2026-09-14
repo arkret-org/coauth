@@ -50,7 +50,7 @@ pub struct AccountConfig {
     #[serde(default = "enabled_default", skip_serializing_if = "matches_enabled")]
     pub password_registration_contact_required: bool,
 
-    /// Allow registration strands to bypass delivery of verification email in
+    /// Allow registration flows to bypass delivery of verification email in
     /// dev/test deployments (default: `false`). Verification/recovery policy
     /// remains in coauth; soland only provides DID/webvh primitives.
     #[serde(default = "disabled_default", skip_serializing_if = "matches_disabled")]

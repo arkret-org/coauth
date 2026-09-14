@@ -1,13 +1,13 @@
 # Password Reset
 
-The password-reset strand lets an authenticated **owner** of a `coauth`
+The password-reset flow lets an authenticated **owner** of a `coauth`
 account regain interactive access when the existing credential
 (password or passkey) is lost. It is intentionally narrow: the path
 exists for account recovery, not for routine credential rotation, and
 all transitions are auditable.
 
 For the high-level sequence diagram see
-[Auth strands / Account recovery](../auth-strands.md#account-recovery-passwordless-reset).
+[Auth flows / Account recovery](../auth-flows.md#account-recovery-passwordless-reset).
 
 ## Threat model
 

@@ -10,7 +10,7 @@ revision; this page records the rules `coauth` enforces locally.
 numbers. The wire form is either `offline_token` (`token_commitment`,
 `token_salt_id`, `token_entropy_bits`) or `lookup` (`lookup_table_ref`,
 `pepper_id`). See [Account lifecycle](../account-lifecycle.md) for the
-claim strand and its rejection codes.
+claim flow and its rejection codes.
 
 ## DID parsing
 

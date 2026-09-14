@@ -146,9 +146,9 @@ pub(super) fn build_account_api_router(router: Router) -> Router {
 
 fn account_api_subrouters() -> (Router, Router) {
     use crate::handlers::account::{
-        agents, approval, auth, avatar, bootstrap_admin_status, emails, invite_relay,
+        agents, approval, auth, avatar, bootstrap_admin_status, emails, invite_relay, journey,
         linked_accounts, notification_prefs, oauth_clients, password, recovery, register, sessions,
-        site_config, strand, upstream_oauth, users, viewer,
+        site_config, upstream_oauth, users, viewer,
     };
     use crate::handlers::arkret;
 
@@ -459,14 +459,14 @@ fn account_api_subrouters() -> (Router, Router) {
                 .get(upstream_oauth::get_link)
                 .post(upstream_oauth::post_link),
         )
-        // Strand engine
+        // Journey engine
         .push(
-            Router::with_path("self/strand")
-                .push(Router::with_path("{slug}/start").post(strand::start_strand))
+            Router::with_path("self/journey")
+                .push(Router::with_path("{slug}/start").post(journey::start_journey))
                 .push(
                     Router::with_path("session/{id}")
-                        .get(strand::get_strand_session)
-                        .push(Router::with_path("respond").post(strand::respond_strand)),
+                        .get(journey::get_journey_session)
+                        .push(Router::with_path("respond").post(journey::respond_journey)),
                 ),
         );
 

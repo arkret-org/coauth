@@ -20,7 +20,7 @@ sh ./misc/device-code-grant.sh https://auth.example.com/
 pwsh -File ./misc/device-code-grant.ps1 https://auth.example.com/
 ```
 
-This prints a verification URL and user code. Finish the browser strand, then the
+This prints a verification URL and user code. Finish the browser flow, then the
 script prints the token response.
 
 ## Common scopes

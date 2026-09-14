@@ -4,7 +4,7 @@
 //
 // Portions based on mas-cli by The Matrix.org Foundation C.I.C.
 
-//! Interactive user registration strand and related types.
+//! Interactive user registration flow and related types.
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;

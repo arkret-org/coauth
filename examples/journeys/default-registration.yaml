@@ -1,6 +1,6 @@
-# Default registration strand definition.
+# Default registration journey definition.
 #
-# This strand collects basic user information and then verifies the user's
+# This journey collects basic user information and then verifies the user's
 # email address before completing registration.
 
 slug: default-registration

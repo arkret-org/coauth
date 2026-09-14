@@ -47,17 +47,17 @@ pub struct NotificationRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum NotificationRequestSource {
-    /// Triggered by an email-authentication strand.
+    /// Triggered by an email-authentication flow.
     UserEmailAuthentication {
         /// The originating email-authentication session.
         user_email_authentication_id: Ulid,
     },
-    /// Triggered by a phone-authentication strand.
+    /// Triggered by a phone-authentication flow.
     UserPhoneAuthentication {
         /// The originating phone-authentication session.
         user_phone_authentication_id: Ulid,
     },
-    /// Triggered by an account-recovery strand.
+    /// Triggered by an account-recovery flow.
     UserRecoverySession {
         /// The originating recovery session.
         user_recovery_session_id: Ulid,

@@ -34,15 +34,15 @@ use crate::response_type::ResponseType;
 #[serde(from = "ClientMetadataSerdeHelper", into = "ClientMetadataSerdeHelper")]
 pub struct ClientMetadata {
     // -- RFC 7591: OAuth Dynamic Client Registration Protocol --
-    /// Array of redirection URIs for use in redirect-based strands such as the
-    /// [authorization code strand].
+    /// Array of redirection URIs for use in redirect-based flows such as the
+    /// [authorization code flow].
     ///
     /// All the URIs used by the client in an authorization request's
     /// `redirect_uri` field must appear in this list.
     ///
     /// This field is required and the URIs must not contain a fragment.
     ///
-    /// [authorization code strand]: https://openid.net/specs/openid-connect-core-1_0.html#CodeStrandAuth
+    /// [authorization code flow]: https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
     pub redirect_uris: Option<Vec<Url>>,
 
     /// Array of the [OAuth `response_type` values] that the client can use

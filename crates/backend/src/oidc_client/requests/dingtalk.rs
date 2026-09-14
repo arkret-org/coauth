@@ -1,6 +1,6 @@
 //! `DingTalk` OAuth specific request implementations.
 //!
-//! `DingTalk` uses a mostly standard OAuth strand with JSON request/response
+//! `DingTalk` uses a mostly standard OAuth flow with JSON request/response
 //! bodies and a custom header for the access token in userinfo requests.
 
 use std::collections::HashMap;

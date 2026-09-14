@@ -1,19 +1,20 @@
-//! Strand engine data model types.
+//! Journey engine data model types.
 //!
-//! A "strand" is a multi-step user interaction such as registration, account
-//! recovery, password change, MFA enrollment, or OAuth consent.  Each strand is
+//! A "journey" is a multi-step user interaction such as registration, account
+//! recovery, password change, MFA enrollment, or OAuth consent.  Each journey is
 //! composed of an ordered sequence of "stages", where every stage defines what
 //! to show the user (a **challenge**) and what to accept back (a **response**).
 //!
-//! At runtime a [`StrandSession`] tracks the user's progress through the stages,
+//! At runtime a [`JourneySession`] tracks the user's progress through the stages,
 //! accumulating context data that later stages can reference.
 //!
-//! NOTE: the "Strand" in this module is coauth's **internal authentication-strand
-//! engine** (registration / recovery / MFA / OAuth consent). It is unrelated
-//! to the Arkret protocol `ak:strand:` collaboration object — these types never
-//! touch the Arkret wire, and the protocol's `stage`/`state`/`status` axis
-//! rules do not govern them. The name collision is purely nominal; do not
-//! conflate `StrandSession` here with a protocol Strand durable object.
+//! NOTE: this engine is coauth-internal (registration / recovery / MFA / OAuth
+//! consent) and is unrelated to the Arkret protocol `ak:strand:` collaboration
+//! object — these types never touch the Arkret wire, and the protocol's
+//! `stage`/`state`/`status` axis rules do not govern them. The engine was
+//! previously named "strand", which collided nominally with that protocol
+//! object; it is now "journey" precisely so the two cannot be conflated. Do
+//! not reintroduce `strand` as a name for anything in this module.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -22,49 +23,49 @@ use serde_json::Value;
 use crate::Ulid;
 
 // ---------------------------------------------------------------------------
-// Strand designation
+// Journey designation
 // ---------------------------------------------------------------------------
 
-/// The purpose/designation of a strand — determines when it is triggered.
+/// The purpose/designation of a journey — determines when it is triggered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum StrandDesignation {
-    /// User registration strand.
+pub enum JourneyDesignation {
+    /// User registration journey.
     Registration,
-    /// Account recovery / password reset strand.
+    /// Account recovery / password reset journey.
     Recovery,
-    /// Password change strand (authenticated).
+    /// Password change journey (authenticated).
     PasswordChange,
-    /// Authentication / login strand.
+    /// Authentication / login journey.
     Authentication,
-    /// OAuth authorization consent strand.
+    /// OAuth authorization consent journey.
     Authorization,
-    /// MFA device enrollment strand.
+    /// MFA device enrollment journey.
     Enrollment,
-    /// User profile / settings strand.
+    /// User profile / settings journey.
     StageConfiguration,
 }
 
 // ---------------------------------------------------------------------------
-// Strand definition
+// Journey definition
 // ---------------------------------------------------------------------------
 
-/// A strand definition — a named sequence of stages for a specific purpose.
+/// A journey definition — a named sequence of stages for a specific purpose.
 ///
-/// Strand definitions are configuration-time objects.  They describe *what*
+/// Journey definitions are configuration-time objects.  They describe *what*
 /// should happen (which stages, in which order) but do not carry any runtime
-/// state — that lives in [`StrandSession`].
+/// state — that lives in [`JourneySession`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrandDefinition {
+pub struct JourneyDefinition {
     /// Unique identifier.
     pub id: Ulid,
     /// URL-friendly identifier, e.g., `"default-registration"`.
     pub slug: String,
     /// Human-readable title shown in admin UIs.
     pub title: String,
-    /// What this strand is used for.
-    pub designation: StrandDesignation,
-    /// Whether the strand is currently active.
+    /// What this journey is used for.
+    pub designation: JourneyDesignation,
+    /// Whether the journey is currently active.
     pub enabled: bool,
     /// Optional template override key. When set, the template engine
     /// looks for templates under this key instead of the default.
@@ -177,10 +178,10 @@ pub enum PromptFieldType {
 }
 
 // ---------------------------------------------------------------------------
-// Strand-stage binding
+// Journey-stage binding
 // ---------------------------------------------------------------------------
 
-/// Binds a stage to a strand with ordering and an optional policy expression.
+/// Binds a stage to a journey with ordering and an optional policy expression.
 ///
 /// The planner iterates these bindings in [`order`](Self::order) to build the
 /// list of stages the user must complete.  If
@@ -188,14 +189,14 @@ pub enum PromptFieldType {
 /// [`policy_expression`](Self::policy_expression) is evaluated at plan time to
 /// decide whether the stage should be included.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrandStageBinding {
+pub struct JourneyStageBinding {
     /// Unique identifier.
     pub id: Ulid,
-    /// The strand this binding belongs to.
-    pub strand_id: Ulid,
+    /// The journey this binding belongs to.
+    pub journey_id: Ulid,
     /// The stage configuration.
     pub stage: StageKind,
-    /// Execution order within the strand (lower = earlier).
+    /// Execution order within the journey (lower = earlier).
     pub order: i32,
     /// Whether to evaluate [`policy_expression`](Self::policy_expression) at
     /// plan time.
@@ -209,24 +210,24 @@ pub struct StrandStageBinding {
 }
 
 // ---------------------------------------------------------------------------
-// Strand session (runtime state)
+// Journey session (runtime state)
 // ---------------------------------------------------------------------------
 
-/// Runtime session tracking a user's progress through a strand.
+/// Runtime session tracking a user's progress through a journey.
 ///
-/// Created when a user begins a strand and updated as they advance through
+/// Created when a user begins a journey and updated as they advance through
 /// stages.  The [`context`](Self::context) field accumulates data that later
 /// stages can read (e.g., the identified user, a pending email address).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StrandSession {
+pub struct JourneySession {
     /// Unique identifier.
     pub id: Ulid,
-    /// The strand definition this session is executing.
-    pub strand_id: Ulid,
+    /// The journey definition this session is executing.
+    pub journey_id: Ulid,
     /// The current stage binding index (0-based).
     pub current_stage_index: usize,
     /// Session lifecycle status.
-    pub status: StrandSessionStatus,
+    pub status: JourneySessionStatus,
     /// Accumulated context data shared between stages.
     pub context: Value,
     /// IP address of the user who initiated the session.
@@ -243,21 +244,21 @@ pub struct StrandSession {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
-/// Strand session lifecycle status.
+/// Journey session lifecycle status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum StrandSessionStatus {
-    /// Strand is in progress.
+pub enum JourneySessionStatus {
+    /// Journey is in progress.
     InProgress,
-    /// Strand completed successfully.
+    /// Journey completed successfully.
     Completed,
-    /// Strand was cancelled or abandoned.
+    /// Journey was cancelled or abandoned.
     Cancelled,
-    /// Strand expired before completion.
+    /// Journey expired before completion.
     Expired,
 }
 
-impl StrandSessionStatus {
+impl JourneySessionStatus {
     /// Returns `true` if the status represents a terminal (final) state.
     #[must_use]
     pub fn is_terminal(self) -> bool {
@@ -322,8 +323,8 @@ pub enum StageChallenge {
         /// Whether the token is required or optional.
         required: bool,
     },
-    /// Terminal challenge — the strand is done, redirect the user.
-    StrandDone {
+    /// Terminal challenge — the journey is done, redirect the user.
+    JourneyDone {
         /// URL to redirect to, if any.
         redirect_to: Option<String>,
     },
@@ -399,7 +400,7 @@ pub enum StageOutcome {
         /// The validation errors to display.
         errors: Vec<StageValidationError>,
     },
-    /// The strand is done.
+    /// The journey is done.
     Done {
         /// URL to redirect to after completion, if any.
         redirect_to: Option<String>,
@@ -426,40 +427,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn strand_session_status_is_terminal() {
+    fn journey_session_status_is_terminal() {
         assert!(
-            !StrandSessionStatus::InProgress.is_terminal(),
+            !JourneySessionStatus::InProgress.is_terminal(),
             "InProgress should not be terminal"
         );
         assert!(
-            StrandSessionStatus::Completed.is_terminal(),
+            JourneySessionStatus::Completed.is_terminal(),
             "Completed should be terminal"
         );
         assert!(
-            StrandSessionStatus::Cancelled.is_terminal(),
+            JourneySessionStatus::Cancelled.is_terminal(),
             "Cancelled should be terminal"
         );
         assert!(
-            StrandSessionStatus::Expired.is_terminal(),
+            JourneySessionStatus::Expired.is_terminal(),
             "Expired should be terminal"
         );
     }
 
     #[test]
-    fn strand_designation_roundtrips_through_json() {
-        let designation = StrandDesignation::Registration;
+    fn journey_designation_roundtrips_through_json() {
+        let designation = JourneyDesignation::Registration;
         let json = serde_json::to_string(&designation).unwrap();
         assert_eq!(json, "\"registration\"");
-        let back: StrandDesignation = serde_json::from_str(&json).unwrap();
+        let back: JourneyDesignation = serde_json::from_str(&json).unwrap();
         assert_eq!(back, designation);
     }
 
     #[test]
-    fn strand_session_status_roundtrips_through_json() {
-        let status = StrandSessionStatus::InProgress;
+    fn journey_session_status_roundtrips_through_json() {
+        let status = JourneySessionStatus::InProgress;
         let json = serde_json::to_string(&status).unwrap();
         assert_eq!(json, "\"in_progress\"");
-        let back: StrandSessionStatus = serde_json::from_str(&json).unwrap();
+        let back: JourneySessionStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(back, status);
     }
 

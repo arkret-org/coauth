@@ -55,9 +55,9 @@ coauth-change-password-description = This will change your account password.
 coauth-change-password-heading = Change my password
 # Field for the user's new password
 coauth-change-password-new = New password
-# During the registration strand, the user is asked to choose a display name. This is the description of that form.
+# During the registration flow, the user is asked to choose a display name. This is the description of that form.
 coauth-choose-display-name-description = This is the name other people will see. You can change this at any time.
-# During the registration strand, the user is asked to choose a display name. This is the headline of that form.
+# During the registration flow, the user is asked to choose a display name. This is the headline of that form.
 coauth-choose-display-name-headline = Choose your display name
 coauth-approval-use-another-account = Use another account
 # The automatic device name generated for a client, e.g. 'Element on iPhone'

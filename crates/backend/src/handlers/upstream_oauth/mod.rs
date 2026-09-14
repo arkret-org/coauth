@@ -8,7 +8,7 @@
 //!   provider-specific userinfo-only adapters do not return signed ID tokens, so callbacks for
 //!   those adapters fail closed unless `COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH=true` is set.
 //!
-//! - **Handler layer** (this module): User-facing strand orchestration (session management,
+//! - **Handler layer** (this module): User-facing flow orchestration (session management,
 //!   link/unlink, attribute mapping, conflict resolution). This logic is delegated to the private
 //!   `link_workflow` submodule.
 //!

@@ -1,61 +1,61 @@
 use std::net::IpAddr;
 
 use coauth_data::CaptchaConfig;
-use coauth_data::strand::{
-    StageChallenge, StageKind, StageOutcome, StageSubmission, StageValidationError,
-    StrandDefinition, StrandSession, StrandStageBinding,
+use coauth_data::journey::{
+    JourneyDefinition, JourneySession, JourneyStageBinding, StageChallenge, StageKind,
+    StageOutcome, StageSubmission, StageValidationError,
 };
 use serde_json::Value;
 use thiserror::Error;
 use tracing::warn;
 
 #[derive(Debug, Error)]
-pub enum StrandPlannerError {
-    #[error("strand not found: {0}")]
-    StrandNotFound(String),
+pub enum JourneyPlannerError {
+    #[error("journey not found: {0}")]
+    JourneyNotFound(String),
 
-    #[error("strand session expired")]
+    #[error("journey session expired")]
     SessionExpired,
 
-    #[error("strand session already completed")]
+    #[error("journey session already completed")]
     AlreadyCompleted,
 
-    #[error("no more stages in strand")]
+    #[error("no more stages in journey")]
     NoMoreStages,
 
     #[error(transparent)]
     Repository(#[from] coauth_data::RepositoryError),
 }
 
-/// A planned strand — the ordered list of stage bindings to execute.
-pub struct StrandPlan {
-    pub strand: StrandDefinition,
-    pub stages: Vec<StrandStageBinding>,
+/// A planned journey — the ordered list of stage bindings to execute.
+pub struct JourneyPlan {
+    pub journey: JourneyDefinition,
+    pub stages: Vec<JourneyStageBinding>,
 }
 
-/// The strand executor manages progression through a strand's stages.
-pub struct StrandExecutor;
+/// The journey executor manages progression through a journey's stages.
+pub struct JourneyExecutor;
 
-impl StrandExecutor {
-    /// Plan a strand: determine which stages should run based on context.
-    /// For now, all stages in the strand are included (no policy evaluation).
+impl JourneyExecutor {
+    /// Plan a journey: determine which stages should run based on context.
+    /// For now, all stages in the journey are included (no policy evaluation).
     #[must_use]
-    pub fn plan(strand: StrandDefinition, bindings: Vec<StrandStageBinding>) -> StrandPlan {
+    pub fn plan(journey: JourneyDefinition, bindings: Vec<JourneyStageBinding>) -> JourneyPlan {
         let mut stages = bindings;
         stages.sort_by_key(|b| b.order);
-        StrandPlan { strand, stages }
+        JourneyPlan { journey, stages }
     }
 
-    /// Get the challenge for the current stage of a strand session.
+    /// Get the challenge for the current stage of a journey session.
     ///
     /// Before returning the challenge, this advances past any stages whose
     /// requirements are already satisfied by the session context (auto-skip).
     pub fn current_challenge(
-        plan: &StrandPlan,
-        session: &mut StrandSession,
-    ) -> Result<StageChallenge, StrandPlannerError> {
+        plan: &JourneyPlan,
+        session: &mut JourneySession,
+    ) -> Result<StageChallenge, JourneyPlannerError> {
         if session.status.is_terminal() {
-            return Err(StrandPlannerError::AlreadyCompleted);
+            return Err(JourneyPlannerError::AlreadyCompleted);
         }
 
         // Auto-skip stages that are already satisfied by the context.
@@ -71,7 +71,7 @@ impl StrandExecutor {
         let binding = plan
             .stages
             .get(session.current_stage_index)
-            .ok_or(StrandPlannerError::NoMoreStages)?;
+            .ok_or(JourneyPlannerError::NoMoreStages)?;
 
         Ok(challenge_for_stage(&binding.stage, &session.context))
     }
@@ -79,19 +79,19 @@ impl StrandExecutor {
     /// Process a response for the current stage and determine the outcome.
     /// Returns the outcome and the updated context.
     pub async fn process_response(
-        plan: &StrandPlan,
-        session: &StrandSession,
+        plan: &JourneyPlan,
+        session: &JourneySession,
         response: StageSubmission,
         captcha_ctx: Option<&CaptchaVerifyContext<'_>>,
-    ) -> Result<(StageOutcome, Value), StrandPlannerError> {
+    ) -> Result<(StageOutcome, Value), JourneyPlannerError> {
         if session.status.is_terminal() {
-            return Err(StrandPlannerError::AlreadyCompleted);
+            return Err(JourneyPlannerError::AlreadyCompleted);
         }
 
         let binding = plan
             .stages
             .get(session.current_stage_index)
-            .ok_or(StrandPlannerError::NoMoreStages)?;
+            .ok_or(JourneyPlannerError::NoMoreStages)?;
 
         let mut context = session.context.clone();
         let outcome = validate_response(&binding.stage, &response, &mut context, captcha_ctx).await;
@@ -99,9 +99,9 @@ impl StrandExecutor {
         Ok((outcome, context))
     }
 
-    /// Check if the strand has more stages after the current one.
+    /// Check if the journey has more stages after the current one.
     #[must_use]
-    pub fn has_next_stage(plan: &StrandPlan, session: &StrandSession) -> bool {
+    pub fn has_next_stage(plan: &JourneyPlan, session: &JourneySession) -> bool {
         session.current_stage_index + 1 < plan.stages.len()
     }
 }
@@ -277,7 +277,7 @@ async fn validate_response(
             }
 
             // Server-side verification. Delegate to the single shared
-            // `captcha::verify_token` entry point so the strand path enforces the
+            // `captcha::verify_token` entry point so the journey path enforces the
             // same hostname binding and fail-closed semantics as the REST
             // paths (hostname mismatch is a hard failure, not a warning; a
             // supplied token with no configured provider is rejected).

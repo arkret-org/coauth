@@ -16,7 +16,7 @@
 //! authz-code injection. The cross-check is the primary defence; the
 //! cookie attributes ([`crate::salvo_utils::cookies::CookieOption`])
 //! supply `HttpOnly` + `Secure` + `SameSite=Lax` so that a
-//! third-party iframe cannot tamper with the cookie state mid-strand.
+//! third-party iframe cannot tamper with the cookie state mid-flow.
 //!
 //! NOTE: the upstream callback is a top-level navigation back to our
 //! origin from a foreign IdP, so the cookie deliberately stays at

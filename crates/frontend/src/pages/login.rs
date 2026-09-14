@@ -512,7 +512,7 @@ fn LoginForm(providers: ProvidersOutcome) -> Element {
                                 // Propagate the current page's query string (e.g.
                                 // ?kind=continue_authorization_grant&id=...) to the
                                 // upstream authorize URL so that after the upstream
-                                // strand completes, coauth can continue the original
+                                // flow completes, coauth can continue the original
                                 // OAuth grant and redirect back to the originating
                                 // client.
                                 let query = current_query_string();

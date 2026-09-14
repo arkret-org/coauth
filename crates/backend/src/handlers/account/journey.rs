@@ -1,19 +1,19 @@
-//! REST API endpoints for the strand engine.
+//! REST API endpoints for the journey engine.
 //!
-//! These endpoints expose the strand engine over HTTP, allowing clients to start
-//! strands, query the current challenge, and submit stage responses.
+//! These endpoints expose the journey engine over HTTP, allowing clients to start
+//! journeys, query the current challenge, and submit stage responses.
 //!
 //! Session state is stored in-memory for now; a proper repository-backed store
-//! will replace this once `StrandSession` has a database repository.
+//! will replace this once `JourneySession` has a database repository.
 
 use chrono::Utc;
-use coauth_data::new_id;
-use coauth_data::strand::{
-    IdentificationField as DomainIdentificationField, PromptField as DomainPromptField,
-    PromptFieldType as DomainPromptFieldType, StageChallenge as DomainStageChallenge, StageOutcome,
-    StageSubmission as DomainStageSubmission, StageValidationError as DomainStageValidationError,
-    StrandSession, StrandSessionStatus,
+use coauth_data::journey::{
+    IdentificationField as DomainIdentificationField, JourneySession, JourneySessionStatus,
+    PromptField as DomainPromptField, PromptFieldType as DomainPromptFieldType,
+    StageChallenge as DomainStageChallenge, StageOutcome, StageSubmission as DomainStageSubmission,
+    StageValidationError as DomainStageValidationError,
 };
+use coauth_data::new_id;
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -22,18 +22,18 @@ use ulid::Ulid;
 
 use super::{RouteError, make_rng};
 use crate::app_state::DepotExt as _;
-use crate::handlers::strand::{
-    CaptchaVerifyContext, StrandExecutor, StrandPlan, evict_strand_sessions,
-    strand_session_store_write,
+use crate::handlers::journey::{
+    CaptchaVerifyContext, JourneyExecutor, JourneyPlan, evict_journey_sessions,
+    journey_session_store_write,
 };
 
 // ---------------------------------------------------------------------------
 // Request / response types
 // ---------------------------------------------------------------------------
 
-/// Envelope returned for every strand endpoint.
+/// Envelope returned for every journey endpoint.
 ///
-/// This is intentionally separate from the data-model strand types. The strand
+/// This is intentionally separate from the data-model journey types. The journey
 /// engine continues using domain enums from `coauth_data`, while the REST
 /// API exposes a stable schema DTO that can be documented via `OpenAPI`.
 #[derive(Debug, Clone, Copy, Serialize, ToSchema)]
@@ -103,7 +103,7 @@ impl From<DomainPromptField> for PromptField {
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum StrandChallenge {
+pub enum JourneyChallenge {
     Identification {
         user_fields: Vec<IdentificationField>,
         password_stage: bool,
@@ -131,12 +131,12 @@ pub enum StrandChallenge {
     EnrollmentToken {
         required: bool,
     },
-    StrandDone {
+    JourneyDone {
         redirect_to: Option<String>,
     },
 }
 
-impl From<DomainStageChallenge> for StrandChallenge {
+impl From<DomainStageChallenge> for JourneyChallenge {
     fn from(value: DomainStageChallenge) -> Self {
         match value {
             DomainStageChallenge::Identification {
@@ -165,19 +165,19 @@ impl From<DomainStageChallenge> for StrandChallenge {
             DomainStageChallenge::EnrollmentToken { required } => {
                 Self::EnrollmentToken { required }
             }
-            DomainStageChallenge::StrandDone { redirect_to } => Self::StrandDone { redirect_to },
+            DomainStageChallenge::JourneyDone { redirect_to } => Self::JourneyDone { redirect_to },
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
-pub struct StrandValidationError {
+pub struct JourneyValidationError {
     pub field: Option<String>,
     pub message: String,
     pub code: String,
 }
 
-impl From<DomainStageValidationError> for StrandValidationError {
+impl From<DomainStageValidationError> for JourneyValidationError {
     fn from(value: DomainStageValidationError) -> Self {
         Self {
             field: value.field,
@@ -188,26 +188,26 @@ impl From<DomainStageValidationError> for StrandValidationError {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct StrandOutcome {
+pub struct JourneyOutcome {
     /// The session identifier (ULID).
     pub session_id: String,
-    /// The slug of the strand being executed.
-    pub strand_slug: String,
+    /// The slug of the journey being executed.
+    pub journey_slug: String,
     /// The current stage challenge to present to the user.
-    pub challenge: StrandChallenge,
+    pub challenge: JourneyChallenge,
     /// Zero-based index of the current stage.
     pub stage_index: usize,
-    /// Total number of stages in the strand.
+    /// Total number of stages in the journey.
     pub total_stages: usize,
     /// Validation errors, if the last response was rejected.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub errors: Option<Vec<StrandValidationError>>,
+    pub errors: Option<Vec<JourneyValidationError>>,
 }
 
-/// Request body for `POST /_coauth/self/strand/session/:id/respond`.
+/// Request body for `POST /_coauth/self/journey/session/:id/respond`.
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum StrandStageRequestBody {
+pub enum JourneyStageRequestBody {
     Identification {
         uid_field: String,
         password: Option<String>,
@@ -238,35 +238,35 @@ pub enum StrandStageRequestBody {
     },
 }
 
-impl From<StrandStageRequestBody> for DomainStageSubmission {
-    fn from(value: StrandStageRequestBody) -> Self {
+impl From<JourneyStageRequestBody> for DomainStageSubmission {
+    fn from(value: JourneyStageRequestBody) -> Self {
         match value {
-            StrandStageRequestBody::Identification {
+            JourneyStageRequestBody::Identification {
                 uid_field,
                 password,
             } => Self::Identification {
                 uid_field,
                 password,
             },
-            StrandStageRequestBody::EmailVerification { code } => Self::EmailVerification { code },
-            StrandStageRequestBody::PasswordWrite {
+            JourneyStageRequestBody::EmailVerification { code } => Self::EmailVerification { code },
+            JourneyStageRequestBody::PasswordWrite {
                 current_password,
                 new_password,
             } => Self::PasswordWrite {
                 current_password,
                 new_password,
             },
-            StrandStageRequestBody::UserWrite {
+            JourneyStageRequestBody::UserWrite {
                 handle,
                 display_name,
             } => Self::UserWrite {
                 handle,
                 display_name,
             },
-            StrandStageRequestBody::Captcha { token } => Self::Captcha { token },
-            StrandStageRequestBody::Consent { granted } => Self::Consent { granted },
-            StrandStageRequestBody::Prompt { data } => Self::Prompt { data },
-            StrandStageRequestBody::EnrollmentToken { token } => Self::EnrollmentToken { token },
+            JourneyStageRequestBody::Captcha { token } => Self::Captcha { token },
+            JourneyStageRequestBody::Consent { granted } => Self::Consent { granted },
+            JourneyStageRequestBody::Prompt { data } => Self::Prompt { data },
+            JourneyStageRequestBody::EnrollmentToken { token } => Self::EnrollmentToken { token },
         }
     }
 }
@@ -274,56 +274,56 @@ impl From<StrandStageRequestBody> for DomainStageSubmission {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RespondInput {
     /// The stage response submitted by the client.
-    pub response: StrandStageRequestBody,
+    pub response: JourneyStageRequestBody,
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Resolve a strand definition + bindings from a slug using the built-in
+/// Resolve a journey definition + bindings from a slug using the built-in
 /// defaults.  Returns `None` if the slug does not match any known default
-/// strand.
-fn resolve_strand_by_slug(
+/// journey.
+fn resolve_journey_by_slug(
     slug: &str,
     rng: &mut (dyn rand_core::RngCore + Send),
 ) -> Option<(
-    coauth_data::strand::StrandDefinition,
-    Vec<coauth_data::strand::StrandStageBinding>,
+    coauth_data::journey::JourneyDefinition,
+    Vec<coauth_data::journey::JourneyStageBinding>,
 )> {
     match slug {
         "default-registration" => {
-            Some(crate::handlers::strand::defaults::default_registration_strand(rng))
+            Some(crate::handlers::journey::defaults::default_registration_journey(rng))
         }
-        "default-recovery" => Some(crate::handlers::strand::defaults::default_recovery_strand(
-            rng,
-        )),
+        "default-recovery" => {
+            Some(crate::handlers::journey::defaults::default_recovery_journey(rng))
+        }
         "default-password-change" => {
-            Some(crate::handlers::strand::defaults::default_password_change_strand(rng))
+            Some(crate::handlers::journey::defaults::default_password_change_journey(rng))
         }
         "default-authentication" => {
-            Some(crate::handlers::strand::defaults::default_authentication_strand(rng))
+            Some(crate::handlers::journey::defaults::default_authentication_journey(rng))
         }
         "default-authorization" => {
-            Some(crate::handlers::strand::defaults::default_authorization_strand(rng))
+            Some(crate::handlers::journey::defaults::default_authorization_journey(rng))
         }
         "default-enrollment" => {
-            Some(crate::handlers::strand::defaults::default_enrollment_strand(rng))
+            Some(crate::handlers::journey::defaults::default_enrollment_journey(rng))
         }
         _ => None,
     }
 }
 
-/// Build a [`StrandOutcome`] from a plan, session, and challenge.
+/// Build a [`JourneyOutcome`] from a plan, session, and challenge.
 fn build_response(
-    plan: &StrandPlan,
-    session: &StrandSession,
+    plan: &JourneyPlan,
+    session: &JourneySession,
     challenge: DomainStageChallenge,
     errors: Option<Vec<DomainStageValidationError>>,
-) -> StrandOutcome {
-    StrandOutcome {
+) -> JourneyOutcome {
+    JourneyOutcome {
         session_id: session.id.to_string(),
-        strand_slug: plan.strand.slug.clone(),
+        journey_slug: plan.journey.slug.clone(),
         challenge: challenge.into(),
         stage_index: session.current_stage_index,
         total_stages: plan.stages.len(),
@@ -331,7 +331,7 @@ fn build_response(
     }
 }
 
-fn parse_strand_session_id(req: &Request) -> Result<Ulid, RouteError> {
+fn parse_journey_session_id(req: &Request) -> Result<Ulid, RouteError> {
     req.param::<String>("id")
         .ok_or_else(|| RouteError::BadRequest("missing session id".into()))?
         .parse()
@@ -339,34 +339,34 @@ fn parse_strand_session_id(req: &Request) -> Result<Ulid, RouteError> {
 }
 
 // ---------------------------------------------------------------------------
-// POST /_coauth/self/strand/:slug/start
+// POST /_coauth/self/journey/:slug/start
 // ---------------------------------------------------------------------------
 
-/// Start a new strand session for the given strand slug.
+/// Start a new journey session for the given journey slug.
 ///
-/// Creates a `StrandSession`, plans the strand, and returns the first stage
+/// Creates a `JourneySession`, plans the journey, and returns the first stage
 /// challenge.
 #[endpoint]
-pub async fn start_strand(req: &mut Request) -> Result<Json<StrandOutcome>, RouteError> {
+pub async fn start_journey(req: &mut Request) -> Result<Json<JourneyOutcome>, RouteError> {
     let slug: String = req
         .param::<String>("slug")
-        .ok_or_else(|| RouteError::BadRequest("missing strand slug".into()))?;
+        .ok_or_else(|| RouteError::BadRequest("missing journey slug".into()))?;
 
     let mut rng = make_rng();
 
-    let (strand_def, bindings) =
-        resolve_strand_by_slug(&slug, &mut *rng).ok_or_else(|| RouteError::NotFound)?;
+    let (journey_def, bindings) =
+        resolve_journey_by_slug(&slug, &mut *rng).ok_or_else(|| RouteError::NotFound)?;
 
-    let plan = StrandExecutor::plan(strand_def, bindings);
+    let plan = JourneyExecutor::plan(journey_def, bindings);
 
     let now = Utc::now();
     let session_id = new_id(now, &mut *rng);
 
-    let session = StrandSession {
+    let session = JourneySession {
         id: session_id,
-        strand_id: plan.strand.id,
+        journey_id: plan.journey.id,
         current_stage_index: 0,
-        status: StrandSessionStatus::InProgress,
+        status: JourneySessionStatus::InProgress,
         context: Value::Object(serde_json::Map::new()),
         ip_address: None,
         user_agent: None,
@@ -377,7 +377,7 @@ pub async fn start_strand(req: &mut Request) -> Result<Json<StrandOutcome>, Rout
     };
 
     let mut session = session;
-    let challenge = StrandExecutor::current_challenge(&plan, &mut session)
+    let challenge = JourneyExecutor::current_challenge(&plan, &mut session)
         .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
     let response = build_response(&plan, &session, challenge, None);
@@ -385,8 +385,8 @@ pub async fn start_strand(req: &mut Request) -> Result<Json<StrandOutcome>, Rout
     // Store in memory. Evict expired (and, if at capacity, oldest) sessions
     // first so this unauthenticated endpoint cannot grow the map without bound.
     {
-        let mut store = strand_session_store_write().await;
-        evict_strand_sessions(&mut store);
+        let mut store = journey_session_store_write().await;
+        evict_journey_sessions(&mut store);
         store.insert(session_id, (plan, session));
     }
 
@@ -394,15 +394,15 @@ pub async fn start_strand(req: &mut Request) -> Result<Json<StrandOutcome>, Rout
 }
 
 // ---------------------------------------------------------------------------
-// GET /_coauth/self/strand/session/:id
+// GET /_coauth/self/journey/session/:id
 // ---------------------------------------------------------------------------
 
-/// Get the current challenge for an existing strand session.
+/// Get the current challenge for an existing journey session.
 #[endpoint]
-pub async fn get_strand_session(req: &mut Request) -> Result<Json<StrandOutcome>, RouteError> {
-    let id = parse_strand_session_id(req)?;
+pub async fn get_journey_session(req: &mut Request) -> Result<Json<JourneyOutcome>, RouteError> {
+    let id = parse_journey_session_id(req)?;
 
-    let mut store = strand_session_store_write().await;
+    let mut store = journey_session_store_write().await;
 
     // Enforce the session TTL: an expired non-terminal session is treated as
     // gone — remove it and report NotFound rather than continuing to serve it.
@@ -417,15 +417,15 @@ pub async fn get_strand_session(req: &mut Request) -> Result<Json<StrandOutcome>
     let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;
 
     if session.status.is_terminal() {
-        // Return a StrandDone challenge for completed sessions
-        let challenge = DomainStageChallenge::StrandDone {
+        // Return a JourneyDone challenge for completed sessions
+        let challenge = DomainStageChallenge::JourneyDone {
             redirect_to: Some("/account".into()),
         };
         let response = build_response(plan, session, challenge, None);
         return Ok(Json(response));
     }
 
-    let challenge = StrandExecutor::current_challenge(plan, session)
+    let challenge = JourneyExecutor::current_challenge(plan, session)
         .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
     let response = build_response(plan, session, challenge, None);
@@ -434,27 +434,27 @@ pub async fn get_strand_session(req: &mut Request) -> Result<Json<StrandOutcome>
 }
 
 // ---------------------------------------------------------------------------
-// POST /_coauth/self/strand/session/:id/respond
+// POST /_coauth/self/journey/session/:id/respond
 // ---------------------------------------------------------------------------
 
 /// Submit a response to the current stage challenge.
 ///
-/// On success, advances to the next stage (or completes the strand) and
+/// On success, advances to the next stage (or completes the journey) and
 /// returns the new challenge.  On validation failure, returns the current
 /// challenge again with error details.
 #[endpoint]
-pub async fn respond_strand(
+pub async fn respond_journey(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<StrandOutcome>, RouteError> {
-    let id = parse_strand_session_id(req)?;
+) -> Result<Json<JourneyOutcome>, RouteError> {
+    let id = parse_journey_session_id(req)?;
 
     let input: RespondInput = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let mut store = strand_session_store_write().await;
+    let mut store = journey_session_store_write().await;
 
     // Enforce the session TTL before accepting a response: an expired
     // non-terminal session is treated as gone and may not be advanced.
@@ -470,7 +470,7 @@ pub async fn respond_strand(
 
     if session.status.is_terminal() {
         return Err(RouteError::BadRequest(
-            "strand session is no longer active".into(),
+            "journey session is no longer active".into(),
         ));
     }
 
@@ -495,7 +495,7 @@ pub async fn respond_strand(
     });
 
     // Process the response through the executor
-    let (outcome, updated_context) = StrandExecutor::process_response(
+    let (outcome, updated_context) = JourneyExecutor::process_response(
         plan,
         session,
         input.response.into(),
@@ -511,20 +511,20 @@ pub async fn respond_strand(
     match outcome {
         StageOutcome::Continue => {
             // Advance to the next stage
-            if StrandExecutor::has_next_stage(plan, session) {
+            if JourneyExecutor::has_next_stage(plan, session) {
                 session.current_stage_index += 1;
 
-                let challenge = StrandExecutor::current_challenge(plan, session)
+                let challenge = JourneyExecutor::current_challenge(plan, session)
                     .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
                 let response = build_response(plan, session, challenge, None);
                 Ok(Json(response))
             } else {
-                // Strand is done
-                session.status = StrandSessionStatus::Completed;
+                // Journey is done
+                session.status = JourneySessionStatus::Completed;
                 session.completed_at = Some(Utc::now());
 
-                let challenge = DomainStageChallenge::StrandDone {
+                let challenge = DomainStageChallenge::JourneyDone {
                     redirect_to: Some("/account".into()),
                 };
                 // Stage index points past the last stage to indicate completion
@@ -535,18 +535,18 @@ pub async fn respond_strand(
         }
         StageOutcome::Retry { errors } => {
             // Re-display the current challenge with validation errors
-            let challenge = StrandExecutor::current_challenge(plan, session)
+            let challenge = JourneyExecutor::current_challenge(plan, session)
                 .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
             let response = build_response(plan, session, challenge, Some(errors));
             Ok(Json(response))
         }
         StageOutcome::Done { redirect_to } => {
-            // The stage itself decided the strand is done (e.g. consent denied)
-            session.status = StrandSessionStatus::Completed;
+            // The stage itself decided the journey is done (e.g. consent denied)
+            session.status = JourneySessionStatus::Completed;
             session.completed_at = Some(Utc::now());
 
-            let challenge = DomainStageChallenge::StrandDone { redirect_to };
+            let challenge = DomainStageChallenge::JourneyDone { redirect_to };
             session.current_stage_index = plan.stages.len();
             let response = build_response(plan, session, challenge, None);
             Ok(Json(response))

@@ -33,7 +33,7 @@ impl DiscoveryMode {
 // ── PKCE Method ──
 
 /// Controls whether Proof Key for Code Exchange is used during the
-/// authorization code strand
+/// authorization code flow
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum PkceMethod {

@@ -133,8 +133,8 @@ The whole project is highly modular and APIs are coherent between crates.
 ### User Portal API (/_coauth/self/viewer/*, /_coauth/gate/account/auth/*, /_coauth/gate/account/email-auth/*, etc.)
 User self-service endpoints, consumed by the Dioxus frontend.
 
-### Workflow API (/_coauth/self/strand/*)
-Strand engine endpoints, supporting multi-step interactive strands (registration, recovery, MFA, etc.).
+### Journey API (/_coauth/self/journey/*)
+Journey engine endpoints, supporting multi-step interactive journeys (registration, recovery, MFA, etc.).
 
 ### Admin Operations API (/_coauth/admin/*)
 Administrative operation endpoints, consumed by the Padmin management interface.

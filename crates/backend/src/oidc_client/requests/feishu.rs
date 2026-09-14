@@ -1,6 +1,6 @@
 //! Feishu (Lark) OAuth specific request implementations.
 //!
-//! Feishu uses a non-standard OAuth strand:
+//! Feishu uses a non-standard OAuth flow:
 //! - A separate step is needed to obtain an `app_access_token`
 //! - The token exchange uses `app_access_token` as Bearer auth (not `client_secret`)
 //! - Request bodies are JSON (not form-encoded)

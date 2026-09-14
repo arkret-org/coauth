@@ -204,7 +204,7 @@ pub struct BatchInviteOutcome {
 /// the consent-gate metadata — the gate is the caller's responsibility
 /// (see `batch_invite` and `invite_quarantine::resolve_invite_quarantine`).
 ///
-/// Exposed so the quarantine-approve strand can re-mint tokens with the
+/// Exposed so the quarantine-approve flow can re-mint tokens with the
 /// same parameters that were originally enqueued, without re-parsing
 /// the request body or re-running the consent gate (the operator
 /// approving the quarantine has already vouched for it).

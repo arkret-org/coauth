@@ -53,7 +53,7 @@ pub struct StartedEmailVerification {
     pub authentication: UserEmailAuthentication,
 }
 
-/// Begin an email verification strand for an existing user session.
+/// Begin an email verification flow for an existing user session.
 ///
 /// Creates a [`UserEmailAuthentication`] record and schedules a verification
 /// code notification.

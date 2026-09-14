@@ -9,7 +9,7 @@
 ## Prerequisites
 
 - PostgreSQL 14+ (primary) — `coauth-backend` uses Diesel migrations.
-- Optional: OIDC upstream provider (Keycloak, Auth0, Azure AD, etc.) for `ak.account.oidc_*` strands.
+- Optional: OIDC upstream provider (Keycloak, Auth0, Azure AD, etc.) for `ak.account.oidc_*` flows.
 - A durable `arkret-keystore` backend: platform credential storage for a
   single host, or encrypted-file storage plus a separately custodied master
   key for containers and replicas.

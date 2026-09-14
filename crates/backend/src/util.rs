@@ -603,7 +603,7 @@ pub async fn load_policy_factory_dynamic_data(
     Ok(())
 }
 
-/// Create the local principal account facade used by account/profile strands.
+/// Create the local principal account facade used by account/profile flows.
 ///
 /// Backed by coauth's own Postgres (`users`) via `repository_factory` — see
 /// [`crate::services::principal_facade::DbConnectorAdmin`]. Replaces the

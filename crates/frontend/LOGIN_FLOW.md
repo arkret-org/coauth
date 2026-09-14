@@ -1,10 +1,10 @@
-# Login Strand Cross-Check
+# Login Flow Cross-Check
 
-This note captures the coauth-side login strand that `sodmin` should align with.
+This note captures the coauth-side login flow that `sodmin` should align with.
 No `sodmin` files are modified by this slice; the shared admin bridge boundary
 continues to live in `coauth-admin-types`.
 
-## SPA Strand
+## SPA Flow
 
 | SPA action | Frontend path | Backend route |
 | --- | --- | --- |

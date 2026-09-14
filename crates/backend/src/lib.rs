@@ -33,7 +33,7 @@ pub mod sync;
 pub mod telemetry;
 pub mod util;
 
-/// HTTP request handlers, service modules, and strand engine.
+/// HTTP request handlers, service modules, and journey engine.
 #[allow(
     // Some salvo handlers need that
     clippy::unused_async,

@@ -259,7 +259,7 @@ string_enum! {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct AuthorizationRequest {
     /// OAuth Response Type value that determines the authorization
-    /// processing strand to be used.
+    /// processing flow to be used.
     pub response_type: ResponseType,
 
     /// OAuth Client Identifier valid at the Authorization Server.
@@ -613,16 +613,16 @@ impl fmt::Debug for DeviceCodeGrant {
 #[serde(tag = "grant_type", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum AccessTokenRequest {
-    /// A request in the Authorization Code strand.
+    /// A request in the Authorization Code flow.
     AuthorizationCode(AuthorizationCodeGrant),
 
     /// A request to refresh an access token.
     RefreshToken(RefreshTokenGrant),
 
-    /// A request in the Client Credentials strand.
+    /// A request in the Client Credentials flow.
     ClientCredentials(ClientCredentialsGrant),
 
-    /// A request in the Device Code strand.
+    /// A request in the Device Code flow.
     #[serde(rename = "urn:ietf:params:oauth:grant-type:device_code")]
     DeviceCode(DeviceCodeGrant),
 

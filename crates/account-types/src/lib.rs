@@ -584,7 +584,7 @@ pub struct UpdateNotificationPreferencesOutcome {
 }
 
 /// Start a password registration while durably preserving the authenticated
-/// strand that must resume after the account is created.
+/// flow that must resume after the account is created.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(salvo::oapi::ToSchema))]
 pub struct RegisterInput {
