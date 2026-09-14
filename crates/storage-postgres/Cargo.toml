@@ -21,6 +21,7 @@ test-support = ["dep:arkret-signatures"]
 anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
 arkret-identifiers = { workspace = true, features = ["diesel"] }
+arkret-identity = { workspace = true }
 arkret-locale = { workspace = true }
 arkret-models-collaboration = { workspace = true }
 arkret-models-identity = { workspace = true }

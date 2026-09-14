@@ -55,12 +55,10 @@ fn reserved_identity_matches_abandonment_checkpoint(
     did_version_id: &str,
 ) -> bool {
     reserved.principal_id == *principal_id
-        && reserved
-            .did_operation
-            .operation
-            .get("versionId")
-            .and_then(serde_json::Value::as_str)
-            == Some(did_version_id)
+        && arkret_identity::validate_principal_registration_anchor(
+            &reserved.principal_registration_anchor,
+        )
+        .is_ok_and(|validated| validated.did_version_id == did_version_id)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -170,7 +168,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT local_account_id, audience_id, lease_id, holder_jkt, fence, expires_at, \
-             reserved_principal_id, reserved_operation_digest, did_operation, state, \
+             reserved_principal_id, reserved_registration_anchor_digest, principal_registration_anchor, state, \
              registry_receipt, log_head_digest, registration_did_evidence, pcr_genesis_request_digest, \
              pcr_genesis_receipt, binding_receipt, register_handoff_grant_id, \
              register_challenge_id, register_request_digest, register_outcome, created_at, updated_at \
@@ -211,7 +209,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
     ) -> Result<Option<IdentityBindingChallengeRecord>, DatabaseError> {
         let row = diesel::sql_query(
             "SELECT request_id, request_digest, local_account_id, challenge_id, challenge, \
-             purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, did, registration_anchor_digest, did_version_id, method_history_head, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE request_id = $1",
@@ -231,7 +229,7 @@ impl<'c> PgAccountHandoffRepository<'c> {
         let suffix = if for_update { " FOR UPDATE" } else { "" };
         let query = format!(
             "SELECT request_id, request_digest, local_account_id, challenge_id, challenge, \
-             purpose, account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+             purpose, account_subject, principal_id, did, registration_anchor_digest, did_version_id, method_history_head, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
              founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, \
              origin, trust_domain, issued_at, expires_at, consumed_at, replaced_at \
              FROM identity_binding_challenges WHERE challenge_id = $1{suffix}"
@@ -771,9 +769,9 @@ struct LeaseRow {
     #[diesel(sql_type = Nullable<Text>)]
     reserved_principal_id: Option<arkret_identifiers::DidCoreId>,
     #[diesel(sql_type = Nullable<Text>)]
-    reserved_operation_digest: Option<String>,
+    reserved_registration_anchor_digest: Option<String>,
     #[diesel(sql_type = Nullable<Jsonb>)]
-    did_operation: Option<serde_json::Value>,
+    principal_registration_anchor: Option<serde_json::Value>,
     #[diesel(sql_type = Text)]
     state: String,
     #[diesel(sql_type = Nullable<Jsonb>)]
@@ -805,17 +803,16 @@ struct LeaseRow {
 fn lease_from_row(row: LeaseRow) -> Result<IdentityCreationLeaseRecord, DatabaseError> {
     let reserved_identity = match (
         row.reserved_principal_id,
-        row.reserved_operation_digest,
-        row.did_operation,
+        row.reserved_registration_anchor_digest,
+        row.principal_registration_anchor,
     ) {
         (None, None, None) => None,
-        (Some(principal_id), Some(operation_digest), Some(did_operation)) => {
-            let did_operation = serde_json::from_value(did_operation)?;
-            let reserved =
-                arkret_models_identity::ReservedIdentityCreation::from_operation(did_operation)
-                    .map_err(|_| DatabaseError::invalid_operation())?;
+        (Some(principal_id), Some(registration_anchor_digest), Some(anchor)) => {
+            let anchor = serde_json::from_value(anchor)?;
+            let reserved = arkret_models_identity::ReservedIdentityCreation::from_anchor(anchor)
+                .map_err(|_| DatabaseError::invalid_operation())?;
             if reserved.principal_id != principal_id
-                || reserved.operation_digest.as_str() != operation_digest
+                || reserved.registration_anchor_digest.as_str() != registration_anchor_digest
             {
                 return Err(DatabaseError::invalid_operation());
             }
@@ -919,11 +916,11 @@ struct ChallengeRow {
     #[diesel(sql_type = Text)]
     did: String,
     #[diesel(sql_type = Text)]
-    operation_digest: String,
+    registration_anchor_digest: String,
     #[diesel(sql_type = Text)]
     did_version_id: String,
     #[diesel(sql_type = Text)]
-    log_head_digest: String,
+    method_history_head: String,
     #[diesel(sql_type = Text)]
     control_key_digest: String,
     #[diesel(sql_type = Text)]
@@ -1077,9 +1074,9 @@ fn challenge_from_row(row: ChallengeRow) -> Result<IdentityBindingChallengeRecor
         account_subject: arkret_identifiers::Hash::new(row.account_subject)?,
         principal_id: row.principal_id,
         did,
-        operation_digest: arkret_identifiers::Hash::new(row.operation_digest)?,
+        registration_anchor_digest: arkret_identifiers::Hash::new(row.registration_anchor_digest)?,
         did_version_id: row.did_version_id,
-        log_head_digest: arkret_identifiers::Hash::new(row.log_head_digest)?,
+        method_history_head: arkret_identifiers::Hash::new(row.method_history_head)?,
         control_key_digest: arkret_identifiers::Hash::new(row.control_key_digest)?,
         pcr_realm_id: arkret_identifiers::RealmId::new(row.pcr_realm_id)?,
         realm_create_payload_digest: arkret_identifiers::Hash::new(
@@ -1118,9 +1115,9 @@ fn challenge_matches_context(
         && challenge.account_subject == expected.account_subject
         && challenge.principal_id == expected.principal_id
         && challenge.did == expected.did
-        && challenge.operation_digest == expected.operation_digest
+        && challenge.registration_anchor_digest == expected.registration_anchor_digest
         && challenge.did_version_id == expected.did_version_id
-        && challenge.log_head_digest == expected.log_head_digest
+        && challenge.method_history_head == expected.method_history_head
         && challenge.control_key_digest == expected.control_key_digest
         && challenge.pcr_realm_id == expected.pcr_realm_id
         && challenge.realm_create_payload_digest == expected.realm_create_payload_digest
@@ -1789,11 +1786,11 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(IdentityBindingChallengeIssue::Replay(existing));
         }
 
-        let reserved = arkret_models_identity::ReservedIdentityCreation::from_operation(
-            input.did_operation.clone(),
+        let reserved = arkret_models_identity::ReservedIdentityCreation::from_anchor(
+            input.principal_registration_anchor.clone(),
         )
         .map_err(|_| DatabaseError::invalid_operation())?;
-        if reserved.operation_digest != input.operation_digest
+        if reserved.registration_anchor_digest != input.registration_anchor_digest
             || reserved.principal_id != input.principal_id
         {
             return Ok(IdentityBindingChallengeIssue::ReservationConflict);
@@ -1831,7 +1828,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
         diesel::sql_query(
             "UPDATE identity_creation_leases SET reserved_principal_id = $3, \
-             reserved_operation_digest = $4, did_operation = $5, \
+             reserved_registration_anchor_digest = $4, principal_registration_anchor = $5, \
              state = CASE WHEN state <> 'active' THEN state ELSE 'reserved' END, \
              updated_at = $6 \
              WHERE local_account_id = $1 AND audience_id = $2 AND lease_id = $7 \
@@ -1841,8 +1838,10 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
-        .bind::<Text, _>(reserved.operation_digest.as_str())
-        .bind::<Jsonb, _>(serde_json::to_value(&reserved.did_operation)?)
+        .bind::<Text, _>(reserved.registration_anchor_digest.as_str())
+        .bind::<Jsonb, _>(serde_json::to_value(
+            &reserved.principal_registration_anchor,
+        )?)
         .bind::<Timestamptz, _>(issued_at)
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
@@ -1853,7 +1852,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "UPDATE identity_binding_challenges SET replaced_at = $1 \
              WHERE local_account_id = $2 AND audience_id = $3 AND lease_id = $4 \
-             AND lease_fence = $5 AND operation_digest = $6 \
+             AND lease_fence = $5 AND registration_anchor_digest = $6 \
              AND consumed_at IS NULL AND replaced_at IS NULL AND expires_at > $1",
         )
         .bind::<Timestamptz, _>(issued_at)
@@ -1861,14 +1860,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.audience_id.as_str())
         .bind::<Text, _>(&input.lease_id)
         .bind::<BigInt, _>(i64::try_from(input.lease_fence)?)
-        .bind::<Text, _>(input.operation_digest.as_str())
+        .bind::<Text, _>(input.registration_anchor_digest.as_str())
         .execute(self.conn)
         .await?;
 
         diesel::sql_query(
             "INSERT INTO identity_binding_challenges \
              (request_id, request_digest, local_account_id, challenge_id, challenge, purpose, \
-              account_subject, principal_id, did, operation_digest, did_version_id, log_head_digest, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
+              account_subject, principal_id, did, registration_anchor_digest, did_version_id, method_history_head, control_key_digest, pcr_realm_id, realm_create_payload_digest, \
               founding_authorize_payload_digest, initial_session_request_digest, lease_id, lease_fence, dpop_jkt, audience_id, origin, \
               trust_domain, issued_at, expires_at) \
              VALUES ($1, $2, $3, $4, $5, 'account_binding_and_pcr_genesis', $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24) \
@@ -1882,9 +1881,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<Text, _>(reserved.principal_id.as_str())
         .bind::<Text, _>(input.did.as_str())
-        .bind::<Text, _>(input.operation_digest.as_str())
+        .bind::<Text, _>(input.registration_anchor_digest.as_str())
         .bind::<Text, _>(&input.did_version_id)
-        .bind::<Text, _>(input.log_head_digest.as_str())
+        .bind::<Text, _>(input.method_history_head.as_str())
         .bind::<Text, _>(input.control_key_digest.as_str())
         .bind::<Text, _>(input.pcr_realm_id.as_str())
         .bind::<Text, _>(input.realm_create_payload_digest.as_str())
@@ -2211,13 +2210,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "SELECT EXISTS (SELECT 1 FROM user_session_authentications a \
              WHERE a.user_session_id = $1 AND a.created_at <= $2 \
              AND a.created_at > (SELECT min(issued_at) FROM identity_binding_challenges \
-             WHERE local_account_id = $3 AND lease_id = $4 AND operation_digest = $5)) AS present",
+             WHERE local_account_id = $3 AND lease_id = $4 AND registration_anchor_digest = $5)) AS present",
         )
         .bind::<SqlUuid, _>(Uuid::from(session_id))
         .bind::<Timestamptz, _>(grant.issued_at)
         .bind::<SqlUuid, _>(Uuid::from(input.local_account_id))
         .bind::<Text, _>(&input.lease_id)
-        .bind::<Text, _>(reserved.operation_digest.as_str())
+        .bind::<Text, _>(reserved.registration_anchor_digest.as_str())
         .get_result::<ExistsRow>(self.conn)
         .await?
         .present;
@@ -2410,7 +2409,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             || lease.fence != context.lease.fence
             || lease.holder_jkt != context.grant.cnf_jkt
             || lease.reserved_identity.as_ref().is_none_or(|reserved| {
-                reserved.operation_digest != context.challenge.operation_digest
+                reserved.registration_anchor_digest != context.challenge.registration_anchor_digest
             })
         {
             return Ok(IdentityCreationRegisterReserve::Stale);
@@ -2492,7 +2491,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             || lease.holder_jkt != context.grant.cnf_jkt
             || lease.expires_at <= now
             || lease.reserved_identity.as_ref().is_none_or(|reserved| {
-                reserved.operation_digest != context.challenge.operation_digest
+                reserved.registration_anchor_digest != context.challenge.registration_anchor_digest
             })
             || !matches!(
                 lease.state,
@@ -2576,7 +2575,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "UPDATE identity_creation_leases SET state = 'did_published', registry_receipt = $1, \
              log_head_digest = $2, registration_did_evidence = $3, updated_at = $4 \
              WHERE local_account_id = $5 AND audience_id = $6 AND lease_id = $7 AND fence = $8 \
-             AND holder_jkt = $9 AND reserved_operation_digest = $10 \
+             AND holder_jkt = $9 AND reserved_registration_anchor_digest = $10 \
              AND state IN ('reserved', 'did_published')",
         )
         .bind::<Jsonb, _>(registry_receipt)
@@ -2588,7 +2587,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&context.lease.lease_id)
         .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
         .bind::<Text, _>(&context.grant.cnf_jkt)
-        .bind::<Text, _>(context.challenge.operation_digest.as_str())
+        .bind::<Text, _>(context.challenge.registration_anchor_digest.as_str())
         .execute(self.conn)
         .await?;
         Ok(updated == 1)
@@ -2648,7 +2647,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             || lease.fence != context.lease.fence
             || lease.holder_jkt != context.grant.cnf_jkt
             || lease.reserved_identity.as_ref().is_none_or(|reserved| {
-                reserved.operation_digest != context.challenge.operation_digest
+                reserved.registration_anchor_digest != context.challenge.registration_anchor_digest
             })
             || !matches!(
                 lease.state,
@@ -2727,8 +2726,9 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
         if binding_receipt.identity_creation_lease_id.as_deref() != Some(lease.lease_id.as_str())
             || binding_receipt.lease_fence != Some(lease.fence)
-            || binding_receipt.operation_digest != context.challenge.operation_digest
-            || lease.log_head_digest.as_ref() != Some(&context.challenge.log_head_digest)
+            || binding_receipt.registration_anchor_digest
+                != context.challenge.registration_anchor_digest
+            || lease.log_head_digest.as_ref() != Some(&context.challenge.method_history_head)
         {
             return Ok(false);
         }
@@ -2749,7 +2749,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "UPDATE identity_creation_leases SET state = 'account_bound', binding_receipt = $1, \
              updated_at = $2 WHERE local_account_id = $3 AND audience_id = $4 \
              AND lease_id = $5 AND fence = $6 AND holder_jkt = $7 \
-             AND reserved_operation_digest = $8 AND state = 'pcr_accepted'",
+             AND reserved_registration_anchor_digest = $8 AND state = 'pcr_accepted'",
         )
         .bind::<Jsonb, _>(receipt)
         .bind::<Timestamptz, _>(now)
@@ -2758,7 +2758,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&context.lease.lease_id)
         .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
         .bind::<Text, _>(&context.grant.cnf_jkt)
-        .bind::<Text, _>(context.challenge.operation_digest.as_str())
+        .bind::<Text, _>(context.challenge.registration_anchor_digest.as_str())
         .execute(self.conn)
         .await?;
         Ok(updated == 1)
@@ -2802,7 +2802,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
         if lease.state != IdentityCreationLeaseState::AccountBound
             || lease.reserved_identity.as_ref().is_none_or(|reserved| {
-                reserved.operation_digest != context.challenge.operation_digest
+                reserved.registration_anchor_digest != context.challenge.registration_anchor_digest
             })
             || lease
                 .register_reservation
@@ -2835,7 +2835,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              register_request_digest = $3, register_outcome = $4, updated_at = $5 \
              WHERE local_account_id = $6 AND audience_id = $7 \
              AND lease_id = $8 AND fence = $9 AND holder_jkt = $10 \
-             AND reserved_operation_digest = $11 AND state = 'account_bound' \
+             AND reserved_registration_anchor_digest = $11 AND state = 'account_bound' \
              AND register_handoff_grant_id = $1 AND register_challenge_id = $2 \
              AND register_request_digest = $3 AND register_outcome IS NULL",
         )
@@ -2849,7 +2849,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&context.lease.lease_id)
         .bind::<BigInt, _>(i64::try_from(context.lease.fence)?)
         .bind::<Text, _>(&context.grant.cnf_jkt)
-        .bind::<Text, _>(context.challenge.operation_digest.as_str())
+        .bind::<Text, _>(context.challenge.registration_anchor_digest.as_str())
         .execute(self.conn)
         .await?;
         Ok(if updated == 1 {
@@ -2895,8 +2895,6 @@ fn registration_challenge_state_is_usable(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use chrono::{Duration, TimeZone as _, Utc};
     use coauth_data::Ulid;
 
@@ -2924,44 +2922,26 @@ mod tests {
 
     #[test]
     fn abandonment_checkpoint_matches_projected_principal_not_did() {
-        let did =
-            arkret_identifiers::Did::new("did:webvh:zQ3shExampleScid:alice.example:webvh:user")
-                .expect("valid DID");
-        let principal_id =
-            arkret_identifiers::project_did_to_core_id(&did).expect("projected principal id");
-        assert_ne!(did.as_str(), principal_id.as_str());
-
-        let mut operation = BTreeMap::new();
-        operation.insert(
-            "versionId".to_owned(),
-            serde_json::Value::String("version-1".to_owned()),
+        let anchor = crate::test_utils::principal_registration_anchor_fixture(
+            "abandonment-checkpoint",
+            [9; 32],
         );
-        let reserved = arkret_models_identity::ReservedIdentityCreation {
-            principal_id: principal_id.clone(),
-            did,
-            operation_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "0".repeat(64)))
-                .expect("digest"),
-            did_operation: arkret_models_identity::DidOperationSubmitRequestBody {
-                did: arkret_identifiers::Did::new(
-                    "did:webvh:zQ3shExampleScid:alice.example:webvh:user",
-                )
-                .expect("operation did"),
-                did_method: arkret_models_identity::DidMethodName::Webvh,
-                seq: None,
-                prev_event_digest: None,
-                operation,
-            },
-        };
+        let validated = arkret_identity::validate_principal_registration_anchor(&anchor)
+            .expect("valid registration anchor");
+        let principal_id = validated.principal_id.clone();
+        assert_ne!(validated.did.as_str(), principal_id.as_str());
+        let reserved = arkret_models_identity::ReservedIdentityCreation::from_anchor(anchor)
+            .expect("valid reservation");
 
         assert!(reserved_identity_matches_abandonment_checkpoint(
             &reserved,
             &principal_id,
-            "version-1",
+            &validated.did_version_id,
         ));
         assert!(!reserved_identity_matches_abandonment_checkpoint(
             &reserved,
             &principal_id,
-            "version-2",
+            "2-QmWrongWebvhVersion",
         ));
     }
 

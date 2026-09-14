@@ -736,12 +736,20 @@ async fn identity_challenge_http_uses_live_authority_without_renewal_and_replays
     )
     .unwrap();
     let digest = arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
+    let principal_registration_anchor =
+        arkret_models_identity::PrincipalRegistrationAnchor::WebvhRegistration {
+            registration_did_operation: Box::new(inception.submit_body.clone()),
+            log_entries: vec![serde_json::from_value(inception.log_entry.clone()).unwrap()],
+            witness_records: Vec::new(),
+            normalized_did_document: serde_json::from_value(inception.log_entry["state"].clone())
+                .unwrap(),
+        };
     let body = IdentityBindingChallengeRequestBody {
         request_id: test_request_id(unique_test_nonce()),
         identity_creation_lease_id: lease.identity_creation_lease_id.clone(),
         lease_fence: lease.fence,
         did: inception.submit_body.did.clone(),
-        did_operation: inception.submit_body,
+        principal_registration_anchor,
         pcr_realm_id: coauth_storage_postgres::test_utils::principal_control_realm_id(),
         realm_create_payload_digest: digest.clone(),
         founding_authorize_payload_digest: digest.clone(),

@@ -748,8 +748,8 @@ CREATE TABLE public.identity_creation_leases (
     fence bigint NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     reserved_principal_id text,
-    reserved_operation_digest text,
-    did_operation jsonb,
+    reserved_registration_anchor_digest text,
+    principal_registration_anchor jsonb,
     registration_did_evidence jsonb,
     state text NOT NULL,
     registry_receipt jsonb,
@@ -768,7 +768,7 @@ CREATE TABLE public.identity_creation_leases (
     CONSTRAINT identity_creation_leases_lease_id_valid CHECK ((lease_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
     CONSTRAINT identity_creation_leases_holder_jkt_valid CHECK ((holder_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
     CONSTRAINT identity_creation_leases_fence_positive CHECK ((fence >= 1)),
-    CONSTRAINT identity_creation_leases_operation_digest_valid CHECK (((reserved_operation_digest IS NULL) OR (reserved_operation_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
+    CONSTRAINT identity_creation_leases_registration_anchor_digest_valid CHECK (((reserved_registration_anchor_digest IS NULL) OR (reserved_registration_anchor_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT identity_creation_leases_registration_evidence_object CHECK (((registration_did_evidence IS NULL) OR (jsonb_typeof(registration_did_evidence) = 'object'::text))),
     CONSTRAINT identity_creation_leases_head_digest_valid CHECK (((log_head_digest IS NULL) OR (log_head_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT identity_creation_leases_pcr_request_digest_valid CHECK (((pcr_genesis_request_digest IS NULL) OR (pcr_genesis_request_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
@@ -777,7 +777,7 @@ CREATE TABLE public.identity_creation_leases (
     CONSTRAINT identity_creation_leases_register_request_digest_valid CHECK (((register_request_digest IS NULL) OR (register_request_digest ~ '^sha256:[0-9a-f]{64}$'::text))),
     CONSTRAINT identity_creation_leases_register_outcome_object CHECK (((register_outcome IS NULL) OR (jsonb_typeof(register_outcome) = 'object'::text))),
     CONSTRAINT identity_creation_leases_state_valid CHECK ((state = ANY (ARRAY['active'::text, 'reserved'::text, 'did_published'::text, 'pcr_accepted'::text, 'account_bound'::text, 'completed'::text]))),
-    CONSTRAINT identity_creation_leases_reservation_complete CHECK ((((state = 'active'::text) AND (reserved_principal_id IS NULL) AND (reserved_operation_digest IS NULL) AND (did_operation IS NULL)) OR ((state <> 'active'::text) AND (reserved_principal_id IS NOT NULL) AND (reserved_operation_digest IS NOT NULL) AND (did_operation IS NOT NULL)))),
+    CONSTRAINT identity_creation_leases_reservation_complete CHECK ((((state = 'active'::text) AND (reserved_principal_id IS NULL) AND (reserved_registration_anchor_digest IS NULL) AND (principal_registration_anchor IS NULL)) OR ((state <> 'active'::text) AND (reserved_principal_id IS NOT NULL) AND (reserved_registration_anchor_digest IS NOT NULL) AND (principal_registration_anchor IS NOT NULL)))),
     CONSTRAINT identity_creation_leases_registry_complete CHECK ((((state = ANY (ARRAY['active'::text, 'reserved'::text])) AND (registry_receipt IS NULL) AND (log_head_digest IS NULL)) OR ((state = ANY (ARRAY['did_published'::text, 'pcr_accepted'::text, 'account_bound'::text, 'completed'::text])) AND (registry_receipt IS NOT NULL) AND (jsonb_typeof(registry_receipt) = 'object'::text) AND (log_head_digest IS NOT NULL)))),
     CONSTRAINT identity_creation_leases_pcr_complete CHECK ((((state = ANY (ARRAY['active'::text, 'reserved'::text, 'did_published'::text])) AND (pcr_genesis_request_digest IS NULL) AND (pcr_genesis_receipt IS NULL)) OR ((state = ANY (ARRAY['pcr_accepted'::text, 'account_bound'::text, 'completed'::text])) AND (pcr_genesis_request_digest IS NOT NULL) AND (pcr_genesis_receipt IS NOT NULL)))),
     CONSTRAINT identity_creation_leases_binding_complete CHECK ((((state <> ALL (ARRAY['account_bound'::text, 'completed'::text])) AND (binding_receipt IS NULL)) OR ((state = ANY (ARRAY['account_bound'::text, 'completed'::text])) AND (binding_receipt IS NOT NULL)))),
@@ -810,9 +810,9 @@ CREATE TABLE public.identity_binding_challenges (
     account_subject text NOT NULL,
     principal_id text NOT NULL,
     did text NOT NULL,
-    operation_digest text NOT NULL,
+    registration_anchor_digest text NOT NULL,
     did_version_id text NOT NULL,
-    log_head_digest text NOT NULL,
+    method_history_head text NOT NULL,
     control_key_digest text NOT NULL,
     pcr_realm_id text NOT NULL,
     realm_create_payload_digest text NOT NULL,
@@ -832,12 +832,12 @@ CREATE TABLE public.identity_binding_challenges (
     CONSTRAINT identity_binding_challenges_challenge_id_valid CHECK ((challenge_id ~ '^[A-Za-z0-9_-]{22,128}$'::text)),
     CONSTRAINT identity_binding_challenges_challenge_nonempty CHECK ((length(challenge) >= 22)),
     CONSTRAINT identity_binding_challenges_purpose_valid CHECK ((purpose = 'account_binding_and_pcr_genesis'::text)),
-    CONSTRAINT identity_binding_challenges_operation_digest_valid CHECK ((operation_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_registration_anchor_digest_valid CHECK ((registration_anchor_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_account_subject_valid CHECK ((account_subject ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_principal_core_valid CHECK ((principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
     CONSTRAINT identity_binding_challenges_did_bare CHECK ((did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text)),
     CONSTRAINT identity_binding_challenges_did_version_nonempty CHECK ((btrim(did_version_id) <> ''::text)),
-    CONSTRAINT identity_binding_challenges_log_head_digest_valid CHECK ((log_head_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
+    CONSTRAINT identity_binding_challenges_method_history_head_valid CHECK ((method_history_head ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_control_key_digest_valid CHECK ((control_key_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT identity_binding_challenges_pcr_realm_id_nonempty CHECK ((btrim(pcr_realm_id) <> ''::text)),
     CONSTRAINT identity_binding_challenges_realm_create_digest_valid CHECK ((realm_create_payload_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
@@ -1671,7 +1671,7 @@ CREATE INDEX idx_identity_creation_rate_acquisition ON public.identity_creation_
 
 CREATE INDEX idx_identity_creation_rate_holder ON public.identity_creation_rate_limit_events USING btree (account_subject, audience_id, holder_jkt, action, occurred_at DESC);
 
-CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (local_account_id, audience_id, lease_id, lease_fence, operation_digest);
+CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_binding_challenges USING btree (local_account_id, audience_id, lease_id, lease_fence, registration_anchor_digest);
 
 CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_challenges USING btree (expires_at) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL));
 

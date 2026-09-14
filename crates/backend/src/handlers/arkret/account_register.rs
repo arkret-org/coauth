@@ -129,7 +129,7 @@ pub async fn account_register_endpoint(
             "top-level device_id is not used by the atomic identity-creation flow",
         ));
     }
-    if identity_creation.did_operation.did != body.did
+    if identity_creation.principal_registration_anchor.did() != &body.did
         || identity_creation.control_proof.principal_id != body.principal_id
         || identity_creation.control_proof.did != body.did
     {
@@ -232,8 +232,12 @@ pub async fn account_register_endpoint(
     // registry I/O, behind the frozen-reservation barrier. A later genesis
     // rejection cannot withdraw an already published DID, so a lawful DID
     // operation carrying an invalid extra proof must still be refused here.
-    let validated = arkret_signatures::webvh::verify_identity_creation_control_proof(
-        &identity_creation.did_operation,
+    let validated = arkret_identity::validate_principal_registration_anchor(
+        &identity_creation.principal_registration_anchor,
+    )
+    .map_err(|error| proof_invalid(error.to_string()))?;
+    arkret_signatures::webvh::verify_identity_creation_control_proof(
+        &validated,
         &identity_creation.control_proof,
     )
     .map_err(|error| proof_invalid(error.to_string()))?;
@@ -242,8 +246,14 @@ pub async fn account_register_endpoint(
             "validated inception principal does not match the registration principal",
         ));
     }
+    let registration_did_operation = match &identity_creation.principal_registration_anchor {
+        arkret_models_identity::PrincipalRegistrationAnchor::WebvhRegistration {
+            registration_did_operation,
+            ..
+        } => registration_did_operation.as_ref(),
+    };
     arkret_signatures::webvh::verify_registration_did_evidence_draft(
-        &identity_creation.did_operation,
+        registration_did_operation,
         &identity_creation.registration_did_evidence_draft,
     )
     .map_err(|error| proof_invalid(error.to_string()))?;
@@ -286,7 +296,7 @@ pub async fn account_register_endpoint(
                 &depot.http_client()?,
                 &station.endpoint,
                 station.bearer.as_deref(),
-                &identity_creation.did_operation,
+                registration_did_operation,
             )
             .await
             .map_err(|error| {
@@ -297,14 +307,14 @@ pub async fn account_register_endpoint(
                 )
             })?;
             outcome
-                .validate_accepted_for_request(&identity_creation.did_operation)
+                .validate_accepted_for_request(registration_did_operation)
                 .map_err(|error| failed_precondition(error.to_string()))?;
             let registration_did_evidence = identity_creation
                 .registration_did_evidence_draft
                 .clone()
                 .accept(outcome.accepted_at)
                 .map_err(|error| proof_invalid(error.to_string()))?;
-            let head = &validated.log_head_digest;
+            let head = &validated.method_history_head;
             let mut repo = depot.repo().await?;
             if !repo
                 .account_handoff()
@@ -328,7 +338,7 @@ pub async fn account_register_endpoint(
                     failed_precondition("published identity has no registry receipt")
                 })?;
             outcome
-                .validate_accepted_for_request(&identity_creation.did_operation)
+                .validate_accepted_for_request(registration_did_operation)
                 .map_err(|error| failed_precondition(error.to_string()))?;
             let registration_did_evidence = context
                 .lease
@@ -344,7 +354,7 @@ pub async fn account_register_endpoint(
                     "frozen registration DID evidence does not carry the registry acceptance time",
                 ));
             }
-            let head = &validated.log_head_digest;
+            let head = &validated.method_history_head;
             if context.lease.state == IdentityCreationLeaseState::DidPublished {
                 let mut repo = depot.repo().await?;
                 if !repo
@@ -387,7 +397,7 @@ pub async fn account_register_endpoint(
         registration_request_digest: request_digest.clone(),
         did_version_id: identity_creation.control_proof.did_version_id.clone(),
         control_key_digest: identity_creation.control_proof.control_key_digest.clone(),
-        registration_did_operation: identity_creation.did_operation.clone(),
+        principal_registration_anchor: identity_creation.principal_registration_anchor.clone(),
         registration_did_evidence,
         identity_creation_control_proof: identity_creation.control_proof.clone(),
         genesis_unit: identity_creation.pcr_genesis_unit.clone(),
@@ -487,7 +497,7 @@ pub async fn account_register_endpoint(
         DidOperationSubmitStatus::Duplicate => IdentityCreationOperationStatus::Duplicate,
         _ => unreachable!("registry outcome validated above"),
     };
-    let log_head_digest = validated.log_head_digest.clone();
+    let log_head_digest = validated.method_history_head.clone();
     let mut receipt = AccountBindingReceipt {
         binding_state: AccountBindingState::Bound,
         binding_kind: AccountBindingKind::IdentityCreation,
@@ -500,7 +510,7 @@ pub async fn account_register_endpoint(
         identity_creation_lease_id: Some(identity_creation.identity_creation_lease_id.clone()),
         lease_fence: Some(identity_creation.lease_fence),
         operation_status,
-        operation_digest: validated.operation_digest,
+        registration_anchor_digest: validated.registration_anchor_digest,
         issued_at: now,
         proof: arkret_wire::PayloadProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
@@ -777,21 +787,24 @@ fn validate_registration_transcript(
             "reason_code=account_binding_principal_mismatch; identity-creation proof changed the authenticated account subject",
         ));
     }
-    if reserved.did_operation != registration.did_operation
+    if reserved.principal_registration_anchor != registration.principal_registration_anchor
         || arkret_identifiers::project_did_to_core_id(&registration.did)
             .map_err(|error| proof_invalid(error.to_string()))?
             != proof.principal_id
         || registration.did != proof.did
-        || reserved.operation_digest != proof.operation_digest
+        || reserved.registration_anchor_digest != proof.registration_anchor_digest
         || challenge.challenge_id != proof.challenge_id
         || challenge.challenge != proof.challenge
         || challenge.purpose != proof.purpose
         || challenge.principal_id != proof.principal_id
         || challenge.did != proof.did
-        || challenge.operation_digest != proof.operation_digest
+        || challenge.registration_anchor_digest != proof.registration_anchor_digest
         || challenge.did_version_id != proof.did_version_id
-        || challenge.log_head_digest.as_str()
-            != arkret_canonical::canonical::canonical_sha256(&registration.did_operation.operation)?
+        || challenge.method_history_head
+            != registration
+                .principal_registration_anchor
+                .declared_method_history_head()
+                .map_err(|error| proof_invalid(error.to_string()))?
         || challenge.control_key_digest != proof.control_key_digest
         || challenge.pcr_realm_id != proof.pcr_realm_id
         || challenge.realm_create_payload_digest != proof.realm_create_payload_digest

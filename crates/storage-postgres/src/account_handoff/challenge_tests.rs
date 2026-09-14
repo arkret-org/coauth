@@ -52,20 +52,14 @@ async fn seed(
         AccountHandoffCreation::Active { .. }
     ));
     repo.save().await.unwrap();
-    // The storage boundary accepts a wrapper already verified by the handler.
-    let operation = arkret_models_identity::DidOperationSubmitRequestBody {
-        did: arkret_identifiers::Did::new("did:webvh:zchallengePrincipal:example.com").unwrap(),
-        did_method: arkret_models_identity::DidMethodName::Webvh,
-        seq: None,
-        prev_event_digest: None,
-        operation: std::collections::BTreeMap::from([(
-            "versionId".to_owned(),
-            serde_json::json!("1-test"),
-        )]),
-    };
+    // The storage boundary accepts an anchor already verified by the handler.
+    let anchor = crate::test_utils::principal_registration_anchor_fixture(
+        "challenge-holder",
+        [8; 32],
+    );
+    let validated = arkret_identity::validate_principal_registration_anchor(&anchor).unwrap();
     let reserved =
-        arkret_models_identity::ReservedIdentityCreation::from_operation(operation.clone())
-            .unwrap();
+        arkret_models_identity::ReservedIdentityCreation::from_anchor(anchor.clone()).unwrap();
     let challenge = IdentityBindingChallengeInput {
         request_id: request(2),
         request_digest: hash('3'),
@@ -74,14 +68,14 @@ async fn seed(
         lease_id: handoff.lease_id.clone(),
         lease_fence: 1,
         holder_jkt: handoff.cnf_jkt.clone(),
-        did_operation: operation,
+        principal_registration_anchor: anchor,
         principal_id: reserved.principal_id,
         did: reserved.did,
-        operation_digest: reserved.operation_digest,
+        registration_anchor_digest: reserved.registration_anchor_digest,
         account_subject: handoff.account_subject.clone(),
-        did_version_id: "1-test".to_owned(),
-        log_head_digest: hash('4'),
-        control_key_digest: hash('5'),
+        did_version_id: validated.did_version_id,
+        method_history_head: validated.method_history_head,
+        control_key_digest: validated.control_key_digest,
         pcr_realm_id: crate::test_utils::principal_control_realm_id(),
         realm_create_payload_digest: hash('6'),
         founding_authorize_payload_digest: hash('7'),

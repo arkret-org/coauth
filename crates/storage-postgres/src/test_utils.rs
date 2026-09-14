@@ -13,6 +13,39 @@ use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::pooled_connection::deadpool::Pool;
 use diesel_async::{AsyncConnection as _, AsyncPgConnection, RunQueryDsl as _};
 
+/// Build a cryptographically valid WebVH principal registration anchor for
+/// storage and handler tests. Human account registration supports WebVH only.
+pub fn principal_registration_anchor_fixture(
+    local_id: &str,
+    root_seed: [u8; 32],
+) -> arkret_models_identity::PrincipalRegistrationAnchor {
+    let endpoint = url::Url::parse("https://registration.example/").expect("fixture endpoint");
+    let next_root_public_key_multibase =
+        "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG";
+    let inception = arkret_signatures::webvh::prepare_principal_inception(
+        &arkret_signatures::webvh::PrincipalInceptionInput {
+            provider_endpoint: &endpoint,
+            principal_endpoint: &endpoint,
+            local_id,
+            also_known_as: &[],
+            version_time: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+            root_seed: &root_seed,
+            next_root_public_key_multibase,
+            witness_policy: None,
+        },
+    )
+    .expect("valid WebVH inception fixture");
+    arkret_models_identity::PrincipalRegistrationAnchor::WebvhRegistration {
+        registration_did_operation: Box::new(inception.submit_body),
+        log_entries: vec![
+            serde_json::from_value(inception.log_entry.clone()).expect("typed log entry")
+        ],
+        witness_records: Vec::new(),
+        normalized_did_document: serde_json::from_value(inception.log_entry["state"].clone())
+            .expect("typed DID document"),
+    }
+}
+
 /// Session-scoped Postgres advisory-lock key that serializes every test
 /// holding a [`TestDatabase`]. Postgres releases a session-level advisory lock
 /// when the owning session closes, so the guard needs no async drop.
@@ -329,8 +362,11 @@ pub fn account_binding_receipt(
         identity_creation_lease_id: Some("test-identity-creation-lease".to_owned()),
         lease_fence: Some(1),
         operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
-        operation_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "3".repeat(64)))
-            .unwrap(),
+        registration_anchor_digest: arkret_identifiers::Hash::new(format!(
+            "sha256:{}",
+            "3".repeat(64)
+        ))
+        .unwrap(),
         issued_at,
         proof: arkret_wire::PayloadProof {
             kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),

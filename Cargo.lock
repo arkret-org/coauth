@@ -2206,6 +2206,7 @@ dependencies = [
  "anyhow",
  "arkret-canonical",
  "arkret-identifiers",
+ "arkret-identity",
  "arkret-locale",
  "arkret-models-collaboration",
  "arkret-models-identity",

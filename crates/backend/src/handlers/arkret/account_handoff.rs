@@ -813,14 +813,15 @@ pub async fn issue_identity_binding_challenge(
     let request_digest = body
         .canonical_request_digest()
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?;
-    let validated =
-        arkret_signatures::webvh::validate_principal_inception_operation(&body.did_operation)
-            .map_err(|error| failed_precondition(error.to_string()))?;
+    let validated = arkret_identity::validate_principal_registration_anchor(
+        &body.principal_registration_anchor,
+    )
+    .map_err(|error| failed_precondition(error.to_string()))?;
     let principal_id = arkret_identifiers::project_did_to_core_id(&body.did)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    if body.did != body.did_operation.did || validated.principal_id != principal_id {
+    if body.did != validated.did || validated.principal_id != principal_id {
         return Err(failed_precondition(
-            "identity creation did/core projection does not match the inception operation",
+            "identity creation did/core projection does not match the registration anchor",
         ));
     }
 
@@ -855,13 +856,13 @@ pub async fn issue_identity_binding_challenge(
             lease_id: body.identity_creation_lease_id,
             lease_fence: body.lease_fence,
             holder_jkt: grant.cnf_jkt.clone(),
-            did_operation: body.did_operation,
+            principal_registration_anchor: body.principal_registration_anchor,
             principal_id,
             did: body.did,
-            operation_digest: validated.operation_digest,
+            registration_anchor_digest: validated.registration_anchor_digest,
             account_subject,
             did_version_id: validated.did_version_id,
-            log_head_digest: validated.log_head_digest,
+            method_history_head: validated.method_history_head,
             control_key_digest: validated.control_key_digest,
             pcr_realm_id: body.pcr_realm_id,
             realm_create_payload_digest: body.realm_create_payload_digest,
