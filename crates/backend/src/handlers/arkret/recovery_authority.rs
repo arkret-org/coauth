@@ -473,6 +473,27 @@ pub async fn issue_recovery_completion_grant_endpoint(
     Ok(ArkretCanonicalJson(canonical_outcome))
 }
 
+/// Cross-checks the two independent replacement-device / Station signatures
+/// that together describe one atomic recovery commit.
+///
+/// The receipt and the completion attestation are signed by different keys over
+/// overlapping members, so every shared member is compared here, including
+/// `first_generation_seal_id`: a pair naming two Seals describes a recovery
+/// whose Seal was never committed.
+///
+/// `attestation.terminal_commit_digest` is deliberately **not** recomputed.
+/// It is `SHA-256(RFC8785_JCS(RecoveryTerminalCommit))` over
+/// `{first_generation_seal, recovery_receipt}`, and the grant boundary receives
+/// only the receipt half; the signed Seal never crosses this boundary. Coauth
+/// therefore binds the digest transitively: it is a member of the fixed Station
+/// signing projection verified in `verify_station_completion_attestation`, and
+/// the Station is the only authority that can assert the Seal is the committed
+/// current head of the replacement-device generation. Re-deriving it here would
+/// require mirroring the Seal into this request, which would add a second,
+/// weaker copy of a fact the Station already signed.
+///
+/// The coordinator is `account_id.station_id`; no separate coordinator member
+/// exists on wire or in the signed projection.
 fn validate_completion_evidence(
     request: &IssueRecoveryCompletionGrantRequest,
     receipt: &RecoveryReceipt,
@@ -504,7 +525,8 @@ fn validate_completion_evidence(
         || receipt.authorization_event_id != attestation.device_authorization_event_id
         || receipt_generation != request_generation
         || receipt.completed_at > attestation.completed_at
-        || attestation.coordinator_id.as_str() != handoff.audience_id
+        || receipt.first_generation_seal_id != attestation.first_generation_seal_id
+        || attestation.account_id.station_id.as_str() != handoff.audience_id
     {
         return Err(failed_precondition(
             "recovery receipt, completion attestation, replacement device and current generation disagree",
@@ -565,6 +587,14 @@ fn account_status_reactivation_failed(
     )
 }
 
+/// Verifies the Station signature over the fixed 14-member completion
+/// projection.
+///
+/// The projection itself is owned by `arkret_wire` (`signing_bytes`), so this
+/// boundary can never drift from the transcript the Station signed. The signer
+/// must be the handoff audience, and `validate_completion_evidence` separately
+/// requires `attestation.account_id.station_id` to equal that same audience, so
+/// the coordinator is pinned to the account's own Station.
 async fn verify_station_completion_attestation(
     depot: &Depot,
     repo: &mut coauth_data::BoxRepository,
