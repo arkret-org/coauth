@@ -162,7 +162,7 @@ pub struct AccountHandoffGrant {
     pub browser_session_id: Option<Ulid>,
     pub audience_id: String,
     pub cnf_jkt: String,
-    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 6],
+    pub allowed_operations: [arkret_models_identity::AccountHandoffAllowedOperation; 7],
     pub account_handoff_grant: String,
     pub issued_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,

@@ -735,7 +735,7 @@ CREATE TABLE public.account_handoff_grants (
     CONSTRAINT account_handoff_grants_request_digest_valid CHECK ((request_digest ~ '^sha256:[0-9a-f]{64}$'::text)),
     CONSTRAINT account_handoff_grants_audience_id_nonempty CHECK ((btrim(audience_id) <> ''::text)),
     CONSTRAINT account_handoff_grants_cnf_jkt_valid CHECK ((cnf_jkt ~ '^[A-Za-z0-9_-]{43}$'::text)),
-    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge.v1'::text, 'ak.gate.account.command.issue_did_binding_challenge.v1'::text, 'ak.gate.account.command.abandon_identity_creation.v1'::text, 'ak.gate.account.command.register.v1'::text, 'ak.gate.account.command.issue_session_grant.v1'::text, 'ak.gate.account.command.issue_recovery_completion_grant.v1'::text])),
+    CONSTRAINT account_handoff_grants_allowed_operations_closed CHECK ((allowed_operations = ARRAY['ak.gate.account.command.issue_identity_binding_challenge.v1'::text, 'ak.gate.account.command.issue_did_binding_challenge.v1'::text, 'ak.gate.account.command.abandon_identity_creation.v1'::text, 'ak.gate.account.command.register.v1'::text, 'ak.gate.account.command.finalize_device_pairing.v1'::text, 'ak.gate.account.command.issue_session_grant.v1'::text, 'ak.gate.account.command.issue_recovery_completion_grant.v1'::text])),
     CONSTRAINT account_handoff_grants_token_nonempty CHECK ((length(account_handoff_grant) >= 32)),
     CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
 );

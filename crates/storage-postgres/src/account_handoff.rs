@@ -29,11 +29,12 @@ use uuid::Uuid;
 
 use crate::DatabaseError;
 
-const ALLOWED_OPERATIONS: [&str; 6] = [
+const ALLOWED_OPERATIONS: [&str; 7] = [
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_IDENTITY_BINDING_CHALLENGE_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_DID_BINDING_CHALLENGE_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ABANDON_IDENTITY_CREATION_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_REGISTER_V1,
+    arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_FINALIZE_DEVICE_PAIRING_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_SESSION_GRANT_V1,
     arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_RECOVERY_COMPLETION_GRANT_V1,
 ];
