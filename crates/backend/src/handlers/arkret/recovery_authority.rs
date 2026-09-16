@@ -267,9 +267,10 @@ pub async fn issue_recovery_completion_grant_endpoint(
             .map_err(|error| signature_invalid(error.to_string()))?;
     let expected_device_binding = arkret_models_identity::SessionGrantDeviceBinding {
         device_id: initial.device_id.clone(),
-        authorization_ref: request
+        authorization_event_id: request
             .completion_attestation
             .device_authorization_event_ref
+            .event_id
             .clone(),
         model_generation_ref: request.result_model_generation_ref,
     };
