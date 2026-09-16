@@ -130,7 +130,10 @@ pub async fn issue_controller_gate_attestation(
     let expires_at = now + GATE_TTL;
     let basis = ControllerAccountGateBasis::AccountBindingDefault {
         binding_version: binding.binding_version,
-        binding_frontier_digest: binding.binding_frontier_digest,
+        // Local column renamed to its actual meaning: the digest of the stored
+        // AccountBindingReceipt. The gate basis member keeps the name the SDK
+        // exposes for this closed wire object.
+        binding_frontier_digest: binding.binding_receipt_digest,
     };
     let basis_digest =
         arkret_identifiers::Hash::new(arkret_canonical::canonical_sha256(&serde_json::json!({

@@ -57,7 +57,7 @@ pub struct OrganizationPrincipalControl {
     /// is no state in which an organization has control without a ref.
     pub control_stream_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pcr_frontier_digest: Option<String>,
+    pub pcr_commit_ref: Option<String>,
     pub bootstrap_authorization: OrganizationBootstrapAuthorization,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bootstrap_delegation_ref: Option<String>,

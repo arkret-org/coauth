@@ -1,6 +1,6 @@
 //! Organization principal control + organization delegation repository.
 
-use arkret_identifiers::{Did, DidCoreId, EventId, Hash};
+use arkret_identifiers::{Did, DidCoreId, EventId, RealmCommitId};
 use arkret_models_collaboration::{
     RealmOrganizationControlScope, RealmOrganizationIssuerRole, RealmOrganizationRelationship,
 };
@@ -31,8 +31,8 @@ pub struct NewOrganizationPrincipalControl {
     /// MUST be a retype of it; later rotations replace it with the current
     /// organization control-stream head, never with nothing.
     pub control_stream_ref: String,
-    /// Optional digest of the PCR control frontier evaluated at bootstrap.
-    pub pcr_frontier_digest: Option<String>,
+    /// Optional authority commit the PCR control state was evaluated at.
+    pub pcr_commit_ref: Option<String>,
     /// Authorization basis under which the bootstrap was accepted.
     pub bootstrap_authorization: OrganizationBootstrapAuthorization,
     /// Delegation reference backing a delegated bootstrap, when applicable.
@@ -48,14 +48,15 @@ pub struct NewOrganizationPrincipalControl {
 ///
 /// Rotation is a whole-state replacement, so this struct carries every mutable
 /// control column. There is deliberately no way to express "leave this column
-/// as it is": a rotation that did not restate the frontier is a rotation onto a
-/// state that has no frontier yet.
+/// as it is": a rotation that did not restate the authority commit is a rotation
+/// onto a state that has no authority commit yet.
 #[derive(Debug, Clone)]
 pub struct RotatedOrganizationControl {
     /// Control-stream head the organization rotates onto.
     pub control_stream_ref: EventId,
-    /// Control-frontier digest of the rotated-to state, when it already has one.
-    pub pcr_frontier_digest: Option<Hash>,
+    /// Authority commit of the rotated-to control state, when it already has
+    /// one.
+    pub pcr_commit_ref: Option<RealmCommitId>,
 }
 
 /// Parameters used to record an organization delegation.

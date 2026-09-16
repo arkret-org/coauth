@@ -799,14 +799,14 @@ mod tests {
             trust_domain(),
         )
         .unwrap();
-        let url = base.join("/_arkret/peer/events/frontier").unwrap();
+        let url = base.join("/_arkret/peer/streams/scan").unwrap();
         let body = br#"{"realm_id":"ak:realm:Abeq9pC3fxOERl1X0ivHa5cJCBy41KfYu5LKvGfPFq5K"}"#;
 
         let signed = peer
             .signed_request(
                 "QUERY",
                 &url,
-                ServiceOperationId::PEER_EVENTS_READ_FRONTIER_V1,
+                ServiceOperationId::PEER_EVENTS_READ_SCAN_V1,
                 Some(body),
                 None,
             )

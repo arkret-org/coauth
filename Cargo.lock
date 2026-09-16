@@ -251,7 +251,6 @@ dependencies = [
  "arkret-identifiers",
  "arkret-identity",
  "arkret-keystore",
- "arkret-lattice-registry",
  "arkret-mls",
  "arkret-models-collaboration",
  "arkret-models-crypto",
@@ -287,11 +286,8 @@ name = "arkret-bootstrap"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
- "arkret-event-draft",
- "arkret-lattice-registry",
  "arkret-models-collaboration",
  "arkret-models-identity",
- "arkret-state",
  "arkret-wire",
  "chrono",
  "serde_json",
@@ -318,7 +314,6 @@ name = "arkret-crypto"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",
- "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-signatures",
  "arkret-wire",
@@ -468,18 +463,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arkret-lattice-registry"
-version = "0.3.0"
-dependencies = [
- "arkret-models-collaboration",
- "arkret-schema",
- "arkret-state",
- "arkret-wire",
- "serde_json",
- "thiserror 2.0.20",
-]
-
-[[package]]
 name = "arkret-locale"
 version = "0.3.0"
 dependencies = [
@@ -526,7 +509,6 @@ dependencies = [
  "arkret-identifiers",
  "arkret-models-crypto",
  "arkret-models-identity",
- "arkret-models-integration",
  "arkret-schema",
  "arkret-wire",
  "chrono",
@@ -677,17 +659,8 @@ dependencies = [
 name = "arkret-state"
 version = "0.3.0"
 dependencies = [
- "arkret-canonical",
- "arkret-event-draft",
  "arkret-identifiers",
- "arkret-models-collaboration",
- "arkret-models-crypto",
  "arkret-wire",
- "async-trait",
- "chrono",
- "hex",
- "serde",
- "serde_json",
  "thiserror 2.0.20",
 ]
 
@@ -710,6 +683,7 @@ dependencies = [
  "unicode-normalization",
  "unicode-security",
  "url",
+ "uuid",
  "web-time",
 ]
 
@@ -4502,39 +4476,24 @@ version = "0.3.0"
 dependencies = [
  "arkret-auth",
  "arkret-canonical",
- "arkret-crypto",
- "arkret-event-draft",
  "arkret-hlc",
  "arkret-http-client",
  "arkret-identifiers",
  "arkret-identity",
  "arkret-keystore",
- "arkret-lattice-registry",
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-discovery",
  "arkret-models-identity",
- "arkret-policy",
- "arkret-retry",
- "arkret-schema",
  "arkret-signatures",
- "arkret-state",
  "arkret-wire",
- "base64 0.23.1",
- "chacha20poly1305 0.11.0",
  "chrono",
  "ed25519-dalek 3.0.0",
- "getrandom 0.4.3",
- "hex",
- "hkdf 0.13.0",
  "serde",
  "serde_json",
- "sha2 0.11.0",
  "thiserror 2.0.20",
  "tokio",
- "tracing",
  "url",
- "x25519-dalek 3.0.0",
  "zeroize",
 ]
 
@@ -11918,7 +11877,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7e8131a03190127fb2263afc72b322ecadae46b6ff8c6f399ff5d02f5559af6"
 dependencies = [
  "curve25519-dalek 5.0.0",
- "getrandom 0.4.3",
  "rand_core 0.10.1",
  "zeroize",
 ]

@@ -61,8 +61,8 @@ struct PrincipalDidJoinedRow {
     accepted_id: arkret_identifiers::DidCoreId,
     #[diesel(select_expression = principal_did_bindings::binding_version)]
     binding_version: i64,
-    #[diesel(select_expression = principal_did_bindings::binding_frontier_digest)]
-    binding_frontier_digest: String,
+    #[diesel(select_expression = principal_did_bindings::binding_receipt_digest)]
+    binding_receipt_digest: String,
     #[diesel(select_expression = principal_did_bindings::account_id)]
     account_id: serde_json::Value,
     #[diesel(select_expression = principal_did_bindings::principal_control_realm_id)]
@@ -137,13 +137,14 @@ fn binding_from_row(row: PrincipalDidJoinedRow) -> Result<PrincipalDidBinding, D
                 .row(id)
                 .source(error)
         })?,
-        binding_frontier_digest: arkret_identifiers::Hash::new(row.binding_frontier_digest)
-            .map_err(|error| {
+        binding_receipt_digest: arkret_identifiers::Hash::new(row.binding_receipt_digest).map_err(
+            |error| {
                 DatabaseInconsistencyError::on("principal_did_bindings")
-                    .column("binding_frontier_digest")
+                    .column("binding_receipt_digest")
                     .row(id)
                     .source(error)
-            })?,
+            },
+        )?,
         account_id,
         principal_control_realm_id: arkret_identifiers::RealmId::new(
             row.principal_control_realm_id,
@@ -190,7 +191,7 @@ struct NewPrincipalDidBinding {
     binding_receipt: serde_json::Value,
     accepted_id: arkret_identifiers::DidCoreId,
     binding_version: i64,
-    binding_frontier_digest: String,
+    binding_receipt_digest: String,
     account_id: serde_json::Value,
     principal_control_realm_id: String,
     created_at: DateTime<Utc>,
@@ -257,7 +258,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             binding_receipt,
             accepted_id,
             binding_version,
-            binding_frontier_digest,
+            binding_receipt_digest,
             account_id,
             principal_control_realm_id,
         } = input;
@@ -337,7 +338,7 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
             binding_receipt: serde_json::to_value(&binding_receipt)?,
             accepted_id: accepted_id.clone(),
             binding_version: i64::try_from(binding_version)?,
-            binding_frontier_digest: binding_frontier_digest.to_string(),
+            binding_receipt_digest: binding_receipt_digest.to_string(),
             account_id: serde_json::to_value(&account_id)?,
             principal_control_realm_id: principal_control_realm_id.to_string(),
             created_at: now,
@@ -356,8 +357,8 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
                 principal_did_bindings::binding_receipt.eq(serde_json::to_value(&binding_receipt)?),
                 principal_did_bindings::accepted_id.eq(&accepted_id),
                 principal_did_bindings::binding_version.eq(i64::try_from(binding_version)?),
-                principal_did_bindings::binding_frontier_digest
-                    .eq(binding_frontier_digest.to_string()),
+                principal_did_bindings::binding_receipt_digest
+                    .eq(binding_receipt_digest.to_string()),
                 principal_did_bindings::account_id.eq(serde_json::to_value(&account_id)?),
                 principal_did_bindings::principal_control_realm_id
                     .eq(principal_control_realm_id.to_string()),

@@ -28,7 +28,7 @@ pub struct VerifiedPrincipalDidBindingInput {
     pub binding_version: u64,
     /// Digest of the complete authority-signed binding receipt that installed
     /// this generation.
-    pub binding_frontier_digest: arkret_identifiers::Hash,
+    pub binding_receipt_digest: arkret_identifiers::Hash,
     /// Public account authority coordinate accepted at registration.
     pub account_id: arkret_wire::AccountId,
     /// Exact PCR accepted by the registration genesis operation.

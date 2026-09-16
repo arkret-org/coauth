@@ -11,7 +11,11 @@ pub struct RecoveryCompletionGrantIssuance {
     pub local_account_id: crate::Ulid,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub device_id: String,
-    pub device_authorization_event_id: String,
+    /// Closed `CommittedEventRef` of the accepted recovery re-anchor Event.
+    pub reanchor_ref: Value,
+    /// Closed `CommittedEventRef` of the immediately following replacement
+    /// device authorization Event in the same PCR Realm stream.
+    pub device_authorization_ref: Value,
     pub result_model_generation_ref: Value,
     pub canonical_request_digest: String,
     pub canonical_request: Vec<u8>,
@@ -28,7 +32,11 @@ pub struct NewRecoveryCompletionGrantIssuance {
     pub local_account_id: crate::Ulid,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub device_id: String,
-    pub device_authorization_event_id: String,
+    /// Closed `CommittedEventRef` of the accepted recovery re-anchor Event.
+    pub reanchor_ref: Value,
+    /// Closed `CommittedEventRef` of the immediately following replacement
+    /// device authorization Event in the same PCR Realm stream.
+    pub device_authorization_ref: Value,
     pub result_model_generation_ref: Value,
     pub canonical_request_digest: String,
     pub canonical_request: Vec<u8>,

@@ -11,8 +11,8 @@
 //!
 //! `ak.capability.grant` is capability-gated (`event-kind-registry.json` has no
 //! `service_attested` admission for it) and `capabilities.md` section 18
-//! resolves the *issuer's own* effective capability under the Control Move's
-//! `seal_basis`. The issuer is the Event actor, so the grant has to be authored
+//! resolves the *issuer's own* effective capability under the grant's
+//! authority commit basis. The issuer is the Event actor, so the grant has to be authored
 //! and signed by the administrator who holds that authority, from a client that
 //! custodies their key, submitted through the registered Event surface, and
 //! executed in the Realm's confirmed safety sequence. An OAuth admin console

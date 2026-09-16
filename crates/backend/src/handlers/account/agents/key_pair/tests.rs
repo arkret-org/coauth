@@ -72,8 +72,6 @@ fn authoritative_key_state() -> arkret_models_collaboration::agent_operations::K
             "actions": [
                 "ak.self.events.stream.subscribe.v1",
                 "ak.self.events.read.scan.v1",
-                "ak.self.events.read.frontier.v1",
-                "ak.self.seals.read.frontier.v1",
                 "ak.self.events.command.submit.v1",
                 "ak.event.read"
             ],
@@ -116,8 +114,6 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
                 "actions": [
                     "ak.self.events.stream.subscribe.v1",
                     "ak.self.events.read.scan.v1",
-                    "ak.self.events.read.frontier.v1",
-                    "ak.self.seals.read.frontier.v1",
                     "ak.self.events.command.submit.v1",
                     "ak.event.read"
                 ],
@@ -257,25 +253,25 @@ fn controller_station_for_pairing_uses_trusted_enrollment() {
 
 #[test]
 fn pairing_scope_precheck_returns_key_reason_before_queueing() {
+    // The provision layer activates both interactive chat and E2EE, so the key
+    // layer must independently carry every mandatory operation of both.
     let provision = [
         "ak.self.events.stream.subscribe.v1",
         "ak.self.events.read.scan.v1",
-        "ak.self.events.read.frontier.v1",
-        "ak.self.seals.read.frontier.v1",
         "ak.self.events.command.submit.v1",
+        "ak.self.keys.keypackages.upload.create.v1",
     ]
     .map(str::to_owned);
-    let key_without_seal = [
+    let key_without_e2ee = [
         "ak.self.events.stream.subscribe.v1",
         "ak.self.events.read.scan.v1",
-        "ak.self.events.read.frontier.v1",
         "ak.self.events.command.submit.v1",
     ]
     .map(str::to_owned);
 
     let error = super::super::session_proof::validate_agent_runtime_key_scope_layers(
         &provision,
-        &key_without_seal,
+        &key_without_e2ee,
     )
     .expect_err("incomplete key ceiling must reject before queued authorization persistence");
     assert_eq!(
@@ -283,10 +279,10 @@ fn pairing_scope_precheck_returns_key_reason_before_queueing() {
         AgentAuthRejection::AgentKeyScopeReauthorizationRequired
     );
 
-    let provision_without_seal = key_without_seal.clone();
+    let provision_without_chat = ["ak.self.events.command.submit.v1".to_owned()];
     let unknown_key = ["ak.self.events.read.future_unregistered.v1".to_owned()];
     let error = super::super::session_proof::validate_agent_runtime_key_scope_layers(
-        &provision_without_seal,
+        &provision_without_chat,
         &unknown_key,
     )
     .expect_err("provision deficiency must have priority over a lower-layer unknown action");

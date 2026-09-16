@@ -224,7 +224,8 @@ CREATE TABLE public.recovery_completion_grant_issuances (
     local_account_id uuid NOT NULL,
     principal_id text NOT NULL,
     device_id text NOT NULL,
-    device_authorization_event_id text NOT NULL,
+    reanchor_ref jsonb NOT NULL,
+    device_authorization_ref jsonb NOT NULL,
     result_model_generation_ref jsonb NOT NULL,
     canonical_request_digest text NOT NULL,
     canonical_request bytea NOT NULL,
@@ -232,7 +233,20 @@ CREATE TABLE public.recovery_completion_grant_issuances (
     canonical_outcome bytea NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     CONSTRAINT recovery_completion_grant_issuances_principal_core_valid CHECK (principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$')
+    -- Recovery completes as one atomic unit: both Events are admitted by the
+    -- same authority-signed RealmCommit, on one PCR Realm stream, at strictly
+    -- consecutive positions. The ledger refuses to record any other shape.
+    ,CONSTRAINT recovery_completion_grant_issuances_consecutive_pcr_commit CHECK (
+        reanchor_ref->'stream_ref' = device_authorization_ref->'stream_ref'
+        AND reanchor_ref->'stream_ref'->>'kind' = 'realm'
+        AND reanchor_ref->>'commit_id' = device_authorization_ref->>'commit_id'
+        AND (device_authorization_ref->>'stream_position')::bigint
+            = (reanchor_ref->>'stream_position')::bigint + 1
+    )
 );
+
+COMMENT ON COLUMN public.recovery_completion_grant_issuances.reanchor_ref IS 'Closed CommittedEventRef of the accepted recovery re-anchor Event.';
+COMMENT ON COLUMN public.recovery_completion_grant_issuances.device_authorization_ref IS 'Closed CommittedEventRef of the replacement-device authorization Event committed immediately after the re-anchor on the same PCR Realm stream.';
 
 CREATE TABLE public.admin_operation_logs (
     id uuid NOT NULL,
@@ -268,14 +282,17 @@ CREATE TABLE public.organization_principal_controls (
     organization_did text NOT NULL,
     principal_control_realm_id text NOT NULL,
     control_stream_ref text NOT NULL,
-    pcr_frontier_digest text,
+    pcr_commit_ref text,
     bootstrap_authorization text NOT NULL,
     bootstrap_delegation_ref text,
     executed_by text,
     bootstrap_proof_digest text,
     created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT organization_principal_controls_pcr_commit_ref_shape CHECK (pcr_commit_ref IS NULL OR pcr_commit_ref ~ '^ak:realm_commit:[A-Za-z0-9_-]{44}$'::text)
 );
+
+COMMENT ON COLUMN public.organization_principal_controls.pcr_commit_ref IS 'Authority-signed RealmCommit of the PCR Realm stream the control state was evaluated at. NULL means the control state carries no authority commit yet.';
 
 COMMENT ON TABLE public.organization_principal_controls IS 'Organization principal control state (identity-did.md §7). One row per stable organization identity, retaining the exact bootstrap DID evidence. There is intentionally no shared-credential/password column: an organization principal is controlled by DID keys + delegations only, never a shared human login.';
 
@@ -660,12 +677,12 @@ CREATE TABLE public.principal_did_bindings (
     binding_receipt jsonb NOT NULL,
     accepted_id text NOT NULL,
     binding_version bigint NOT NULL,
-    binding_frontier_digest text NOT NULL,
+    binding_receipt_digest text NOT NULL,
     account_id jsonb NOT NULL,
     principal_control_realm_id text NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
-    ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience_id = accepted_id AND audience_id LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_frontier_digest ~ '^sha256:[0-9a-f]{64}$'::text AND principal_control_realm_id LIKE 'ak:realm:%')
+    ,CONSTRAINT principal_did_binding_basis_shape CHECK (audience_id = accepted_id AND audience_id LIKE 'ak:did_core:%' AND binding_version >= 1 AND binding_receipt_digest ~ '^sha256:[0-9a-f]{64}$'::text AND principal_control_realm_id LIKE 'ak:realm:%')
     ,CONSTRAINT principal_did_binding_resolution_snapshot_shape CHECK (verified_did ~ '^did:[a-z0-9]+:[^[:space:]/?#]+$'::text AND btrim(verified_version_id) <> ''::text AND jsonb_typeof(binding_receipt) = 'object'::text AND jsonb_typeof(account_id) = 'object'::text)
 );
 

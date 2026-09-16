@@ -34,7 +34,7 @@ pub struct OrganizationPrincipalControl {
     pub principal_control_realm_id: String,
     pub control_stream_ref: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pcr_frontier_digest: Option<String>,
+    pub pcr_commit_ref: Option<String>,
     pub bootstrap_authorization: OrganizationBootstrapAuthorization,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bootstrap_delegation_ref: Option<String>,
@@ -56,7 +56,7 @@ impl From<coauth_data_model::OrganizationPrincipalControl> for OrganizationPrinc
             organization_did: value.organization_did,
             principal_control_realm_id: value.principal_control_realm_id,
             control_stream_ref: value.control_stream_ref,
-            pcr_frontier_digest: value.pcr_frontier_digest,
+            pcr_commit_ref: value.pcr_commit_ref,
             bootstrap_authorization: value.bootstrap_authorization,
             bootstrap_delegation_ref: value.bootstrap_delegation_ref,
             executed_by: value.executed_by,
@@ -167,9 +167,9 @@ pub struct BootstrapOrganizationRequest {
     /// Accepted PCR create Event ref. `principal_control_realm_id` must be a
     /// retype of this Event ref.
     pub control_stream_ref: String,
-    /// Optional control-frontier digest.
+    /// Optional authority commit the PCR control state was evaluated at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pcr_frontier_digest: Option<String>,
+    pub pcr_commit_ref: Option<String>,
     /// How the bootstrap is authorized.
     pub authorization: BootstrapAuthorizationInput,
 }
@@ -233,8 +233,8 @@ pub struct RenewOrganizationDelegationRequest {
 /// The body states the **complete** control state that must hold after the
 /// rotation, not a partial changeset. A missing field is therefore never an
 /// instruction to keep the stored value: `control_stream_ref` is required, and
-/// an absent (or explicitly null) `pcr_frontier_digest` is the post-rotation
-/// "no frontier yet" state. That is what makes an empty body a decode error
+/// an absent (or explicitly null) `pcr_commit_ref` is the post-rotation
+/// "no authority commit yet" state. That is what makes an empty body a decode error
 /// instead of a silent erasure of a live control stream.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(
@@ -244,10 +244,10 @@ pub struct RenewOrganizationDelegationRequest {
 pub struct RotateOrganizationControllerRequest {
     /// Control-stream / control-state reference after the rotation.
     pub control_stream_ref: String,
-    /// Control-frontier digest after the rotation. Absent and `null` both mean
-    /// the rotated-to state carries no frontier digest.
+    /// Authority commit of the rotated-to control state. Absent and `null`
+    /// both mean the rotated-to state carries no authority commit yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pcr_frontier_digest: Option<String>,
+    pub pcr_commit_ref: Option<String>,
 }
 
 /// Request body for
@@ -293,7 +293,7 @@ pub struct IssueOrganizationStatementRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revokes_statement_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub realm_frontier_digest: Option<String>,
+    pub realm_commit_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub organization_policy_ref: Option<String>,
 }

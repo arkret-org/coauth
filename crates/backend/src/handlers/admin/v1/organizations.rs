@@ -12,7 +12,7 @@
 //! - `POST   /organizations/{organization_id}/delegations/{ref}/revoke` — revoke.
 //! - `POST   /organizations/{organization_id}/delegations/{ref}/renew` — renew validity.
 //! - `POST   /organizations/{organization_id}/rotate-controller` — rotate the control stream /
-//!   frontier ref.
+//!   authority commit ref.
 //! - `POST   /organizations/{organization_id}/statements` — issue a signed `ak.realm.organization`
 //!   statement (COA-ORG-03).
 //!
@@ -88,10 +88,10 @@ fn parse_control_stream_ref(raw: &str) -> Result<EventId, AppError> {
     Ok(event_id)
 }
 
-fn parse_frontier_digest(raw: Option<&str>) -> Result<Option<Hash>, AppError> {
-    raw.map(|value| Hash::new(value.to_owned()))
+fn parse_commit_ref(raw: Option<&str>) -> Result<Option<RealmCommitId>, AppError> {
+    raw.map(|value| RealmCommitId::new(value.to_owned()))
         .transpose()
-        .map_err(|error| AppError::bad_request(format!("invalid pcr_frontier_digest: {error}")))
+        .map_err(|error| AppError::bad_request(format!("invalid pcr_commit_ref: {error}")))
 }
 
 #[derive(Serialize)]
@@ -103,7 +103,7 @@ struct OrganizationControllerBootstrapTranscript<'a> {
     principal_control_realm_id: &'a str,
     control_stream_ref: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pcr_frontier_digest: Option<&'a str>,
+    pcr_commit_ref: Option<&'a str>,
     purpose: &'static str,
     profile: &'static str,
 }
@@ -117,7 +117,7 @@ fn organization_controller_bootstrap_transcript_bytes(
         organization_did: body.organization_did.as_str(),
         principal_control_realm_id: &body.principal_control_realm_id,
         control_stream_ref: &body.control_stream_ref,
-        pcr_frontier_digest: body.pcr_frontier_digest.as_deref(),
+        pcr_commit_ref: body.pcr_commit_ref.as_deref(),
         purpose: "principal_control",
         profile: arkret_wire::ProfileId::PRINCIPAL_CONTROL_REALM_V1,
     })
@@ -205,7 +205,7 @@ pub async fn bootstrap_handler(
     // before any lookup, authorization decision, or proof resolution.
     validate_organization_binding(&body)?;
     let create_event_id = parse_control_stream_ref(&body.control_stream_ref)?;
-    parse_frontier_digest(body.pcr_frontier_digest.as_deref())?;
+    parse_commit_ref(body.pcr_commit_ref.as_deref())?;
     let supplied_realm_id = RealmId::new(body.principal_control_realm_id.clone())
         .map_err(|error| AppError::bad_request(format!("invalid PCR Realm id: {error}")))?;
     if supplied_realm_id != RealmId::from_event_id(&create_event_id) {
@@ -303,7 +303,7 @@ pub async fn bootstrap_handler(
                 organization_did: body.organization_did,
                 principal_control_realm_id: body.principal_control_realm_id,
                 control_stream_ref: body.control_stream_ref,
-                pcr_frontier_digest: body.pcr_frontier_digest,
+                pcr_commit_ref: body.pcr_commit_ref,
                 bootstrap_authorization,
                 bootstrap_delegation_ref,
                 executed_by,
@@ -490,7 +490,7 @@ pub async fn rotate_controller_handler(
     // a malformed ref can never reach the database layer.
     let rotated = RotatedOrganizationControl {
         control_stream_ref: parse_control_stream_ref(&body.control_stream_ref)?,
-        pcr_frontier_digest: parse_frontier_digest(body.pcr_frontier_digest.as_deref())?,
+        pcr_commit_ref: parse_commit_ref(body.pcr_commit_ref.as_deref())?,
     };
     let mut repo = extract_call_context(req, depot).await?.repo;
     let clock = make_clock();
@@ -541,12 +541,12 @@ pub async fn issue_statement_handler(
             "revoked statement requires revokes_statement_id",
         ));
     }
-    let realm_frontier_digest = body
-        .realm_frontier_digest
+    let realm_commit_ref = body
+        .realm_commit_ref
         .as_deref()
-        .map(|raw| Hash::new(raw.to_owned()))
+        .map(|raw| RealmCommitId::new(raw.to_owned()))
         .transpose()
-        .map_err(|e| AppError::bad_request(format!("invalid realm_frontier_digest: {e}")))?;
+        .map_err(|e| AppError::bad_request(format!("invalid realm_commit_ref: {e}")))?;
 
     let arkret_config = depot.arkret_config()?;
     let keyring = depot.keyring()?;
@@ -589,7 +589,7 @@ pub async fn issue_statement_handler(
         expires_at: body.expires_at,
         supersedes_statement_id: body.supersedes_statement_id,
         revokes_statement_id: body.revokes_statement_id,
-        realm_frontier_digest,
+        realm_commit_ref,
         organization_policy_ref: body.organization_policy_ref,
         issuer_id: issuer,
         issuer_role: body.issuer_role,
@@ -631,7 +631,9 @@ mod tests {
             principal_control_realm_id: "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG"
                 .to_owned(),
             control_stream_ref: "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG".to_owned(),
-            pcr_frontier_digest: Some(format!("sha256:{}", "ab".repeat(32))),
+            pcr_commit_ref: Some(
+                "ak:realm_commit:Aaurq6urq6urq6urq6urq6urq6urq6urq6urq6urq6ur".to_owned(),
+            ),
             authorization: BootstrapAuthorizationInput::DidControllerProof {
                 proof_jws: "header..signature".to_owned(),
             },
@@ -648,9 +650,10 @@ mod tests {
 
         second.organization_id = first.organization_id.clone();
         second.organization_did = first.organization_did.clone();
-        second.pcr_frontier_digest = Some(format!("sha256:{}", "cd".repeat(32)));
-        let changed_frontier = organization_controller_bootstrap_transcript_bytes(&second).unwrap();
-        assert_ne!(first_bytes, changed_frontier);
+        second.pcr_commit_ref =
+            Some("ak:realm_commit:Ac3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3N".to_owned());
+        let changed_commit = organization_controller_bootstrap_transcript_bytes(&second).unwrap();
+        assert_ne!(first_bytes, changed_commit);
 
         let transcript: serde_json::Value = serde_json::from_slice(&first_bytes).unwrap();
         assert_eq!(transcript["purpose"], "principal_control");
@@ -704,7 +707,7 @@ mod tests {
         for (body, expected_fragment) in [
             (serde_json::json!({}), "control_stream_ref"),
             (
-                serde_json::json!({ "pcr_frontier_digest": format!("sha256:{}", "ab".repeat(32)) }),
+                serde_json::json!({ "pcr_commit_ref": "ak:realm_commit:Aaurq6urq6urq6urq6urq6urq6urq6urq6urq6urq6ur" }),
                 "control_stream_ref",
             ),
             (
@@ -722,23 +725,23 @@ mod tests {
     }
 
     #[test]
-    fn rotation_body_treats_an_absent_frontier_as_the_rotated_to_value() {
+    fn rotation_body_treats_an_absent_commit_ref_as_the_rotated_to_value() {
         let decoded =
             serde_json::from_value::<RotateOrganizationControllerRequest>(serde_json::json!({
                 "control_stream_ref":
                     "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
             }))
-            .expect("a rotation without a frontier is a rotation onto a frontier-less state");
-        assert_eq!(decoded.pcr_frontier_digest, None);
+            .expect("a rotation without a commit ref rotates onto a commit-less state");
+        assert_eq!(decoded.pcr_commit_ref, None);
 
         let explicit_null =
             serde_json::from_value::<RotateOrganizationControllerRequest>(serde_json::json!({
                 "control_stream_ref":
                     "ak:event:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
-                "pcr_frontier_digest": serde_json::Value::Null,
+                "pcr_commit_ref": serde_json::Value::Null,
             }))
-            .expect("an explicit null frontier decodes to the same rotated-to state");
-        assert_eq!(explicit_null.pcr_frontier_digest, None);
+            .expect("an explicit null commit ref decodes to the same rotated-to state");
+        assert_eq!(explicit_null.pcr_commit_ref, None);
     }
 
     #[test]
@@ -773,18 +776,26 @@ mod tests {
     }
 
     #[test]
-    fn frontier_digest_must_be_a_canonical_hash() {
-        assert_eq!(parse_frontier_digest(None).unwrap(), None);
+    fn commit_ref_must_be_a_canonical_realm_commit_id() {
+        assert_eq!(parse_commit_ref(None).unwrap(), None);
         assert!(
-            parse_frontier_digest(Some(&format!("sha256:{}", "ab".repeat(32))))
-                .unwrap()
-                .is_some()
+            parse_commit_ref(Some(
+                "ak:realm_commit:Aaurq6urq6urq6urq6urq6urq6urq6urq6urq6urq6ur"
+            ))
+            .unwrap()
+            .is_some()
         );
-        let truncated = format!("sha256:{}", "ab".repeat(31));
-        for rejected in ["", "sha256:", "deadbeef", truncated.as_str()] {
+        for rejected in [
+            "",
+            "sha256:",
+            "deadbeef",
+            &format!("sha256:{}", "ab".repeat(32)),
+            "ak:realm_commit:not-canonical",
+            "ak:realm:AQYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG",
+        ] {
             assert!(
-                parse_frontier_digest(Some(rejected)).is_err(),
-                "{rejected} must not be accepted as a control frontier digest"
+                parse_commit_ref(Some(rejected)).is_err(),
+                "{rejected} must not be accepted as a PCR control authority commit ref"
             );
         }
     }

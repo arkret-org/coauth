@@ -194,8 +194,6 @@ fn registration_device_gate_outcome(
             linearization_seq: 1,
             linearized_at: request.requested_at,
             expires_at: request.requested_at + Duration::seconds(30),
-            blocking_proposal_digest: None,
-            covering_seal_id: None,
         },
     };
     outcome.validate_for_request(request).unwrap();

@@ -18,7 +18,7 @@ The intended external review scope is the v1.0 coauth service:
 - Admin API: `coauth-admin-types` shared DTOs, `sodmin` bridge discovery,
   account mutation workflows, risk-action durable proposal approval/execute,
   audit feed, and policy dry-runs.
-- Policy and signing: policy-response signing transcript, policy frontier,
+- Policy and signing: policy-response signing transcript, policy decision basis,
   Cedar/remote policy backends, signed policy decision audit records.
 - Operations: `/readyz`, Prometheus metrics binding, OpenTelemetry exporter
   examples, local SBOM, local provenance, release image Trivy scan, and

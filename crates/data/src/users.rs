@@ -590,7 +590,7 @@ pub struct PrincipalDidBinding {
     pub binding_receipt: arkret_models_identity::AccountBindingReceipt,
     pub accepted_id: arkret_identifiers::DidCoreId,
     pub binding_version: u64,
-    pub binding_frontier_digest: arkret_identifiers::Hash,
+    pub binding_receipt_digest: arkret_identifiers::Hash,
     pub account_id: arkret_wire::AccountId,
     /// Principal Control Realm accepted by the PCR genesis operation that
     /// installed this exact account binding. Lifecycle authoring must use

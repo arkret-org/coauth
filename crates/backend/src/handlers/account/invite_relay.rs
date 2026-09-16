@@ -441,8 +441,8 @@ mod tests {
     use super::*;
     use crate::handlers::test_utils::setup;
 
-    /// The Realm named by the invite Event. A
-    /// bundle whose Seal sits in another Realm is rejected as cross-Realm.
+    /// The Realm named by the invite Event. A bundle whose authority commit
+    /// sits in another Realm stream is rejected as cross-Realm.
     const FIXTURE_REALM: &str = "ak:realm:Acewuy1nKbK90D-V6pWEnoWq1drBx9FVel0gtDQlninN";
 
     fn core_id(value: &str) -> DidCoreId {

@@ -62,11 +62,8 @@ fn registration_binding_input(
         ),
         accepted_id: audience_id,
         binding_version: 1,
-        binding_frontier_digest: arkret_identifiers::Hash::new(format!(
-            "sha256:{}",
-            "c".repeat(64)
-        ))
-        .unwrap(),
+        binding_receipt_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "c".repeat(64)))
+            .unwrap(),
         account_id,
         principal_control_realm_id: principal_control_realm_id(),
     }

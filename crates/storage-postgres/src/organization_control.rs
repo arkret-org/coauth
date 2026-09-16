@@ -45,7 +45,7 @@ struct ControlRow {
     organization_did: String,
     principal_control_realm_id: String,
     control_stream_ref: String,
-    pcr_frontier_digest: Option<String>,
+    pcr_commit_ref: Option<String>,
     bootstrap_authorization: String,
     bootstrap_delegation_ref: Option<String>,
     executed_by: Option<DidCoreId>,
@@ -103,7 +103,7 @@ impl TryFrom<ControlRow> for OrganizationPrincipalControl {
             organization_did,
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: control_stream_ref.to_string(),
-            pcr_frontier_digest: value.pcr_frontier_digest,
+            pcr_commit_ref: value.pcr_commit_ref,
             bootstrap_authorization,
             bootstrap_delegation_ref: value.bootstrap_delegation_ref,
             executed_by: value.executed_by,
@@ -122,7 +122,7 @@ struct InsertableControl {
     organization_did: String,
     principal_control_realm_id: String,
     control_stream_ref: String,
-    pcr_frontier_digest: Option<String>,
+    pcr_commit_ref: Option<String>,
     bootstrap_authorization: String,
     bootstrap_delegation_ref: Option<String>,
     executed_by: Option<DidCoreId>,
@@ -290,7 +290,7 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
             organization_did: organization_did.as_str().to_owned(),
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: create_event_id.to_string(),
-            pcr_frontier_digest: params.pcr_frontier_digest,
+            pcr_commit_ref: params.pcr_commit_ref,
             bootstrap_authorization: params.bootstrap_authorization.as_str().to_owned(),
             bootstrap_delegation_ref: params.bootstrap_delegation_ref,
             executed_by: params.executed_by,
@@ -310,7 +310,7 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
             organization_did,
             principal_control_realm_id: row.principal_control_realm_id,
             control_stream_ref: row.control_stream_ref,
-            pcr_frontier_digest: row.pcr_frontier_digest,
+            pcr_commit_ref: row.pcr_commit_ref,
             bootstrap_authorization: params.bootstrap_authorization,
             bootstrap_delegation_ref: row.bootstrap_delegation_ref,
             executed_by: row.executed_by,
@@ -351,8 +351,8 @@ impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
         .set((
             organization_principal_controls::control_stream_ref
                 .eq(rotated.control_stream_ref.to_string()),
-            organization_principal_controls::pcr_frontier_digest
-                .eq(rotated.pcr_frontier_digest.map(|digest| digest.to_string())),
+            organization_principal_controls::pcr_commit_ref
+                .eq(rotated.pcr_commit_ref.map(|commit| commit.to_string())),
             organization_principal_controls::updated_at.eq(now),
         ))
         .returning(ControlRow::as_returning())
@@ -547,7 +547,7 @@ mod tests {
             )
             .to_string(),
             control_stream_ref: control_stream_ref.to_string(),
-            pcr_frontier_digest: None,
+            pcr_commit_ref: None,
             bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof
                 .as_str()
                 .to_owned(),
@@ -580,7 +580,9 @@ mod tests {
             )
             .to_string(),
             control_stream_ref: create_event_id.to_string(),
-            pcr_frontier_digest: Some(format!("sha256:{}", "ab".repeat(32))),
+            pcr_commit_ref: Some(
+                "ak:realm_commit:Aaurq6urq6urq6urq6urq6urq6urq6urq6urq6urq6ur".to_owned(),
+            ),
             bootstrap_authorization: OrganizationBootstrapAuthorization::DidControllerProof,
             bootstrap_delegation_ref: None,
             executed_by: Some(DidCoreId::new("ak:did_core:web:admin.example".to_owned()).unwrap()),
@@ -736,11 +738,11 @@ mod tests {
             .bootstrap(&mut rng, &clock, control(&did))
             .await
             .unwrap();
-        assert!(bootstrapped.pcr_frontier_digest.is_some());
+        assert!(bootstrapped.pcr_commit_ref.is_some());
         repo.save().await.unwrap();
 
-        // A rotation that does not restate the frontier rotates onto a state
-        // that has no frontier; the stored digest is replaced, not preserved.
+        // A rotation that does not restate the authority commit rotates onto a
+        // state that has none; the stored ref is replaced, not preserved.
         let mut repo = factory.create().await.unwrap();
         let rotated = repo
             .organization_control()
@@ -749,14 +751,14 @@ mod tests {
                 &organization_id,
                 RotatedOrganizationControl {
                     control_stream_ref: rotated_head.clone(),
-                    pcr_frontier_digest: None,
+                    pcr_commit_ref: None,
                 },
             )
             .await
             .unwrap()
             .expect("bootstrapped organization is rotatable");
         assert_eq!(rotated.control_stream_ref, rotated_head.to_string());
-        assert_eq!(rotated.pcr_frontier_digest, None);
+        assert_eq!(rotated.pcr_commit_ref, None);
         repo.save().await.unwrap();
 
         let mut repo = factory.create().await.unwrap();
@@ -767,7 +769,7 @@ mod tests {
             .unwrap()
             .expect("control persisted");
         assert_eq!(reloaded.control_stream_ref, rotated_head.to_string());
-        assert_eq!(reloaded.pcr_frontier_digest, None);
+        assert_eq!(reloaded.pcr_commit_ref, None);
         repo.cancel().await.unwrap();
     }
 
@@ -795,7 +797,7 @@ mod tests {
                             [8_u8; 32],
                         ),
                     ),
-                    pcr_frontier_digest: None,
+                    pcr_commit_ref: None,
                 },
             )
             .await

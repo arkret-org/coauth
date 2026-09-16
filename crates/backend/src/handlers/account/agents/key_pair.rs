@@ -8,8 +8,9 @@
 //! that authenticated result, persists the pending local authorization for
 //! `agent_key_proof`, and commits the unchanged signed request to the
 //! authoritative Station before reporting the Event as durable. The
-//! Station activates the frozen candidate after its authorize Event enters an
-//! accepted Agent-PCR frontier; polling only observes this transition.
+//! Station activates the frozen candidate after its authorize Event is
+//! committed to the Agent-PCR Realm stream; polling only observes this
+//! transition.
 
 use std::collections::BTreeMap;
 
@@ -49,7 +50,7 @@ const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 /// canonical operation to the authoritative Station, and returns only
 /// after that server durably accepts the supplied Event and activates the
 /// Agent. Runtime replacement re-pairing is expressed atomically by the
-/// controller-signed `authorize_event.event.payload.supersedes[]`; Coauth never
+/// controller-signed `authorize_event.payload.supersedes[]`; Coauth never
 /// fabricates controller-authored revoke Events. Returns the SDK
 /// [`AgentKeyPairOutcome`] carrying the accepted authorization Event ref.
 #[handler]
@@ -73,16 +74,16 @@ pub async fn post_agent_key_pair(
     // The carried Event id is untrusted input. Verify its complete
     // suite-tagged digest binding before it is used for idempotency or any
     // repository lookup.
-    verify_authorize_event_identity(&body.authorize_event.event)?;
+    verify_authorize_event_identity(&body.authorize_event)?;
     let idempotency_key = req
         .headers()
         .get("idempotency-key")
         .and_then(|value| value.to_str().ok())
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("Idempotency-Key is required"))?;
-    if idempotency_key != body.authorize_event.event.event_id.as_str() {
+    if idempotency_key != body.authorize_event.event_id.as_str() {
         return Err(AppError::bad_request(
-            "Idempotency-Key must equal authorize_event.event.event_id",
+            "Idempotency-Key must equal authorize_event.event_id",
         )
         .into());
     }
@@ -90,7 +91,7 @@ pub async fn post_agent_key_pair(
     // `agent_id` is already a closed `DidCoreId` on the wire model. Do not
     // feed it through the full-DID normalizer: that parser deliberately
     // rejects `ak:did_core:*` identifiers.
-    let submitted_payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event.event)
+    let submitted_payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event)
         .map_err(|error| AppError::bad_request(error.to_string()))?;
     let agent_id = submitted_payload.agent_id.to_string();
     ensure_body_pairing_request_id_present(&body.pairing_request_id)?;
@@ -109,9 +110,9 @@ pub async fn post_agent_key_pair(
     // Final pairing idempotency is the controller-minted authorize Event id,
     // not the one-time pairing handle. Resolve an exact persisted retry before
     // current-handle/recovery gates: a successful first commit consumes the
-    // handle and advances the Agent PCR frontier to stale, but the identical
+    // handle and advances the Agent PCR Realm stream head, but the identical
     // request must still return the original outcome after a lost response.
-    let authorized_event_id = body.authorize_event.event.event_id.to_string();
+    let authorized_event_id = body.authorize_event.event_id.to_string();
     let request_digest = canonical_digest(&body)?;
     let mut idempotency_repo = depot.repo().await?;
     let existing_authorization = idempotency_repo
@@ -130,24 +131,24 @@ pub async fn post_agent_key_pair(
                     format!("stored Agent key-pair request is invalid: {error}"),
                 )
             })?;
-        verify_authorize_event_identity(&stored_body.authorize_event.event).map_err(|_| {
+        verify_authorize_event_identity(&stored_body.authorize_event).map_err(|_| {
             AppError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "stored Agent authorization has an invalid Event identity",
             )
         })?;
-        let stored_preimage = authorize_event_preimage_bytes(&stored_body.authorize_event.event)?;
-        let incoming_preimage = authorize_event_preimage_bytes(&body.authorize_event.event)?;
+        let stored_preimage = authorize_event_preimage_bytes(&stored_body.authorize_event)?;
+        let incoming_preimage = authorize_event_preimage_bytes(&body.authorize_event)?;
         if stored_preimage != incoming_preimage {
             let variants = [
                 coauth_data::agent_key::AgentEventCollisionVariant {
                     canonical_preimage: stored_preimage,
-                    envelope: serde_json::to_value(&stored_body.authorize_event.event)
+                    envelope: serde_json::to_value(&stored_body.authorize_event)
                         .map_err(|error| AppError::internal_box(Box::new(error)))?,
                 },
                 coauth_data::agent_key::AgentEventCollisionVariant {
                     canonical_preimage: incoming_preimage,
-                    envelope: serde_json::to_value(&body.authorize_event.event)
+                    envelope: serde_json::to_value(&body.authorize_event)
                         .map_err(|error| AppError::internal_box(Box::new(error)))?,
                 },
             ];
@@ -271,7 +272,7 @@ pub async fn post_agent_key_pair(
         })?;
 
     let authorize_event = validate_controller_authorize_event(
-        &body.authorize_event.event,
+        &body.authorize_event,
         agent_id.as_str(),
         &submitted_payload.verification_method,
         &submitted_payload.public_key,
@@ -343,7 +344,7 @@ pub async fn post_agent_key_pair(
         now,
     )
     .await?;
-    verify_controller_authorize_event_proofs(&body.authorize_event.event, &controller_keys)?;
+    verify_controller_authorize_event_proofs(&body.authorize_event, &controller_keys)?;
     for proof in &disclosure.proofs {
         if proof.created_at < disclosure.issued_at || proof.created_at > disclosure.expires_at {
             return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
@@ -566,7 +567,7 @@ fn validate_controller_authorize_event(
     // Closes the payload once, here. Every business check below reads a typed
     // field; unknown payload fields are already rejected by the SDK type.
     let payload = AgentKeyAuthorizePayload::try_from(event)
-        .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
+        .map_err(|error| AppError::bad_request(format!("authorize_event {error}")))?;
 
     let expected_agent_id = parse_principal_id(agent_id, "agent_id")?;
     let expected_actor_id = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
@@ -578,7 +579,7 @@ fn validate_controller_authorize_event(
     ));
     if event.actor_id != expected_actor_id {
         return Err(AppError::forbidden(
-            "authorize_event.event.actor_id must equal the Agent account at the authoritative Station",
+            "authorize_event.actor_id must equal the Agent account at the authoritative Station",
         ));
     }
     let controller_account_id = event
@@ -587,7 +588,7 @@ fn validate_controller_authorize_event(
         .and_then(arkret_wire::ActorId::as_account_id)
         .ok_or_else(|| {
             AppError::bad_request(
-                "authorize_event.event.executed_by must be the controller account actor",
+                "authorize_event.executed_by must be the controller account actor",
             )
         })?;
     let controller_principal_id = controller_account_id.principal_id.as_str();
@@ -600,7 +601,7 @@ fn validate_controller_authorize_event(
     }
     if event.realm_id.as_str() != authoritative_key_state.principal_control_realm_id.as_str() {
         return Err(AppError::forbidden(
-            "authorize_event.event.realm_id must equal the authoritative Agent PCR",
+            "authorize_event.realm_id must equal the authoritative Agent PCR",
         ));
     }
     if event.authorization_ref.as_deref()
@@ -611,7 +612,7 @@ fn validate_controller_authorize_event(
         )
     {
         return Err(AppError::forbidden(
-            "authorize_event.event.authorization_ref must match the authoritative controller delegation",
+            "authorize_event.authorization_ref must match the authoritative controller delegation",
         ));
     }
     ensure_authorize_event_has_controller_signature(event, controller_principal_id)?;
@@ -619,23 +620,23 @@ fn validate_controller_authorize_event(
 
     if payload.agent_id.as_str() != agent_id {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.agent_id must match the request",
+            "authorize_event.payload.agent_id must match the request",
         ));
     }
     if payload.verification_method.as_str() != verification_method {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.verification_method must match the request",
+            "authorize_event.payload.verification_method must match the request",
         ));
     }
     if parse_principal_id(
         payload.accountable_principal_id.as_str(),
-        "authorize_event.event.payload.accountable_principal_id",
+        "authorize_event.payload.accountable_principal_id",
     )?
     .as_str()
         != controller_principal_id
     {
         return Err(AppError::forbidden(
-            "authorize_event.event.payload.accountable_principal_id must match executed_by",
+            "authorize_event.payload.accountable_principal_id must match executed_by",
         ));
     }
     let verification_method =
@@ -656,7 +657,7 @@ fn validate_controller_authorize_event(
         .any(|candidate| candidate == audience)
     {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.audience must include requested_scope_disclosure.verifier_id",
+            "authorize_event.payload.audience must include requested_scope_disclosure.verifier_id",
         ));
     }
     if payload.agent_key_scope.actions.is_empty()
@@ -667,7 +668,7 @@ fn validate_controller_authorize_event(
             .any(|action| action.trim().is_empty())
     {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.agent_key_scope.actions must be non-empty strings",
+            "authorize_event.payload.agent_key_scope.actions must be non-empty strings",
         ));
     }
     if let Some(expires_at) = payload.expires_at {
@@ -676,7 +677,7 @@ fn validate_controller_authorize_event(
         }
         if expires_at <= payload.issued_at {
             return Err(AppError::bad_request(
-                "authorize_event.event.payload.expires_at must be after issued_at",
+                "authorize_event.payload.expires_at must be after issued_at",
             ));
         }
     }
@@ -685,17 +686,17 @@ fn validate_controller_authorize_event(
         != arkret_models_collaboration::events_payloads::agent::AgentKeyApprovalEvidenceKind::PairingRequest
     {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.approval_evidence.kind must be pairing_request",
+            "authorize_event.payload.approval_evidence.kind must be pairing_request",
         ));
     }
     if approval.evidence_ref.is_some() {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.approval_evidence.evidence_ref must be absent for pairing_request evidence",
+            "authorize_event.payload.approval_evidence.evidence_ref must be absent for pairing_request evidence",
         ));
     }
     if approval.request_canonical_digest.is_none() {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.approval_evidence.request_canonical_digest is required",
+            "authorize_event.payload.approval_evidence.request_canonical_digest is required",
         ));
     }
     if approval
@@ -705,7 +706,7 @@ fn validate_controller_authorize_event(
         != Some(pairing_request_id)
     {
         return Err(AppError::bad_request(
-            "authorize_event.event.payload.approval_evidence.pairing_request_id must match the request",
+            "authorize_event.payload.approval_evidence.pairing_request_id must match the request",
         ));
     }
     let approved_by_matches_controller = approval
@@ -714,7 +715,7 @@ fn validate_controller_authorize_event(
         .is_some_and(|approved_by| approved_by.as_str() == controller_principal_id);
     if !approved_by_matches_controller {
         return Err(AppError::forbidden(
-            "authorize_event.event.payload.approval_evidence.approved_by must match executed_by",
+            "authorize_event.payload.approval_evidence.approved_by must match executed_by",
         ));
     }
 
@@ -774,7 +775,7 @@ fn validate_authorize_event_supersedes(
         .collect();
     if supplied.len() != payload.supersedes.len() || supplied != expected {
         return Err(AppError::conflict(
-            "authorize_event.event.payload.supersedes does not match the authoritative active key set",
+            "authorize_event.payload.supersedes does not match the authoritative active key set",
         ));
     }
     Ok(())
@@ -1142,8 +1143,8 @@ async fn commit_and_mark_agent_key_authorization(
 fn pairing_superseded_event_refs(
     body: &arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 ) -> Result<Vec<String>, AppError> {
-    let payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event.event)
-        .map_err(|error| AppError::bad_request(format!("authorize_event.event {error}")))?;
+    let payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event)
+        .map_err(|error| AppError::bad_request(format!("authorize_event {error}")))?;
     Ok(payload
         .supersedes
         .into_iter()

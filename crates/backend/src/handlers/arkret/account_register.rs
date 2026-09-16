@@ -586,7 +586,7 @@ pub async fn account_register_endpoint(
                             binding_receipt: receipt.clone(),
                             accepted_id: station.service_id.clone(),
                             binding_version: 1,
-                            binding_frontier_digest: arkret_identifiers::Hash::new(
+                            binding_receipt_digest: arkret_identifiers::Hash::new(
                                 arkret_canonical::canonical_sha256(&receipt)?,
                             )?,
                             account_id: account_id.clone(),

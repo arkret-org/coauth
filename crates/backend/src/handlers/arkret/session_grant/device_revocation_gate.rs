@@ -234,8 +234,6 @@ mod tests {
                 linearization_seq: 1,
                 linearized_at,
                 expires_at: linearized_at + chrono::Duration::seconds(30),
-                blocking_proposal_digest: None,
-                covering_seal_id: None,
             },
         }
     }

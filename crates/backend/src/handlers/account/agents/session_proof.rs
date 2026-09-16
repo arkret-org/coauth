@@ -623,12 +623,12 @@ fn validate_authoritative_agent_session_evidence(
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     let authorized_key =
         arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey::from_event(
-            &paired_request.authorize_event.event,
+            &paired_request.authorize_event,
         )
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if authorized_key.agent_id.as_str() != authorization.agent_id
         || authorized_key.verification_method.as_str() != authorization.verification_method
-        || paired_request.authorize_event.event.event_id.as_str()
+        || paired_request.authorize_event.event_id.as_str()
             != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
         || disclosure.controller_principal_id.as_str()
@@ -1571,16 +1571,12 @@ mod tests {
             "ak.self.device_messages.command.ack.v1",
             "ak.self.device_messages.read.list.v1",
             "ak.self.events.command.submit.v1",
-            "ak.self.events.read.describe.v1",
-            "ak.self.events.read.frontier.v1",
-            "ak.self.events.read.resolve.v1",
             "ak.self.events.read.scan.v1",
             "ak.self.events.resource.get.v1",
             "ak.self.events.stream.subscribe.v1",
             "ak.self.keys.keypackages.command.consume.v1",
             "ak.self.keys.keypackages.command.revoke.v1",
             "ak.self.keys.keypackages.upload.create.v1",
-            "ak.self.seals.read.frontier.v1",
             "ak.self.signal.command.send.v1",
         ]
         .into_iter()
@@ -1813,7 +1809,6 @@ mod tests {
                 " ak.self.events.command.submit.v1 ".to_owned(),
                 "ak.message.create".to_owned(),
                 "ak.self.events.command.submit.v1".to_owned(),
-                "ak.self.events.read.frontier.v1".to_owned(),
                 "ak.self.authorization_leases.command.issue.v1".to_owned(),
                 "ak.self.signal.command.send.v1".to_owned(),
                 "ak.reaction.add".to_owned(),
@@ -1834,7 +1829,6 @@ mod tests {
                 "ak.self.device_messages.command.ack.v1".to_owned(),
                 "ak.self.device_messages.read.list.v1".to_owned(),
                 "ak.self.events.command.submit.v1".to_owned(),
-                "ak.self.events.read.frontier.v1".to_owned(),
                 "ak.self.keys.keypackages.command.consume.v1".to_owned(),
                 "ak.self.keys.keypackages.upload.create.v1".to_owned(),
                 "ak.self.signal.command.send.v1".to_owned(),
