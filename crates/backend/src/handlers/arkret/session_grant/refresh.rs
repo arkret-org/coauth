@@ -1,7 +1,7 @@
 use arkret_identifiers::DeviceId;
-use arkret_models_collaboration::session_grant_bodies::{
+use arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest;
+use arkret_models_collaboration::session_grants::{
     HumanSessionGrantRefreshRequest, SessionGrantOutcome, SessionGrantRefreshRequestBody,
-    session_grant_refresh_request_digest,
 };
 use arkret_models_identity::{SessionGrantCredentialClass, SessionGrantProofKind};
 use chrono::{DateTime, Utc};

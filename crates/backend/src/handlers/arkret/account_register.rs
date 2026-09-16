@@ -1,10 +1,10 @@
 //! Canonical account-first identity creation and binding.
-use arkret_models_collaboration::account_lifecycle::{
+use arkret_models_collaboration::account_operations::{
     AccountRegisterOutcome, AccountRegisterRequestBody,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody;
-use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantOutcome;
 use arkret_models_identity::{
     AccountBindingKind, AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
     DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationLeaseState,
@@ -200,7 +200,7 @@ pub async fn account_register_endpoint(
         .validate()
         .map_err(|error| proof_invalid(error.to_string()))?;
     validate_registration_transcript(&context, identity_creation)?;
-    let create_event = identity_creation.pcr_genesis_unit.create();
+    let create_event = &identity_creation.creation_events.realm_create;
     if arkret_identifiers::RealmId::from_event_id(&create_event.event_id)
         != identity_creation.control_proof.pcr_realm_id
         || create_event.realm_id != identity_creation.control_proof.pcr_realm_id
@@ -400,7 +400,14 @@ pub async fn account_register_endpoint(
         principal_registration_anchor: identity_creation.principal_registration_anchor.clone(),
         registration_did_evidence,
         identity_creation_control_proof: identity_creation.control_proof.clone(),
-        genesis_unit: identity_creation.pcr_genesis_unit.clone(),
+        genesis_unit: arkret_wire::PcrGenesisUnit::new(
+            identity_creation.creation_events.realm_create.clone(),
+            identity_creation
+                .creation_events
+                .founding_device_authorize
+                .clone(),
+        )
+        .map_err(|error| proof_invalid(error.to_string()))?,
     };
     pcr_request
         .validate()

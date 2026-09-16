@@ -233,20 +233,22 @@ CREATE TABLE public.recovery_completion_grant_issuances (
     canonical_outcome bytea NOT NULL,
     issued_at timestamp with time zone NOT NULL,
     CONSTRAINT recovery_completion_grant_issuances_principal_core_valid CHECK (principal_id ~ '^ak:did_core:[a-z0-9]+:[^[:space:]/?#]+$')
-    -- Recovery completes as one atomic unit: both Events are admitted by the
-    -- same authority-signed RealmCommit, on one PCR Realm stream, at strictly
-    -- consecutive positions. The ledger refuses to record any other shape.
+    -- Recovery completes as one atomic unit: both Events land on one PCR Realm
+    -- stream at strictly consecutive positions. One RealmCommit carries exactly
+    -- one Event, so the pair names two distinct commit ids and two distinct
+    -- Event ids. The ledger refuses to record any other shape.
     ,CONSTRAINT recovery_completion_grant_issuances_consecutive_pcr_commit CHECK (
         reanchor_ref->'stream_ref' = device_authorization_ref->'stream_ref'
         AND reanchor_ref->'stream_ref'->>'kind' = 'realm'
-        AND reanchor_ref->>'commit_id' = device_authorization_ref->>'commit_id'
+        AND reanchor_ref->>'commit_id' <> device_authorization_ref->>'commit_id'
+        AND reanchor_ref->>'event_id' <> device_authorization_ref->>'event_id'
         AND (device_authorization_ref->>'stream_position')::bigint
             = (reanchor_ref->>'stream_position')::bigint + 1
     )
 );
 
 COMMENT ON COLUMN public.recovery_completion_grant_issuances.reanchor_ref IS 'Closed CommittedEventRef of the accepted recovery re-anchor Event.';
-COMMENT ON COLUMN public.recovery_completion_grant_issuances.device_authorization_ref IS 'Closed CommittedEventRef of the replacement-device authorization Event committed immediately after the re-anchor on the same PCR Realm stream.';
+COMMENT ON COLUMN public.recovery_completion_grant_issuances.device_authorization_ref IS 'Closed CommittedEventRef of the replacement-device authorization Event committed immediately after the re-anchor on the same PCR Realm stream. One RealmCommit carries exactly one Event, so the pair always names two distinct commit ids.';
 
 CREATE TABLE public.admin_operation_logs (
     id uuid NOT NULL,

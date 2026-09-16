@@ -130,10 +130,9 @@ pub async fn issue_controller_gate_attestation(
     let expires_at = now + GATE_TTL;
     let basis = ControllerAccountGateBasis::AccountBindingDefault {
         binding_version: binding.binding_version,
-        // Local column renamed to its actual meaning: the digest of the stored
-        // AccountBindingReceipt. The gate basis member keeps the name the SDK
-        // exposes for this closed wire object.
-        binding_frontier_digest: binding.binding_receipt_digest,
+        // Local column and SDK wire member now agree: the value is the digest
+        // of the stored AccountBindingReceipt.
+        binding_receipt_digest: binding.binding_receipt_digest,
     };
     let basis_digest =
         arkret_identifiers::Hash::new(arkret_canonical::canonical_sha256(&serde_json::json!({
@@ -165,11 +164,16 @@ pub async fn issue_controller_gate_attestation(
         },
     };
     let sdk_signing_key = sdk_signing_key_from_seed_bytes(&signing_seed);
-    arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
-        &mut attestation,
-        &sdk_signing_key,
-    )
-    .map_err(|_| ArkretRouteError::Internal("controller gate signing failed".into()))?;
+    // The SDK owns both halves: the attestation canonicalizes its own
+    // domain-separated signing bytes with `proof.jws` excluded, and the
+    // signature primitive produces the canonical detached JWS wire form.
+    let signing_bytes = attestation
+        .signing_bytes()
+        .map_err(|_| ArkretRouteError::Internal("controller gate signing failed".into()))?;
+    let jws = arkret_signatures::sign_ed25519_detached_jws(&sdk_signing_key, &signing_bytes)
+        .map_err(|_| ArkretRouteError::Internal("controller gate signing failed".into()))?;
+    attestation.proof.jws = NonEmptyString::new(jws)
+        .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?;
     let outcome = ControllerAccountGateAttestationIssueOutcome {
         request_id: request.request_id.clone(),
         controller_account_gate_attestation: attestation,

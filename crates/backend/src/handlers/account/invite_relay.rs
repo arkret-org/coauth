@@ -4,19 +4,17 @@
 
 //! Per-recipient invite-relay handler (consent-gated forward).
 //!
-//! Per the Move/Anchor/Lattice spec (`arkret-spec` 2026-05-08,
-//! `consent-model.md` §3-§9), before an actor (coauth admin / inkson UI /
-//! sodmin operator) can deliver an invite to a target principal, coauth
-//! must consult the holder's consent-grant cell at the target Station
-//! (`soland`). The read+gate helper in
-//! `consent_cell_query`; this handler is the call-site that uses it.
+//! Before an actor (coauth admin / inkson UI / sodmin operator) can deliver an
+//! invite to a target principal, coauth must consult the holder's consent
+//! result at the target Station (`soland`). The read+gate helper lives in
+//! `consent_result_query`; this handler is the call-site that uses it.
 //!
 //! ## Flow
 //!
 //! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
 //!    /_coauth/self/account/invites/relay` along with `(target_principal_url,
 //!    target_holder_principal_id, consent_id, scope)`.
-//! 2. Coauth queries the target's consent cell via `consent_cell_query::query_consent_cell`.
+//! 2. Coauth queries the target's consent result via `consent_result_query::query_consent_result`.
 //! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `consent_required` policy
 //!    bit into an `Allow / ConsentRequired / Quarantine` decision.
 //! 4. On `Allow`, coauth forwards the typed invite-delivery request to the target principal's
@@ -24,12 +22,12 @@
 //!    with `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; callers
 //!    retain responsibility for deferred holder-side delivery.
 //!
-//! ## Why this is a "relay" and not a "Move-mint"
+//! ## Why this is a "relay" and not an issuance
 //!
-//! Consent grants/revokes on the holder's cell are constructed and signed
-//! by the **holder** when they accept an invite — they're separate Moves
-//! posted by inkson, not by coauth. coauth's only responsibility here is
-//! the gate-check + forward; it never signs Moves on the holder's behalf.
+//! Consent grants and revokes are constructed and signed by the **holder**
+//! when they accept an invite — they are separate holder-authored Events
+//! submitted by inkson, not by coauth. coauth's only responsibility here is
+//! the gate-check + forward; it never signs Events on the holder's behalf.
 
 use arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody;
 use arkret_models_collaboration::governance::membership_invite::{
@@ -45,8 +43,8 @@ use tracing::{debug, warn};
 use url::Url;
 
 use super::{DepotExt, RouteError, make_clock};
-use crate::handlers::account::consent_cell_query::{
-    InviteGateDecision, evaluate_invite_gate, query_consent_cell,
+use crate::handlers::account::consent_result_query::{
+    InviteGateDecision, evaluate_invite_gate, query_consent_result,
 };
 use crate::handlers::arkret;
 use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
@@ -254,10 +252,10 @@ pub async fn relay_invite_with(
     };
 
     let lookup = if let Some(delivery) = invite_delivery {
-        let peer = arkret_models_collaboration::account_lifecycle::ConsentPeer::Actor {
+        let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
             actor_id: delivery.invite_event.actor_id.clone(),
         };
-        query_consent_cell(
+        query_consent_result(
             Some(principal_url),
             target_holder_principal_id,
             consent_id,
@@ -267,7 +265,7 @@ pub async fn relay_invite_with(
         )
         .await
     } else {
-        crate::handlers::account::consent_cell_query::ConsentLookup::Unknown {
+        crate::handlers::account::consent_result_query::ConsentLookup::Unknown {
             reason: "exact_peer_actor_required",
         }
     };
@@ -818,7 +816,7 @@ mod tests {
         let server = MockServer::start().await;
         let client = reqwest::Client::new();
 
-        // Cell-query mock: granted with matching peer/scope tag.
+        // Consent-result mock: active for the exact peer and scope.
         Mock::given(method("GET"))
             .and(path_regex(r"^/_arkret/self/consent/cell$"))
             .and(query_param(

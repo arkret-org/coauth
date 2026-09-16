@@ -1,10 +1,10 @@
-use arkret_models_collaboration::session_grant_bodies::{
+use arkret_models_collaboration::session_grants::{
     AuthSessionLogoutOutcome, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND,
-    SessionGrantIntrospectOutcome, SessionGrantIntrospectStatus,
-    SessionGrantIntrospectionProofClaims,
+    SessionGrantIntrospectOutcome, SessionGrantIntrospectionProofClaims,
 };
 use arkret_models_identity::{
-    SessionGrantCredentialClass, SessionGrantHolderBinding, SignedSessionGrantClaims,
+    SessionGrantAdminIntrospectionStatus, SessionGrantCredentialClass, SessionGrantHolderBinding,
+    SignedSessionGrantClaims,
 };
 use chrono::{Duration, Utc};
 use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig, StationConfig};
@@ -774,7 +774,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             now,
             Some("ak:did_core:web:soland.example.com")
         ),
-        SessionGrantIntrospectStatus::Active
+        SessionGrantAdminIntrospectionStatus::Active
     );
     assert_eq!(
         introspection_status(
@@ -783,27 +783,27 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             now,
             Some("ak:did_core:web:other.example.com")
         ),
-        SessionGrantIntrospectStatus::AudienceMismatch
+        SessionGrantAdminIntrospectionStatus::AudienceMismatch
     );
 
     user.locked_at = Some(now);
     assert_eq!(
         introspection_status(&grant, Some(&user), now, None),
-        SessionGrantIntrospectStatus::Locked
+        SessionGrantAdminIntrospectionStatus::Locked
     );
 
     user.locked_at = None;
     user.deactivated_at = Some(now);
     assert_eq!(
         introspection_status(&grant, Some(&user), now, None),
-        SessionGrantIntrospectStatus::Suspended
+        SessionGrantAdminIntrospectionStatus::Suspended
     );
 
     grant.revoked_at = Some(now);
     grant.lifecycle_state = coauth_data::SessionGrantLifecycleState::Revoked;
     assert_eq!(
         introspection_status(&grant, Some(&user), now, None),
-        SessionGrantIntrospectStatus::Revoked
+        SessionGrantAdminIntrospectionStatus::Revoked
     );
 }
 
@@ -2001,7 +2001,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     );
     assert!(
         !handle.canonical().starts_with("arkret://"),
-        "handle MUST NOT carry the retired arkret:// URI form"
+        "handle MUST NOT carry the forbidden arkret:// URI form"
     );
     assert!(
         !handle.canonical().starts_with("acct:"),

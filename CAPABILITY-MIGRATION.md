@@ -17,9 +17,9 @@ and which test covers it.
 
 | Capability / entry point (before) | Implementation now | Test |
 | --- | --- | --- |
-| `POST /_arkret/gate/account/recovery-session-grants/issue` accepted a Station attestation whose `first_generation_seal_id` and `terminal_commit_digest` bound recovery completion to a committed Seal. | `crates/backend/src/handlers/arkret/recovery_authority.rs` — `validate_completion_evidence` now joins the two halves of the atomic recovery unit: the replacement device's receipt carries `reanchor_event_id` / `authorization_event_id`, the Station's attestation carries `reanchor_ref` / `device_authorization_ref`, and the handler requires the ids to match the refs, the two refs to share one `commit_id`, and (via `commit_pair_realm`) the stream to be the account's own `principal_control_realm_id` Realm stream. `IssueRecoveryCompletionGrantRequest::validate_structural` in the SDK already rejects a cross-stream or non-consecutive pair. | `crates/backend/src/handlers/arkret/tests.rs` recovery-completion cases; blocked, see "External blockers". |
-| The recovery replay ledger recorded a single `device_authorization_event_id`. | `crates/data/src/recovery_authority.rs`, `crates/storage-postgres/src/recovery_authority.rs`, `crates/storage-postgres/src/schema.rs` and the initial migration now record closed `reanchor_ref` and `device_authorization_ref` JSON. The table carries `recovery_completion_grant_issuances_consecutive_pcr_commit`, which refuses to store any pair that is not one `RealmCommit` on one Realm stream at consecutive positions. | `crates/storage-postgres` recovery repository tests; blocked, see below. |
-| Session-grant device binding named the authorizing Event by id. | `SessionGrantDeviceBinding.authorization_ref: CommittedEventRef` (SDK-owned) is populated from `request.device_authorization_ref`. | as above |
+| `POST /_arkret/gate/account/recovery-session-grants/issue` accepted a Station attestation whose `first_generation_seal_id` and `terminal_commit_digest` bound recovery completion to a committed Seal. | `crates/backend/src/handlers/arkret/recovery_authority.rs` — `validate_completion_evidence` now joins the two halves of the atomic recovery unit: the replacement device's receipt carries `reanchor_event_id` / `authorization_event_id`, the Station's attestation carries `reanchor_ref` / `device_authorization_ref`, and the handler requires the ids to match the refs and (via `commit_pair_realm`) the stream to be the account's own `principal_control_realm_id` Realm stream. One `RealmCommit` covers exactly one Event, so the two refs always name two distinct commits; same-stream adjacency and the distinctness of both `commit_id` and `event_id` are enforced by the SDK's `validate_recovery_commit_pair`, reached through `IssueRecoveryCompletionGrantRequest::validate_structural`. The refs are read from `completion_attestation.reanchor_event_ref` / `.device_authorization_event_ref`, which is where the SDK carries them. | `crates/backend/src/handlers/arkret/tests.rs` recovery-completion cases; blocked, see "External blockers". |
+| The recovery replay ledger recorded a single `device_authorization_event_id`. | `crates/data/src/recovery_authority.rs`, `crates/storage-postgres/src/recovery_authority.rs`, `crates/storage-postgres/src/schema.rs` and the initial migration now record closed `reanchor_ref` and `device_authorization_ref` JSON. The table carries `recovery_completion_grant_issuances_consecutive_pcr_commit`, which refuses to store any pair that is not two distinct `RealmCommit`s over two distinct Events on one Realm stream at consecutive positions. | `crates/storage-postgres` recovery repository tests; blocked, see below. |
+| Session-grant device binding named the authorizing Event by id. | `SessionGrantDeviceBinding.authorization_ref: CommittedEventRef` (SDK-owned) is populated from `completion_attestation.device_authorization_event_ref`. The SDK member name and the spec's `authorization_event_id` disagree; see "SDK / spec conflicts". | blocked, see below |
 | Agent runtime scopes carried `ak.self.events.read.describe.v1`, `ak.self.events.read.frontier.v1`, `ak.self.events.read.resolve.v1` and `ak.self.seals.read.frontier.v1`. | Those four operations no longer exist in the service-operation registry. The canonical scope fixtures in `crates/backend/src/handlers/account/agents/session_proof.rs`, `crates/backend/src/handlers/account/agents/key_pair/tests.rs` and `crates/storage-postgres/src/agent_key.rs` now carry only registered operations, matching `agent-runtime-scope-registry.json` (`interactive_chat` = submit / read.scan / stream.subscribe, `e2ee` = keypackage upload / consume / revoke, plus `ak.self.signal.command.send.v1`). | `pairing_scope_precheck_returns_key_reason_before_queueing` in `key_pair/tests.rs`, rewritten so the key-layer deficiency is a missing E2EE mandatory operation instead of a missing Seal-frontier read. |
 | Agent key-pair commit job branched on `AgentKeyPairActivationState::AwaitingAcceptedFrontier`. | `crates/tasks/src/agent_key_pair_commit.rs` branches on `AgentKeyPairOutcome.status` (`AgentLifecycleState`). The outcome only exists once the Station has committed the authorize Event, so there is no "awaiting acceptance" retry state; active and paused Agents both complete re-pairing (`key-management.md` section 3.6.1), deactivated is terminal. | `crates/tasks` job tests; blocked, see below. |
 | `AgentKeyPairRequestBody.authorize_event` was an `EventCommitSubmission` wrapper. | The SDK's single submission DTO is `EventCommitSubmission { event }`; this body embeds the producer `Event` directly. All call sites in `crates/backend/src/handlers/account/agents/`, `crates/principal` and `crates/tasks` unwrapped accordingly. | as above |
@@ -45,36 +45,92 @@ the Rust sealed-trait pattern; `hyper_util::client::legacy` and the
 `#[allow(deprecated)]` shims around `generic-array` are third-party names. None
 of these are protocol residue and none were changed.
 
-## Known residue that is blocked upstream
+## Second pass — rulings landed
 
-| Residue | Why it is still here |
+| Ruling | What changed here |
 | --- | --- |
-| `crates/backend/src/handlers/account/consent_cell_query.rs` reads an `OrSet` consent Cell from `/_arkret/self/consent/cell` using `arkret_models_collaboration::account_lifecycle::{ConsentCellView, ConsentState}` and `CellFamilyId`. | Consent is a live product capability and the invite gate depends on it, so the module must be migrated, not deleted. The successor surface exists in the spec (`ak.self.consent.resource.get.v1`, `ak.self.consent.read.list.v1` at `GET /_arkret/self/consent/results`, schema `consent-operations.schema.json#/$defs/consent_list`) but the SDK exposes no Rust DTO for it yet. Migrating it now would mean hand-rolling protocol types in coauth, which the migration forbids. |
-| `crates/backend/src/handlers/arkret/controller_gate.rs` still writes the gate basis member as `binding_frontier_digest`. | `ControllerAccountGateBasis` is an SDK type that is currently absent; the final member name has to come from regenerated SDK code, not from a guess here. The value passed in is the renamed local `binding_receipt_digest`. |
-| `ak.self.authorization_leases.command.issue.v1` appears in the canonical Agent scope fixture in `session_proof.rs`. | The operation is absent from both the spec's HTTP binding and the SDK registry. It belongs to the authz/lease plane rather than this migration's subject, so it is recorded here instead of being removed in the same change. |
+| `session_grant_introspect` / `auth_session_logout` are in the spec after all, spelled `ak.gate.account.command.introspect_session_grant.v1` and `ak.gate.account.command.logout_auth_session.v1` (`zh/sync/service-http-binding.md` L202 / L208), with HTTP bindings and OpenAPI entries. | Both implementations are kept. The status vocabulary follows the SDK's decision to reuse `arkret_models_identity::SessionGrantAdminIntrospectionStatus`: 30 occurrences of the old local spelling in `crates/backend/src/handlers/arkret/session_grant/introspection.rs` and `crates/backend/src/handlers/arkret/tests.rs` were renamed, and the DTO import moved from `session_grant_bodies` to `session_grants`. |
+| `ak.self.authorization_leases.command.issue.v1` is deleted (zero hits across the 218-operation registry and `service-http-binding.md`), but the `AuthorizationLease` object itself stays in the spec and is now produced inside the security-transaction flow. | coauth never routed the operation; it appeared only in the canonical Agent scope fixture. All three occurrences in `crates/backend/src/handlers/account/agents/session_proof.rs` are gone. No type was deleted: coauth defines and consumes no lease type. |
 
-## External blockers at the time of this change
+## Second pass — migrations unblocked by the SDK
 
-`cargo +nightly fmt` succeeds. `cargo check --workspace --all-features` and
-therefore `cargo test --workspace --all-features --no-fail-fast` cannot run:
-the workspace stops at two crates, both on types that exist in `arkret-spec`
-but are missing from the SDK's generated Rust surface.
+| Module | What it is now | Test |
+| --- | --- | --- |
+| `crates/backend/src/handlers/account/consent_result_query.rs` (was `consent_cell_query.rs`) | Reads `ak.self.consent.resource.get.v1` at `GET /_arkret/self/consent/result` with the same `(peer, consent_scope)` resource key, parses `arkret_models_collaboration::consent_operations::ConsentView`, and calls the view's own `validate()` before trusting it. `ConsentPeer` now comes from `events_payloads::consent`. The local `ConsentState`/`tags` pair became `ConsentGrantState`/`granted_scopes: Vec<ConsentScope>`, so the invite gate compares typed scopes instead of `"scope=…"` strings. Every `cell` in the module name, URL path, function names, log fields and prose is gone. | the module's own 11 tests — 6 wiremock round-trips over the new path and DTO, 5 pure `evaluate_invite_gate` cases — plus the `invite_relay.rs` call-site tests; blocked, see below |
+| `crates/backend/src/handlers/arkret/controller_gate.rs` | The gate basis member is written under the SDK's real name, `ControllerAccountGateBasis::AccountBindingDefault { binding_version, binding_receipt_digest }`; SDK member and local column now agree that the value is the digest of the stored `AccountBindingReceipt`. Signing moved off the withdrawn `arkret_signatures::agent_evidence::sign_controller_account_gate_attestation` and onto the two SDK primitives it was built from: `ControllerAccountGateAttestation::signing_bytes()` plus `arkret_signatures::sign_ed25519_detached_jws`. | `crates/backend/src/handlers/arkret/tests.rs` controller-gate cases; blocked, see below |
 
-- `coauth-principal` — 5 errors, all `arkret_models_collaboration::account_lifecycle`:
-  `AccountStatusPublicationRequestBody`, `AccountStatusPublicationOutcome`.
-- `coauth-data` — 12 errors: the same `account_lifecycle` module plus
-  `principal_operations::{PcrGenesisSubmitRequestBody, PcrGenesisSubmitOutcome}`.
-- `soland-contracts` (a dependency of `coauth-backend`) — 1 error,
-  `arkret_models_collaboration::events_payloads::MediaServiceFocus`.
+## Second pass — SDK module and member realignment
 
-Further SDK gaps that the build has not yet reached, found by inspection:
-`ControllerAccountGateAttestation` and its basis / eligibility / status types,
-the whole `DeviceRevocationGate*` family, `SessionGrantIntrospect*`,
-`SessionRevokeRequestBody` / `SessionRevokeOutcome`,
-`AuthSessionLogoutRequestBody`, `DidBoundSignature`, and the consent types
-listed above. `session_grant_introspect` and `auth_session_logout` have no
-occurrence in `arkret-spec` at all, so those two need a spec ruling rather than
-only a codegen pass.
+Pure re-pointings at the SDK's current layout, applied across the workspace:
 
-None of these are caused by this change; the same two crates failed on the same
-symbols before it.
+| Was | Is |
+| --- | --- |
+| `account_lifecycle::{AccountRegisterRequestBody, AccountRegisterOutcome}` | `account_operations::…` |
+| `account_lifecycle::{AccountStatusRecord, UnsignedAccountStatusRecord}` | `account_status::…` |
+| `session_grant_bodies::{SessionGrant*, AgentSessionGrant*, AuthSessionLogout*, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND}` | `session_grants::…` — only `RecoverySessionGrantRequest` and the Agent refresh digest stayed in `session_grant_bodies` |
+| `agent_operations::agent_runtime_key_binding_digest` | `agent_scope::agent_runtime_key_binding_digest` |
+| `agent_operations::AgentKeyPairActivationState::Active` | `AgentKeyPairOutcome.status != agent_operations::AgentLifecycleState::Active` |
+| `AgentKeyPairOutcome.authorize_event_ref` | `.authorize_ref.event_id` |
+| `IdentityCreationRegistration.pcr_genesis_unit` | `.creation_events.{realm_create, founding_device_authorize}`, recomposed with the SDK's `PcrGenesisUnit::new` for the PCR genesis submit body |
+| `AgentKeyPairRequestBody.authorize_event.event` | `.authorize_event` — the body embeds the producer `Event` directly |
+| `AccountLifecycleProof.proof_kind` compared as `&str` | matched as the typed `AccountLifecycleProofKind` |
+| `IssueRecoveryCompletionGrantRequest.{reanchor_ref, device_authorization_ref}` | `.completion_attestation.{reanchor_event_ref, device_authorization_event_ref}` |
+| `CommitStreamRef` match without a wildcard | wildcard arm added; the enum is `#[non_exhaustive]` and non-Realm streams stay refused |
+
+## Verification
+
+| Command | Result |
+| --- | --- |
+| `just fmt`, then `cargo +nightly fmt -p <the 20 local packages>` | clean; verified the sibling `arkret-rust-sdk` checkout is byte-identical before and after |
+| `cargo check --workspace --all-features` | 19 of the 20 local packages compile. `coauth-backend` stops with 39 errors, every one an SDK surface that does not exist — see below. 2 pre-existing `unused import: Hash` warnings, left alone because the crate is red and the import analysis is incomplete. |
+| `cargo test --workspace --all-features --no-fail-fast` | cannot run: every test target links `coauth-backend` |
+| module reachability self-check | 20 crates; 631 `src/**/*.rs` on disk, 631 reachable by walking `mod` from `src/lib.rs`, `src/main.rs`, `src/bin/*`, `tests/*`, `examples/*` and `benches/*` (`#[path]` and nested inline `mod` handled, `build.rs` excluded); **0 orphans** |
+| residue scan | see below |
+
+### Residue scan
+
+`Seal`, `Cell`, `frontier`, `lattice`, `Retired`, `exporter` and `deprecated`
+are the only terms with hits, and every hit is a legitimate ordinary-English or
+third-party use:
+
+- `trait Sealed` in `crates/templates/src/context/ext.rs` — the Rust sealed-trait pattern.
+- `exporter` in `crates/backend/src/telemetry.rs`, `crates/cli/src/main.rs` and `crates/config/src/sections/telemetry.rs` — OpenTelemetry span / metric / Prometheus exporters.
+- `deprecated` — RFC 7636's wording about `plain`, the OpenTelemetry note about Jaeger-native propagation, and the `#[allow(deprecated)]` shims around `generic-array` re-exports.
+- `module-lattice` in `Cargo.lock` — the ML-KEM third-party crate.
+- `lattice-registry` in an archived `artifacts/cargo-adhoc/` build log.
+- This file and the history rows above, which have to name what was removed.
+
+`CBS`, `Bottom`, `ControlProposal`, `sequenced_state`, `or_set`,
+`causal_register`, `authority_revision`, `auth_context`, `RHRK`,
+`history_secret`, `policy_root`, `encryption_floor`, `encryption_profile`,
+`Legacy` and `Deprecated` have zero hits.
+
+## Blocked on missing SDK surface
+
+`coauth-backend` cannot compile. None of these can be worked around without
+hand-rolling a protocol type or a normative admission rule inside coauth, which
+this migration forbids. Grouped by the absent SDK symbol:
+
+| Missing SDK surface | coauth call sites | Errors |
+| --- | --- | --- |
+| `arkret_schema::agent_runtime_scope` — the whole module. `AgentRuntimeScopeLayer` survives as `arkret_schema::AgentRuntimeScopeLayer` (generated), but `AgentRuntimeScopeError`, `AgentRuntimeScopeDeficiency` and `assess_agent_runtime_{provision_scope,key_scopes,scopes}` are gone; `crates/schema/src/agent_runtime_scope.rs` was deleted in SDK `e309b047`. soland (`crates/http/src/routing/identity/agents/common.rs`) and inkson (`src/views/agents/model.rs`) call the same module, so this is a three-consumer regression. | `handlers/account/agents/session_proof.rs`, `handlers/account/agents/error_matrix.rs` | 10 |
+| `agent_operations::KeyState.{requested_scope, active_authorizations, controller_authorization_ref}` — the SDK's `KeyState` now carries only `current_authorization_ref`. The Agent session and key-pair paths need the requested-scope ceiling and the active authorization set to re-bind cached evidence to the authoritative projection. | `handlers/account/agents/key_pair.rs`, `handlers/account/agents/session_proof.rs` | 7 |
+| `SessionGrantRefreshRequestBody::Agent` and `SessionGrantRefreshRequestBody::validate()` — the SDK enum has only `Human`, while `key-management.md` section 6.5 states the refresh body has two branches, "human `device_binding`" and "Agent runtime lifecycle". | `handlers/arkret/session_grant/refresh.rs` | 5 |
+| `SessionGrantRequestBody::Recovery` — the SDK enum is `Human` / `Agent` / `PairwiseEndpoint`, yet `RecoverySessionGrantRequest` exists in `session_grant_bodies` and the SDK's own module doc says the operation admits a three-branch union including it. | `handlers/arkret/session_grant/issue.rs` | 3 |
+| `AgentLifecycleState::as_wire_str` and `AgentRuntimeState::as_wire_str` — needed to write the two enums into the audit payload under their exact wire spellings. | `handlers/account/agents/key_pair.rs` | 3 |
+| `AgentSessionGrantProof::{validate_at, canonical_signing_bytes}` and `AgentSessionGrantRequest::canonical_request_digest` — the SDK kept only `AgentSessionGrantProof::validate_structure`, leaving the proof time-window check and the canonical signature transcript without an owner. | `handlers/account/agents/session_proof.rs` | 3 |
+| `SessionGrantDeviceBinding::{as_expected_gate_binding, from_gate_outcome}` and the `authorization_event_id` member — see "SDK / spec conflicts" item 1. | `handlers/arkret/session_grant/device_revocation_gate.rs`, `handlers/arkret/mod.rs` | 3 |
+| `SessionGrantHolderBinding::AgentRuntime.agent_key_authorization_ref` is a `CommittedEventRef`, but the only input coauth receives is `AgentSessionGrantRequest.agent_key_authorization_ref`, a bare event-id `String`. The two SDK types cannot be joined. | `handlers/arkret/session_grant/issuance.rs` | 1 |
+| `arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey` and its `from_event` — removed with the rest of `agent_evidence` in `e309b047`. | `handlers/account/agents/session_proof.rs` | 1 |
+| `agent_operations::agent_key_pairing_request_binding_digest` — the controller-signed pairing approval digest. It existed at `e309b047^`. | `handlers/account/agents/key_pair.rs` | 1 |
+| `session_grant_bodies::session_grant_refresh_request_digest` — the human accepted-device refresh intent digest. The SDK has `human_session_grant_intent_digest` (issue) and `agent_session_refresh_request_digest` (Agent refresh); the human refresh transcript has no owner. | `handlers/arkret/session_grant/refresh.rs` | 1 |
+| `SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1` — `ControllerAccountGateAttestation.schema` is a required member and the SDK's own fixture pins it to `ak.schema.controller_account_gate_attestation.v1`, but that id is in neither the SDK's generated `SchemaId` nor the spec's schema registry. | `handlers/arkret/controller_gate.rs` | 1 |
+
+## SDK / spec conflicts to resolve upstream
+
+Reported rather than papered over; coauth changes neither side.
+
+1. **`SessionGrantDeviceBinding` shape.** `service-operation-dtos.schema.json#/$defs/SessionGrantDeviceBinding` requires `{device_id, authorization_event_id, model_generation_ref}` and states the Account Authority MUST populate it verbatim from the allow receipt of `ak.peer.device_revocations.command.check.v1`. `device-revocation-state.schema.json#/$defs/device_revocation_gate_decision_receipt` discloses only `target_device_authorize_event_id` (an `event_id`) and `target_device_generation_ref`, and says explicitly that the receipt "carries no Control Proposal or RealmCommit witness". The SDK's Rust struct instead declares `authorization_ref: CommittedEventRef`. A `CommittedEventRef` cannot be derived from the allow receipt, so the SDK shape makes the spec's own mandated data flow unimplementable. Either the SDK reverts to `authorization_event_id`, or the gate receipt must start carrying a full `CommittedEventRef`.
+2. **`ak.schema.controller_account_gate_attestation.v1` is unregistered.** The DTO requires the `schema` member, the SDK fixture pins that value, and it appears in no schema registry on either side.
+3. **`RealmOrganizationControlScope::NotaryControl`.** The spec's `control_scope` enum in `event-payload.schema.json` spells this scope `realm_authority`; the SDK enum still says `NotaryControl`. sodmin renders the SDK value verbatim and cannot fix it locally.
+4. **Narrowed session-grant unions.** The SDK's own `session_grant_bodies` module doc names a three-branch issue union and `key-management.md` section 6.5 names a two-branch refresh union; both Rust enums are narrower than the text beside them.

@@ -2,45 +2,44 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Cross-service helper that consults the holder's consent cell on the
+//! Cross-service helper that consults the holder's consent result on the
 //! `server_name` (`soland`) before coauth admits or relays an invite.
 //!
-//! Per the Move/Anchor/Lattice spec (`arkret-spec` 2026-05-08,
-//! `consent-model.md` §3–§9), consent is no longer reducer state on the
-//! `server_name`. It is an `OrSet` cell:
+//! Consent is holder-private state serialized by the holder's current
+//! governance Station. The reader-facing surface is the typed current result
+//! `consent-operations.schema.json#/$defs/consent_view`, addressed by the
+//! `(peer, consent_scope)` resource key:
 //!
 //! ```text
-//! ak:cell:ak.component.consent.grant.v1:<consent_id>
+//! GET /_arkret/self/consent/result?peer=<json>&consent_scope=<scope>
 //! ```
 //!
-//! `grant` adds a tag, `revoke` removes a tag. Whether an invite is allowed
-//! is decided by reading the cell's join value and inspecting the tags. This
-//! module performs that read; the per-cell tag-policy decision lives at the
-//! invite handler call-site.
+//! (`ak.self.consent.resource.get.v1`; the sibling
+//! `ak.self.consent.read.list.v1` at `GET /_arkret/self/consent/results`
+//! enumerates every result and is not what an invite gate needs.) Whether an
+//! invite is allowed is decided by reading that result's `state` and
+//! `consent_scope`. This module performs that read; the policy decision lives
+//! at the invite handler call-site.
 //!
-//! The helper calls soland's typed consent-cell endpoint. Transport failures,
-//! non-success responses, and response-key mismatches become
-//! [`ConsentLookup::Unknown`] so callers can degrade safely.
+//! Transport failures, non-success responses, and response-key mismatches
+//! become [`ConsentLookup::Unknown`] so callers can degrade safely.
 
-use arkret_models_collaboration::account_lifecycle::{
-    ConsentCellView, ConsentPeer, ConsentState as SdkConsentState,
+use arkret_models_collaboration::consent_operations::{
+    ConsentState as SdkConsentState, ConsentView,
 };
+use arkret_models_collaboration::events_payloads::consent::ConsentPeer;
 use arkret_wire::{ConsentScope, DidCoreId};
 use tracing::{debug, warn};
 use url::Url;
 
 use crate::outbound_http;
 
-/// Result of consulting a holder's consent cell.
-///
-/// `tags` are the `OrSet` tag identifiers currently joined into the cell.
-/// Each tag is opaque to this layer; the invite handler is responsible for
-/// matching `(peer, scope)` patterns against them.
+/// Result of consulting a holder's consent state.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConsentLookup {
-    /// The cell was read successfully. `tags` may be empty if all grants
-    /// have been revoked.
-    Known(ConsentState),
+    /// The holder's Station answered. `granted_scopes` may be empty if every
+    /// grant has been revoked or none was ever recorded.
+    Known(ConsentGrantState),
 
     /// soland is not configured, the endpoint is unreachable, or the
     /// response could not be parsed. Callers must apply their own fail-safe
@@ -49,26 +48,26 @@ pub enum ConsentLookup {
     Unknown { reason: &'static str },
 }
 
-/// Consent-cell read result when soland confirms the cell exists.
+/// Consent read result when soland answers for the requested resource key.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConsentState {
+pub struct ConsentGrantState {
     pub consent_id: String,
     pub granted: bool,
-    pub tags: Vec<String>,
+    pub granted_scopes: Vec<ConsentScope>,
 }
 
-/// Look up the holder's consent-grant cell on their `server_name`.
+/// Look up the holder's consent result on their `server_name`.
 ///
 /// * `station_url` — base URL of the holder's soland deployment. `None` means soland is not wired
 ///   into this coauth instance and the gate degrades to `ConsentLookup::Unknown`.
 /// * `holder_principal_id` — the target holder principal used only for local diagnostics. It is not
 ///   transmitted; the destination derives the wire holder from its authenticated session.
-/// * `consent_id` — the consent-cell identifier per spec §6.
+/// * `consent_id` — the consent identifier the caller is asking about, echoed back to it.
 /// * `peer` / `scope` — the standard self consent resource key. The helper also probes `scope=any`
 ///   when `scope` is more specific, preserving the invite-gate wildcard semantics.
 /// * `http_client` — caller-provided client so tests can inject a wiremock server and production
 ///   callers can share the global pool.
-pub async fn query_consent_cell(
+pub async fn query_consent_result(
     station_url: Option<&Url>,
     holder_principal_id: &DidCoreId,
     consent_id: &str,
@@ -92,7 +91,7 @@ pub async fn query_consent_cell(
     }
 
     for candidate_scope in scopes {
-        match query_consent_cell_scope(
+        match query_consent_result_scope(
             base,
             holder_principal_id,
             peer,
@@ -101,34 +100,36 @@ pub async fn query_consent_cell(
         )
         .await
         {
-            ConsentScopeLookup::Active { cell_id } => {
-                let tag = format!("scope={candidate_scope}");
+            ConsentScopeLookup::Active { result_consent_id } => {
                 debug!(
-                    %cell_id,
+                    %result_consent_id,
                     consent_id,
                     peer = ?peer,
                     scope = %candidate_scope,
-                    "consent cell query: active"
+                    "consent result query: active"
                 );
-                return ConsentLookup::Known(ConsentState {
+                return ConsentLookup::Known(ConsentGrantState {
                     consent_id: consent_id.to_owned(),
                     granted: true,
-                    tags: vec![tag],
+                    granted_scopes: vec![candidate_scope],
                 });
             }
-            ConsentScopeLookup::Inactive { cell_id, state } => {
+            ConsentScopeLookup::Inactive {
+                result_consent_id,
+                state,
+            } => {
                 debug!(
-                    %cell_id,
+                    %result_consent_id,
                     ?state,
                     consent_id,
                     peer = ?peer,
                     scope = %candidate_scope,
-                    "consent cell query: inactive"
+                    "consent result query: inactive"
                 );
-                return ConsentLookup::Known(ConsentState {
+                return ConsentLookup::Known(ConsentGrantState {
                     consent_id: consent_id.to_owned(),
                     granted: false,
-                    tags: Vec::new(),
+                    granted_scopes: Vec::new(),
                 });
             }
             ConsentScopeLookup::Missing => {}
@@ -138,20 +139,20 @@ pub async fn query_consent_cell(
         }
     }
 
-    ConsentLookup::Known(ConsentState {
+    ConsentLookup::Known(ConsentGrantState {
         consent_id: consent_id.to_owned(),
         granted: false,
-        tags: Vec::new(),
+        granted_scopes: Vec::new(),
     })
 }
 
 #[derive(Debug)]
 enum ConsentScopeLookup {
     Active {
-        cell_id: String,
+        result_consent_id: String,
     },
     Inactive {
-        cell_id: String,
+        result_consent_id: String,
         state: SdkConsentState,
     },
     Missing,
@@ -160,21 +161,21 @@ enum ConsentScopeLookup {
     },
 }
 
-async fn query_consent_cell_scope(
+async fn query_consent_result_scope(
     base: &Url,
     holder_principal_id: &DidCoreId,
     peer: &ConsentPeer,
     scope: ConsentScope,
     http_client: &reqwest::Client,
 ) -> ConsentScopeLookup {
-    let path = "_arkret/self/consent/cell";
+    let path = "_arkret/self/consent/result";
     let mut url = match base.join(path) {
         Ok(u) => u,
         Err(error) => {
             warn!(
                 ?error,
                 holder_principal_id = %holder_principal_id,
-                "failed to build consent-cell URL"
+                "failed to build consent-result URL"
             );
             return ConsentScopeLookup::Unknown {
                 reason: "invalid_station_url",
@@ -189,7 +190,7 @@ async fn query_consent_cell_scope(
         .append_pair("consent_scope", scope.as_str());
 
     let response = match outbound_http::send_with_policy(
-        outbound_http::soland_policy("consent_cell_read")
+        outbound_http::soland_policy("consent_result_read")
             .with_timeout(std::time::Duration::from_secs(5)),
         || {
             http_client.get(url.clone()).header(
@@ -202,7 +203,7 @@ async fn query_consent_cell_scope(
     {
         Ok(r) => r,
         Err(error) => {
-            warn!(?error, "consent cell query: HTTP error");
+            warn!(?error, "consent result query: HTTP error");
             return ConsentScopeLookup::Unknown {
                 reason: "station_unreachable",
             };
@@ -214,50 +215,60 @@ async fn query_consent_cell_scope(
         return ConsentScopeLookup::Missing;
     }
     if !status.is_success() {
-        warn!(?status, "consent cell query: non-success status");
+        warn!(?status, "consent result query: non-success status");
         return ConsentScopeLookup::Unknown {
             reason: "station_error",
         };
     }
 
-    let parsed: ConsentCellView = match response.json().await {
+    let parsed: ConsentView = match response.json().await {
         Ok(p) => p,
         Err(error) => {
-            warn!(?error, "consent cell query: failed to parse response");
+            warn!(?error, "consent result query: failed to parse response");
             return ConsentScopeLookup::Unknown {
                 reason: "station_response_invalid",
             };
         }
     };
 
-    if &parsed.peer != peer || parsed.consent_scope != scope {
+    if parsed.validate().is_err() {
         warn!(
-            cell_id = %parsed.cell_id,
-            response_peer = ?parsed.peer,
-            response_scope = parsed.consent_scope.as_str(),
+            consent_id = %parsed.consent_id,
             holder_principal_id = %holder_principal_id,
-            peer = ?peer,
-            scope = %scope,
-            "consent cell query: response key mismatch"
+            "consent result query: response fails its own structural invariants"
         );
         return ConsentScopeLookup::Unknown {
             reason: "station_response_invalid",
         };
     }
 
+    if &parsed.peer != peer || parsed.consent_scope != scope {
+        warn!(
+            consent_id = %parsed.consent_id,
+            response_peer = ?parsed.peer,
+            response_scope = parsed.consent_scope.as_str(),
+            holder_principal_id = %holder_principal_id,
+            peer = ?peer,
+            scope = %scope,
+            "consent result query: response key mismatch"
+        );
+        return ConsentScopeLookup::Unknown {
+            reason: "station_response_invalid",
+        };
+    }
+
+    let result_consent_id = parsed.consent_id.to_string();
     if parsed.state == SdkConsentState::Active {
-        ConsentScopeLookup::Active {
-            cell_id: parsed.cell_id,
-        }
+        ConsentScopeLookup::Active { result_consent_id }
     } else {
         ConsentScopeLookup::Inactive {
-            cell_id: parsed.cell_id,
+            result_consent_id,
             state: parsed.state,
         }
     }
 }
 
-/// Decide whether an invite should pass the consent gate, given a cell
+/// Decide whether an invite should pass the consent gate, given a consent
 /// lookup result and the requested `(peer_principal_id, scope)` pair.
 ///
 /// `consent_required` mirrors the principal control Realm's
@@ -280,10 +291,10 @@ pub enum InviteGateDecision {
 /// a gate decision. No I/O, easy to unit-test and reuse from other
 /// invite-style handlers.
 ///
-/// The peer half of the match is not re-checked here: `query_consent_cell`
+/// The peer half of the match is not re-checked here: `query_consent_result`
 /// asks the holder Station for one exact `peer`, so a lookup that comes back
-/// `Known` is already the cell for that peer and nothing else. Only the scope
-/// tag is left to decide.
+/// `Known` is already the result for that peer and nothing else. Only the
+/// scope is left to decide.
 #[must_use]
 pub fn evaluate_invite_gate(
     lookup: &ConsentLookup,
@@ -292,13 +303,10 @@ pub fn evaluate_invite_gate(
 ) -> InviteGateDecision {
     match lookup {
         ConsentLookup::Known(state) if state.granted => {
-            // Spec §6.1: `scope=invite|any` on the peer-scoped cell.
-            let want_scoped = format!("scope={scope}");
-            let want_any = "scope=any";
             if state
-                .tags
+                .granted_scopes
                 .iter()
-                .any(|t| t == &want_scoped || t == want_any)
+                .any(|granted| *granted == scope || *granted == ConsentScope::Any)
             {
                 InviteGateDecision::Allow
             } else if consent_required {
@@ -308,7 +316,7 @@ pub fn evaluate_invite_gate(
             }
         }
         ConsentLookup::Known(_) => {
-            // granted == false: explicit revocation / empty cell.
+            // granted == false: explicit revocation or no recorded consent.
             if consent_required {
                 InviteGateDecision::ConsentRequired
             } else {
@@ -346,43 +354,33 @@ mod tests {
         }
     }
 
-    fn active_cell(scope: &str) -> serde_json::Value {
+    fn consent_result(scope: &str, state: &str) -> serde_json::Value {
         serde_json::json!({
-            "cell_id": arkret_wire::subject_cell(
-                arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
-                &format!("c-{scope}"),
-            ),
+            "consent_id": "ak:consent:0198ff00-0000-7000-8000-000000000001",
             "peer": peer(),
             "consent_scope": scope,
-            "state": "active",
+            "state": state,
             "updated_at": "2026-05-01T00:00:00.000Z",
-            "active_grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-            "grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-            "revoked_dots": [],
+            "revision": {
+                "commit_id": arkret_wire::RealmCommitId::from_digest([2; 32]),
+                "stream_position": 7,
+            },
         })
     }
 
-    fn revoked_cell(scope: &str) -> serde_json::Value {
-        serde_json::json!({
-            "cell_id": arkret_wire::subject_cell(
-                arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
-                &format!("c-{scope}"),
-            ),
-            "peer": peer(),
-            "consent_scope": scope,
-            "state": "no_consent",
-            "updated_at": "2026-05-01T00:00:00.000Z",
-            "active_grant_dots": [],
-            "grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-            "revoked_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-        })
+    fn active_result(scope: &str) -> serde_json::Value {
+        consent_result(scope, "active")
+    }
+
+    fn revoked_result(scope: &str) -> serde_json::Value {
+        consent_result(scope, "no_consent")
     }
 
     #[tokio::test]
     async fn consent_unknown_when_station_url_is_none() {
         setup();
         let client = reqwest::Client::new();
-        let result = query_consent_cell(
+        let result = query_consent_result(
             None,
             &core_id("ak:did_core:web:holder"),
             "c-123",
@@ -400,26 +398,26 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_granted_when_soland_returns_tags() {
+    async fn consent_granted_when_soland_returns_an_active_result() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
             .and(header(
                 "Arkret-Operation",
                 arkret_wire::ServiceOperationId::SELF_CONSENT_RESOURCE_GET_V1,
             ))
             .and(query_param("peer", serde_json::to_string(&peer()).unwrap()))
             .and(query_param("consent_scope", "invite"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(active_result("invite")))
             .expect(1)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(
+        let result = query_consent_result(
             Some(&base),
             &core_id("ak:did_core:web:holder"),
             "c-123",
@@ -432,7 +430,7 @@ mod tests {
         match result {
             ConsentLookup::Known(state) => {
                 assert!(state.granted);
-                assert_eq!(state.tags, vec!["scope=invite"]);
+                assert_eq!(state.granted_scopes, vec![ConsentScope::Invite]);
                 assert_eq!(state.consent_id, "c-123");
             }
             other => panic!("expected Known(granted), got {other:?}"),
@@ -440,25 +438,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_unknown_when_cell_response_key_mismatches_request() {
+    async fn consent_unknown_when_result_key_mismatches_request() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();
-        let mut cell = active_cell("invite");
-        cell["peer"]["actor_id"]["account_id"]["station_id"] =
+        let mut view = active_result("invite");
+        view["peer"]["actor_id"]["account_id"]["station_id"] =
             serde_json::Value::String("ak:did_core:web:other-station".to_owned());
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
             .and(query_param("peer", serde_json::to_string(&peer()).unwrap()))
             .and(query_param("consent_scope", "invite"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(cell))
+            .respond_with(ResponseTemplate::new(200).set_body_json(view))
             .expect(1)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(
+        let result = query_consent_result(
             Some(&base),
             &core_id("ak:did_core:web:holder"),
             "c-123",
@@ -477,19 +475,19 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_revoked_when_response_has_empty_tags() {
+    async fn consent_revoked_when_result_state_is_no_consent() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(revoked_cell("invite")))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(revoked_result("invite")))
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(
+        let result = query_consent_result(
             Some(&base),
             &core_id("ak:did_core:web:holder"),
             "c-123",
@@ -502,7 +500,7 @@ mod tests {
         match result {
             ConsentLookup::Known(state) => {
                 assert!(!state.granted);
-                assert!(state.tags.is_empty());
+                assert!(state.granted_scopes.is_empty());
             }
             other => panic!("expected Known(empty), got {other:?}"),
         }
@@ -515,13 +513,13 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
             .respond_with(ResponseTemplate::new(500))
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(
+        let result = query_consent_result(
             Some(&base),
             &core_id("ak:did_core:web:holder"),
             "c-123",
@@ -540,20 +538,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_missing_cell_returns_known_empty() {
+    async fn consent_missing_result_returns_known_empty() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
             .respond_with(ResponseTemplate::new(404))
             .expect(2)
             .mount(&server)
             .await;
 
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let result = query_consent_cell(
+        let result = query_consent_result(
             Some(&base),
             &core_id("ak:did_core:web:holder"),
             "c-404",
@@ -566,7 +564,7 @@ mod tests {
         match result {
             ConsentLookup::Known(state) => {
                 assert!(!state.granted);
-                assert!(state.tags.is_empty());
+                assert!(state.granted_scopes.is_empty());
                 assert_eq!(state.consent_id, "c-404");
             }
             other => panic!("expected Known(empty), got {other:?}"),
@@ -574,11 +572,11 @@ mod tests {
     }
 
     #[test]
-    fn invite_gate_allows_when_tag_matches_peer_and_scope() {
-        let lookup = ConsentLookup::Known(ConsentState {
+    fn invite_gate_allows_when_result_matches_peer_and_scope() {
+        let lookup = ConsentLookup::Known(ConsentGrantState {
             consent_id: "c-1".into(),
             granted: true,
-            tags: vec!["scope=invite".into()],
+            granted_scopes: vec![ConsentScope::Invite],
         });
         assert_eq!(
             evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
@@ -587,11 +585,11 @@ mod tests {
     }
 
     #[test]
-    fn invite_gate_allows_when_tag_grants_any_scope() {
-        let lookup = ConsentLookup::Known(ConsentState {
+    fn invite_gate_allows_when_result_grants_any_scope() {
+        let lookup = ConsentLookup::Known(ConsentGrantState {
             consent_id: "c-1".into(),
             granted: true,
-            tags: vec!["scope=any".into()],
+            granted_scopes: vec![ConsentScope::Any],
         });
         assert_eq!(
             evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
@@ -623,10 +621,10 @@ mod tests {
 
     #[test]
     fn invite_gate_rejects_when_revoked_and_required() {
-        let lookup = ConsentLookup::Known(ConsentState {
+        let lookup = ConsentLookup::Known(ConsentGrantState {
             consent_id: "c-1".into(),
             granted: false,
-            tags: vec![],
+            granted_scopes: vec![],
         });
         assert_eq!(
             evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),
@@ -635,11 +633,11 @@ mod tests {
     }
 
     #[test]
-    fn invite_gate_rejects_when_scope_tag_is_malformed() {
-        let lookup = ConsentLookup::Known(ConsentState {
+    fn invite_gate_rejects_when_granted_scope_does_not_cover_the_request() {
+        let lookup = ConsentLookup::Known(ConsentGrantState {
             consent_id: "c-1".into(),
             granted: true,
-            tags: vec!["invite".into()],
+            granted_scopes: vec![ConsentScope::VoiceCall],
         });
         assert_eq!(
             evaluate_invite_gate(&lookup, ConsentScope::Invite, true,),

@@ -1,6 +1,6 @@
 //! PostgreSQL Account Authority issuer ledger.
 
-use arkret_models_collaboration::account_lifecycle::AccountStatusRecord;
+use arkret_models_collaboration::account_status::AccountStatusRecord;
 use async_trait::async_trait;
 use coauth_data::{AccountStatusAppendOutcome, AccountStatusLedgerRepository, LocalAccountId};
 use diesel::prelude::*;

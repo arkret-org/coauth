@@ -26,7 +26,7 @@ pub mod approval;
 pub mod auth;
 pub mod avatar;
 pub mod bootstrap_admin_status;
-pub mod consent_cell_query;
+pub mod consent_result_query;
 pub mod emails;
 pub mod invite_relay;
 pub mod journey;

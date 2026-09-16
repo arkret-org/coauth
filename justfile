@@ -113,13 +113,17 @@ check:
 lint:
     cargo clippy --workspace -- -D warnings
 
-# Format all Rust code
+# Scoped to this repository's own packages on purpose. The Arkret SDK is a
+# sibling path dependency in this workspace, and `cargo fmt --all` reaches into
+# that repository and rewrites its sources.
 fmt:
-    cargo fmt --all
+    cargo fmt -p coauth -p coauth-account-types -p coauth-admin-types -p coauth-backend -p coauth-config -p coauth-data -p coauth-data-model -p coauth-email-types -p coauth-frontend -p coauth-i18n -p coauth-iana -p coauth-jose -p coauth-keyring -p coauth-keystore-keygen -p coauth-messaging -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres -p coauth-tasks -p coauth-templates
 
-# Check formatting without modifying files
+# Scoped to this repository's own packages on purpose. The Arkret SDK is a
+# sibling path dependency in this workspace, and `cargo fmt --all` reaches into
+# that repository and rewrites its sources.
 fmt-check:
-    cargo fmt --all -- --check
+    cargo fmt -p coauth -p coauth-account-types -p coauth-admin-types -p coauth-backend -p coauth-config -p coauth-data -p coauth-data-model -p coauth-email-types -p coauth-frontend -p coauth-i18n -p coauth-iana -p coauth-jose -p coauth-keyring -p coauth-keystore-keygen -p coauth-messaging -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres -p coauth-tasks -p coauth-templates -- --check
 
 # ── Database ─────────────────────────────────────────────────
 

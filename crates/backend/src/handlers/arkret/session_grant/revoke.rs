@@ -1,6 +1,6 @@
 use arkret_identifiers::{DeviceId, DidCoreId, SessionGrantId};
 use arkret_models_collaboration::account_lifecycle::{
-    AccountLifecycleProof, SessionRevokeRequestBody,
+    AccountLifecycleProof, AccountLifecycleProofKind, SessionRevokeRequestBody,
 };
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{
@@ -194,11 +194,15 @@ fn grant_is_owned_by_current_principal(grant: &SessionGrant, principal_id: &str)
         || grant_is_agent_delegated_to_controller(grant, principal_id)
 }
 
-fn validate_lifecycle_proof_kind(proof_kind: &str) -> Result<(), ArkretRouteError> {
+fn validate_lifecycle_proof_kind(
+    proof_kind: AccountLifecycleProofKind,
+) -> Result<(), ArkretRouteError> {
     match proof_kind {
-        "did_bound_signature" | "paired_device_proof" | "agent_key_proof" => Ok(()),
+        AccountLifecycleProofKind::DidBoundSignature
+        | AccountLifecycleProofKind::PairedDeviceProof
+        | AccountLifecycleProofKind::AgentKeyProof => Ok(()),
         other => Err(lifecycle_proof_invalid(format!(
-            "unsupported lifecycle proof_kind {other}"
+            "unsupported lifecycle proof_kind {other:?}"
         ))),
     }
 }
@@ -243,7 +247,7 @@ async fn verify_cross_session_lifecycle_proof(
     service_id: &DidCoreId,
     now: DateTime<Utc>,
 ) -> Result<(), ArkretRouteError> {
-    validate_lifecycle_proof_kind(&proof.proof_kind)?;
+    validate_lifecycle_proof_kind(proof.proof_kind)?;
     validate_lifecycle_proof_window(proof.issued_at, proof.expires_at, now)?;
 
     if proof.audience_id != current_grant.audience_id {

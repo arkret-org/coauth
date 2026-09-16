@@ -1,7 +1,7 @@
 //! Standard SessionGrant issuance after trusted root-anchored recovery completion.
 
 use arkret_models_collaboration::objects::account_status::AccountStatus;
-use arkret_models_collaboration::session_grant_bodies::SessionGrantOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantOutcome;
 use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
 use arkret_models_identity::{
     AccountHandoffAllowedOperation, InitialSessionGrantIntent,
@@ -141,7 +141,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     // exact account binding was installed under. A structurally valid pair from
     // any other Realm stream is a different authority and must not mint a
     // Standard grant for this account.
-    if commit_pair_realm(&request.reanchor_ref)
+    if commit_pair_realm(&request.completion_attestation.reanchor_event_ref)
         != Some(&principal_binding.principal_control_realm_id)
     {
         prerequisite_repo.cancel().await.ok();
@@ -267,7 +267,10 @@ pub async fn issue_recovery_completion_grant_endpoint(
             .map_err(|error| signature_invalid(error.to_string()))?;
     let expected_device_binding = arkret_models_identity::SessionGrantDeviceBinding {
         device_id: initial.device_id.clone(),
-        authorization_ref: request.device_authorization_ref.clone(),
+        authorization_ref: request
+            .completion_attestation
+            .device_authorization_event_ref
+            .clone(),
         model_generation_ref: request.result_model_generation_ref,
     };
     let device_binding = acquire_human_device_binding(
@@ -402,8 +405,8 @@ pub async fn issue_recovery_completion_grant_endpoint(
         "account_handoff_id": handoff.id.to_string(),
         "transaction_id": request.transaction_id.to_string(),
         "terminal_receipt_id": receipt.receipt_id.to_string(),
-        "reanchor_ref": serde_json::to_value(&request.reanchor_ref)?,
-        "device_authorization_ref": serde_json::to_value(&request.device_authorization_ref)?,
+        "reanchor_ref": serde_json::to_value(&request.completion_attestation.reanchor_event_ref)?,
+        "device_authorization_ref": serde_json::to_value(&request.completion_attestation.device_authorization_event_ref)?,
         "result_model_generation_ref": serde_json::to_value(request.result_model_generation_ref)?,
     });
     let authorization_ref = format!("account-handoff:{}", handoff.id);
@@ -456,8 +459,12 @@ pub async fn issue_recovery_completion_grant_endpoint(
             local_account_id: handoff.local_account_id,
             principal_id: receipt.account_id.principal_id.clone(),
             device_id: initial.device_id.to_string(),
-            reanchor_ref: serde_json::to_value(&request.reanchor_ref)?,
-            device_authorization_ref: serde_json::to_value(&request.device_authorization_ref)?,
+            reanchor_ref: serde_json::to_value(&request.completion_attestation.reanchor_event_ref)?,
+            device_authorization_ref: serde_json::to_value(
+                &request
+                    .completion_attestation
+                    .device_authorization_event_ref,
+            )?,
             result_model_generation_ref: generation,
             canonical_request_digest: request.canonical_request_digest.to_string(),
             canonical_request: canonical_request.clone(),
@@ -499,16 +506,18 @@ pub async fn issue_recovery_completion_grant_endpoint(
 /// two producer Event ids; the governing Station signs the two
 /// `CommittedEventRef` quadruples. This boundary therefore joins the halves:
 /// `receipt.reanchor_event_id` and `receipt.authorization_event_id` must be the
-/// exact `event_id` members of `reanchor_ref` and `device_authorization_ref`,
-/// and the two refs must name the same Realm stream and the same authority
-/// `commit_id` at strictly consecutive positions. The client never signs,
-/// carries, or re-derives the `RealmCommit` itself.
+/// exact `event_id` members of `completion_attestation.reanchor_event_ref` and
+/// `completion_attestation.device_authorization_event_ref`,
+/// and the two refs must name the same Realm stream at strictly consecutive
+/// positions. The client never signs, carries, or re-derives the `RealmCommit`
+/// itself.
 ///
-/// `IssueRecoveryCompletionGrantRequest::validate_structural` already rejects a
-/// cross-stream or non-consecutive pair. The `commit_id` equality is checked
-/// here because one atomic recovery unit is admitted under exactly one
-/// authority-signed `RealmCommit`; two commit ids describe two admissions and
-/// must not mint a Standard grant.
+/// One `RealmCommit` carries exactly one `event_ref` at exactly one
+/// `stream_position`, so the pair always names two distinct commits. Same-stream
+/// adjacency, the Realm stream kind, and the distinctness of both `commit_id`
+/// and `event_id` are all enforced by
+/// `IssueRecoveryCompletionGrantRequest::validate_structural`, which delegates
+/// to the SDK `validate_recovery_commit_pair`.
 ///
 /// The coordinator is `account_id.station_id`; no separate coordinator member
 /// exists on wire or in the signed projection.
@@ -539,19 +548,18 @@ fn validate_completion_evidence(
         || receipt.prepared_plan_digest != attestation.prepared_plan_digest
         || receipt.new_device_id != attestation.replacement_device_id
         || receipt.new_device_id != initial.device_id
-        || receipt.reanchor_event_id != request.reanchor_ref.event_id
-        || receipt.authorization_event_id != request.device_authorization_ref.event_id
+        || receipt.reanchor_event_id != request.completion_attestation.reanchor_event_ref.event_id
+        || receipt.authorization_event_id
+            != request
+                .completion_attestation
+                .device_authorization_event_ref
+                .event_id
         || receipt_generation != request_generation
         || receipt.completed_at > attestation.completed_at
         || attestation.account_id.station_id.as_str() != handoff.audience_id
     {
         return Err(failed_precondition(
             "recovery receipt, completion attestation, replacement device and current generation disagree",
-        ));
-    }
-    if request.reanchor_ref.commit_id != request.device_authorization_ref.commit_id {
-        return Err(failed_precondition(
-            "recovery re-anchor and device authorization must be committed under one RealmCommit",
         ));
     }
     if initial.audience_id.as_str() != handoff.audience_id {
@@ -756,6 +764,7 @@ fn commit_pair_realm(
         arkret_wire::CommitStreamRef::Realm { realm_id } => Some(realm_id),
         arkret_wire::CommitStreamRef::Circle { .. }
         | arkret_wire::CommitStreamRef::Sidecar { .. } => None,
+        _ => None,
     }
 }
 

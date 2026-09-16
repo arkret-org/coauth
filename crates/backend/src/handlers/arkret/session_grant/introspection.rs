@@ -1,9 +1,10 @@
 use arkret_identifiers::{DeviceId, DidCoreId};
-use arkret_models_collaboration::session_grant_bodies::{
+use arkret_models_collaboration::session_grants::{
     SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectGrant,
-    SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody, SessionGrantIntrospectStatus,
+    SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody,
     SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims,
 };
+use arkret_models_identity::SessionGrantAdminIntrospectionStatus;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{BrowserSession, SessionGrant, User};
@@ -101,36 +102,36 @@ pub(crate) fn introspection_status(
     user: Option<&User>,
     now: DateTime<Utc>,
     audience_id: Option<&str>,
-) -> SessionGrantIntrospectStatus {
+) -> SessionGrantAdminIntrospectionStatus {
     if audience_id.is_some_and(|audience_id| audience_id != grant.audience_id.as_str()) {
-        return SessionGrantIntrospectStatus::AudienceMismatch;
+        return SessionGrantAdminIntrospectionStatus::AudienceMismatch;
     }
 
     match grant.lifecycle_state {
         coauth_data::SessionGrantLifecycleState::Revoked => {
-            return SessionGrantIntrospectStatus::Revoked;
+            return SessionGrantAdminIntrospectionStatus::Revoked;
         }
         coauth_data::SessionGrantLifecycleState::Superseded => {
-            return SessionGrantIntrospectStatus::Superseded;
+            return SessionGrantAdminIntrospectionStatus::Superseded;
         }
         coauth_data::SessionGrantLifecycleState::Active => {}
     }
 
     if grant.expires_at <= now {
-        return SessionGrantIntrospectStatus::Expired;
+        return SessionGrantAdminIntrospectionStatus::Expired;
     }
 
     if let Some(user) = user {
         if user.locked_at.is_some() {
-            return SessionGrantIntrospectStatus::Locked;
+            return SessionGrantAdminIntrospectionStatus::Locked;
         }
 
         if user.deactivated_at.is_some() {
-            return SessionGrantIntrospectStatus::Suspended;
+            return SessionGrantAdminIntrospectionStatus::Suspended;
         }
     }
 
-    SessionGrantIntrospectStatus::Active
+    SessionGrantAdminIntrospectionStatus::Active
 }
 
 pub(crate) fn session_grant_jwt_digest(grant_jwt: &str) -> String {
@@ -141,21 +142,21 @@ fn verify_session_grant_introspection_proof(
     grant: &SessionGrant,
     proof: &SessionGrantIntrospectionProof,
     now: DateTime<Utc>,
-) -> SessionGrantIntrospectStatus {
+) -> SessionGrantAdminIntrospectionStatus {
     if proof.challenge.trim().is_empty() || proof.proof_jwt.trim().is_empty() {
-        return SessionGrantIntrospectStatus::InvalidProof;
+        return SessionGrantAdminIntrospectionStatus::InvalidProof;
     }
 
     let Ok(jwt) = Jwt::<SessionGrantIntrospectionProofClaims>::try_from(proof.proof_jwt.as_str())
     else {
-        return SessionGrantIntrospectStatus::InvalidProof;
+        return SessionGrantAdminIntrospectionStatus::InvalidProof;
     };
     let Ok(public_key) = serde_json::from_str::<PublicJsonWebKey>(&grant.session_public_key) else {
-        return SessionGrantIntrospectStatus::InvalidProof;
+        return SessionGrantAdminIntrospectionStatus::InvalidProof;
     };
     let jwks = PublicJsonWebKeySet::new(vec![public_key]);
     if jwt.verify_with_jwks(&jwks).is_err() {
-        return SessionGrantIntrospectStatus::InvalidProof;
+        return SessionGrantAdminIntrospectionStatus::InvalidProof;
     }
 
     let claims = jwt.payload();
@@ -168,10 +169,10 @@ fn verify_session_grant_introspection_proof(
         || claims.expires_at <= now
         || claims.issued_at > now + max_future_skew
     {
-        return SessionGrantIntrospectStatus::InvalidProof;
+        return SessionGrantAdminIntrospectionStatus::InvalidProof;
     }
 
-    SessionGrantIntrospectStatus::Active
+    SessionGrantAdminIntrospectionStatus::Active
 }
 
 #[handler]
@@ -229,7 +230,7 @@ pub async fn introspect_session_grant(
         repo.cancel().await?;
         return Ok(Json(SessionGrantIntrospectOutcome {
             active: false,
-            status: SessionGrantIntrospectStatus::NotFound,
+            status: SessionGrantAdminIntrospectionStatus::NotFound,
             proof_required: false,
             one_time_use_consumed: false,
             grant: None,
@@ -248,7 +249,7 @@ pub async fn introspect_session_grant(
         repo.cancel().await?;
         return Ok(Json(SessionGrantIntrospectOutcome {
             active: false,
-            status: SessionGrantIntrospectStatus::AudienceMismatch,
+            status: SessionGrantAdminIntrospectionStatus::AudienceMismatch,
             proof_required: false,
             one_time_use_consumed: false,
             grant: None,
@@ -285,7 +286,7 @@ pub async fn introspect_session_grant(
         requested_audience.as_ref().map(DidCoreId::as_str),
     );
     let mut proof_required = false;
-    if status == SessionGrantIntrospectStatus::Active {
+    if status == SessionGrantAdminIntrospectionStatus::Active {
         match presented_proof.as_ref() {
             Some(proof) => {
                 status = verify_session_grant_introspection_proof(&grant, proof, clock.now());
@@ -305,7 +306,7 @@ pub async fn introspect_session_grant(
             }
         }
     }
-    let mut active = status == SessionGrantIntrospectStatus::Active;
+    let mut active = status == SessionGrantAdminIntrospectionStatus::Active;
 
     // The grant's authentication context (browser session) being logged out
     // MUST make the grant read inactive here, even if this grant row was not
@@ -317,7 +318,7 @@ pub async fn introspect_session_grant(
             .as_ref()
             .is_none_or(|session| session.finished_at.is_some());
         if logged_out {
-            status = SessionGrantIntrospectStatus::Revoked;
+            status = SessionGrantAdminIntrospectionStatus::Revoked;
             active = false;
         }
     }
@@ -371,7 +372,7 @@ pub async fn introspect_session_grant(
                             .is_none_or(|expires_at| expires_at > clock.now())
                 });
             if !key_alive {
-                status = SessionGrantIntrospectStatus::Revoked;
+                status = SessionGrantAdminIntrospectionStatus::Revoked;
                 active = false;
             }
         }
@@ -383,8 +384,8 @@ pub async fn introspect_session_grant(
     // Only NotFound / AudienceMismatch withhold it — a `proof_required` advisory
     // does NOT, or the default grant+DPoP path could never obtain the cnf_jkt it
     // must verify against.
-    let grant_record = (status != SessionGrantIntrospectStatus::NotFound
-        && status != SessionGrantIntrospectStatus::AudienceMismatch)
+    let grant_record = (status != SessionGrantAdminIntrospectionStatus::NotFound
+        && status != SessionGrantAdminIntrospectionStatus::AudienceMismatch)
         .then(|| introspection_grant_record(&grant, browser_session.as_ref()))
         .transpose()?;
 

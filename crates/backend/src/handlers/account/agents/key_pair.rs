@@ -82,10 +82,9 @@ pub async fn post_agent_key_pair(
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("Idempotency-Key is required"))?;
     if idempotency_key != body.authorize_event.event_id.as_str() {
-        return Err(AppError::bad_request(
-            "Idempotency-Key must equal authorize_event.event_id",
-        )
-        .into());
+        return Err(
+            AppError::bad_request("Idempotency-Key must equal authorize_event.event_id").into(),
+        );
     }
 
     // `agent_id` is already a closed `DidCoreId` on the wire model. Do not
@@ -260,7 +259,7 @@ pub async fn post_agent_key_pair(
     // recomputation over an authenticated object, not a second verification of
     // the runtime's possession proof.
     let expected_binding =
-        arkret_models_collaboration::agent_operations::agent_runtime_key_binding_digest(
+        arkret_models_collaboration::agent_scope::agent_runtime_key_binding_digest(
             &agent_id,
             &body.pairing_request_id,
             &submitted_payload.verification_method,
@@ -326,7 +325,6 @@ pub async fn post_agent_key_pair(
     // verify against key material this service resolved for itself.
     let controller_verification_methods = body
         .authorize_event
-        .event
         .proofs
         .iter()
         .map(|proof| proof.verification_method.as_str())
@@ -1114,8 +1112,7 @@ async fn commit_and_mark_agent_key_authorization(
         )
     })?;
 
-    if outcome.activation_state
-        != arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
+    if outcome.status != arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
     {
         return Ok(outcome);
     }

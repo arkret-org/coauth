@@ -145,7 +145,7 @@ repository_impl! {
             grant: &AccountHandoffGrant,
             challenge_id: &str,
             request_digest: &arkret_identifiers::Hash,
-            outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+            outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
             now: DateTime<Utc>,
         ) -> Result<PublishedDidRegisterCommit, Self::Error>;
 
@@ -227,7 +227,7 @@ repository_impl! {
             &mut self,
             context: &IdentityCreationRegistrationContext,
             request_digest: &arkret_identifiers::Hash,
-            outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+            outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
             now: DateTime<Utc>,
         ) -> Result<IdentityCreationBindingCommit, Self::Error>;
 

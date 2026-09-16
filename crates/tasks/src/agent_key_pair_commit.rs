@@ -80,8 +80,7 @@ impl RunnableJob for AgentKeyPairCommitJob {
             arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
             | arkret_models_collaboration::agent_operations::AgentLifecycleState::Paused => {}
         }
-        let superseded_event_ids = match self.body().authorize_event.payload.get("supersedes")
-        {
+        let superseded_event_ids = match self.body().authorize_event.payload.get("supersedes") {
             None => Vec::new(),
             Some(serde_json::Value::Array(values)) => values
                 .iter()

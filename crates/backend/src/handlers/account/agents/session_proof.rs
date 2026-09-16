@@ -235,7 +235,7 @@ pub async fn validate_agent_session_proof(
     url_builder: &coauth_data::UrlBuilder,
     arkret_config: &ArkretConfig,
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
-    body: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRequest,
+    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
     consume_challenge: bool,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
     let now = clock.now();
@@ -530,7 +530,7 @@ pub async fn validate_agent_session_proof(
 }
 
 fn canonical_session_grant_request_digest_without_signature(
-    body: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRequest,
+    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
 ) -> Result<String, AgentAuthRejection> {
     body.canonical_request_digest()
         .map(|digest| digest.to_string())
@@ -599,7 +599,6 @@ fn validate_authoritative_agent_session_evidence(
             .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     let controller_account_id = paired_request
         .authorize_event
-        .event
         .executed_by
         .as_ref()
         .and_then(arkret_wire::ActorId::as_account_id)
@@ -628,8 +627,7 @@ fn validate_authoritative_agent_session_evidence(
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if authorized_key.agent_id.as_str() != authorization.agent_id
         || authorized_key.verification_method.as_str() != authorization.verification_method
-        || paired_request.authorize_event.event_id.as_str()
-            != authorization.authorized_event_id
+        || paired_request.authorize_event.event_id.as_str() != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
         || disclosure.controller_principal_id.as_str()
             != authorization.accountable_principal_id.as_str()
@@ -1567,7 +1565,6 @@ mod tests {
             "ak.event.read",
             "ak.message.create",
             "ak.reaction.add",
-            "ak.self.authorization_leases.command.issue.v1",
             "ak.self.device_messages.command.ack.v1",
             "ak.self.device_messages.read.list.v1",
             "ak.self.events.command.submit.v1",
@@ -1809,7 +1806,6 @@ mod tests {
                 " ak.self.events.command.submit.v1 ".to_owned(),
                 "ak.message.create".to_owned(),
                 "ak.self.events.command.submit.v1".to_owned(),
-                "ak.self.authorization_leases.command.issue.v1".to_owned(),
                 "ak.self.signal.command.send.v1".to_owned(),
                 "ak.reaction.add".to_owned(),
                 "ak.self.keys.keypackages.upload.create.v1".to_owned(),
@@ -1825,7 +1821,6 @@ mod tests {
             vec![
                 "ak.message.create".to_owned(),
                 "ak.reaction.add".to_owned(),
-                "ak.self.authorization_leases.command.issue.v1".to_owned(),
                 "ak.self.device_messages.command.ack.v1".to_owned(),
                 "ak.self.device_messages.read.list.v1".to_owned(),
                 "ak.self.events.command.submit.v1".to_owned(),
@@ -2269,7 +2264,7 @@ mod tests {
 
     #[test]
     fn session_request_digest_ignores_signature_but_binds_scope() {
-        let mut body = arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRequest {
+        let mut body = arkret_models_collaboration::session_grants::AgentSessionGrantRequest {
             principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example")
                 .unwrap(),
             device_id: arkret_identifiers::DeviceId::new(
@@ -2281,7 +2276,7 @@ mod tests {
             agent_key_authorization_ref:
                 "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK".to_owned(),
             agent_scope_request:
-                arkret_models_collaboration::session_grant_bodies::SessionGrantAgentScopeRequest {
+                arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
                     realm_ids: vec![
                         arkret_identifiers::RealmId::new(
                             "ak:realm:AR5_BcY29XYrMbX0Y8Qiz4KDnt-NvwrXmij2C3-4UD2c",
@@ -2292,12 +2287,12 @@ mod tests {
                     track_names: Vec::new(),
                 },
             dpop_binding_proof:
-                arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof {
+                arkret_models_collaboration::session_grants::SessionGrantDpopBindingProof {
                     proof_jwt: "dpop.jwt".to_owned(),
                 },
             applet_authority: None,
-            proof: arkret_models_collaboration::session_grant_bodies::AgentSessionGrantProof {
-                proof_kind: arkret_models_collaboration::session_grant_bodies::AgentSessionGrantProofKind::AgentKeyProof,
+            proof: arkret_models_collaboration::session_grants::AgentSessionGrantProof {
+                proof_kind: arkret_models_collaboration::session_grants::AgentSessionGrantProofKind::AgentKeyProof,
                 challenge: "AAECAwQFBgcICQoLDA0ODw".to_owned(),
                 request_canonical_digest: arkret_identifiers::Hash::new(format!(
                     "sha256:{}",

@@ -2062,7 +2062,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         grant: &AccountHandoffGrant,
         challenge_id: &str,
         request_digest: &arkret_identifiers::Hash,
-        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+        outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
         now: DateTime<Utc>,
     ) -> Result<PublishedDidRegisterCommit, Self::Error> {
         match self
@@ -2769,7 +2769,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         context: &IdentityCreationRegistrationContext,
         request_digest: &arkret_identifiers::Hash,
-        outcome: &arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+        outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
         now: DateTime<Utc>,
     ) -> Result<IdentityCreationBindingCommit, Self::Error> {
         let Some(lease) = self

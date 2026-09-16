@@ -270,7 +270,7 @@ pub struct IdentityCreationRegisterLedger {
     pub handoff_grant_id: Ulid,
     pub challenge_id: String,
     pub request_digest: arkret_identifiers::Hash,
-    pub outcome: arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome,
+    pub outcome: arkret_models_collaboration::account_operations::AccountRegisterOutcome,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -286,7 +286,7 @@ pub enum IdentityCreationRegisterReplay {
     Pending,
     // Boxed: the outcome is ~1 KiB while every other variant is a unit, so an
     // inline payload would make each `Pending` cost the same as a full replay.
-    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
     DuplicateConflict,
 }
 
@@ -294,7 +294,7 @@ pub enum IdentityCreationRegisterReplay {
 pub enum IdentityCreationBindingCommit {
     Committed,
     // Boxed for the same reason as `IdentityCreationRegisterReplay::Replay`.
-    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
     DuplicateConflict,
     Stale,
 }
@@ -443,7 +443,7 @@ pub struct DidBindingChallengeRecord {
     pub consumed_at: Option<DateTime<Utc>>,
     pub register_request_digest: Option<arkret_identifiers::Hash>,
     pub register_outcome:
-        Option<Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>>,
+        Option<Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>>,
 }
 
 impl DidBindingChallengeRecord {
@@ -488,7 +488,7 @@ pub enum DidBindingChallengeConsume {
 #[derive(Clone, Debug)]
 pub enum PublishedDidRegisterReplay {
     Pending(Box<DidBindingChallengeRecord>),
-    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
     DuplicateConflict,
     Stale,
 }
@@ -496,7 +496,7 @@ pub enum PublishedDidRegisterReplay {
 #[derive(Clone, Debug)]
 pub enum PublishedDidRegisterCommit {
     Committed,
-    Replay(Box<arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
     DuplicateConflict,
     Stale,
 }

@@ -1,6 +1,6 @@
 //! Durable Account Authority issuer ledger.
 
-use arkret_models_collaboration::account_lifecycle::AccountStatusRecord;
+use arkret_models_collaboration::account_status::AccountStatusRecord;
 
 use crate::{LocalAccountId, repository_impl};
 

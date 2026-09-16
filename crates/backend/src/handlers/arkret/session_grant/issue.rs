@@ -1,7 +1,8 @@
 use arkret_identifiers::DidCoreId;
-use arkret_models_collaboration::session_grant_bodies::{
+use arkret_models_collaboration::session_grant_bodies::RecoverySessionGrantRequest;
+use arkret_models_collaboration::session_grants::{
     AgentSessionGrantRequest, HumanSessionGrantRequest, PairwiseEndpointSessionGrantRequest,
-    RecoverySessionGrantRequest, SessionGrantOutcome, SessionGrantRequestBody,
+    SessionGrantOutcome, SessionGrantRequestBody,
 };
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
@@ -1128,7 +1129,7 @@ fn require_agent_key_proof_dpop_binding(
 
 fn verify_agent_body_dpop(
     holder_jkt: &str,
-    body: &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof,
+    body: &arkret_models_collaboration::session_grants::SessionGrantDpopBindingProof,
     method: &str,
     target: &str,
     now: chrono::DateTime<chrono::Utc>,
@@ -1786,7 +1787,7 @@ mod tests {
     fn agent_key_proof_session_grant_rejects_mismatched_body_dpop_binding() {
         let err = match verify_agent_body_dpop(
             "test-jkt",
-            &arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof {
+            &arkret_models_collaboration::session_grants::SessionGrantDpopBindingProof {
                 proof_jwt: "body.proof.jwt".to_owned(),
             },
             "POST",
@@ -1805,7 +1806,7 @@ mod tests {
     }
     #[test]
     fn agent_body_dpop_accepts_fresh_header_from_same_holder_and_rejects_other_holder() {
-        use arkret_models_collaboration::session_grant_bodies::SessionGrantDpopBindingProof;
+        use arkret_models_collaboration::session_grants::SessionGrantDpopBindingProof;
         use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
         let key = sdk_signing_key_from_seed_bytes(&[0x73; 32]);
         let other_key = sdk_signing_key_from_seed_bytes(&[0x74; 32]);

@@ -478,13 +478,13 @@ mod tests {
     }
 
     #[test]
-    fn serialized_config_rejects_retired_inline_key_fields() {
-        let retired = serde_json::json!({
+    fn serialized_config_rejects_unsupported_inline_key_fields() {
+        let unsupported = serde_json::json!({
             "backend": "platform",
             "encryption": "00",
             "keys": []
         });
-        assert!(serde_json::from_value::<KeyStoreConfig>(retired).is_err());
+        assert!(serde_json::from_value::<KeyStoreConfig>(unsupported).is_err());
     }
 
     #[test]

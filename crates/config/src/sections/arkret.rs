@@ -787,7 +787,7 @@ mod tests {
     }
 
     #[test]
-    fn retired_arkret_config_fields_are_rejected() {
+    fn unsupported_arkret_config_fields_are_rejected() {
         assert!(
             serde_json::from_value::<ArkretConfig>(serde_json::json!({
                 "development_auto_enrollment_hosts": ["localhost"]

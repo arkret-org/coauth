@@ -1,7 +1,7 @@
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod agent_auth_error_matrix_tests {
-    use arkret_models_collaboration::session_grant_bodies::{
+    use arkret_models_collaboration::session_grants::{
         AgentSessionGrantProof, AgentSessionGrantProofKind,
     };
     use chrono::Utc;

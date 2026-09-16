@@ -2,6 +2,8 @@
 
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusInitialPublication, AccountStatusPublication, AccountStatusPublicationRequestBody,
+};
+use arkret_models_collaboration::account_status::{
     AccountStatusRecord, UnsignedAccountStatusRecord,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;

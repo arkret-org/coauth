@@ -553,7 +553,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     state.arkret_config.stations[0].embedded_webvh_registration_bearer =
         Some("registration-projection-bearer".to_owned());
     accept_current_registration_station(&state).await;
-    let register: arkret_models_collaboration::account_lifecycle::AccountRegisterRequestBody =
+    let register: arkret_models_collaboration::account_operations::AccountRegisterRequestBody =
         serde_json::from_value(body.clone()).unwrap();
     let authorization_event_id = register
         .identity_creation
@@ -621,7 +621,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         ))
         .await;
     completed.assert_status(StatusCode::OK);
-    let outcome: arkret_models_collaboration::account_lifecycle::AccountRegisterOutcome =
+    let outcome: arkret_models_collaboration::account_operations::AccountRegisterOutcome =
         completed.json();
     outcome.validate_against_request(&register).unwrap();
     assert!(outcome.session_grant_outcome.is_some());
