@@ -790,26 +790,27 @@ mod tests {
         );
     }
 
-    fn active_cell(scope: &str) -> serde_json::Value {
-        let peer = arkret_models_collaboration::account_lifecycle::ConsentPeer::Actor {
+    /// The holder Station's typed `consent_view` current result for
+    /// `(peer, consent_scope)`, carrying the `revision` that names the
+    /// authority commit the result was settled at.
+    fn active_consent_view(scope: &str) -> serde_json::Value {
+        let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
             actor_id: invite_delivery().invite_event.actor_id,
         };
         serde_json::json!({
-            "cell_id": arkret_wire::subject_cell(
-                arkret_wire::CellFamilyId::CONSENT_GRANT_V1,
-                &format!("c-{scope}"),
-            ),
+            "consent_id": "ak:consent:0198ff00-0000-7000-8000-000000000001",
             "peer": peer,
             "consent_scope": scope,
             "state": "active",
             "updated_at": "2026-05-01T00:00:00.000Z",
-            "active_grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-            "grant_dots": ["ak:event:AQgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI:0"],
-            "revoked_dots": [],
+            "revision": {
+                "commit_id": "ak:realm_commit:Aaurq6urq6urq6urq6urq6urq6urq6urq6urq6urq6ur",
+                "stream_position": 7,
+            },
         })
     }
 
-    /// Allow path: cell returns a matching grant tag → forward succeeds.
+    /// Allow path: the consent result is active for the exact peer and scope → forward succeeds.
     #[tokio::test]
     async fn relay_allows_when_consent_granted() {
         setup();
@@ -818,18 +819,18 @@ mod tests {
 
         // Consent-result mock: active for the exact peer and scope.
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
             .and(query_param(
                 "peer",
                 serde_json::to_string(
-                    &arkret_models_collaboration::account_lifecycle::ConsentPeer::Actor {
+                    &arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
                         actor_id: invite_delivery().invite_event.actor_id,
                     },
                 )
                 .unwrap(),
             ))
             .and(query_param("consent_scope", "invite"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("invite")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(active_consent_view("invite")))
             .expect(1)
             .mount(&server)
             .await;
@@ -972,7 +973,7 @@ mod tests {
         let client = reqwest::Client::new();
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
             .and(query_param("consent_scope", "invite"))
             .respond_with(ResponseTemplate::new(404))
             .expect(1)
@@ -980,9 +981,9 @@ mod tests {
             .await;
 
         Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/cell$"))
+            .and(path_regex(r"^/_arkret/self/consent/result$"))
             .and(query_param("consent_scope", "any"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(active_cell("any")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(active_consent_view("any")))
             .expect(1)
             .mount(&server)
             .await;

@@ -133,12 +133,12 @@ pub struct BatchInviteRequestBody {
     /// never expire.
     expires_in_hours: Option<u64>,
 
-    /// Optional Arkret consent-gate metadata (Move/Anchor/Lattice spec
-    /// `consent-model.md` §6.1). When `peer_principal_id` is supplied **and** a
-    /// `server_name` URL is configured, coauth queries the holder's
-    /// consent-grant cell on `soland` before minting registration tokens
-    /// and rejects / quarantines the batch when the holder has not granted
-    /// the requesting peer.
+    /// Optional Arkret consent-gate metadata (`identity/consent-model.md`
+    /// §6.1). When `peer_principal_id` is supplied **and** a `server_name`
+    /// URL is configured, coauth queries the holder's typed consent current
+    /// result on `soland` before minting registration tokens and rejects /
+    /// quarantines the batch when the holder has not granted the requesting
+    /// peer.
     ///
     /// Requests that do not address a specific holder DID omit this field;
     /// the gate is then a no-op for local registration-token minting.
@@ -377,11 +377,11 @@ pub async fn batch_invite(
     };
     mint_params.validate()?;
 
-    // ── C10.E consent gate (Move/Anchor/Lattice) ─────────────────
+    // ── C10.E consent gate ─────────────────────────────────
     //
-    // Per `arkret-spec` 2026-05-08 `consent-model.md` §6.1, when an
-    // invite addresses a specific holder DID we must query the holder's
-    // consent-grant cell on their server_name (`soland`) before
+    // Per `arkret-spec` `identity/consent-model.md` §6.1, when an invite
+    // addresses a specific holder DID we must query the holder's typed
+    // consent current result on their server_name (`soland`) before
     // proceeding. The gate is opt-in via `BatchInviteConsentGate` —
     // callers that just want bulk registration tokens omit the metadata
     // and skip the network round-trip entirely.
