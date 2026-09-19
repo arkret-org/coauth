@@ -2236,10 +2236,27 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(request_digest.as_str())
         .execute(self.conn)
         .await?;
-        Ok(if updated == 1 {
-            DevicePairingAdmissionCommit::Completed(canonical_outcome.to_vec())
-        } else {
-            DevicePairingAdmissionCommit::NotReady
+        if updated == 1 {
+            return Ok(DevicePairingAdmissionCommit::Completed(
+                canonical_outcome.to_vec(),
+            ));
+        }
+        let raced = self.get_device_pairing_stage(request_id).await?;
+        Ok(match raced.and_then(|record| record.admission) {
+            Some(admission)
+                if admission.state == DevicePairingAdmissionState::Completed
+                    && admission.canonical_request_digest == *request_digest =>
+            {
+                DevicePairingAdmissionCommit::Replay(
+                    admission
+                        .terminal_outcome_bytes
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )
+            }
+            Some(admission) if admission.state == DevicePairingAdmissionState::Completed => {
+                DevicePairingAdmissionCommit::DuplicateConflict
+            }
+            _ => DevicePairingAdmissionCommit::NotReady,
         })
     }
 
