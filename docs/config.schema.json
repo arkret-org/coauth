@@ -2949,6 +2949,32 @@
               "$ref": "#/definitions/DidBindingRateLimitingConfig"
             }
           ]
+        },
+        "device_pairing": {
+          "description": "Device-pairing transport limits. These buckets are independent from\nthe durable per-request failure budget.",
+          "default": {
+            "per_ip": {
+              "burst": 30,
+              "per_second": 0.5
+            },
+            "per_account": {
+              "burst": 20,
+              "per_second": 0.3333333333333333
+            },
+            "per_device": {
+              "burst": 10,
+              "per_second": 0.16666666666666666
+            },
+            "per_service": {
+              "burst": 1000,
+              "per_second": 16.666666666666668
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/DevicePairingRateLimitingConfig"
+            }
+          ]
         }
       }
     },
@@ -3231,6 +3257,59 @@
           "default": {
             "burst": 3,
             "per_second": 0.01
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "DevicePairingRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Requests permitted from one source address.",
+          "default": {
+            "burst": 30,
+            "per_second": 0.5
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_account": {
+          "description": "Requests permitted for one authenticated local account.",
+          "default": {
+            "burst": 20,
+            "per_second": 0.3333333333333333
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_device": {
+          "description": "Requests permitted for one sender-constrained device key.",
+          "default": {
+            "burst": 10,
+            "per_second": 0.16666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_service": {
+          "description": "Requests permitted by this Account Authority instance.",
+          "default": {
+            "burst": 1000,
+            "per_second": 16.666666666666668
           },
           "allOf": [
             {

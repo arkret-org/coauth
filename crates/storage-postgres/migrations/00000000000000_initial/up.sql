@@ -782,6 +782,8 @@ CREATE TABLE public.device_pairing_pending (
     created_at timestamp with time zone NOT NULL,
     finalized_at timestamp with time zone,
     superseded_at timestamp with time zone,
+    code_consumed_at timestamp with time zone,
+    abuse_locked_at timestamp with time zone,
     CONSTRAINT device_pairing_request_id_valid CHECK (device_pairing_request_id ~ '^device_pairing_request:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
     CONSTRAINT device_pairing_code_valid CHECK (pairing_code ~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$'),
     CONSTRAINT device_pairing_nonce_valid CHECK (client_nonce ~ '^[A-Za-z0-9_-]{22,86}$' AND server_nonce ~ '^[A-Za-z0-9_-]{22,86}$'),
@@ -790,12 +792,23 @@ CREATE TABLE public.device_pairing_pending (
     CONSTRAINT device_pairing_finalize_digest_valid CHECK (finalize_request_digest IS NULL OR finalize_request_digest ~ '^sha256:[0-9a-f]{64}$'),
     CONSTRAINT device_pairing_retention_valid CHECK (expires_at > created_at AND retained_until > expires_at),
     CONSTRAINT device_pairing_finalize_shape CHECK (
-        (state = 'staged' AND account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL AND superseded_at IS NULL)
+        (state = 'staged' AND account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL AND superseded_at IS NULL AND code_consumed_at IS NULL AND abuse_locked_at IS NULL)
         OR
-        (state IN ('ready_for_claim', 'authorized') AND account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL AND superseded_at IS NULL)
+        (state = 'ready_for_claim' AND account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL AND superseded_at IS NULL AND code_consumed_at IS NULL AND abuse_locked_at IS NULL)
         OR
-        (state = 'expired' AND ((account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL) OR (account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL)))
+        (state = 'authorized' AND account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL AND superseded_at IS NULL AND code_consumed_at IS NOT NULL AND abuse_locked_at IS NULL)
+        OR
+        (state = 'expired' AND code_consumed_at IS NOT NULL AND ((account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL) OR (account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL)))
     )
+);
+
+-- Private per-request failure budget.  No row is created for an unknown id;
+-- the foreign key also removes the counter with its bounded pairing tombstone.
+CREATE TABLE public.device_pairing_abuse_ledger (
+    device_pairing_request_id text PRIMARY KEY REFERENCES public.device_pairing_pending(device_pairing_request_id) ON DELETE CASCADE,
+    failure_count smallint NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT device_pairing_failure_count_bounded CHECK (failure_count BETWEEN 1 AND 10)
 );
 
 CREATE TABLE public.identity_creation_leases (

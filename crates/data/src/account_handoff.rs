@@ -226,6 +226,19 @@ pub enum DevicePairingFinalizeCommit {
     NotFound,
 }
 
+/// Result of spending one unit from a retained pairing request's private
+/// abuse-control budget.  The count itself is intentionally not exposed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DevicePairingFailureRecord {
+    /// No retained request exists, or an accepted terminal outcome protects it.
+    NotCounted,
+    /// The failure was durably counted and the pending record remains usable.
+    Counted,
+    /// The tenth failure was counted and the pending record was atomically
+    /// expired, its code consumed, and its bounded tombstone retained.
+    Locked,
+}
+
 impl std::fmt::Debug for AccountHandoffGrant {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter

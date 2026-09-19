@@ -21,7 +21,7 @@ use salvo::prelude::*;
 
 use super::account_handoff::{proof_invalid, random_opaque};
 use super::{ArkretCanonicalJson, ArkretRouteError, authenticate_account_handoff};
-use crate::handlers::common::DepotExt as _;
+use crate::handlers::common::{DepotExt as _, extract_bound_activity_tracker};
 
 const PAIRING_TTL: Duration = Duration::minutes(10);
 const PAIRING_TOMBSTONE_RETENTION: Duration = Duration::hours(24);
@@ -114,12 +114,18 @@ pub async fn finalize_device_pairing(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<ArkretCanonicalJson, ArkretRouteError> {
-    let (handoff, _dpop) = authenticate_account_handoff(
+    let (handoff, dpop) = authenticate_account_handoff(
         req,
         depot,
         AccountHandoffAllowedOperation::FinalizeDevicePairing,
     )
     .await?;
+    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
+    depot
+        .limiter()?
+        .check_device_pairing(requester, handoff.local_account_id, &dpop.jkt)
+        .await
+        .map_err(|_| ArkretRouteError::rate_limited("device pairing is rate limited", 60_000))?;
     let body: DevicePairingFinalizeRequestBody = req
         .parse_json()
         .await
@@ -139,13 +145,6 @@ pub async fn finalize_device_pairing(
         .get_for_user_and_audience(&user, &handoff.audience_id)
         .await?
         .ok_or(ArkretRouteError::NotFound)?;
-    if body.target_proof.account_id != binding.account_id {
-        repo.cancel().await.ok();
-        return Err(proof_invalid(
-            "device pairing target proof account_id does not match the authenticated handoff",
-        ));
-    }
-
     let record = repo
         .account_handoff()
         .get_device_pairing_stage(&body.device_pairing_request_id)
@@ -154,10 +153,22 @@ pub async fn finalize_device_pairing(
         repo.cancel().await.ok();
         return Err(ArkretRouteError::NotFound);
     };
+    if body.target_proof.account_id != binding.account_id {
+        repo.account_handoff()
+            .record_device_pairing_failure(&body.device_pairing_request_id, now)
+            .await?;
+        repo.save().await?;
+        return Err(proof_invalid(
+            "device pairing target proof account_id does not match the authenticated handoff",
+        ));
+    }
     if record.pairing_code != body.pairing_code
         || (record.state == DevicePairingState::Staged && record.expires_at <= now)
     {
-        repo.cancel().await.ok();
+        repo.account_handoff()
+            .record_device_pairing_failure(&body.device_pairing_request_id, now)
+            .await?;
+        repo.save().await?;
         return Err(ArkretRouteError::NotFound);
     }
 
@@ -172,16 +183,21 @@ pub async fn finalize_device_pairing(
             display_name: record.display_name.clone(),
             device_metadata: record.device_metadata.clone(),
         };
-        verify_server_device_pairing_target_proof(
+        if let Err(error) = verify_server_device_pairing_target_proof(
             &record.new_device_pubkey,
             &challenge,
             &binding.account_id,
             &body.target_proof,
             now,
-        )
-        .map_err(|error| {
-            proof_invalid(format!("device pairing target proof is invalid: {error}"))
-        })?;
+        ) {
+            repo.account_handoff()
+                .record_device_pairing_failure(&body.device_pairing_request_id, now)
+                .await?;
+            repo.save().await?;
+            return Err(proof_invalid(format!(
+                "device pairing target proof is invalid: {error}"
+            )));
+        }
     }
 
     let outcome = DevicePairingFinalizeOutcome {
@@ -212,7 +228,7 @@ pub async fn finalize_device_pairing(
             Ok(ArkretCanonicalJson(bytes))
         }
         DevicePairingFinalizeCommit::DuplicateConflict => {
-            repo.cancel().await.ok();
+            repo.save().await?;
             Err(ArkretRouteError::coded(
                 StatusCode::CONFLICT,
                 arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
@@ -220,7 +236,7 @@ pub async fn finalize_device_pairing(
             ))
         }
         DevicePairingFinalizeCommit::NotFound => {
-            repo.cancel().await.ok();
+            repo.save().await?;
             Err(ArkretRouteError::NotFound)
         }
     }

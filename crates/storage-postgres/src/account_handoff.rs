@@ -7,12 +7,12 @@ use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationIssuance,
-    ControllerGateAttestationReserve, DevicePairingFinalizeCommit, DevicePairingPendingRecord,
-    DevicePairingStageInsert, DidBindingChallengeConsume, DidBindingChallengeInput,
-    DidBindingChallengeIssue, DidBindingChallengeRecord, IdentityAbandonmentCommit,
-    IdentityAbandonmentCommitInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
-    IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
-    IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
+    ControllerGateAttestationReserve, DevicePairingFailureRecord, DevicePairingFinalizeCommit,
+    DevicePairingPendingRecord, DevicePairingStageInsert, DidBindingChallengeConsume,
+    DidBindingChallengeInput, DidBindingChallengeIssue, DidBindingChallengeRecord,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
+    IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
     IdentityCreationRegisterReplay, IdentityCreationRegisterReservation,
     IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
     IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
@@ -23,7 +23,7 @@ use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
 use diesel::prelude::*;
 use diesel::sql_types::{
-    Array, BigInt, Bytea, Jsonb, Nullable, Text, Timestamptz, Uuid as SqlUuid,
+    Array, BigInt, Bytea, Jsonb, Nullable, SmallInt, Text, Timestamptz, Uuid as SqlUuid,
 };
 use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use sha2::Digest as _;
@@ -653,6 +653,24 @@ struct DevicePairingPendingRow {
     finalize_outcome: Option<Vec<u8>>,
     #[diesel(sql_type = Timestamptz)]
     expires_at: DateTime<Utc>,
+}
+
+#[derive(QueryableByName)]
+struct DevicePairingFailureCandidateRow {
+    #[diesel(sql_type = Text)]
+    state: String,
+}
+
+#[derive(QueryableByName)]
+struct DevicePairingFailureCountRow {
+    #[diesel(sql_type = SmallInt)]
+    failure_count: i16,
+}
+
+#[derive(QueryableByName)]
+struct DevicePairingRequestIdRow {
+    #[diesel(sql_type = Text)]
+    device_pairing_request_id: String,
 }
 
 fn device_pairing_pending_from_row(
@@ -1608,6 +1626,81 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         row.map(device_pairing_pending_from_row).transpose()
     }
 
+    async fn record_device_pairing_failure(
+        &mut self,
+        request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+        now: DateTime<Utc>,
+    ) -> Result<DevicePairingFailureRecord, Self::Error> {
+        let candidate = diesel::sql_query(
+            "SELECT state FROM device_pairing_pending \
+             WHERE device_pairing_request_id=$1 AND retained_until>$2 FOR UPDATE",
+        )
+        .bind::<Text, _>(request_id.as_str())
+        .bind::<Timestamptz, _>(now)
+        .get_result::<DevicePairingFailureCandidateRow>(self.conn)
+        .await
+        .optional()?;
+        let Some(candidate) = candidate else {
+            return Ok(DevicePairingFailureRecord::NotCounted);
+        };
+        if candidate.state == "authorized" {
+            return Ok(DevicePairingFailureRecord::NotCounted);
+        }
+
+        let count = diesel::sql_query(
+            "INSERT INTO device_pairing_abuse_ledger \
+             (device_pairing_request_id, failure_count, updated_at) VALUES ($1,1,$2) \
+             ON CONFLICT (device_pairing_request_id) DO UPDATE \
+             SET failure_count=LEAST(device_pairing_abuse_ledger.failure_count + 1, 10), \
+                 updated_at=EXCLUDED.updated_at \
+             RETURNING failure_count",
+        )
+        .bind::<Text, _>(request_id.as_str())
+        .bind::<Timestamptz, _>(now)
+        .get_result::<DevicePairingFailureCountRow>(self.conn)
+        .await?
+        .failure_count;
+
+        if count < 10 {
+            return Ok(DevicePairingFailureRecord::Counted);
+        }
+        diesel::sql_query(
+            "UPDATE device_pairing_pending \
+             SET state='expired', code_consumed_at=COALESCE(code_consumed_at,$2), \
+                 abuse_locked_at=COALESCE(abuse_locked_at,$2) \
+             WHERE device_pairing_request_id=$1 AND state IN ('staged','ready_for_claim')",
+        )
+        .bind::<Text, _>(request_id.as_str())
+        .bind::<Timestamptz, _>(now)
+        .execute(self.conn)
+        .await?;
+        Ok(DevicePairingFailureRecord::Locked)
+    }
+
+    async fn record_device_pairing_code_failure(
+        &mut self,
+        pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
+        now: DateTime<Utc>,
+    ) -> Result<DevicePairingFailureRecord, Self::Error> {
+        let located = diesel::sql_query(
+            "SELECT device_pairing_request_id FROM device_pairing_pending \
+             WHERE pairing_code=$1 AND retained_until>$2",
+        )
+        .bind::<Text, _>(pairing_code.as_str())
+        .bind::<Timestamptz, _>(now)
+        .get_result::<DevicePairingRequestIdRow>(self.conn)
+        .await
+        .optional()?;
+        let Some(located) = located else {
+            return Ok(DevicePairingFailureRecord::NotCounted);
+        };
+        let request_id = arkret_models_collaboration::device_pairing::DevicePairingRequestId::new(
+            located.device_pairing_request_id,
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?;
+        self.record_device_pairing_failure(&request_id, now).await
+    }
+
     async fn finalize_device_pairing(
         &mut self,
         request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
@@ -1632,18 +1725,25 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(record) = row.map(device_pairing_pending_from_row).transpose()? else {
             return Ok(DevicePairingFinalizeCommit::NotFound);
         };
+        if record.finalize_request_digest.as_ref() == Some(request_digest)
+            && record.account_id.as_ref() == Some(account_id)
+        {
+            return record
+                .finalize_outcome
+                .map(DevicePairingFinalizeCommit::Replay)
+                .ok_or_else(DatabaseError::invalid_operation);
+        }
+        if record.state
+            == arkret_models_collaboration::device_pairing::DevicePairingState::Authorized
+        {
+            return Ok(DevicePairingFinalizeCommit::NotFound);
+        }
         if record.pairing_code != *pairing_code {
+            self.record_device_pairing_failure(request_id, now).await?;
             return Ok(DevicePairingFinalizeCommit::NotFound);
         }
         if record.state != arkret_models_collaboration::device_pairing::DevicePairingState::Staged {
-            if record.finalize_request_digest.as_ref() == Some(request_digest)
-                && record.account_id.as_ref() == Some(account_id)
-            {
-                return record
-                    .finalize_outcome
-                    .map(DevicePairingFinalizeCommit::Replay)
-                    .ok_or_else(DatabaseError::invalid_operation);
-            }
+            self.record_device_pairing_failure(request_id, now).await?;
             return Ok(if record.finalize_request_digest.is_some() {
                 DevicePairingFinalizeCommit::DuplicateConflict
             } else {
@@ -1651,15 +1751,18 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             });
         }
         if record.expires_at <= now {
+            self.record_device_pairing_failure(request_id, now).await?;
             return Ok(DevicePairingFinalizeCommit::NotFound);
         }
         if target_proof.account_id != *account_id {
+            self.record_device_pairing_failure(request_id, now).await?;
             return Ok(DevicePairingFinalizeCommit::DuplicateConflict);
         }
 
         let account_id_json = serde_json::to_value(account_id)?;
         diesel::sql_query(
-            "UPDATE device_pairing_pending SET state='expired', superseded_at=$1 \
+            "UPDATE device_pairing_pending SET state='expired', superseded_at=$1, \
+             code_consumed_at=COALESCE(code_consumed_at,$1) \
              WHERE state='ready_for_claim' AND account_id=$2 \
              AND device_pairing_request_id<>$3",
         )

@@ -5,14 +5,14 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
-    DevicePairingFinalizeCommit, DevicePairingPendingRecord, DevicePairingStageInsert,
-    DidBindingChallengeConsume, DidBindingChallengeInput, DidBindingChallengeIssue,
-    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
-    IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
-    IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
-    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
-    NewControllerGateAttestationIssuance, NewDevicePairingPendingRecord,
-    PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
+    DevicePairingFailureRecord, DevicePairingFinalizeCommit, DevicePairingPendingRecord,
+    DevicePairingStageInsert, DidBindingChallengeConsume, DidBindingChallengeInput,
+    DidBindingChallengeIssue, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
+    IdentityCreationRegisterReplay, IdentityCreationRegisterReserve,
+    IdentityCreationRegistrationAdmission, IdentityCreationRegistrationContext,
+    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
+    NewDevicePairingPendingRecord, PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
 };
 
 use crate::repository_impl;
@@ -103,6 +103,25 @@ repository_impl! {
             &mut self,
             request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
         ) -> Result<Option<DevicePairingPendingRecord>, Self::Error>;
+
+        /// Spend one private failure-budget unit for an exact retained request.
+        /// Unknown requests and records with an accepted terminal outcome are
+        /// deliberately side-effect free.  The tenth unit atomically expires
+        /// an otherwise pending record and consumes its code.
+        async fn record_device_pairing_failure(
+            &mut self,
+            request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+            now: DateTime<Utc>,
+        ) -> Result<DevicePairingFailureRecord, Self::Error>;
+
+        /// Spend one failure-budget unit only when an exact pairing code maps
+        /// to a retained request. An unknown or mistyped code cannot create a
+        /// request-keyed ledger row.
+        async fn record_device_pairing_code_failure(
+            &mut self,
+            pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
+            now: DateTime<Utc>,
+        ) -> Result<DevicePairingFailureRecord, Self::Error>;
 
         /// Atomically commit staged -> ready_for_claim, replay the exact prior
         /// outcome, or reject a conflicting/not-found request.  The backend

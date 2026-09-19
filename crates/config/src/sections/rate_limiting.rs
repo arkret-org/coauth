@@ -44,6 +44,30 @@ pub struct RateLimitingConfig {
     /// of principal DIDs on accounts.
     #[serde(default)]
     pub did_binding: DidBindingRateLimitingConfig,
+
+    /// Device-pairing transport limits. These buckets are independent from
+    /// the durable per-request failure budget.
+    #[serde(default)]
+    pub device_pairing: DevicePairingRateLimitingConfig,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct DevicePairingRateLimitingConfig {
+    /// Requests permitted from one source address.
+    #[serde(default = "default_device_pairing_per_ip")]
+    pub per_ip: RateLimiterConfiguration,
+
+    /// Requests permitted for one authenticated local account.
+    #[serde(default = "default_device_pairing_per_account")]
+    pub per_account: RateLimiterConfiguration,
+
+    /// Requests permitted for one sender-constrained device key.
+    #[serde(default = "default_device_pairing_per_device")]
+    pub per_device: RateLimiterConfiguration,
+
+    /// Requests permitted by this Account Authority instance.
+    #[serde(default = "default_device_pairing_per_service")]
+    pub per_service: RateLimiterConfiguration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -350,6 +374,18 @@ impl ConfigurationSection for RateLimitingConfig {
         if let Some(error) = error_on_limiter(&self.did_binding.per_account) {
             return Err(error_on_nested_field(error, "did_binding", "per_account").into());
         }
+        if let Some(error) = error_on_limiter(&self.device_pairing.per_ip) {
+            return Err(error_on_nested_field(error, "device_pairing", "per_ip").into());
+        }
+        if let Some(error) = error_on_limiter(&self.device_pairing.per_account) {
+            return Err(error_on_nested_field(error, "device_pairing", "per_account").into());
+        }
+        if let Some(error) = error_on_limiter(&self.device_pairing.per_device) {
+            return Err(error_on_nested_field(error, "device_pairing", "per_device").into());
+        }
+        if let Some(error) = error_on_limiter(&self.device_pairing.per_service) {
+            return Err(error_on_nested_field(error, "device_pairing", "per_service").into());
+        }
 
         Ok(())
     }
@@ -513,6 +549,34 @@ fn default_did_binding_per_account() -> RateLimiterConfiguration {
     }
 }
 
+fn default_device_pairing_per_ip() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(30).unwrap(),
+        per_second: 30.0 / 60.0,
+    }
+}
+
+fn default_device_pairing_per_account() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(20).unwrap(),
+        per_second: 20.0 / 60.0,
+    }
+}
+
+fn default_device_pairing_per_device() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(10).unwrap(),
+        per_second: 10.0 / 60.0,
+    }
+}
+
+fn default_device_pairing_per_service() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(1_000).unwrap(),
+        per_second: 1_000.0 / 60.0,
+    }
+}
+
 impl Default for RateLimitingConfig {
     fn default() -> Self {
         RateLimitingConfig {
@@ -524,6 +588,18 @@ impl Default for RateLimitingConfig {
             directory_lookup: DirectoryLookupRateLimitingConfig::default(),
             identity_resolution: IdentityResolutionRateLimitingConfig::default(),
             did_binding: DidBindingRateLimitingConfig::default(),
+            device_pairing: DevicePairingRateLimitingConfig::default(),
+        }
+    }
+}
+
+impl Default for DevicePairingRateLimitingConfig {
+    fn default() -> Self {
+        Self {
+            per_ip: default_device_pairing_per_ip(),
+            per_account: default_device_pairing_per_account(),
+            per_device: default_device_pairing_per_device(),
+            per_service: default_device_pairing_per_service(),
         }
     }
 }

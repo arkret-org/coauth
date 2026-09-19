@@ -162,7 +162,9 @@ fn pairing_fixture(
     };
     use arkret_wire::{Base64UrlString, DeviceId, DidKey, NonEmptyString};
 
-    let signing_key = ed25519_dalek_3::SigningKey::from_bytes(&[u8::try_from(tag).unwrap(); 32]);
+    let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
+        &[u8::try_from(tag).unwrap(); 32],
+    );
     let kid = format!("ak:device:00000000-0000-7000-8000-{tag:012x}");
     let public_key = PublicKey {
         kty: NonEmptyString::new("OKP").unwrap(),
@@ -435,6 +437,295 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
         DevicePairingFinalizeCommit::Replay(bytes) if bytes == first_outcome
     ));
     repo.cancel().await.unwrap();
+}
+
+#[derive(diesel::QueryableByName)]
+struct PairingAbuseStateRow {
+    #[diesel(sql_type = Text)]
+    state: String,
+    #[diesel(sql_type = Nullable<Timestamptz>)]
+    code_consumed_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = Nullable<Timestamptz>)]
+    abuse_locked_at: Option<DateTime<Utc>>,
+    #[diesel(sql_type = Nullable<SmallInt>)]
+    failure_count: Option<i16>,
+}
+
+#[derive(diesel::QueryableByName)]
+struct PairingCountRow {
+    #[diesel(sql_type = BigInt)]
+    count: i64,
+}
+
+async fn pairing_abuse_state(
+    conn: &mut AsyncPgConnection,
+    request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+) -> PairingAbuseStateRow {
+    diesel::sql_query(
+        "SELECT p.state, p.code_consumed_at, p.abuse_locked_at, l.failure_count \
+         FROM device_pairing_pending p LEFT JOIN device_pairing_abuse_ledger l \
+         USING (device_pairing_request_id) WHERE p.device_pairing_request_id=$1",
+    )
+    .bind::<Text, _>(request_id.as_str())
+    .get_result(conn)
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn pairing_failure_budget_is_durable_bounded_and_transactional() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zbudgetPrincipal").unwrap(),
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zbudgetStation").unwrap(),
+    );
+    let (pending, _) = pairing_fixture(3, now, &account_id);
+    let (rolled_back, _) = pairing_fixture(4, now, &account_id);
+    let factory = crate::PgRepositoryFactory::new((*pool).clone());
+
+    let mut repo = factory.create().await.unwrap();
+    for stage in [pending.clone(), rolled_back.clone()] {
+        assert_eq!(
+            repo.account_handoff()
+                .insert_device_pairing_stage(stage)
+                .await
+                .unwrap(),
+            DevicePairingStageInsert::Inserted
+        );
+    }
+    repo.save().await.unwrap();
+
+    let unknown = arkret_models_collaboration::device_pairing::DevicePairingRequestId::new(
+        "device_pairing_request:00000000-0000-7000-8000-000000000099".to_owned(),
+    )
+    .unwrap();
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .record_device_pairing_failure(&unknown, now)
+            .await
+            .unwrap(),
+        DevicePairingFailureRecord::NotCounted
+    );
+    let unknown_code =
+        arkret_models_collaboration::device_pairing::DevicePairingCode::new("ZZZZZZZZ".to_owned())
+            .unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .record_device_pairing_code_failure(&unknown_code, now)
+            .await
+            .unwrap(),
+        DevicePairingFailureRecord::NotCounted
+    );
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .record_device_pairing_failure(&rolled_back.device_pairing_request_id, now)
+            .await
+            .unwrap(),
+        DevicePairingFailureRecord::Counted
+    );
+    repo.cancel().await.unwrap();
+
+    for _ in 0..9 {
+        let mut repo = factory.create().await.unwrap();
+        assert_eq!(
+            repo.account_handoff()
+                .record_device_pairing_failure(&pending.device_pairing_request_id, now)
+                .await
+                .unwrap(),
+            DevicePairingFailureRecord::Counted
+        );
+        repo.save().await.unwrap();
+    }
+    let mut conn = pool.get().await.unwrap();
+    let ninth = pairing_abuse_state(&mut conn, &pending.device_pairing_request_id).await;
+    assert_eq!(ninth.state, "staged");
+    assert_eq!(ninth.failure_count, Some(9));
+    assert!(ninth.code_consumed_at.is_none());
+    assert!(ninth.abuse_locked_at.is_none());
+    let rolled_back_state =
+        pairing_abuse_state(&mut conn, &rolled_back.device_pairing_request_id).await;
+    assert_eq!(rolled_back_state.failure_count, None);
+    drop(conn);
+
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .record_device_pairing_failure(&pending.device_pairing_request_id, now)
+            .await
+            .unwrap(),
+        DevicePairingFailureRecord::Locked
+    );
+    repo.save().await.unwrap();
+
+    let mut conn = pool.get().await.unwrap();
+    let locked = pairing_abuse_state(&mut conn, &pending.device_pairing_request_id).await;
+    assert_eq!(locked.state, "expired");
+    assert_eq!(locked.failure_count, Some(10));
+    assert_eq!(locked.code_consumed_at, Some(now));
+    assert_eq!(locked.abuse_locked_at, Some(now));
+    let unknown_rows: i64 = diesel::sql_query(
+        "SELECT COUNT(*) AS count FROM device_pairing_abuse_ledger \
+         WHERE device_pairing_request_id=$1",
+    )
+    .bind::<Text, _>(unknown.as_str())
+    .get_result::<PairingCountRow>(&mut conn)
+    .await
+    .unwrap()
+    .count;
+    assert_eq!(unknown_rows, 0);
+}
+
+#[tokio::test]
+async fn pairing_failure_budget_linearizes_concurrent_failures_and_protects_terminal_success() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zconcurrentPrincipal").unwrap(),
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zconcurrentStation").unwrap(),
+    );
+    let (pending, _) = pairing_fixture(5, now, &account_id);
+    let (replayable, replayable_proof) = pairing_fixture(6, now, &account_id);
+    let (terminal, terminal_proof) = pairing_fixture(7, now, &account_id);
+    let factory = crate::PgRepositoryFactory::new((*pool).clone());
+    let mut repo = factory.create().await.unwrap();
+    for stage in [pending.clone(), replayable.clone(), terminal.clone()] {
+        assert_eq!(
+            repo.account_handoff()
+                .insert_device_pairing_stage(stage)
+                .await
+                .unwrap(),
+            DevicePairingStageInsert::Inserted
+        );
+    }
+    repo.save().await.unwrap();
+
+    let mut tasks = Vec::new();
+    for _ in 0..10 {
+        let factory = factory.clone();
+        let request_id = pending.device_pairing_request_id.clone();
+        tasks.push(tokio::spawn(async move {
+            let mut repo = factory.create().await.unwrap();
+            let result = repo
+                .account_handoff()
+                .record_device_pairing_failure(&request_id, now)
+                .await
+                .unwrap();
+            repo.save().await.unwrap();
+            result
+        }));
+    }
+    let mut locked = 0;
+    for task in tasks {
+        if task.await.unwrap() == DevicePairingFailureRecord::Locked {
+            locked += 1;
+        }
+    }
+    assert_eq!(locked, 1);
+
+    let replayable_digest = hash('c');
+    let replayable_outcome = b"{\"state\":\"ready_for_claim\"}";
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &replayable.device_pairing_request_id,
+                &replayable.pairing_code,
+                &account_id,
+                &replayable_proof,
+                &replayable_digest,
+                replayable_outcome,
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::Committed(_)
+    ));
+    repo.save().await.unwrap();
+    for _ in 0..10 {
+        let mut repo = factory.create().await.unwrap();
+        repo.account_handoff()
+            .record_device_pairing_failure(&replayable.device_pairing_request_id, now)
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+    }
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &replayable.device_pairing_request_id,
+                &replayable.pairing_code,
+                &account_id,
+                &replayable_proof,
+                &replayable_digest,
+                replayable_outcome,
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::Replay(bytes) if bytes == replayable_outcome
+    ));
+    repo.cancel().await.unwrap();
+
+    let terminal_digest = hash('d');
+    let terminal_outcome = b"{\"state\":\"ready_for_claim\"}";
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &terminal.device_pairing_request_id,
+                &terminal.pairing_code,
+                &account_id,
+                &terminal_proof,
+                &terminal_digest,
+                terminal_outcome,
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::Committed(_)
+    ));
+    repo.save().await.unwrap();
+    let mut conn = pool.get().await.unwrap();
+    diesel::sql_query(
+        "UPDATE device_pairing_pending SET state='authorized', code_consumed_at=$2 \
+         WHERE device_pairing_request_id=$1",
+    )
+    .bind::<Text, _>(terminal.device_pairing_request_id.as_str())
+    .bind::<Timestamptz, _>(now)
+    .execute(&mut conn)
+    .await
+    .unwrap();
+    drop(conn);
+
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .record_device_pairing_failure(&terminal.device_pairing_request_id, now)
+            .await
+            .unwrap(),
+        DevicePairingFailureRecord::NotCounted
+    );
+    repo.save().await.unwrap();
+    let mut conn = pool.get().await.unwrap();
+    let concurrent = pairing_abuse_state(&mut conn, &pending.device_pairing_request_id).await;
+    assert_eq!(concurrent.state, "expired");
+    assert_eq!(concurrent.failure_count, Some(10));
+    let replayed = pairing_abuse_state(&mut conn, &replayable.device_pairing_request_id).await;
+    assert_eq!(replayed.state, "expired");
+    assert_eq!(replayed.failure_count, Some(10));
+    let protected = pairing_abuse_state(&mut conn, &terminal.device_pairing_request_id).await;
+    assert_eq!(protected.state, "authorized");
+    assert_eq!(protected.failure_count, None);
 }
 
 #[tokio::test]

@@ -90,6 +90,21 @@ pub enum DidBindingLimitedError {
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
+pub enum DevicePairingLimitedError {
+    #[error("Too many device-pairing requests for requester {0}")]
+    Requester(RequesterFingerprint),
+
+    #[error("Too many device-pairing requests for account {0}")]
+    Account(Ulid),
+
+    #[error("Too many device-pairing requests for device key {0}")]
+    Device(String),
+
+    #[error("Too many device-pairing requests for this service")]
+    Service,
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum DirectoryLookupLimitedError {
     #[error("Too many directory lookup requests for requester {0}")]
     Requester(RequesterFingerprint),
@@ -400,6 +415,10 @@ struct LimiterInner {
     identity_resolution_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_requester: KeyedLimiter<RequesterFingerprint>,
     did_binding_per_account: KeyedLimiter<Ulid>,
+    device_pairing_per_requester: KeyedLimiter<RequesterFingerprint>,
+    device_pairing_per_account: KeyedLimiter<Ulid>,
+    device_pairing_per_device: KeyedLimiter<String>,
+    device_pairing_per_service: KeyedLimiter<()>,
     failed_login: FailedLoginTracker,
 }
 
@@ -447,6 +466,16 @@ impl LimiterInner {
             )?,
             did_binding_per_requester: KeyedLimiter::from_config(&config.did_binding.per_ip)?,
             did_binding_per_account: KeyedLimiter::from_config(&config.did_binding.per_account)?,
+            device_pairing_per_requester: KeyedLimiter::from_config(&config.device_pairing.per_ip)?,
+            device_pairing_per_account: KeyedLimiter::from_config(
+                &config.device_pairing.per_account,
+            )?,
+            device_pairing_per_device: KeyedLimiter::from_config(
+                &config.device_pairing.per_device,
+            )?,
+            device_pairing_per_service: KeyedLimiter::from_config(
+                &config.device_pairing.per_service,
+            )?,
             failed_login: FailedLoginTracker::new(&config.login.lockout),
         })
     }
@@ -815,6 +844,45 @@ impl Limiter {
 
         Ok(())
     }
+
+    /// Apply the four independent transport buckets for authenticated
+    /// device-pairing traffic. These checks do not read or reset the durable
+    /// ten-failure budget keyed by pairing request id.
+    pub async fn check_device_pairing(
+        &self,
+        requester: RequesterFingerprint,
+        account_id: Ulid,
+        device_key: &str,
+    ) -> Result<(), DevicePairingLimitedError> {
+        if !self
+            .inner
+            .device_pairing_per_requester
+            .check(&requester)
+            .await
+        {
+            return Err(DevicePairingLimitedError::Requester(requester));
+        }
+        if !self
+            .inner
+            .device_pairing_per_account
+            .check(&account_id)
+            .await
+        {
+            return Err(DevicePairingLimitedError::Account(account_id));
+        }
+        if !self
+            .inner
+            .device_pairing_per_device
+            .check(&device_key.to_owned())
+            .await
+        {
+            return Err(DevicePairingLimitedError::Device(device_key.to_owned()));
+        }
+        if !self.inner.device_pairing_per_service.check(&()).await {
+            return Err(DevicePairingLimitedError::Service);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -824,6 +892,87 @@ mod tests {
     use rand_core::SeedableRng;
 
     use super::*;
+
+    fn roomy_pairing_config() -> RateLimitingConfig {
+        let mut config = RateLimitingConfig::default();
+        let roomy = RateLimiterConfiguration {
+            burst: std::num::NonZeroU32::new(100).unwrap(),
+            per_second: 100.0,
+        };
+        config.device_pairing.per_ip = roomy;
+        config.device_pairing.per_account = roomy;
+        config.device_pairing.per_device = roomy;
+        config.device_pairing.per_service = roomy;
+        config
+    }
+
+    #[tokio::test]
+    async fn device_pairing_transport_buckets_are_independent() {
+        let tight = RateLimiterConfiguration {
+            burst: std::num::NonZeroU32::new(1).unwrap(),
+            per_second: 0.000_001,
+        };
+        let requester_a = RequesterFingerprint::new([192, 0, 2, 1].into());
+        let requester_b = RequesterFingerprint::new([192, 0, 2, 2].into());
+        let account_a = Ulid::from(1_u128);
+        let account_b = Ulid::from(2_u128);
+
+        let mut config = roomy_pairing_config();
+        config.device_pairing.per_ip = tight;
+        let limiter = Limiter::new(&config).unwrap();
+        limiter
+            .check_device_pairing(requester_a, account_a, "device-a")
+            .await
+            .unwrap();
+        assert!(matches!(
+            limiter
+                .check_device_pairing(requester_a, account_b, "device-b")
+                .await,
+            Err(DevicePairingLimitedError::Requester(_))
+        ));
+
+        let mut config = roomy_pairing_config();
+        config.device_pairing.per_account = tight;
+        let limiter = Limiter::new(&config).unwrap();
+        limiter
+            .check_device_pairing(requester_a, account_a, "device-a")
+            .await
+            .unwrap();
+        assert!(matches!(
+            limiter
+                .check_device_pairing(requester_b, account_a, "device-b")
+                .await,
+            Err(DevicePairingLimitedError::Account(id)) if id == account_a
+        ));
+
+        let mut config = roomy_pairing_config();
+        config.device_pairing.per_device = tight;
+        let limiter = Limiter::new(&config).unwrap();
+        limiter
+            .check_device_pairing(requester_a, account_a, "device-a")
+            .await
+            .unwrap();
+        assert!(matches!(
+            limiter
+                .check_device_pairing(requester_b, account_b, "device-a")
+                .await,
+            Err(DevicePairingLimitedError::Device(id)) if id == "device-a"
+        ));
+
+        let mut config = roomy_pairing_config();
+        config.device_pairing.per_service = tight;
+        let limiter = Limiter::new(&config).unwrap();
+        limiter
+            .check_device_pairing(requester_a, account_a, "device-a")
+            .await
+            .unwrap();
+        assert!(matches!(
+            limiter
+                .check_device_pairing(requester_b, account_b, "device-b")
+                .await,
+            Err(DevicePairingLimitedError::Service)
+        ));
+    }
 
     #[tokio::test]
     async fn test_password_check_limiter() {

@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS identity_binding_challenges CASCADE;
 DROP TABLE IF EXISTS did_binding_challenges CASCADE;
 DROP TABLE IF EXISTS identity_creation_rate_limit_events CASCADE;
 DROP TABLE IF EXISTS identity_creation_leases CASCADE;
+DROP TABLE IF EXISTS device_pairing_abuse_ledger CASCADE;
 DROP TABLE IF EXISTS device_pairing_pending CASCADE;
 DROP TABLE IF EXISTS account_handoff_grants CASCADE;
 DROP TABLE IF EXISTS account_handoff_creation_attempts CASCADE;
