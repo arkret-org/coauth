@@ -1626,6 +1626,25 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         row.map(device_pairing_pending_from_row).transpose()
     }
 
+    async fn get_device_pairing_by_code(
+        &mut self,
+        pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DevicePairingPendingRecord>, Self::Error> {
+        let row = diesel::sql_query(
+            "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+             display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
+             target_proof, finalize_request_digest, finalize_outcome, expires_at \
+             FROM device_pairing_pending WHERE pairing_code = $1 AND retained_until > $2 FOR UPDATE",
+        )
+        .bind::<Text, _>(pairing_code.as_str())
+        .bind::<Timestamptz, _>(now)
+        .get_result::<DevicePairingPendingRow>(self.conn)
+        .await
+        .optional()?;
+        row.map(device_pairing_pending_from_row).transpose()
+    }
+
     async fn record_device_pairing_failure(
         &mut self,
         request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,

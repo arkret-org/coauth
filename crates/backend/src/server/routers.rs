@@ -188,6 +188,11 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::finalize_device_pairing),
         )
         .push(
+            Router::with_path("gate/account/device-pairing/code-claims")
+                .options(oidc_preflight_handler)
+                .post(arkret::claim_device_pairing_code),
+        )
+        .push(
             Router::with_path("gate/account/onboarding")
                 .options(oidc_preflight_handler)
                 .get(arkret::account_onboarding_state),

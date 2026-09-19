@@ -104,6 +104,15 @@ repository_impl! {
             request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
         ) -> Result<Option<DevicePairingPendingRecord>, Self::Error>;
 
+        /// Locate and lock the exact retained pending row named by a pairing
+        /// code. Unknown codes stay side-effect free; callers decide whether a
+        /// located row is usable and charge its request-keyed failure budget.
+        async fn get_device_pairing_by_code(
+            &mut self,
+            pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
+            now: DateTime<Utc>,
+        ) -> Result<Option<DevicePairingPendingRecord>, Self::Error>;
+
         /// Spend one private failure-budget unit for an exact retained request.
         /// Unknown requests and records with an accepted terminal outcome are
         /// deliberately side-effect free.  The tenth unit atomically expires

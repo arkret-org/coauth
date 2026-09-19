@@ -513,6 +513,13 @@ async fn pairing_failure_budget_is_durable_bounded_and_transactional() {
     let unknown_code =
         arkret_models_collaboration::device_pairing::DevicePairingCode::new("ZZZZZZZZ".to_owned())
             .unwrap();
+    assert!(
+        repo.account_handoff()
+            .get_device_pairing_by_code(&unknown_code, now)
+            .await
+            .unwrap()
+            .is_none()
+    );
     assert_eq!(
         repo.account_handoff()
             .record_device_pairing_code_failure(&unknown_code, now)
@@ -521,6 +528,19 @@ async fn pairing_failure_budget_is_durable_bounded_and_transactional() {
         DevicePairingFailureRecord::NotCounted
     );
     repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let located = repo
+        .account_handoff()
+        .get_device_pairing_by_code(&pending.pairing_code, now)
+        .await
+        .unwrap()
+        .expect("the exact retained code locates its request");
+    assert_eq!(
+        located.device_pairing_request_id,
+        pending.device_pairing_request_id
+    );
+    repo.cancel().await.unwrap();
 
     let mut repo = factory.create().await.unwrap();
     assert_eq!(
