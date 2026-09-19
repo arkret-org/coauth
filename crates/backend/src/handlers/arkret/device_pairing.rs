@@ -319,12 +319,17 @@ async fn authenticate_internal_pairing_request(
     {
         return Err(internal_not_found());
     }
-    let trust_domain = config
+    let source_trust_domain = config
+        .owning_station()
+        .and_then(|station| station.trust_domain.as_deref())
+        .ok_or_else(internal_not_found)?;
+    let destination_trust_domain = config
         .trust_domain
         .as_deref()
         .ok_or_else(internal_not_found)?;
-    if super::account_status::required_header(req, "source-trust-domain")? != trust_domain
-        || super::account_status::required_header(req, "destination-trust-domain")? != trust_domain
+    if super::account_status::required_header(req, "source-trust-domain")? != source_trust_domain
+        || super::account_status::required_header(req, "destination-trust-domain")?
+            != destination_trust_domain
     {
         return Err(internal_not_found());
     }
@@ -402,7 +407,7 @@ async fn authenticate_internal_pairing_request(
     }
     let policy = SignatureVerificationPolicy::new(covered)
         .require_content_digest(true)
-        .max_clock_skew_seconds(300)
+        .max_clock_skew_seconds(30)
         .max_validity_window_seconds(300);
     let sdk_public_key =
         sdk_verifying_key_from_jose_verifying_key(&public_key).map_err(|_| internal_not_found())?;
@@ -920,6 +925,23 @@ mod tests {
         ] {
             assert!(verifier.contains(covered), "missing covered {covered}");
         }
+        assert!(
+            verifier.contains("let source_trust_domain = config")
+                && verifier.contains(".owning_station()")
+                && verifier.contains("station.trust_domain.as_deref()"),
+            "source trust domain must come from the verified owning Station entry"
+        );
+        assert!(
+            verifier.contains("let destination_trust_domain = config")
+                && verifier.contains(".trust_domain")
+                && verifier.contains("destination_trust_domain"),
+            "destination trust domain must come from the Account Authority deployment"
+        );
+        assert!(
+            verifier.contains(".max_clock_skew_seconds(30)")
+                && verifier.contains(".max_validity_window_seconds(300)"),
+            "service signature freshness must keep the canonical 30s skew / 300s lifetime"
+        );
     }
 
     #[test]
