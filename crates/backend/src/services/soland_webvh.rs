@@ -89,7 +89,8 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "status": "accepted",
                 "did": did,
-                "accepted_at": "2026-08-27T00:00:00.000Z"
+                "accepted_at": "2026-08-27T00:00:00.000Z",
+                "operation_ref": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             })))
             .expect(1)
             .mount(&server)

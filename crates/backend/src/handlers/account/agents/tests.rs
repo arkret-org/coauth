@@ -133,7 +133,7 @@ mod agent_auth_error_matrix_tests {
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let fields = AgentSessionGrantProof {
             audience_id: arkret_wire::DidCoreId::new("ak:did_core:web:arkret.example").unwrap(),
-            challenge: "challenge-abc".to_owned(),
+            challenge: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
             proof_kind: AgentSessionGrantProofKind::AgentKeyProof,
             issued_at: expires_at - chrono::Duration::minutes(5),
             signature: String::new(),
@@ -163,7 +163,7 @@ mod agent_auth_error_matrix_tests {
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = AgentSessionGrantProof {
             audience_id: arkret_wire::DidCoreId::new("ak:did_core:web:arkret.example").unwrap(),
-            challenge: "challenge-abc".to_owned(),
+            challenge: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
             proof_kind: AgentSessionGrantProofKind::AgentKeyProof,
             issued_at: expires_at - chrono::Duration::minutes(5),
             signature: String::new(),
@@ -200,7 +200,7 @@ mod agent_auth_error_matrix_tests {
         let expires_at = Utc::now() + chrono::Duration::minutes(5);
         let signed = AgentSessionGrantProof {
             audience_id: arkret_wire::DidCoreId::new("ak:did_core:web:arkret.example").unwrap(),
-            challenge: "challenge-abc".to_owned(),
+            challenge: "AAAAAAAAAAAAAAAAAAAAAA".to_owned(),
             proof_kind: AgentSessionGrantProofKind::AgentKeyProof,
             issued_at: expires_at - chrono::Duration::minutes(5),
             signature: String::new(),

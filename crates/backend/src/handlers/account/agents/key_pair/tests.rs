@@ -100,10 +100,7 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
             "station_id": AUDIENCE
         }},
         "authorization_ref": format!("{AGENT_FULL}#managed-controller"),
-        "actor_seq": 1,
         "created_at": "2026-07-06T00:00:00.000Z",
-        "hlc": "01970e589d21-0001-a13f9c2e",
-        "prev_refs": [],
         "payload": {
             "agent_id": AGENT,
             "key_id": "runtime-key-1",
