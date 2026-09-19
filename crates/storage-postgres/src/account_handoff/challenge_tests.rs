@@ -197,6 +197,8 @@ fn pairing_fixture(
         server_nonce: server_nonce.clone(),
         expires_at,
     };
+    let stage_request_bytes = arkret_canonical::canonical_json_bytes(&stage_request).unwrap();
+    let stage_outcome_bytes = arkret_canonical::canonical_json_bytes(&stage_outcome).unwrap();
     let challenge = ServerDevicePairingChallenge::from_stage(&stage_request, &stage_outcome);
     let (_, digest) = server_device_pairing_transcript(&public_key, &challenge).unwrap();
     let did_key = DidKey::new(format!(
@@ -221,6 +223,12 @@ fn pairing_fixture(
     .unwrap();
     (
         NewDevicePairingPendingRecord {
+            stage_idempotency_key: format!("pairing-fixture:{tag}"),
+            stage_request_digest: arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(
+                &stage_request_bytes,
+            ))
+            .unwrap(),
+            stage_outcome: stage_outcome_bytes,
             device_pairing_request_id: request_id,
             pairing_code,
             new_device_pubkey: public_key,
@@ -235,6 +243,54 @@ fn pairing_fixture(
         },
         proof,
     )
+}
+
+#[tokio::test]
+async fn pairing_stage_idempotency_replays_exact_bytes_and_conflicts_on_changed_body() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingPrincipal").unwrap(),
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingStation").unwrap(),
+    );
+    let (input, _) = pairing_fixture(7, now, &account_id);
+    let expected = input.stage_outcome.clone();
+    let factory = crate::PgRepositoryFactory::new((*pool).clone());
+
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .insert_device_pairing_stage(input.clone())
+            .await
+            .unwrap(),
+        DevicePairingStageInsert::Inserted
+    );
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .insert_device_pairing_stage(input.clone())
+            .await
+            .unwrap(),
+        DevicePairingStageInsert::Replay(expected)
+    );
+    repo.cancel().await.unwrap();
+
+    let mut changed = input;
+    changed.stage_request_digest =
+        arkret_identifiers::Hash::new(format!("sha256:{}", "f".repeat(64))).unwrap();
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .insert_device_pairing_stage(changed)
+            .await
+            .unwrap(),
+        DevicePairingStageInsert::DuplicateConflict
+    );
+    repo.cancel().await.unwrap();
 }
 
 #[tokio::test]

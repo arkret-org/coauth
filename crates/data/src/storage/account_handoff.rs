@@ -90,9 +90,13 @@ repository_impl! {
             now: DateTime<Utc>,
         ) -> Result<Option<AccountHandoffGrant>, Self::Error>;
 
-        /// Insert a newly minted, account-less device-pairing stage.  A live
-        /// request id or pairing-code collision is reported so the caller can
-        /// mint a fresh pair without overwriting any existing credential.
+        /// Insert a newly minted, account-less device-pairing stage. The
+        /// Station-provided internal idempotency key and canonical request
+        /// digest live on this same pending row: equal key + digest replays
+        /// the exact response bytes, while equal key + different digest
+        /// conflicts without creating a second pairing ledger. A request id
+        /// or pairing-code collision is reported so the caller can mint fresh
+        /// server material without overwriting an existing credential.
         async fn insert_device_pairing_stage(
             &mut self,
             input: NewDevicePairingPendingRecord,

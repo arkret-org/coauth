@@ -196,6 +196,12 @@ pub struct DevicePairingPendingRecord {
 /// Immutable values minted by the Account Authority for a new anonymous stage.
 #[derive(Clone, Debug)]
 pub struct NewDevicePairingPendingRecord {
+    /// Station-scoped identity for exactly one accepted public stage ingress.
+    /// It is stored on the pending row itself so idempotency cannot become a
+    /// second pairing ledger.
+    pub stage_idempotency_key: String,
+    pub stage_request_digest: arkret_identifiers::Hash,
+    pub stage_outcome: Vec<u8>,
     pub device_pairing_request_id:
         arkret_models_collaboration::device_pairing::DevicePairingRequestId,
     pub pairing_code: arkret_models_collaboration::device_pairing::DevicePairingCode,
@@ -211,9 +217,11 @@ pub struct NewDevicePairingPendingRecord {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DevicePairingStageInsert {
     Inserted,
+    Replay(Vec<u8>),
+    DuplicateConflict,
     IdentifierCollision,
 }
 

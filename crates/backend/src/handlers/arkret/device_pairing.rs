@@ -1,10 +1,12 @@
 //! Account Authority-owned device-pairing stage, finalize and code-claim boundary.
 
+use arkret_identity::DidBindingPurpose;
 use arkret_models_collaboration::device_pairing::{
     DevicePairingBootstrap, DevicePairingCode, DevicePairingCodeClaimOutcome,
     DevicePairingCodeClaimRequestBody, DevicePairingFinalizeOutcome,
     DevicePairingFinalizeRequestBody, DevicePairingNonce, DevicePairingRequestId,
-    DevicePairingStageOutcome, DevicePairingStageRequestBody, DevicePairingState,
+    DevicePairingResolveRequestBody, DevicePairingStageOutcome, DevicePairingStageRequestBody,
+    DevicePairingState, DevicePairingStatusOutcome, DevicePairingStatusRequestBody,
 };
 use arkret_models_identity::{
     AccountHandoffAllowedOperation, SessionGrantCredentialClass, SessionGrantHolderBinding,
@@ -13,7 +15,12 @@ use arkret_models_identity::{
 use arkret_signatures::device_pairing::{
     ServerDevicePairingChallenge, verify_server_device_pairing_target_proof,
 };
-use arkret_wire::Hash;
+use arkret_signatures::http_signature::{
+    Component, SignatureVerificationPolicy, parse_signature_input,
+    verify_signed_canonical_json_message,
+};
+use arkret_wire::{DidUrl, Hash};
+use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{
@@ -27,7 +34,9 @@ use salvo::prelude::*;
 use super::account_handoff::{proof_invalid, random_opaque};
 use super::session_grant::acquire_human_device_binding;
 use super::{ArkretCanonicalJson, ArkretRouteError, authenticate_account_handoff};
+use crate::arkret_key_bridge::sdk_verifying_key_from_jose_verifying_key;
 use crate::handlers::common::{DepotExt as _, extract_bound_activity_tracker};
+use crate::services::did_binding;
 use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
 
 const PAIRING_TTL: Duration = Duration::minutes(10);
@@ -48,6 +57,35 @@ fn mint_nonce(rng: &mut (impl RngCore + ?Sized)) -> DevicePairingNonce {
     DevicePairingNonce::new(random_opaque(rng, 32)).expect("32-byte base64url nonce")
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct DevicePairingToken {
+    r: DevicePairingRequestId,
+    c: DevicePairingCode,
+}
+
+fn parse_device_pairing_token(
+    token: &str,
+) -> Result<(DevicePairingRequestId, DevicePairingCode), ArkretRouteError> {
+    let bytes = Base64UrlUnpadded::decode_vec(token).map_err(|_| internal_not_found())?;
+    let value: DevicePairingToken =
+        serde_json::from_slice(&bytes).map_err(|_| internal_not_found())?;
+    let canonical =
+        arkret_canonical::canonical_json_bytes(&value).map_err(|_| internal_not_found())?;
+    if canonical != bytes {
+        return Err(internal_not_found());
+    }
+    Ok((value.r, value.c))
+}
+
+fn valid_stage_idempotency_key(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._~:-".contains(&byte))
+}
+
 /// `ak.open.device_pairing.command.stage.v1`.
 #[handler]
 pub async fn stage_device_pairing(
@@ -58,6 +96,21 @@ pub async fn stage_device_pairing(
         .parse_json()
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
+    // A direct public ingress is intentionally not retry-safe. In a combined
+    // deployment it still enters the same Authority-owned ledger, with a
+    // fresh private key that cannot accidentally deduplicate a later public
+    // invocation.
+    let internal_key = format!("direct:{}", uuid::Uuid::now_v7());
+    stage_device_pairing_with_key(body, internal_key, depot).await
+}
+
+async fn stage_device_pairing_with_key(
+    body: DevicePairingStageRequestBody,
+    stage_idempotency_key: String,
+    depot: &Depot,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    let canonical_request = arkret_canonical::canonical_json_bytes(&body)?;
+    let stage_request_digest = Hash::new(arkret_canonical::sha256_digest(&canonical_request))?;
     let clock = crate::handlers::make_clock();
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let expires_at = now + PAIRING_TTL;
@@ -76,35 +129,48 @@ pub async fn stage_device_pairing(
         ))?;
         let pairing_code = mint_pairing_code(&mut *rng);
         let server_nonce = mint_nonce(&mut *rng);
+        let outcome = DevicePairingStageOutcome {
+            device_pairing_request_id: device_pairing_request_id.clone(),
+            pairing_code: pairing_code.clone(),
+            gate_audience_uri: gate_audience_uri.clone(),
+            server_nonce: server_nonce.clone(),
+            expires_at,
+        };
+        let bytes = arkret_canonical::canonical_json_bytes(&outcome)?;
         let inserted = repo
             .account_handoff()
             .insert_device_pairing_stage(NewDevicePairingPendingRecord {
-                device_pairing_request_id: device_pairing_request_id.clone(),
-                pairing_code: pairing_code.clone(),
+                stage_idempotency_key: stage_idempotency_key.clone(),
+                stage_request_digest: stage_request_digest.clone(),
+                stage_outcome: bytes.clone(),
+                device_pairing_request_id,
+                pairing_code,
                 new_device_pubkey: body.new_device_pubkey.clone(),
                 client_nonce: body.client_nonce.clone(),
                 display_name: body.display_name.clone(),
                 device_metadata: body.device_metadata.clone(),
                 gate_audience_uri: gate_audience_uri.clone(),
-                server_nonce: server_nonce.clone(),
+                server_nonce,
                 expires_at,
                 retained_until: expires_at + PAIRING_TOMBSTONE_RETENTION,
                 created_at: now,
             })
             .await?;
-        if inserted == DevicePairingStageInsert::IdentifierCollision {
-            continue;
+        match inserted {
+            DevicePairingStageInsert::Inserted => {
+                repo.save().await?;
+                return Ok(ArkretCanonicalJson(bytes));
+            }
+            DevicePairingStageInsert::Replay(bytes) => {
+                repo.cancel().await.ok();
+                return Ok(ArkretCanonicalJson(bytes));
+            }
+            DevicePairingStageInsert::DuplicateConflict => {
+                repo.cancel().await.ok();
+                return Err(duplicate_conflict());
+            }
+            DevicePairingStageInsert::IdentifierCollision => continue,
         }
-        let outcome = DevicePairingStageOutcome {
-            device_pairing_request_id,
-            pairing_code,
-            gate_audience_uri,
-            server_nonce,
-            expires_at,
-        };
-        let bytes = arkret_canonical::canonical_json_bytes(&outcome)?;
-        repo.save().await?;
-        return Ok(ArkretCanonicalJson(bytes));
     }
 
     repo.cancel().await.ok();
@@ -113,6 +179,266 @@ pub async fn stage_device_pairing(
         arkret_wire::ErrorCode::TEMPORARILY_UNAVAILABLE,
         "could not mint a unique live device-pairing credential",
     ))
+}
+
+/// `ak.gate.account.command.stage_device_pairing.v1`.
+#[handler]
+pub async fn stage_device_pairing_internal(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    let body: DevicePairingStageRequestBody =
+        req.parse_json().await.map_err(|_| internal_not_found())?;
+    let canonical_body =
+        arkret_canonical::canonical_json_bytes(&body).map_err(|_| internal_not_found())?;
+    authenticate_internal_pairing_request(
+        req,
+        depot,
+        &canonical_body,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_STAGE_DEVICE_PAIRING_V1,
+        true,
+    )
+    .await?;
+    let idempotency_key = super::account_status::required_header(req, "idempotency-key")?;
+    if !valid_stage_idempotency_key(&idempotency_key) {
+        return Err(internal_not_found());
+    }
+    stage_device_pairing_with_key(body, idempotency_key, depot).await
+}
+
+/// `ak.gate.account.read.resolve_device_pairing.v1`.
+#[handler]
+pub async fn resolve_device_pairing_internal(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    let body: DevicePairingResolveRequestBody =
+        req.parse_json().await.map_err(|_| internal_not_found())?;
+    let canonical_body =
+        arkret_canonical::canonical_json_bytes(&body).map_err(|_| internal_not_found())?;
+    authenticate_internal_pairing_request(
+        req,
+        depot,
+        &canonical_body,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_RESOLVE_DEVICE_PAIRING_V1,
+        false,
+    )
+    .await?;
+    let (request_id, pairing_code) = parse_device_pairing_token(body.pairing_token.as_str())?;
+    let now = arkret_canonical::normalize_timestamp_canonical(crate::handlers::make_clock().now());
+    let mut repo = depot.repo().await?;
+    let record = repo
+        .account_handoff()
+        .get_device_pairing_stage(&request_id)
+        .await?
+        .filter(|record| {
+            record.pairing_code == pairing_code
+                && record.state == DevicePairingState::ReadyForClaim
+                && record.expires_at > now
+        })
+        .ok_or_else(internal_not_found)?;
+    let station_origin = depot
+        .arkret_config()?
+        .owning_station()
+        .map(|station| station.endpoint.origin().ascii_serialization())
+        .ok_or_else(internal_not_found)?;
+    let outcome = DevicePairingBootstrap {
+        arkret_base_url: station_origin,
+        device_pairing_request_id: record.device_pairing_request_id,
+        pairing_code: record.pairing_code,
+        new_device_pubkey: record.new_device_pubkey,
+        client_nonce: record.client_nonce,
+        gate_audience_uri: record.gate_audience_uri,
+        server_nonce: record.server_nonce,
+        display_name: record.display_name,
+        device_metadata: record.device_metadata,
+        expires_at: record.expires_at,
+    };
+    let bytes = arkret_canonical::canonical_json_bytes(&outcome)?;
+    repo.cancel().await.ok();
+    Ok(ArkretCanonicalJson(bytes))
+}
+
+/// `ak.gate.account.read.device_pairing_status.v1`.
+#[handler]
+pub async fn device_pairing_status_internal(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    let body: DevicePairingStatusRequestBody =
+        req.parse_json().await.map_err(|_| internal_not_found())?;
+    let canonical_body =
+        arkret_canonical::canonical_json_bytes(&body).map_err(|_| internal_not_found())?;
+    authenticate_internal_pairing_request(
+        req,
+        depot,
+        &canonical_body,
+        arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_DEVICE_PAIRING_STATUS_V1,
+        false,
+    )
+    .await?;
+    let now = arkret_canonical::normalize_timestamp_canonical(crate::handlers::make_clock().now());
+    let mut repo = depot.repo().await?;
+    let record = repo
+        .account_handoff()
+        .get_device_pairing_stage(&body.device_pairing_request_id)
+        .await?
+        .filter(|record| {
+            record.pairing_code == body.pairing_code
+                && record.state == DevicePairingState::ReadyForClaim
+                && record.expires_at > now
+        })
+        .ok_or_else(internal_not_found)?;
+    let outcome = DevicePairingStatusOutcome {
+        state: record.state,
+        device_id: None,
+        authorized_event_ref: None,
+    };
+    outcome.validate().map_err(|_| internal_not_found())?;
+    let bytes = arkret_canonical::canonical_json_bytes(&outcome)?;
+    repo.cancel().await.ok();
+    Ok(ArkretCanonicalJson(bytes))
+}
+
+async fn authenticate_internal_pairing_request(
+    req: &Request,
+    depot: &Depot,
+    canonical_body: &[u8],
+    operation_id: &str,
+    require_idempotency_key: bool,
+) -> Result<(), ArkretRouteError> {
+    let config = depot.arkret_config()?;
+    let owning_station_id = super::owning_station_id_for(&config);
+    let owning_station_did = super::owning_station_did_for(&config);
+    let source_id = super::account_status::required_header(req, "source-service-id")?;
+    let destination_id = super::account_status::required_header(req, "destination-service-id")?;
+    let selected_operation = super::account_status::required_header(req, "arkret-operation")?;
+    if source_id != owning_station_id.as_str()
+        || destination_id != owning_station_id.as_str()
+        || selected_operation != operation_id
+    {
+        return Err(internal_not_found());
+    }
+    let trust_domain = config
+        .trust_domain
+        .as_deref()
+        .ok_or_else(internal_not_found)?;
+    if super::account_status::required_header(req, "source-trust-domain")? != trust_domain
+        || super::account_status::required_header(req, "destination-trust-domain")? != trust_domain
+    {
+        return Err(internal_not_found());
+    }
+
+    let signature_input = req
+        .headers()
+        .get("signature-input")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| parse_signature_input(value).ok())
+        .ok_or_else(internal_not_found)?;
+    let key_id = DidUrl::new(signature_input.key_id.clone()).map_err(|_| internal_not_found())?;
+    let source_did = key_id
+        .as_str()
+        .rsplit_once('#')
+        .map(|(controller, _)| controller)
+        .ok_or_else(internal_not_found)?;
+    if source_did != owning_station_did.as_str() {
+        return Err(internal_not_found());
+    }
+
+    let mut repo = depot.repo().await?;
+    let authority = did_binding::authority_document(
+        &depot.http_client()?,
+        &depot.url_builder()?,
+        &config,
+        &depot.keyring()?,
+        &mut repo,
+        depot.did_resolver_service()?.as_ref(),
+        depot.verified_did_binding_store()?.as_ref(),
+        source_did,
+        DidBindingPurpose::Service,
+        did_binding::high_risk_freshness(),
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(|_| internal_not_found())?;
+    let resolved_key = arkret_identity::resolve_verification_method_key_from_document(
+        authority.accepted.document(),
+        key_id.as_str(),
+    )
+    .map_err(|_| internal_not_found())?;
+    let public_key = ed25519_dalek::VerifyingKey::from_bytes(
+        &resolved_key
+            .public_key
+            .ed25519_bytes()
+            .map_err(|_| internal_not_found())?,
+    )
+    .map_err(|_| internal_not_found())?;
+
+    let public_base_url = depot.url_builder()?.http_base();
+    let authority_header = public_base_url
+        .host_str()
+        .map(|host| {
+            public_base_url
+                .port()
+                .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"))
+        })
+        .ok_or_else(internal_not_found)?;
+    let target_uri = public_base_url
+        .join(req.uri().path().trim_start_matches('/'))
+        .map_err(|_| internal_not_found())?;
+    let mut covered = vec![
+        Component::Method,
+        Component::TargetUri,
+        Component::Authority,
+        Component::Header("arkret-operation".to_owned()),
+        Component::Header("source-service-id".to_owned()),
+        Component::Header("destination-service-id".to_owned()),
+        Component::Header("source-trust-domain".to_owned()),
+        Component::Header("destination-trust-domain".to_owned()),
+        Component::Header("content-digest".to_owned()),
+    ];
+    if require_idempotency_key {
+        covered.push(Component::Header("idempotency-key".to_owned()));
+    }
+    let policy = SignatureVerificationPolicy::new(covered)
+        .require_content_digest(true)
+        .max_clock_skew_seconds(300)
+        .max_validity_window_seconds(300);
+    let sdk_public_key =
+        sdk_verifying_key_from_jose_verifying_key(&public_key).map_err(|_| internal_not_found())?;
+    let headers = req.headers().iter().filter_map(|(name, value)| {
+        value
+            .to_str()
+            .ok()
+            .map(|value| (name.as_str().to_owned(), value.to_owned()))
+    });
+    verify_signed_canonical_json_message(
+        req.method().as_str(),
+        target_uri.as_str(),
+        &authority_header,
+        req.uri().path(),
+        headers,
+        req.headers().contains_key("content-encoding"),
+        canonical_body,
+        &sdk_public_key,
+        &policy,
+        crate::handlers::make_clock().now().timestamp(),
+    )
+    .map_err(|_| internal_not_found())?;
+    repo.cancel().await.ok();
+    Ok(())
+}
+
+fn duplicate_conflict() -> ArkretRouteError {
+    ArkretRouteError::coded(
+        StatusCode::CONFLICT,
+        arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+        "Idempotency-Key was reused with a different canonical stage request",
+    )
+}
+
+fn internal_not_found() -> ArkretRouteError {
+    ArkretRouteError::NotFound
 }
 
 /// `ak.gate.account.command.finalize_device_pairing.v1`.
@@ -472,9 +798,12 @@ async fn authenticate_code_claim(
 
 #[cfg(test)]
 mod tests {
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
     use rand_core::{CryptoRng, Error, RngCore};
 
-    use super::{mint_nonce, mint_pairing_code};
+    use super::{
+        mint_nonce, mint_pairing_code, parse_device_pairing_token, valid_stage_idempotency_key,
+    };
 
     struct ZeroRng;
 
@@ -507,6 +836,103 @@ mod tests {
             mint_nonce(&mut rng).as_str(),
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         );
+    }
+
+    #[test]
+    fn pairing_token_accepts_only_canonical_closed_shape() {
+        let canonical = br#"{"c":"ABCDEFGH","r":"device_pairing_request:01999999-0000-7000-8000-00000000feed"}"#;
+        let token = Base64UrlUnpadded::encode_string(canonical);
+        let (request_id, code) = parse_device_pairing_token(&token).expect("canonical token");
+        assert_eq!(
+            request_id.as_str(),
+            "device_pairing_request:01999999-0000-7000-8000-00000000feed"
+        );
+        assert_eq!(code.as_str(), "ABCDEFGH");
+
+        let noncanonical = br#"{"r":"device_pairing_request:01999999-0000-7000-8000-00000000feed", "c":"ABCDEFGH"}"#;
+        assert!(
+            parse_device_pairing_token(&Base64UrlUnpadded::encode_string(noncanonical)).is_err()
+        );
+        let extra = br#"{"c":"ABCDEFGH","r":"device_pairing_request:01999999-0000-7000-8000-00000000feed","x":1}"#;
+        assert!(parse_device_pairing_token(&Base64UrlUnpadded::encode_string(extra)).is_err());
+    }
+
+    #[test]
+    fn stage_idempotency_key_uses_the_registered_closed_alphabet() {
+        assert!(valid_stage_idempotency_key("station:ingress_01.retry-2~x"));
+        assert!(!valid_stage_idempotency_key(""));
+        assert!(!valid_stage_idempotency_key("contains space"));
+        assert!(!valid_stage_idempotency_key(&"a".repeat(129)));
+    }
+
+    #[test]
+    fn internal_pairing_routes_authenticate_before_touching_the_pairing_ledger() {
+        let source = include_str!("device_pairing.rs");
+        for (name, next) in [
+            (
+                "pub async fn stage_device_pairing_internal",
+                "pub async fn resolve_device_pairing_internal",
+            ),
+            (
+                "pub async fn resolve_device_pairing_internal",
+                "pub async fn device_pairing_status_internal",
+            ),
+            (
+                "pub async fn device_pairing_status_internal",
+                "async fn authenticate_internal_pairing_request",
+            ),
+        ] {
+            let body = source
+                .split_once(name)
+                .expect("internal pairing handler")
+                .1
+                .split_once(next)
+                .expect("next handler boundary")
+                .0;
+            let auth = body
+                .find("authenticate_internal_pairing_request(")
+                .expect("service signature authentication");
+            let ledger = body
+                .find("stage_device_pairing_with_key(")
+                .or_else(|| body.find(".account_handoff()"))
+                .expect("pairing ledger access");
+            assert!(
+                auth < ledger,
+                "{name} must authenticate before ledger access"
+            );
+        }
+
+        let verifier = source
+            .split_once("async fn authenticate_internal_pairing_request")
+            .expect("internal verifier")
+            .1
+            .split_once("fn duplicate_conflict")
+            .expect("verifier boundary")
+            .0;
+        for covered in [
+            "arkret-operation",
+            "source-service-id",
+            "destination-service-id",
+            "source-trust-domain",
+            "destination-trust-domain",
+            "content-digest",
+            "idempotency-key",
+        ] {
+            assert!(verifier.contains(covered), "missing covered {covered}");
+        }
+    }
+
+    #[test]
+    fn router_wires_only_the_three_registered_internal_pairing_paths() {
+        let routers = include_str!("../../server/routers.rs");
+        for path in [
+            "gate/account/device-pairing/stages",
+            "gate/account/device-pairing/resolutions",
+            "gate/account/device-pairing/status-queries",
+        ] {
+            assert!(routers.contains(path), "missing {path}");
+        }
+        assert!(!routers.contains("open/device-pairing/internal"));
     }
 
     #[test]

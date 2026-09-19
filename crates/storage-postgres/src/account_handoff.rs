@@ -662,6 +662,26 @@ struct DevicePairingFailureCandidateRow {
 }
 
 #[derive(QueryableByName)]
+struct DevicePairingStageReplayRow {
+    #[diesel(sql_type = Text)]
+    stage_request_digest: String,
+    #[diesel(sql_type = Bytea)]
+    stage_outcome: Vec<u8>,
+}
+
+fn classify_device_pairing_stage_replay(
+    existing_digest: &str,
+    existing_outcome: &[u8],
+    requested_digest: &arkret_identifiers::Hash,
+) -> DevicePairingStageInsert {
+    if existing_digest == requested_digest.as_str() {
+        DevicePairingStageInsert::Replay(existing_outcome.to_vec())
+    } else {
+        DevicePairingStageInsert::DuplicateConflict
+    }
+}
+
+#[derive(QueryableByName)]
 struct DevicePairingFailureCountRow {
     #[diesel(sql_type = SmallInt)]
     failure_count: i16,
@@ -1571,19 +1591,50 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         input: NewDevicePairingPendingRecord,
     ) -> Result<DevicePairingStageInsert, Self::Error> {
-        diesel::sql_query("DELETE FROM device_pairing_pending WHERE retained_until <= $1")
-            .bind::<Timestamptz, _>(input.created_at)
-            .execute(self.conn)
-            .await?;
+        if input.stage_idempotency_key.trim().is_empty()
+            || input.stage_idempotency_key.len() > 128
+            || !input
+                .stage_idempotency_key
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"._~:-".contains(&byte))
+            || !canonical_json_digest_matches(
+                &input.stage_outcome,
+                &arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(
+                    &input.stage_outcome,
+                ))
+                .map_err(|_| DatabaseError::invalid_operation())?,
+            )
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let existing = diesel::sql_query(
+            "SELECT stage_request_digest, stage_outcome FROM device_pairing_pending \
+             WHERE stage_idempotency_key = $1 FOR UPDATE",
+        )
+        .bind::<Text, _>(&input.stage_idempotency_key)
+        .get_result::<DevicePairingStageReplayRow>(self.conn)
+        .await
+        .optional()?;
+        if let Some(existing) = existing {
+            return Ok(classify_device_pairing_stage_replay(
+                &existing.stage_request_digest,
+                &existing.stage_outcome,
+                &input.stage_request_digest,
+            ));
+        }
         let inserted = diesel::sql_query(
             "INSERT INTO device_pairing_pending \
-             (device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+             (device_pairing_request_id, stage_idempotency_key, stage_request_digest, \
+              stage_outcome, pairing_code, new_device_pubkey, client_nonce, \
               display_name, device_metadata, gate_audience_uri, server_nonce, state, \
               expires_at, retained_until, created_at) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'staged',$9,$10,$11) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'staged',$12,$13,$14) \
              ON CONFLICT DO NOTHING",
         )
         .bind::<Text, _>(input.device_pairing_request_id.as_str())
+        .bind::<Text, _>(&input.stage_idempotency_key)
+        .bind::<Text, _>(input.stage_request_digest.as_str())
+        .bind::<Bytea, _>(&input.stage_outcome)
         .bind::<Text, _>(input.pairing_code.as_str())
         .bind::<Jsonb, _>(serde_json::to_value(&input.new_device_pubkey)?)
         .bind::<Text, _>(input.client_nonce.as_str())
@@ -1602,10 +1653,34 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Timestamptz, _>(input.created_at)
         .execute(self.conn)
         .await?;
-        Ok(if inserted == 1 {
-            DevicePairingStageInsert::Inserted
-        } else {
-            DevicePairingStageInsert::IdentifierCollision
+        if inserted == 1 {
+            // Housekeeping follows the accepted stage write. A duplicate-key
+            // conflict returns before this point, preserving its zero-write
+            // contract even when unrelated tombstones are eligible to expire.
+            diesel::sql_query("DELETE FROM device_pairing_pending WHERE retained_until <= $1")
+                .bind::<Timestamptz, _>(input.created_at)
+                .execute(self.conn)
+                .await?;
+            return Ok(DevicePairingStageInsert::Inserted);
+        }
+        // A concurrent transaction may have won on the idempotency key after
+        // the preflight read. Distinguish that durable replay/conflict from a
+        // random request-id or pairing-code collision.
+        let existing = diesel::sql_query(
+            "SELECT stage_request_digest, stage_outcome FROM device_pairing_pending \
+             WHERE stage_idempotency_key = $1 FOR UPDATE",
+        )
+        .bind::<Text, _>(&input.stage_idempotency_key)
+        .get_result::<DevicePairingStageReplayRow>(self.conn)
+        .await
+        .optional()?;
+        Ok(match existing {
+            Some(existing) => classify_device_pairing_stage_replay(
+                &existing.stage_request_digest,
+                &existing.stage_outcome,
+                &input.stage_request_digest,
+            ),
+            None => DevicePairingStageInsert::IdentifierCollision,
         })
     }
 
@@ -3268,11 +3343,27 @@ mod tests {
     use coauth_data::Ulid;
 
     use super::{
-        ExistingDidBindingChallengeDisposition, PrincipalRow,
+        ExistingDidBindingChallengeDisposition, PrincipalRow, classify_device_pairing_stage_replay,
         classify_existing_did_binding_challenge, ensure_did_projects_to_principal,
         lease_quota_advisory_key, principal_from_row,
         reserved_identity_matches_abandonment_checkpoint,
     };
+
+    #[test]
+    fn device_pairing_stage_idempotency_replays_only_equal_canonical_body_digest() {
+        let digest = arkret_identifiers::Hash::new(format!("sha256:{}", "1".repeat(64))).unwrap();
+        let other = arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64))).unwrap();
+        let outcome = br#"{"device_pairing_request_id":"device_pairing_request:01999999-0000-7000-8000-00000000feed"}"#;
+
+        assert_eq!(
+            classify_device_pairing_stage_replay(digest.as_str(), outcome, &digest),
+            coauth_data::DevicePairingStageInsert::Replay(outcome.to_vec())
+        );
+        assert_eq!(
+            classify_device_pairing_stage_replay(digest.as_str(), outcome, &other),
+            coauth_data::DevicePairingStageInsert::DuplicateConflict
+        );
+    }
 
     #[test]
     fn lease_quota_advisory_key_is_postgres_text_safe() {

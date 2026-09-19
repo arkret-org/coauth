@@ -765,6 +765,9 @@ CREATE TABLE public.account_handoff_grants (
 -- unaccepted ready_for_claim row for that AccountId.
 CREATE TABLE public.device_pairing_pending (
     device_pairing_request_id text PRIMARY KEY,
+    stage_idempotency_key text NOT NULL UNIQUE,
+    stage_request_digest text NOT NULL,
+    stage_outcome bytea NOT NULL,
     pairing_code text NOT NULL UNIQUE,
     new_device_pubkey jsonb NOT NULL,
     client_nonce text NOT NULL,
@@ -785,6 +788,9 @@ CREATE TABLE public.device_pairing_pending (
     code_consumed_at timestamp with time zone,
     abuse_locked_at timestamp with time zone,
     CONSTRAINT device_pairing_request_id_valid CHECK (device_pairing_request_id ~ '^device_pairing_request:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+    CONSTRAINT device_pairing_stage_idempotency_key_valid CHECK (stage_idempotency_key ~ '^[A-Za-z0-9._~:-]{1,128}$'),
+    CONSTRAINT device_pairing_stage_request_digest_valid CHECK (stage_request_digest ~ '^sha256:[0-9a-f]{64}$'),
+    CONSTRAINT device_pairing_stage_outcome_nonempty CHECK (octet_length(stage_outcome) > 0),
     CONSTRAINT device_pairing_code_valid CHECK (pairing_code ~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$'),
     CONSTRAINT device_pairing_nonce_valid CHECK (client_nonce ~ '^[A-Za-z0-9_-]{22,86}$' AND server_nonce ~ '^[A-Za-z0-9_-]{22,86}$'),
     CONSTRAINT device_pairing_gate_audience_nonempty CHECK (btrim(gate_audience_uri) <> ''),
