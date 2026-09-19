@@ -5,14 +5,15 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
-    DevicePairingFailureRecord, DevicePairingFinalizeCommit, DevicePairingPendingRecord,
-    DevicePairingStageInsert, DidBindingChallengeConsume, DidBindingChallengeInput,
-    DidBindingChallengeIssue, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
-    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityCreationBindingCommit,
-    IdentityCreationRegisterReplay, IdentityCreationRegisterReserve,
-    IdentityCreationRegistrationAdmission, IdentityCreationRegistrationContext,
-    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
-    NewDevicePairingPendingRecord, PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
+    DevicePairingAdmissionCommit, DevicePairingAdmissionReserve, DevicePairingFailureRecord,
+    DevicePairingFinalizeCommit, DevicePairingPendingRecord, DevicePairingStageInsert,
+    DidBindingChallengeConsume, DidBindingChallengeInput, DidBindingChallengeIssue,
+    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
+    IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
+    IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
+    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
+    NewControllerGateAttestationIssuance, NewDevicePairingAdmission, NewDevicePairingPendingRecord,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
 };
 
 use crate::repository_impl;
@@ -150,6 +151,47 @@ repository_impl! {
             canonical_outcome: &[u8],
             now: DateTime<Utc>,
         ) -> Result<DevicePairingFinalizeCommit, Self::Error>;
+
+        /// Install or recover the Authority-owned pairing admission fence.
+        /// The first write freezes every downstream byte before any Event
+        /// submission. Equal intent resumes; a changed digest or holder is a
+        /// zero-write conflict; completed intent replays exact outcome bytes.
+        async fn reserve_device_pairing_admission(
+            &mut self,
+            input: NewDevicePairingAdmission,
+            now: DateTime<Utc>,
+        ) -> Result<DevicePairingAdmissionReserve, Self::Error>;
+
+        /// Persist a cryptographically verified Station acceptance receipt.
+        async fn mark_device_pairing_station_accepted(
+            &mut self,
+            request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+            request_digest: &arkret_identifiers::Hash,
+            peer_outcome_bytes: &[u8],
+            realm_commit_bytes: &[u8],
+            realm_commit_digest: &arkret_identifiers::Hash,
+            now: DateTime<Utc>,
+        ) -> Result<bool, Self::Error>;
+
+        /// Finish the local half exactly once: consume code/pending state,
+        /// publish authorized, and retain the byte-identical terminal result.
+        async fn complete_device_pairing_admission(
+            &mut self,
+            request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+            request_digest: &arkret_identifiers::Hash,
+            device_id: &arkret_identifiers::DeviceId,
+            authorized_event_ref: &arkret_wire::CommittedEventRef,
+            canonical_outcome: &[u8],
+            now: DateTime<Utc>,
+        ) -> Result<DevicePairingAdmissionCommit, Self::Error>;
+
+        /// Remove only a still-prepared fence after an authenticated terminal
+        /// peer rejection proves the Station wrote nothing.
+        async fn abandon_prepared_device_pairing_admission(
+            &mut self,
+            request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+            request_digest: &arkret_identifiers::Hash,
+        ) -> Result<bool, Self::Error>;
 
         /// Persist a handoff and acquire or reclaim its identity-creation lease.
         async fn create_with_lease(

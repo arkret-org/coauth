@@ -13,6 +13,9 @@ use arkret_models_collaboration::account_lifecycle::{
 use arkret_models_collaboration::agent_operations::{
     AgentKeyPairOutcome, AgentKeyPairRequestBody, AgentView,
 };
+use arkret_models_collaboration::authority_commit::{
+    PeerAuthoritySubmitOutcome, PeerAuthoritySubmitRequest,
+};
 use arkret_models_collaboration::governance::erasure::ErasureReceiptResource;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBody,
@@ -26,9 +29,9 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_wire::{
-    DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody, Did,
-    HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
-    PATH_PEER_DEVICE_REVOCATIONS_CHECK, ServiceOperationId,
+    AuthorityBundleRequest, DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody,
+    Did, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
+    PATH_PEER_DEVICE_REVOCATIONS_CHECK, RealmAuthorityBundle, ServiceOperationId,
 };
 use coauth_keyring::Keyring;
 use serde::Serialize;
@@ -303,6 +306,59 @@ impl<'a> PeerProtocolClient<'a> {
             .await?;
         outcome
             .validate_against(request)
+            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
+        Ok(outcome)
+    }
+
+    /// Resolve the nonce-bound current authority chain from the exact owning
+    /// Station before freezing an external-effect request. The response is
+    /// only a carrier here; callers must run the SDK cryptographic verifier.
+    pub async fn get_realm_authority_bundle(
+        &self,
+        request: &AuthorityBundleRequest,
+    ) -> Result<RealmAuthorityBundle, PeerProtocolClientError> {
+        request
+            .validate()
+            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
+        let url = self.join_absolute("/_arkret/open/realm-authority/bundle")?;
+        let outcome: RealmAuthorityBundle = self
+            .post_json(
+                "open_realm_authority_bundle",
+                url,
+                ServiceOperationId::OPEN_REALM_AUTHORITY_READ_BUNDLE_V1,
+                request,
+                None,
+            )
+            .await?;
+        outcome
+            .validate_for_request(request, chrono::Utc::now())
+            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
+        Ok(outcome)
+    }
+
+    /// Submit one frozen `authority_forward` request through the ordinary
+    /// RFC 9421 peer Event operation. The Event id is the stable idempotency
+    /// identity for crash recovery and lost-response replay.
+    pub async fn post_peer_authority_submit(
+        &self,
+        request: &PeerAuthoritySubmitRequest,
+        idempotency_key: &str,
+    ) -> Result<PeerAuthoritySubmitOutcome, PeerProtocolClientError> {
+        request
+            .validate()
+            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
+        let url = self.join_absolute("/_arkret/peer/events")?;
+        let outcome: PeerAuthoritySubmitOutcome = self
+            .post_json(
+                "peer_events_submit",
+                url,
+                ServiceOperationId::PEER_EVENTS_COMMAND_SUBMIT_V1,
+                request,
+                Some(idempotency_key),
+            )
+            .await?;
+        outcome
+            .validate_for_request(request)
             .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
         Ok(outcome)
     }

@@ -190,7 +190,74 @@ pub struct DevicePairingPendingRecord {
     pub target_proof: Option<arkret_models_collaboration::device_pairing::DevicePairingTargetProof>,
     pub finalize_request_digest: Option<arkret_identifiers::Hash>,
     pub finalize_outcome: Option<Vec<u8>>,
+    pub admission: Option<DevicePairingAdmissionRecord>,
+    pub authorized_device_id: Option<arkret_identifiers::DeviceId>,
+    pub authorized_event_ref: Option<arkret_wire::CommittedEventRef>,
     pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DevicePairingAdmissionState {
+    Prepared,
+    StationAccepted,
+    Completed,
+}
+
+/// Account Authority-owned external-effect fence for one terminal pairing.
+/// All byte fields are the exact canonical wire units used for replay.
+#[derive(Clone, Debug)]
+pub struct DevicePairingAdmissionRecord {
+    pub state: DevicePairingAdmissionState,
+    pub approving_account_id: arkret_wire::AccountId,
+    pub approving_device_id: arkret_identifiers::DeviceId,
+    pub canonical_request_digest: arkret_identifiers::Hash,
+    pub canonical_request_bytes: Vec<u8>,
+    pub authorize_event_bytes: Vec<u8>,
+    pub authorize_event_id: arkret_identifiers::EventId,
+    pub downstream_request_bytes: Vec<u8>,
+    pub downstream_request_digest: arkret_identifiers::Hash,
+    pub target_station_id: arkret_identifiers::DidCoreId,
+    pub target_authority_generation: u64,
+    pub target_stream_head: arkret_wire::CommitStreamHead,
+    pub verified_peer_outcome_bytes: Option<Vec<u8>>,
+    pub verified_realm_commit_bytes: Option<Vec<u8>>,
+    pub verified_realm_commit_digest: Option<arkret_identifiers::Hash>,
+    pub terminal_outcome_bytes: Option<Vec<u8>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NewDevicePairingAdmission {
+    pub device_pairing_request_id:
+        arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+    pub pairing_code: arkret_models_collaboration::device_pairing::DevicePairingCode,
+    pub approving_account_id: arkret_wire::AccountId,
+    pub approving_device_id: arkret_identifiers::DeviceId,
+    pub canonical_request_digest: arkret_identifiers::Hash,
+    pub canonical_request_bytes: Vec<u8>,
+    pub authorize_event_bytes: Vec<u8>,
+    pub authorize_event_id: arkret_identifiers::EventId,
+    pub downstream_request_bytes: Vec<u8>,
+    pub downstream_request_digest: arkret_identifiers::Hash,
+    pub target_station_id: arkret_identifiers::DidCoreId,
+    pub target_authority_generation: u64,
+    pub target_stream_head: arkret_wire::CommitStreamHead,
+}
+
+#[derive(Clone, Debug)]
+pub enum DevicePairingAdmissionReserve {
+    Prepared(DevicePairingAdmissionRecord),
+    Resume(DevicePairingAdmissionRecord),
+    Replay(Vec<u8>),
+    DuplicateConflict,
+    NotFound,
+}
+
+#[derive(Clone, Debug)]
+pub enum DevicePairingAdmissionCommit {
+    Completed(Vec<u8>),
+    Replay(Vec<u8>),
+    DuplicateConflict,
+    NotReady,
 }
 
 /// Immutable values minted by the Account Authority for a new anonymous stage.

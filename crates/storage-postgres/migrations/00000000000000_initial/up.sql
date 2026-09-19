@@ -787,6 +787,27 @@ CREATE TABLE public.device_pairing_pending (
     superseded_at timestamp with time zone,
     code_consumed_at timestamp with time zone,
     abuse_locked_at timestamp with time zone,
+    admission_state text,
+    admission_approving_account_id jsonb,
+    admission_approving_device_id text,
+    admission_request_digest text,
+    admission_request_bytes bytea,
+    admission_authorize_event_bytes bytea,
+    admission_authorize_event_id text,
+    admission_downstream_request_bytes bytea,
+    admission_downstream_request_digest text,
+    admission_target_station_id text,
+    admission_target_authority_generation bigint,
+    admission_target_stream_head jsonb,
+    admission_peer_outcome_bytes bytea,
+    admission_realm_commit_bytes bytea,
+    admission_realm_commit_digest text,
+    admission_terminal_outcome_bytes bytea,
+    admission_prepared_at timestamp with time zone,
+    admission_station_accepted_at timestamp with time zone,
+    admission_completed_at timestamp with time zone,
+    authorized_device_id text,
+    authorized_event_ref jsonb,
     CONSTRAINT device_pairing_request_id_valid CHECK (device_pairing_request_id ~ '^device_pairing_request:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
     CONSTRAINT device_pairing_stage_idempotency_key_valid CHECK (stage_idempotency_key ~ '^[A-Za-z0-9._~:-]{1,128}$'),
     CONSTRAINT device_pairing_stage_request_digest_valid CHECK (stage_request_digest ~ '^sha256:[0-9a-f]{64}$'),
@@ -796,13 +817,24 @@ CREATE TABLE public.device_pairing_pending (
     CONSTRAINT device_pairing_gate_audience_nonempty CHECK (btrim(gate_audience_uri) <> ''),
     CONSTRAINT device_pairing_state_closed CHECK (state = ANY (ARRAY['staged'::text, 'ready_for_claim'::text, 'authorized'::text, 'expired'::text])),
     CONSTRAINT device_pairing_finalize_digest_valid CHECK (finalize_request_digest IS NULL OR finalize_request_digest ~ '^sha256:[0-9a-f]{64}$'),
+    CONSTRAINT device_pairing_admission_state_closed CHECK (admission_state IS NULL OR admission_state = ANY (ARRAY['prepared'::text, 'station_accepted'::text, 'completed'::text])),
+    CONSTRAINT device_pairing_admission_digest_valid CHECK ((admission_request_digest IS NULL OR admission_request_digest ~ '^sha256:[0-9a-f]{64}$') AND (admission_downstream_request_digest IS NULL OR admission_downstream_request_digest ~ '^sha256:[0-9a-f]{64}$') AND (admission_realm_commit_digest IS NULL OR admission_realm_commit_digest ~ '^sha256:[0-9a-f]{64}$')),
+    CONSTRAINT device_pairing_admission_shape CHECK (
+        (admission_state IS NULL AND admission_approving_account_id IS NULL AND admission_approving_device_id IS NULL AND admission_request_digest IS NULL AND admission_request_bytes IS NULL AND admission_authorize_event_bytes IS NULL AND admission_authorize_event_id IS NULL AND admission_downstream_request_bytes IS NULL AND admission_downstream_request_digest IS NULL AND admission_target_station_id IS NULL AND admission_target_authority_generation IS NULL AND admission_target_stream_head IS NULL AND admission_peer_outcome_bytes IS NULL AND admission_realm_commit_bytes IS NULL AND admission_realm_commit_digest IS NULL AND admission_terminal_outcome_bytes IS NULL AND admission_prepared_at IS NULL AND admission_station_accepted_at IS NULL AND admission_completed_at IS NULL AND authorized_device_id IS NULL AND authorized_event_ref IS NULL)
+        OR
+        (admission_state = 'prepared' AND admission_approving_account_id IS NOT NULL AND admission_approving_device_id IS NOT NULL AND admission_request_digest IS NOT NULL AND admission_request_bytes IS NOT NULL AND admission_authorize_event_bytes IS NOT NULL AND admission_authorize_event_id IS NOT NULL AND admission_downstream_request_bytes IS NOT NULL AND admission_downstream_request_digest IS NOT NULL AND admission_target_station_id IS NOT NULL AND admission_target_authority_generation IS NOT NULL AND admission_target_authority_generation >= 0 AND admission_target_stream_head IS NOT NULL AND admission_peer_outcome_bytes IS NULL AND admission_realm_commit_bytes IS NULL AND admission_realm_commit_digest IS NULL AND admission_terminal_outcome_bytes IS NULL AND admission_prepared_at IS NOT NULL AND admission_station_accepted_at IS NULL AND admission_completed_at IS NULL AND authorized_device_id IS NULL AND authorized_event_ref IS NULL)
+        OR
+        (admission_state = 'station_accepted' AND admission_approving_account_id IS NOT NULL AND admission_approving_device_id IS NOT NULL AND admission_request_digest IS NOT NULL AND admission_request_bytes IS NOT NULL AND admission_authorize_event_bytes IS NOT NULL AND admission_authorize_event_id IS NOT NULL AND admission_downstream_request_bytes IS NOT NULL AND admission_downstream_request_digest IS NOT NULL AND admission_target_station_id IS NOT NULL AND admission_target_authority_generation IS NOT NULL AND admission_target_authority_generation >= 0 AND admission_target_stream_head IS NOT NULL AND admission_peer_outcome_bytes IS NOT NULL AND admission_realm_commit_bytes IS NOT NULL AND admission_realm_commit_digest IS NOT NULL AND admission_terminal_outcome_bytes IS NULL AND admission_prepared_at IS NOT NULL AND admission_station_accepted_at IS NOT NULL AND admission_completed_at IS NULL AND authorized_device_id IS NULL AND authorized_event_ref IS NULL)
+        OR
+        (admission_state = 'completed' AND admission_approving_account_id IS NOT NULL AND admission_approving_device_id IS NOT NULL AND admission_request_digest IS NOT NULL AND admission_request_bytes IS NOT NULL AND admission_authorize_event_bytes IS NOT NULL AND admission_authorize_event_id IS NOT NULL AND admission_downstream_request_bytes IS NOT NULL AND admission_downstream_request_digest IS NOT NULL AND admission_target_station_id IS NOT NULL AND admission_target_authority_generation IS NOT NULL AND admission_target_authority_generation >= 0 AND admission_target_stream_head IS NOT NULL AND admission_peer_outcome_bytes IS NOT NULL AND admission_realm_commit_bytes IS NOT NULL AND admission_realm_commit_digest IS NOT NULL AND admission_terminal_outcome_bytes IS NOT NULL AND admission_prepared_at IS NOT NULL AND admission_station_accepted_at IS NOT NULL AND admission_completed_at IS NOT NULL AND authorized_device_id IS NOT NULL AND authorized_event_ref IS NOT NULL)
+    ),
     CONSTRAINT device_pairing_retention_valid CHECK (expires_at > created_at AND retained_until > expires_at),
     CONSTRAINT device_pairing_finalize_shape CHECK (
         (state = 'staged' AND account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL AND superseded_at IS NULL AND code_consumed_at IS NULL AND abuse_locked_at IS NULL)
         OR
         (state = 'ready_for_claim' AND account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL AND superseded_at IS NULL AND code_consumed_at IS NULL AND abuse_locked_at IS NULL)
         OR
-        (state = 'authorized' AND account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL AND superseded_at IS NULL AND code_consumed_at IS NOT NULL AND abuse_locked_at IS NULL)
+        (state = 'authorized' AND account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL AND superseded_at IS NULL AND code_consumed_at IS NOT NULL AND abuse_locked_at IS NULL AND admission_state = 'completed')
         OR
         (state = 'expired' AND code_consumed_at IS NOT NULL AND ((account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL) OR (account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL)))
     )

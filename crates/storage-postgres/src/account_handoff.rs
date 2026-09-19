@@ -7,17 +7,19 @@ use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationIssuance,
-    ControllerGateAttestationReserve, DevicePairingFailureRecord, DevicePairingFinalizeCommit,
-    DevicePairingPendingRecord, DevicePairingStageInsert, DidBindingChallengeConsume,
-    DidBindingChallengeInput, DidBindingChallengeIssue, DidBindingChallengeRecord,
-    IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
-    IdentityBindingChallengeIssue, IdentityBindingChallengeRecord, IdentityCreationBindingCommit,
-    IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision, IdentityCreationRegisterLedger,
-    IdentityCreationRegisterReplay, IdentityCreationRegisterReservation,
-    IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
-    IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
-    NewControllerGateAttestationIssuance, NewDevicePairingPendingRecord,
-    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    ControllerGateAttestationReserve, DevicePairingAdmissionCommit, DevicePairingAdmissionRecord,
+    DevicePairingAdmissionReserve, DevicePairingAdmissionState, DevicePairingFailureRecord,
+    DevicePairingFinalizeCommit, DevicePairingPendingRecord, DevicePairingStageInsert,
+    DidBindingChallengeConsume, DidBindingChallengeInput, DidBindingChallengeIssue,
+    DidBindingChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
+    IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
+    IdentityCreationBindingCommit, IdentityCreationLeaseRecord, IdentityCreationLeaseRiskDecision,
+    IdentityCreationRegisterLedger, IdentityCreationRegisterReplay,
+    IdentityCreationRegisterReservation, IdentityCreationRegisterReserve,
+    IdentityCreationRegistrationAdmission, IdentityCreationRegistrationContext,
+    NewAccountHandoffCreationAttempt, NewControllerGateAttestationIssuance,
+    NewDevicePairingAdmission, NewDevicePairingPendingRecord, PublishedDidRegisterCommit,
+    PublishedDidRegisterReplay,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
@@ -651,6 +653,42 @@ struct DevicePairingPendingRow {
     finalize_request_digest: Option<String>,
     #[diesel(sql_type = Nullable<Bytea>)]
     finalize_outcome: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_state: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    admission_approving_account_id: Option<serde_json::Value>,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_approving_device_id: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    admission_request_bytes: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    admission_authorize_event_bytes: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_authorize_event_id: Option<String>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    admission_downstream_request_bytes: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_downstream_request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_target_station_id: Option<String>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    admission_target_authority_generation: Option<i64>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    admission_target_stream_head: Option<serde_json::Value>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    admission_peer_outcome_bytes: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    admission_realm_commit_bytes: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_realm_commit_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    admission_terminal_outcome_bytes: Option<Vec<u8>>,
+    #[diesel(sql_type = Nullable<Text>)]
+    authorized_device_id: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    authorized_event_ref: Option<serde_json::Value>,
     #[diesel(sql_type = Timestamptz)]
     expires_at: DateTime<Utc>,
 }
@@ -659,6 +697,8 @@ struct DevicePairingPendingRow {
 struct DevicePairingFailureCandidateRow {
     #[diesel(sql_type = Text)]
     state: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    admission_state: Option<String>,
 }
 
 #[derive(QueryableByName)]
@@ -705,6 +745,69 @@ fn device_pairing_pending_from_row(
         "expired" => arkret_models_collaboration::device_pairing::DevicePairingState::Expired,
         _ => return Err(DatabaseError::invalid_operation()),
     };
+    let admission = match row.admission_state.as_deref() {
+        None => None,
+        Some(raw_state) => {
+            let state = match raw_state {
+                "prepared" => DevicePairingAdmissionState::Prepared,
+                "station_accepted" => DevicePairingAdmissionState::StationAccepted,
+                "completed" => DevicePairingAdmissionState::Completed,
+                _ => return Err(DatabaseError::invalid_operation()),
+            };
+            let generation = row
+                .admission_target_authority_generation
+                .and_then(|value| u64::try_from(value).ok())
+                .ok_or_else(DatabaseError::invalid_operation)?;
+            Some(DevicePairingAdmissionRecord {
+                state,
+                approving_account_id: serde_json::from_value(
+                    row.admission_approving_account_id
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )?,
+                approving_device_id: arkret_identifiers::DeviceId::new(
+                    row.admission_approving_device_id
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )?,
+                canonical_request_digest: arkret_identifiers::Hash::new(
+                    row.admission_request_digest
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )?,
+                canonical_request_bytes: row
+                    .admission_request_bytes
+                    .ok_or_else(DatabaseError::invalid_operation)?,
+                authorize_event_bytes: row
+                    .admission_authorize_event_bytes
+                    .ok_or_else(DatabaseError::invalid_operation)?,
+                authorize_event_id: arkret_identifiers::EventId::new(
+                    row.admission_authorize_event_id
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )?,
+                downstream_request_bytes: row
+                    .admission_downstream_request_bytes
+                    .ok_or_else(DatabaseError::invalid_operation)?,
+                downstream_request_digest: arkret_identifiers::Hash::new(
+                    row.admission_downstream_request_digest
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )?,
+                target_station_id: arkret_identifiers::DidCoreId::new(
+                    row.admission_target_station_id
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )?,
+                target_authority_generation: generation,
+                target_stream_head: serde_json::from_value(
+                    row.admission_target_stream_head
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )?,
+                verified_peer_outcome_bytes: row.admission_peer_outcome_bytes,
+                verified_realm_commit_bytes: row.admission_realm_commit_bytes,
+                verified_realm_commit_digest: row
+                    .admission_realm_commit_digest
+                    .map(arkret_identifiers::Hash::new)
+                    .transpose()?,
+                terminal_outcome_bytes: row.admission_terminal_outcome_bytes,
+            })
+        }
+    };
     Ok(DevicePairingPendingRecord {
         device_pairing_request_id:
             arkret_models_collaboration::device_pairing::DevicePairingRequestId::new(
@@ -742,6 +845,15 @@ fn device_pairing_pending_from_row(
             .map(arkret_identifiers::Hash::new)
             .transpose()?,
         finalize_outcome: row.finalize_outcome,
+        admission,
+        authorized_device_id: row
+            .authorized_device_id
+            .map(arkret_identifiers::DeviceId::new)
+            .transpose()?,
+        authorized_event_ref: row
+            .authorized_event_ref
+            .map(serde_json::from_value)
+            .transpose()?,
         expires_at: row.expires_at,
     })
 }
@@ -1657,10 +1769,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             // Housekeeping follows the accepted stage write. A duplicate-key
             // conflict returns before this point, preserving its zero-write
             // contract even when unrelated tombstones are eligible to expire.
-            diesel::sql_query("DELETE FROM device_pairing_pending WHERE retained_until <= $1")
-                .bind::<Timestamptz, _>(input.created_at)
-                .execute(self.conn)
-                .await?;
+            diesel::sql_query(
+                "DELETE FROM device_pairing_pending \
+                 WHERE retained_until <= $1 AND admission_state IS NULL",
+            )
+            .bind::<Timestamptz, _>(input.created_at)
+            .execute(self.conn)
+            .await?;
             return Ok(DevicePairingStageInsert::Inserted);
         }
         // A concurrent transaction may have won on the idempotency key after
@@ -1691,7 +1806,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let row = diesel::sql_query(
             "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
              display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
-             target_proof, finalize_request_digest, finalize_outcome, expires_at \
+             target_proof, finalize_request_digest, finalize_outcome, admission_state, \
+             admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
+             admission_request_bytes, admission_authorize_event_bytes, admission_authorize_event_id, \
+             admission_downstream_request_bytes, admission_downstream_request_digest, \
+             admission_target_station_id, admission_target_authority_generation, admission_target_stream_head, \
+             admission_peer_outcome_bytes, admission_realm_commit_bytes, admission_realm_commit_digest, \
+             admission_terminal_outcome_bytes, authorized_device_id, authorized_event_ref, expires_at \
              FROM device_pairing_pending WHERE device_pairing_request_id = $1",
         )
         .bind::<Text, _>(request_id.as_str())
@@ -1709,7 +1830,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let row = diesel::sql_query(
             "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
              display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
-             target_proof, finalize_request_digest, finalize_outcome, expires_at \
+             target_proof, finalize_request_digest, finalize_outcome, admission_state, \
+             admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
+             admission_request_bytes, admission_authorize_event_bytes, admission_authorize_event_id, \
+             admission_downstream_request_bytes, admission_downstream_request_digest, \
+             admission_target_station_id, admission_target_authority_generation, admission_target_stream_head, \
+             admission_peer_outcome_bytes, admission_realm_commit_bytes, admission_realm_commit_digest, \
+             admission_terminal_outcome_bytes, authorized_device_id, authorized_event_ref, expires_at \
              FROM device_pairing_pending WHERE pairing_code = $1 AND retained_until > $2 FOR UPDATE",
         )
         .bind::<Text, _>(pairing_code.as_str())
@@ -1726,7 +1853,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         now: DateTime<Utc>,
     ) -> Result<DevicePairingFailureRecord, Self::Error> {
         let candidate = diesel::sql_query(
-            "SELECT state FROM device_pairing_pending \
+            "SELECT state, admission_state FROM device_pairing_pending \
              WHERE device_pairing_request_id=$1 AND retained_until>$2 FOR UPDATE",
         )
         .bind::<Text, _>(request_id.as_str())
@@ -1737,7 +1864,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let Some(candidate) = candidate else {
             return Ok(DevicePairingFailureRecord::NotCounted);
         };
-        if candidate.state == "authorized" {
+        if candidate.state == "authorized" || candidate.admission_state.is_some() {
             return Ok(DevicePairingFailureRecord::NotCounted);
         }
 
@@ -1762,7 +1889,8 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             "UPDATE device_pairing_pending \
              SET state='expired', code_consumed_at=COALESCE(code_consumed_at,$2), \
                  abuse_locked_at=COALESCE(abuse_locked_at,$2) \
-             WHERE device_pairing_request_id=$1 AND state IN ('staged','ready_for_claim')",
+             WHERE device_pairing_request_id=$1 AND state IN ('staged','ready_for_claim') \
+             AND admission_state IS NULL",
         )
         .bind::<Text, _>(request_id.as_str())
         .bind::<Timestamptz, _>(now)
@@ -1809,7 +1937,13 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         let row = diesel::sql_query(
             "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
              display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
-             target_proof, finalize_request_digest, finalize_outcome, expires_at \
+             target_proof, finalize_request_digest, finalize_outcome, admission_state, \
+             admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
+             admission_request_bytes, admission_authorize_event_bytes, admission_authorize_event_id, \
+             admission_downstream_request_bytes, admission_downstream_request_digest, \
+             admission_target_station_id, admission_target_authority_generation, admission_target_stream_head, \
+             admission_peer_outcome_bytes, admission_realm_commit_bytes, admission_realm_commit_digest, \
+             admission_terminal_outcome_bytes, authorized_device_id, authorized_event_ref, expires_at \
              FROM device_pairing_pending WHERE device_pairing_request_id = $1 FOR UPDATE",
         )
         .bind::<Text, _>(request_id.as_str())
@@ -1829,6 +1963,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         }
         if record.state
             == arkret_models_collaboration::device_pairing::DevicePairingState::Authorized
+            || record.admission.is_some()
         {
             return Ok(DevicePairingFinalizeCommit::NotFound);
         }
@@ -1857,7 +1992,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         diesel::sql_query(
             "UPDATE device_pairing_pending SET state='expired', superseded_at=$1, \
              code_consumed_at=COALESCE(code_consumed_at,$1) \
-             WHERE state='ready_for_claim' AND account_id=$2 \
+             WHERE state='ready_for_claim' AND account_id=$2 AND admission_state IS NULL \
              AND device_pairing_request_id<>$3",
         )
         .bind::<Timestamptz, _>(now)
@@ -1886,6 +2021,249 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         } else {
             DevicePairingFinalizeCommit::NotFound
         })
+    }
+
+    async fn reserve_device_pairing_admission(
+        &mut self,
+        input: NewDevicePairingAdmission,
+        now: DateTime<Utc>,
+    ) -> Result<DevicePairingAdmissionReserve, Self::Error> {
+        if !canonical_json_digest_matches(
+            &input.canonical_request_bytes,
+            &input.canonical_request_digest,
+        ) || !canonical_json_digest_matches(
+            &input.downstream_request_bytes,
+            &input.downstream_request_digest,
+        ) || input.authorize_event_bytes.is_empty()
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        self.lock_device_pairing_account(&input.approving_account_id)
+            .await?;
+        let existing = self
+            .get_device_pairing_stage(&input.device_pairing_request_id)
+            .await?;
+        let Some(existing) = existing else {
+            return Ok(DevicePairingAdmissionReserve::NotFound);
+        };
+        if let Some(admission) = existing.admission {
+            if admission.canonical_request_digest != input.canonical_request_digest
+                || admission.approving_account_id != input.approving_account_id
+                || admission.approving_device_id != input.approving_device_id
+            {
+                return Ok(DevicePairingAdmissionReserve::DuplicateConflict);
+            }
+            return Ok(match admission.state {
+                DevicePairingAdmissionState::Completed => admission
+                    .terminal_outcome_bytes
+                    .map(DevicePairingAdmissionReserve::Replay)
+                    .ok_or_else(DatabaseError::invalid_operation)?,
+                DevicePairingAdmissionState::Prepared
+                | DevicePairingAdmissionState::StationAccepted => {
+                    DevicePairingAdmissionReserve::Resume(admission)
+                }
+            });
+        }
+        if existing.state
+            != arkret_models_collaboration::device_pairing::DevicePairingState::ReadyForClaim
+            || existing.expires_at <= now
+            || existing.pairing_code != input.pairing_code
+            || existing.account_id.as_ref() != Some(&input.approving_account_id)
+        {
+            self.record_device_pairing_failure(&input.device_pairing_request_id, now)
+                .await?;
+            return Ok(DevicePairingAdmissionReserve::NotFound);
+        }
+
+        let generation = i64::try_from(input.target_authority_generation)
+            .map_err(|_| DatabaseError::invalid_operation())?;
+        let updated = diesel::sql_query(
+            "UPDATE device_pairing_pending SET \
+             admission_state='prepared', admission_approving_account_id=$1, \
+             admission_approving_device_id=$2, admission_request_digest=$3, \
+             admission_request_bytes=$4, admission_authorize_event_bytes=$5, \
+             admission_authorize_event_id=$6, admission_downstream_request_bytes=$7, \
+             admission_downstream_request_digest=$8, admission_target_station_id=$9, \
+             admission_target_authority_generation=$10, admission_target_stream_head=$11, \
+             admission_prepared_at=$12 \
+             WHERE device_pairing_request_id=$13 AND pairing_code=$14 \
+             AND state='ready_for_claim' AND account_id=$1 AND expires_at>$12 \
+             AND admission_state IS NULL",
+        )
+        .bind::<Jsonb, _>(serde_json::to_value(&input.approving_account_id)?)
+        .bind::<Text, _>(input.approving_device_id.as_str())
+        .bind::<Text, _>(input.canonical_request_digest.as_str())
+        .bind::<Bytea, _>(&input.canonical_request_bytes)
+        .bind::<Bytea, _>(&input.authorize_event_bytes)
+        .bind::<Text, _>(input.authorize_event_id.as_str())
+        .bind::<Bytea, _>(&input.downstream_request_bytes)
+        .bind::<Text, _>(input.downstream_request_digest.as_str())
+        .bind::<Text, _>(input.target_station_id.as_str())
+        .bind::<BigInt, _>(generation)
+        .bind::<Jsonb, _>(serde_json::to_value(&input.target_stream_head)?)
+        .bind::<Timestamptz, _>(now)
+        .bind::<Text, _>(input.device_pairing_request_id.as_str())
+        .bind::<Text, _>(input.pairing_code.as_str())
+        .execute(self.conn)
+        .await?;
+        if updated != 1 {
+            let raced = self
+                .get_device_pairing_stage(&input.device_pairing_request_id)
+                .await?
+                .and_then(|record| record.admission);
+            return Ok(match raced {
+                Some(admission)
+                    if admission.canonical_request_digest == input.canonical_request_digest
+                        && admission.approving_account_id == input.approving_account_id
+                        && admission.approving_device_id == input.approving_device_id =>
+                {
+                    match admission.state {
+                        DevicePairingAdmissionState::Completed => admission
+                            .terminal_outcome_bytes
+                            .map(DevicePairingAdmissionReserve::Replay)
+                            .ok_or_else(DatabaseError::invalid_operation)?,
+                        DevicePairingAdmissionState::Prepared
+                        | DevicePairingAdmissionState::StationAccepted => {
+                            DevicePairingAdmissionReserve::Resume(admission)
+                        }
+                    }
+                }
+                Some(_) => DevicePairingAdmissionReserve::DuplicateConflict,
+                None => DevicePairingAdmissionReserve::NotFound,
+            });
+        }
+        let record = self
+            .get_device_pairing_stage(&input.device_pairing_request_id)
+            .await?
+            .and_then(|record| record.admission)
+            .ok_or_else(DatabaseError::invalid_operation)?;
+        Ok(DevicePairingAdmissionReserve::Prepared(record))
+    }
+
+    async fn mark_device_pairing_station_accepted(
+        &mut self,
+        request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+        request_digest: &arkret_identifiers::Hash,
+        peer_outcome_bytes: &[u8],
+        realm_commit_bytes: &[u8],
+        realm_commit_digest: &arkret_identifiers::Hash,
+        now: DateTime<Utc>,
+    ) -> Result<bool, Self::Error> {
+        if peer_outcome_bytes.is_empty()
+            || realm_commit_bytes.is_empty()
+            || !canonical_json_digest_matches(realm_commit_bytes, realm_commit_digest)
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let updated = diesel::sql_query(
+            "UPDATE device_pairing_pending SET admission_state='station_accepted', \
+             admission_peer_outcome_bytes=$1, admission_realm_commit_bytes=$2, \
+             admission_realm_commit_digest=$3, admission_station_accepted_at=$4 \
+             WHERE device_pairing_request_id=$5 AND admission_state='prepared' \
+             AND admission_request_digest=$6",
+        )
+        .bind::<Bytea, _>(peer_outcome_bytes)
+        .bind::<Bytea, _>(realm_commit_bytes)
+        .bind::<Text, _>(realm_commit_digest.as_str())
+        .bind::<Timestamptz, _>(now)
+        .bind::<Text, _>(request_id.as_str())
+        .bind::<Text, _>(request_digest.as_str())
+        .execute(self.conn)
+        .await?;
+        if updated == 1 {
+            return Ok(true);
+        }
+        let record = self.get_device_pairing_stage(request_id).await?;
+        Ok(record.is_some_and(|record| {
+            record.admission.is_some_and(|admission| {
+                admission.canonical_request_digest == *request_digest
+                    && matches!(
+                        admission.state,
+                        DevicePairingAdmissionState::StationAccepted
+                            | DevicePairingAdmissionState::Completed
+                    )
+                    && admission.verified_realm_commit_digest.as_ref() == Some(realm_commit_digest)
+            })
+        }))
+    }
+
+    async fn complete_device_pairing_admission(
+        &mut self,
+        request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+        request_digest: &arkret_identifiers::Hash,
+        device_id: &arkret_identifiers::DeviceId,
+        authorized_event_ref: &arkret_wire::CommittedEventRef,
+        canonical_outcome: &[u8],
+        now: DateTime<Utc>,
+    ) -> Result<DevicePairingAdmissionCommit, Self::Error> {
+        if !canonical_json_digest_matches(
+            canonical_outcome,
+            &arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(canonical_outcome))?,
+        ) {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let existing = self
+            .get_device_pairing_stage(request_id)
+            .await?
+            .ok_or_else(DatabaseError::invalid_operation)?;
+        if let Some(admission) = &existing.admission
+            && admission.state == DevicePairingAdmissionState::Completed
+        {
+            return Ok(if admission.canonical_request_digest == *request_digest {
+                DevicePairingAdmissionCommit::Replay(
+                    admission
+                        .terminal_outcome_bytes
+                        .clone()
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                )
+            } else {
+                DevicePairingAdmissionCommit::DuplicateConflict
+            });
+        }
+        let updated = diesel::sql_query(
+            "UPDATE device_pairing_pending SET state='authorized', \
+             code_consumed_at=COALESCE(code_consumed_at,$1), admission_state='completed', \
+             admission_terminal_outcome_bytes=$2, admission_completed_at=$1, \
+             authorized_device_id=$3, authorized_event_ref=$4 \
+             WHERE device_pairing_request_id=$5 AND state='ready_for_claim' \
+             AND admission_state='station_accepted' AND admission_request_digest=$6",
+        )
+        .bind::<Timestamptz, _>(now)
+        .bind::<Bytea, _>(canonical_outcome)
+        .bind::<Text, _>(device_id.as_str())
+        .bind::<Jsonb, _>(serde_json::to_value(authorized_event_ref)?)
+        .bind::<Text, _>(request_id.as_str())
+        .bind::<Text, _>(request_digest.as_str())
+        .execute(self.conn)
+        .await?;
+        Ok(if updated == 1 {
+            DevicePairingAdmissionCommit::Completed(canonical_outcome.to_vec())
+        } else {
+            DevicePairingAdmissionCommit::NotReady
+        })
+    }
+
+    async fn abandon_prepared_device_pairing_admission(
+        &mut self,
+        request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+        request_digest: &arkret_identifiers::Hash,
+    ) -> Result<bool, Self::Error> {
+        let updated = diesel::sql_query(
+            "UPDATE device_pairing_pending SET admission_state=NULL, \
+             admission_approving_account_id=NULL, admission_approving_device_id=NULL, \
+             admission_request_digest=NULL, admission_request_bytes=NULL, \
+             admission_authorize_event_bytes=NULL, admission_authorize_event_id=NULL, \
+             admission_downstream_request_bytes=NULL, admission_downstream_request_digest=NULL, \
+             admission_target_station_id=NULL, admission_target_authority_generation=NULL, \
+             admission_target_stream_head=NULL, admission_prepared_at=NULL \
+             WHERE device_pairing_request_id=$1 AND admission_state='prepared' \
+             AND admission_request_digest=$2",
+        )
+        .bind::<Text, _>(request_id.as_str())
+        .bind::<Text, _>(request_digest.as_str())
+        .execute(self.conn)
+        .await?;
+        Ok(updated == 1)
     }
 
     async fn create_with_lease(
