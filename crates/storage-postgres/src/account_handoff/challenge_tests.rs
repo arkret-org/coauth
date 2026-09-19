@@ -143,6 +143,300 @@ async fn registration_admission(
     result
 }
 
+fn pairing_fixture(
+    tag: u64,
+    now: DateTime<Utc>,
+    account_id: &arkret_wire::AccountId,
+) -> (
+    NewDevicePairingPendingRecord,
+    arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
+) {
+    use arkret_models_collaboration::device_pairing::{
+        DevicePairingCode, DevicePairingNonce, DevicePairingRequestId, DevicePairingStageOutcome,
+        DevicePairingStageRequestBody, UnsignedDevicePairingTargetProof,
+    };
+    use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
+    use arkret_signatures::device_pairing::{
+        ServerDevicePairingChallenge, server_device_pairing_transcript,
+        sign_device_pairing_target_proof,
+    };
+    use arkret_wire::{Base64UrlString, DeviceId, DidKey, NonEmptyString};
+
+    let signing_key = ed25519_dalek_3::SigningKey::from_bytes(&[u8::try_from(tag).unwrap(); 32]);
+    let kid = format!("ak:device:00000000-0000-7000-8000-{tag:012x}");
+    let public_key = PublicKey {
+        kty: NonEmptyString::new("OKP").unwrap(),
+        kid: NonEmptyString::new(kid.clone()).unwrap(),
+        algorithm: NonEmptyString::new("Ed25519").unwrap(),
+        key: Base64UrlString::new(arkret_canonical::base64url_encode(
+            signing_key.verifying_key().as_bytes(),
+        ))
+        .unwrap(),
+        key_digest: None,
+    };
+    let request_id = DevicePairingRequestId::new(format!(
+        "device_pairing_request:00000000-0000-7000-8000-{tag:012x}"
+    ))
+    .unwrap();
+    let pairing_code = DevicePairingCode::new(format!("AAAAAA{:02}", tag + 22)).unwrap();
+    let client_nonce = DevicePairingNonce::new("AAAAAAAAAAAAAAAAAAAAAA").unwrap();
+    let server_nonce = DevicePairingNonce::new("BBBBBBBBBBBBBBBBBBBBBB").unwrap();
+    let expires_at = now + Duration::minutes(10);
+    let stage_request = DevicePairingStageRequestBody {
+        new_device_pubkey: public_key.clone(),
+        client_nonce: client_nonce.clone(),
+        display_name: None,
+        device_metadata: None,
+    };
+    let stage_outcome = DevicePairingStageOutcome {
+        device_pairing_request_id: request_id.clone(),
+        pairing_code: pairing_code.clone(),
+        gate_audience_uri: "https://account.example".to_owned(),
+        server_nonce: server_nonce.clone(),
+        expires_at,
+    };
+    let challenge = ServerDevicePairingChallenge::from_stage(&stage_request, &stage_outcome);
+    let (_, digest) = server_device_pairing_transcript(&public_key, &challenge).unwrap();
+    let did_key = DidKey::new(format!(
+        "did:key:{}",
+        arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+            signing_key.verifying_key().as_bytes()
+        )
+    ))
+    .unwrap();
+    let proof = sign_device_pairing_target_proof(
+        UnsignedDevicePairingTargetProof::new(
+            account_id.clone(),
+            DeviceId::new(kid).unwrap(),
+            did_key,
+            NonEmptyString::new("hpke-public-key-fixture").unwrap(),
+            vec![NonEmptyString::new("Ed25519").unwrap()],
+            digest,
+        )
+        .unwrap(),
+        &signing_key,
+    )
+    .unwrap();
+    (
+        NewDevicePairingPendingRecord {
+            device_pairing_request_id: request_id,
+            pairing_code,
+            new_device_pubkey: public_key,
+            client_nonce,
+            display_name: None,
+            device_metadata: None,
+            gate_audience_uri: stage_outcome.gate_audience_uri,
+            server_nonce,
+            expires_at,
+            retained_until: expires_at + Duration::hours(24),
+            created_at: now,
+        },
+        proof,
+    )
+}
+
+#[tokio::test]
+async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_prior_ready_row() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let account_id = arkret_wire::AccountId::new(
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingPrincipal").unwrap(),
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingStation").unwrap(),
+    );
+    let (first, first_proof) = pairing_fixture(1, now, &account_id);
+    let (second, second_proof) = pairing_fixture(2, now, &account_id);
+    let factory = crate::PgRepositoryFactory::new((*pool).clone());
+
+    let mut repo = factory.create().await.unwrap();
+    assert_eq!(
+        repo.account_handoff()
+            .insert_device_pairing_stage(first.clone())
+            .await
+            .unwrap(),
+        DevicePairingStageInsert::Inserted
+    );
+    assert_eq!(
+        repo.account_handoff()
+            .insert_device_pairing_stage(second.clone())
+            .await
+            .unwrap(),
+        DevicePairingStageInsert::Inserted
+    );
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &first.device_pairing_request_id,
+                &second.pairing_code,
+                &account_id,
+                &first_proof,
+                &hash('0'),
+                b"{\"wrong_code\":true}",
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::NotFound
+    ));
+    repo.cancel().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let still_staged = repo
+        .account_handoff()
+        .get_device_pairing_stage(&first.device_pairing_request_id)
+        .await
+        .unwrap()
+        .unwrap();
+    repo.cancel().await.unwrap();
+    assert_eq!(
+        still_staged.state,
+        arkret_models_collaboration::device_pairing::DevicePairingState::Staged
+    );
+    assert!(still_staged.finalize_request_digest.is_none());
+    assert!(still_staged.finalize_outcome.is_none());
+
+    let first_digest = hash('a');
+    let first_outcome = b"{\"state\":\"ready_for_claim\"}";
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &first.device_pairing_request_id,
+                &first.pairing_code,
+                &account_id,
+                &first_proof,
+                &first_digest,
+                first_outcome,
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::Committed(bytes) if bytes == first_outcome
+    ));
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &first.device_pairing_request_id,
+                &first.pairing_code,
+                &account_id,
+                &first_proof,
+                &first_digest,
+                first_outcome,
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::Replay(bytes) if bytes == first_outcome
+    ));
+    repo.cancel().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &first.device_pairing_request_id,
+                &first.pairing_code,
+                &account_id,
+                &first_proof,
+                &hash('b'),
+                first_outcome,
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::DuplicateConflict
+    ));
+    repo.cancel().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let unchanged = repo
+        .account_handoff()
+        .get_device_pairing_stage(&first.device_pairing_request_id)
+        .await
+        .unwrap()
+        .unwrap();
+    repo.cancel().await.unwrap();
+    assert_eq!(
+        unchanged.state,
+        arkret_models_collaboration::device_pairing::DevicePairingState::ReadyForClaim
+    );
+    assert_eq!(
+        unchanged.finalize_request_digest,
+        Some(first_digest.clone())
+    );
+    assert_eq!(
+        unchanged.finalize_outcome.as_deref(),
+        Some(first_outcome.as_slice())
+    );
+
+    let second_digest = hash('c');
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &second.device_pairing_request_id,
+                &second.pairing_code,
+                &account_id,
+                &second_proof,
+                &second_digest,
+                b"{\"second\":true}",
+                now,
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::Committed(_)
+    ));
+    repo.save().await.unwrap();
+
+    let mut repo = factory.create().await.unwrap();
+    let first_after = repo
+        .account_handoff()
+        .get_device_pairing_stage(&first.device_pairing_request_id)
+        .await
+        .unwrap()
+        .unwrap();
+    let second_after = repo
+        .account_handoff()
+        .get_device_pairing_stage(&second.device_pairing_request_id)
+        .await
+        .unwrap()
+        .unwrap();
+    repo.cancel().await.unwrap();
+    assert_eq!(
+        first_after.state,
+        arkret_models_collaboration::device_pairing::DevicePairingState::Expired
+    );
+    assert_eq!(
+        second_after.state,
+        arkret_models_collaboration::device_pairing::DevicePairingState::ReadyForClaim
+    );
+
+    let mut repo = factory.create().await.unwrap();
+    assert!(matches!(
+        repo.account_handoff()
+            .finalize_device_pairing(
+                &first.device_pairing_request_id,
+                &first.pairing_code,
+                &account_id,
+                &first_proof,
+                &first_digest,
+                first_outcome,
+                now + Duration::hours(1),
+            )
+            .await
+            .unwrap(),
+        DevicePairingFinalizeCommit::Replay(bytes) if bytes == first_outcome
+    ));
+    repo.cancel().await.unwrap();
+}
+
 #[tokio::test]
 async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reuses_transcript() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {

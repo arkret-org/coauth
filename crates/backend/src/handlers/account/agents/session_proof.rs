@@ -2273,8 +2273,10 @@ mod tests {
             .unwrap(),
             requested_scope: vec!["ak.message.create".to_owned()],
             requested_scope_disclosure: None,
-            agent_key_authorization_ref:
-                "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK".to_owned(),
+            agent_key_authorization_ref: arkret_identifiers::EventId::new(
+                "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK",
+            )
+            .unwrap(),
             agent_scope_request:
                 arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
                     realm_ids: vec![

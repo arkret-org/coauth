@@ -133,6 +133,7 @@ pub use self::account_handoff::{
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve,
     AccountHandoffCreationAttemptState, AccountHandoffGrant, AccountHandoffGrantInput,
     AccountHandoffRepository, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
+    DevicePairingFinalizeCommit, DevicePairingPendingRecord, DevicePairingStageInsert,
     DidBindingChallengeConsume, DidBindingChallengeInput, DidBindingChallengeIssue,
     DidBindingChallengeRecord, IdentityAbandonmentCommit, IdentityAbandonmentCommitInput,
     IdentityBindingChallengeInput, IdentityBindingChallengeIssue, IdentityBindingChallengeRecord,
@@ -140,7 +141,8 @@ pub use self::account_handoff::{
     IdentityCreationRegisterReplay, IdentityCreationRegisterReservation,
     IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
     IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
-    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    NewControllerGateAttestationIssuance, NewDevicePairingPendingRecord,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
 pub use self::accountability::{
     AccountabilityGrant, AccountabilityGrantFanoutState, AccountabilitySubjectKind,

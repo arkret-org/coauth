@@ -521,8 +521,6 @@ mod tests {
                     "ak:did_core:web:auth.example".to_owned(),
                 )
                 .unwrap(),
-                1,
-                arkret_identifiers::Hlc::new("01970e589d21-0001-a13f9c2e").unwrap(),
                 payload(),
             )
             .unwrap(),

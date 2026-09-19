@@ -234,6 +234,7 @@ mod tests {
                 linearization_seq: 1,
                 linearized_at,
                 expires_at: linearized_at + chrono::Duration::seconds(30),
+                accepted_commit_id: None,
             },
         }
     }

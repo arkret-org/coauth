@@ -140,15 +140,7 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
     arkret_signatures::sign_event(
         &mut authored,
         &controller_signer(),
-        &arkret_wire::DidUrl::new(CONTROLLER_VM).expect("controller verification method"),
-        arkret_signatures::SignEventOptions::new(
-            arkret_wire::SignerEvidenceRef::new(format!(
-                "ak:signer_evidence:sha256:{}",
-                "ab".repeat(32)
-            ))
-            .expect("fixture signer evidence ref"),
-        )
-        .with_created_at(
+        arkret_signatures::SignEventOptions::new().with_created_at(
             DateTime::parse_from_rfc3339("2026-07-06T00:01:00.000Z")
                 .unwrap()
                 .with_timezone(&Utc),

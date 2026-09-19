@@ -1301,13 +1301,13 @@ fn canonical_account_handle(
     }
 }
 
-fn random_opaque(rng: &mut (impl RngCore + ?Sized), bytes: usize) -> String {
+pub(super) fn random_opaque(rng: &mut (impl RngCore + ?Sized), bytes: usize) -> String {
     let mut value = vec![0_u8; bytes];
     rng.fill_bytes(&mut value);
     Base64UrlUnpadded::encode_string(&value)
 }
 
-fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
+pub(super) fn proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
         StatusCode::UNAUTHORIZED,
         arkret_wire::ErrorCode::SIGNATURE_INVALID,

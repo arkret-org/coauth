@@ -1407,7 +1407,7 @@ async fn issue_agent_key_proof_session_grant(
         dpop_binding.jkt.clone(),
         session_public_key,
         authorization.scope_details.clone(),
-        arkret_identifiers::EventId::new(body.agent_key_authorization_ref.clone())?,
+        body.agent_key_authorization_ref.clone(),
         body.proof.verification_method.clone(),
         now,
         expires_at,

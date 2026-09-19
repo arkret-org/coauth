@@ -170,6 +170,62 @@ pub struct AccountHandoffGrant {
     pub consumed_at: Option<DateTime<Utc>>,
 }
 
+/// Durable, initially account-less device-pairing stage owned by the Account
+/// Authority.  The complete server challenge inputs are retained so finalize
+/// can reconstruct the protocol transcript without trusting request mirrors.
+#[derive(Clone, Debug)]
+pub struct DevicePairingPendingRecord {
+    pub device_pairing_request_id:
+        arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+    pub pairing_code: arkret_models_collaboration::device_pairing::DevicePairingCode,
+    pub new_device_pubkey: arkret_models_collaboration::governance::agent_artifacts::PublicKey,
+    pub client_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce,
+    pub display_name: Option<arkret_wire::NonEmptyString>,
+    pub device_metadata:
+        Option<arkret_models_collaboration::governance::agent_artifacts::DeviceMetadata>,
+    pub gate_audience_uri: String,
+    pub server_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce,
+    pub state: arkret_models_collaboration::device_pairing::DevicePairingState,
+    pub account_id: Option<arkret_wire::AccountId>,
+    pub target_proof: Option<arkret_models_collaboration::device_pairing::DevicePairingTargetProof>,
+    pub finalize_request_digest: Option<arkret_identifiers::Hash>,
+    pub finalize_outcome: Option<Vec<u8>>,
+    pub expires_at: DateTime<Utc>,
+}
+
+/// Immutable values minted by the Account Authority for a new anonymous stage.
+#[derive(Clone, Debug)]
+pub struct NewDevicePairingPendingRecord {
+    pub device_pairing_request_id:
+        arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+    pub pairing_code: arkret_models_collaboration::device_pairing::DevicePairingCode,
+    pub new_device_pubkey: arkret_models_collaboration::governance::agent_artifacts::PublicKey,
+    pub client_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce,
+    pub display_name: Option<arkret_wire::NonEmptyString>,
+    pub device_metadata:
+        Option<arkret_models_collaboration::governance::agent_artifacts::DeviceMetadata>,
+    pub gate_audience_uri: String,
+    pub server_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce,
+    pub expires_at: DateTime<Utc>,
+    pub retained_until: DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DevicePairingStageInsert {
+    Inserted,
+    IdentifierCollision,
+}
+
+/// Atomic result of binding one staged pairing request to its exact AccountId.
+#[derive(Clone, Debug)]
+pub enum DevicePairingFinalizeCommit {
+    Committed(Vec<u8>),
+    Replay(Vec<u8>),
+    DuplicateConflict,
+    NotFound,
+}
+
 impl std::fmt::Debug for AccountHandoffGrant {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter

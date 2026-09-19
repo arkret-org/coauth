@@ -759,6 +759,45 @@ CREATE TABLE public.account_handoff_grants (
     CONSTRAINT account_handoff_grants_expiry_valid CHECK ((expires_at > issued_at))
 );
 
+-- Account Authority-owned device-pairing pending ledger.  The anonymous
+-- stage is deliberately account-less; finalize installs the signed AccountId
+-- and target proof in the same transaction that supersedes every other
+-- unaccepted ready_for_claim row for that AccountId.
+CREATE TABLE public.device_pairing_pending (
+    device_pairing_request_id text PRIMARY KEY,
+    pairing_code text NOT NULL UNIQUE,
+    new_device_pubkey jsonb NOT NULL,
+    client_nonce text NOT NULL,
+    display_name text,
+    device_metadata jsonb,
+    gate_audience_uri text NOT NULL,
+    server_nonce text NOT NULL,
+    state text NOT NULL,
+    account_id jsonb,
+    target_proof jsonb,
+    finalize_request_digest text,
+    finalize_outcome bytea,
+    expires_at timestamp with time zone NOT NULL,
+    retained_until timestamp with time zone NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    finalized_at timestamp with time zone,
+    superseded_at timestamp with time zone,
+    CONSTRAINT device_pairing_request_id_valid CHECK (device_pairing_request_id ~ '^device_pairing_request:[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+    CONSTRAINT device_pairing_code_valid CHECK (pairing_code ~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$'),
+    CONSTRAINT device_pairing_nonce_valid CHECK (client_nonce ~ '^[A-Za-z0-9_-]{22,86}$' AND server_nonce ~ '^[A-Za-z0-9_-]{22,86}$'),
+    CONSTRAINT device_pairing_gate_audience_nonempty CHECK (btrim(gate_audience_uri) <> ''),
+    CONSTRAINT device_pairing_state_closed CHECK (state = ANY (ARRAY['staged'::text, 'ready_for_claim'::text, 'authorized'::text, 'expired'::text])),
+    CONSTRAINT device_pairing_finalize_digest_valid CHECK (finalize_request_digest IS NULL OR finalize_request_digest ~ '^sha256:[0-9a-f]{64}$'),
+    CONSTRAINT device_pairing_retention_valid CHECK (expires_at > created_at AND retained_until > expires_at),
+    CONSTRAINT device_pairing_finalize_shape CHECK (
+        (state = 'staged' AND account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL AND superseded_at IS NULL)
+        OR
+        (state IN ('ready_for_claim', 'authorized') AND account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL AND superseded_at IS NULL)
+        OR
+        (state = 'expired' AND ((account_id IS NULL AND target_proof IS NULL AND finalize_request_digest IS NULL AND finalize_outcome IS NULL AND finalized_at IS NULL) OR (account_id IS NOT NULL AND target_proof IS NOT NULL AND finalize_request_digest IS NOT NULL AND finalize_outcome IS NOT NULL AND finalized_at IS NOT NULL)))
+    )
+);
+
 CREATE TABLE public.identity_creation_leases (
     local_account_id uuid NOT NULL,
     audience_id text NOT NULL,

@@ -5,13 +5,14 @@ use coauth_data::{
     AccountHandoffAuthorizationCheckpoint, AccountHandoffCreation,
     AccountHandoffCreationAttemptCommit, AccountHandoffCreationAttemptReserve, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationReserve,
+    DevicePairingFinalizeCommit, DevicePairingPendingRecord, DevicePairingStageInsert,
     DidBindingChallengeConsume, DidBindingChallengeInput, DidBindingChallengeIssue,
     IdentityAbandonmentCommit, IdentityAbandonmentCommitInput, IdentityBindingChallengeInput,
     IdentityBindingChallengeIssue, IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
     IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
     IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
-    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
-    Ulid,
+    NewControllerGateAttestationIssuance, NewDevicePairingPendingRecord,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay, Ulid,
 };
 
 use crate::repository_impl;
@@ -88,6 +89,35 @@ repository_impl! {
             token: &str,
             now: DateTime<Utc>,
         ) -> Result<Option<AccountHandoffGrant>, Self::Error>;
+
+        /// Insert a newly minted, account-less device-pairing stage.  A live
+        /// request id or pairing-code collision is reported so the caller can
+        /// mint a fresh pair without overwriting any existing credential.
+        async fn insert_device_pairing_stage(
+            &mut self,
+            input: NewDevicePairingPendingRecord,
+        ) -> Result<DevicePairingStageInsert, Self::Error>;
+
+        /// Read the immutable challenge material needed to verify finalize.
+        async fn get_device_pairing_stage(
+            &mut self,
+            request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+        ) -> Result<Option<DevicePairingPendingRecord>, Self::Error>;
+
+        /// Atomically commit staged -> ready_for_claim, replay the exact prior
+        /// outcome, or reject a conflicting/not-found request.  The backend
+        /// serializes by AccountId and expires every other unaccepted
+        /// ready_for_claim row for that account in the same transaction.
+        async fn finalize_device_pairing(
+            &mut self,
+            request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+            pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
+            account_id: &arkret_wire::AccountId,
+            target_proof: &arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
+            request_digest: &arkret_identifiers::Hash,
+            canonical_outcome: &[u8],
+            now: DateTime<Utc>,
+        ) -> Result<DevicePairingFinalizeCommit, Self::Error>;
 
         /// Persist a handoff and acquire or reclaim its identity-creation lease.
         async fn create_with_lease(

@@ -196,7 +196,10 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
 mod tests {
     use arkret_models_collaboration::account_lifecycle::{
         AccountStatusInitialPublication, AccountStatusPublication,
-        AccountStatusPublicationRequestBody, AccountStatusRecord, UnsignedAccountStatusRecord,
+        AccountStatusPublicationRequestBody,
+    };
+    use arkret_models_collaboration::account_status::{
+        AccountStatusRecord, UnsignedAccountStatusRecord,
     };
     use arkret_models_collaboration::objects::account_status::AccountStatus;
     use arkret_wire::{DidCoreId, DidUrl, Hash, SchemaId};

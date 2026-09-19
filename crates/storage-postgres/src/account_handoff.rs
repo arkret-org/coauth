@@ -7,7 +7,8 @@ use coauth_data::account_handoff::{
     AccountHandoffCreation, AccountHandoffCreationAttempt, AccountHandoffCreationAttemptCommit,
     AccountHandoffCreationAttemptReserve, AccountHandoffCreationAttemptState, AccountHandoffGrant,
     AccountHandoffGrantInput, ControllerGateAttestationCommit, ControllerGateAttestationIssuance,
-    ControllerGateAttestationReserve, DidBindingChallengeConsume, DidBindingChallengeInput,
+    ControllerGateAttestationReserve, DevicePairingFinalizeCommit, DevicePairingPendingRecord,
+    DevicePairingStageInsert, DidBindingChallengeConsume, DidBindingChallengeInput,
     DidBindingChallengeIssue, DidBindingChallengeRecord, IdentityAbandonmentCommit,
     IdentityAbandonmentCommitInput, IdentityBindingChallengeInput, IdentityBindingChallengeIssue,
     IdentityBindingChallengeRecord, IdentityCreationBindingCommit, IdentityCreationLeaseRecord,
@@ -15,7 +16,8 @@ use coauth_data::account_handoff::{
     IdentityCreationRegisterReplay, IdentityCreationRegisterReservation,
     IdentityCreationRegisterReserve, IdentityCreationRegistrationAdmission,
     IdentityCreationRegistrationContext, NewAccountHandoffCreationAttempt,
-    NewControllerGateAttestationIssuance, PublishedDidRegisterCommit, PublishedDidRegisterReplay,
+    NewControllerGateAttestationIssuance, NewDevicePairingPendingRecord,
+    PublishedDidRegisterCommit, PublishedDidRegisterReplay,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
 use diesel::OptionalExtension as _;
@@ -377,6 +379,23 @@ impl<'c> PgAccountHandoffRepository<'c> {
         Ok(())
     }
 
+    async fn lock_device_pairing_account(
+        &mut self,
+        account_id: &arkret_wire::AccountId,
+    ) -> Result<(), DatabaseError> {
+        let key = String::from_utf8(arkret_canonical::canonical_json_bytes(account_id)?)
+            .map_err(|_| DatabaseError::invalid_operation())?;
+        let lock = diesel::sql_query(
+            "SELECT TRUE AS locked \
+             FROM pg_advisory_xact_lock(hashtextextended($1, 84))",
+        )
+        .bind::<Text, _>(key)
+        .get_result::<AdvisoryLockRow>(self.conn)
+        .await?;
+        debug_assert!(lock.locked);
+        Ok(())
+    }
+
     async fn quota_event_exists(
         &mut self,
         request_id: Uuid,
@@ -602,6 +621,91 @@ struct HandoffRow {
     revoked_at: Option<DateTime<Utc>>,
     #[diesel(sql_type = Nullable<Timestamptz>)]
     consumed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(QueryableByName)]
+struct DevicePairingPendingRow {
+    #[diesel(sql_type = Text)]
+    device_pairing_request_id: String,
+    #[diesel(sql_type = Text)]
+    pairing_code: String,
+    #[diesel(sql_type = Jsonb)]
+    new_device_pubkey: serde_json::Value,
+    #[diesel(sql_type = Text)]
+    client_nonce: String,
+    #[diesel(sql_type = Nullable<Text>)]
+    display_name: Option<String>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    device_metadata: Option<serde_json::Value>,
+    #[diesel(sql_type = Text)]
+    gate_audience_uri: String,
+    #[diesel(sql_type = Text)]
+    server_nonce: String,
+    #[diesel(sql_type = Text)]
+    state: String,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    account_id: Option<serde_json::Value>,
+    #[diesel(sql_type = Nullable<Jsonb>)]
+    target_proof: Option<serde_json::Value>,
+    #[diesel(sql_type = Nullable<Text>)]
+    finalize_request_digest: Option<String>,
+    #[diesel(sql_type = Nullable<Bytea>)]
+    finalize_outcome: Option<Vec<u8>>,
+    #[diesel(sql_type = Timestamptz)]
+    expires_at: DateTime<Utc>,
+}
+
+fn device_pairing_pending_from_row(
+    row: DevicePairingPendingRow,
+) -> Result<DevicePairingPendingRecord, DatabaseError> {
+    let state = match row.state.as_str() {
+        "staged" => arkret_models_collaboration::device_pairing::DevicePairingState::Staged,
+        "ready_for_claim" => {
+            arkret_models_collaboration::device_pairing::DevicePairingState::ReadyForClaim
+        }
+        "authorized" => arkret_models_collaboration::device_pairing::DevicePairingState::Authorized,
+        "expired" => arkret_models_collaboration::device_pairing::DevicePairingState::Expired,
+        _ => return Err(DatabaseError::invalid_operation()),
+    };
+    Ok(DevicePairingPendingRecord {
+        device_pairing_request_id:
+            arkret_models_collaboration::device_pairing::DevicePairingRequestId::new(
+                row.device_pairing_request_id,
+            )
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        pairing_code: arkret_models_collaboration::device_pairing::DevicePairingCode::new(
+            row.pairing_code,
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?,
+        new_device_pubkey: serde_json::from_value(row.new_device_pubkey)?,
+        client_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce::new(
+            row.client_nonce,
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?,
+        display_name: row
+            .display_name
+            .map(arkret_wire::NonEmptyString::new)
+            .transpose()
+            .map_err(|_| DatabaseError::invalid_operation())?,
+        device_metadata: row
+            .device_metadata
+            .map(serde_json::from_value)
+            .transpose()?,
+        gate_audience_uri: row.gate_audience_uri,
+        server_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce::new(
+            row.server_nonce,
+        )
+        .map_err(|_| DatabaseError::invalid_operation())?,
+        state,
+        account_id: row.account_id.map(serde_json::from_value).transpose()?,
+        target_proof: row.target_proof.map(serde_json::from_value).transpose()?,
+        finalize_request_digest: row
+            .finalize_request_digest
+            .map(arkret_identifiers::Hash::new)
+            .transpose()?,
+        finalize_outcome: row.finalize_outcome,
+        expires_at: row.expires_at,
+    })
 }
 
 #[derive(QueryableByName)]
@@ -1443,6 +1547,148 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .await
         .optional()?;
         row.map(handoff_from_row).transpose()
+    }
+
+    async fn insert_device_pairing_stage(
+        &mut self,
+        input: NewDevicePairingPendingRecord,
+    ) -> Result<DevicePairingStageInsert, Self::Error> {
+        diesel::sql_query("DELETE FROM device_pairing_pending WHERE retained_until <= $1")
+            .bind::<Timestamptz, _>(input.created_at)
+            .execute(self.conn)
+            .await?;
+        let inserted = diesel::sql_query(
+            "INSERT INTO device_pairing_pending \
+             (device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+              display_name, device_metadata, gate_audience_uri, server_nonce, state, \
+              expires_at, retained_until, created_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'staged',$9,$10,$11) \
+             ON CONFLICT DO NOTHING",
+        )
+        .bind::<Text, _>(input.device_pairing_request_id.as_str())
+        .bind::<Text, _>(input.pairing_code.as_str())
+        .bind::<Jsonb, _>(serde_json::to_value(&input.new_device_pubkey)?)
+        .bind::<Text, _>(input.client_nonce.as_str())
+        .bind::<Nullable<Text>, _>(input.display_name.as_ref().map(|value| value.as_str()))
+        .bind::<Nullable<Jsonb>, _>(
+            input
+                .device_metadata
+                .as_ref()
+                .map(serde_json::to_value)
+                .transpose()?,
+        )
+        .bind::<Text, _>(&input.gate_audience_uri)
+        .bind::<Text, _>(input.server_nonce.as_str())
+        .bind::<Timestamptz, _>(input.expires_at)
+        .bind::<Timestamptz, _>(input.retained_until)
+        .bind::<Timestamptz, _>(input.created_at)
+        .execute(self.conn)
+        .await?;
+        Ok(if inserted == 1 {
+            DevicePairingStageInsert::Inserted
+        } else {
+            DevicePairingStageInsert::IdentifierCollision
+        })
+    }
+
+    async fn get_device_pairing_stage(
+        &mut self,
+        request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+    ) -> Result<Option<DevicePairingPendingRecord>, Self::Error> {
+        let row = diesel::sql_query(
+            "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+             display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
+             target_proof, finalize_request_digest, finalize_outcome, expires_at \
+             FROM device_pairing_pending WHERE device_pairing_request_id = $1",
+        )
+        .bind::<Text, _>(request_id.as_str())
+        .get_result::<DevicePairingPendingRow>(self.conn)
+        .await
+        .optional()?;
+        row.map(device_pairing_pending_from_row).transpose()
+    }
+
+    async fn finalize_device_pairing(
+        &mut self,
+        request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+        pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
+        account_id: &arkret_wire::AccountId,
+        target_proof: &arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
+        request_digest: &arkret_identifiers::Hash,
+        canonical_outcome: &[u8],
+        now: DateTime<Utc>,
+    ) -> Result<DevicePairingFinalizeCommit, Self::Error> {
+        self.lock_device_pairing_account(account_id).await?;
+        let row = diesel::sql_query(
+            "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+             display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
+             target_proof, finalize_request_digest, finalize_outcome, expires_at \
+             FROM device_pairing_pending WHERE device_pairing_request_id = $1 FOR UPDATE",
+        )
+        .bind::<Text, _>(request_id.as_str())
+        .get_result::<DevicePairingPendingRow>(self.conn)
+        .await
+        .optional()?;
+        let Some(record) = row.map(device_pairing_pending_from_row).transpose()? else {
+            return Ok(DevicePairingFinalizeCommit::NotFound);
+        };
+        if record.pairing_code != *pairing_code {
+            return Ok(DevicePairingFinalizeCommit::NotFound);
+        }
+        if record.state != arkret_models_collaboration::device_pairing::DevicePairingState::Staged {
+            if record.finalize_request_digest.as_ref() == Some(request_digest)
+                && record.account_id.as_ref() == Some(account_id)
+            {
+                return record
+                    .finalize_outcome
+                    .map(DevicePairingFinalizeCommit::Replay)
+                    .ok_or_else(DatabaseError::invalid_operation);
+            }
+            return Ok(if record.finalize_request_digest.is_some() {
+                DevicePairingFinalizeCommit::DuplicateConflict
+            } else {
+                DevicePairingFinalizeCommit::NotFound
+            });
+        }
+        if record.expires_at <= now {
+            return Ok(DevicePairingFinalizeCommit::NotFound);
+        }
+        if target_proof.account_id != *account_id {
+            return Ok(DevicePairingFinalizeCommit::DuplicateConflict);
+        }
+
+        let account_id_json = serde_json::to_value(account_id)?;
+        diesel::sql_query(
+            "UPDATE device_pairing_pending SET state='expired', superseded_at=$1 \
+             WHERE state='ready_for_claim' AND account_id=$2 \
+             AND device_pairing_request_id<>$3",
+        )
+        .bind::<Timestamptz, _>(now)
+        .bind::<Jsonb, _>(&account_id_json)
+        .bind::<Text, _>(request_id.as_str())
+        .execute(self.conn)
+        .await?;
+
+        let updated = diesel::sql_query(
+            "UPDATE device_pairing_pending SET state='ready_for_claim', account_id=$1, \
+             target_proof=$2, finalize_request_digest=$3, finalize_outcome=$4, finalized_at=$5 \
+             WHERE device_pairing_request_id=$6 AND pairing_code=$7 AND state='staged' \
+             AND expires_at>$5",
+        )
+        .bind::<Jsonb, _>(account_id_json)
+        .bind::<Jsonb, _>(serde_json::to_value(target_proof)?)
+        .bind::<Text, _>(request_digest.as_str())
+        .bind::<Bytea, _>(canonical_outcome)
+        .bind::<Timestamptz, _>(now)
+        .bind::<Text, _>(request_id.as_str())
+        .bind::<Text, _>(pairing_code.as_str())
+        .execute(self.conn)
+        .await?;
+        Ok(if updated == 1 {
+            DevicePairingFinalizeCommit::Committed(canonical_outcome.to_vec())
+        } else {
+            DevicePairingFinalizeCommit::NotFound
+        })
     }
 
     async fn create_with_lease(

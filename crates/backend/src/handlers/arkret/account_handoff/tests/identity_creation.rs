@@ -125,6 +125,16 @@ fn pcr_outcome(
         principal_id: request.principal_id.clone(),
         pcr_realm_id: request.pcr_realm_id.clone(),
         accepted_device_id: descriptor.device_id,
+        resolution: arkret_models_identity::PrincipalResolutionProjection {
+            did: request.did.clone(),
+            method_history_head: request
+                .registration_did_evidence
+                .method_history_head
+                .clone(),
+            version_id: request.registration_did_evidence.version_id.clone(),
+            resolution_event_ref: request.genesis_unit.create().event_id.to_string(),
+            updated_at: request.registration_did_evidence.accepted_at,
+        },
         receipt,
     };
     outcome.validate_against(request).unwrap();
@@ -194,6 +204,7 @@ fn registration_device_gate_outcome(
             linearization_seq: 1,
             linearized_at: request.requested_at,
             expires_at: request.requested_at + Duration::seconds(30),
+            accepted_commit_id: None,
         },
     };
     outcome.validate_for_request(request).unwrap();
