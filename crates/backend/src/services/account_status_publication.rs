@@ -34,9 +34,18 @@ pub struct AccountStatusPublicationPlan {
     pub body: AccountStatusPublicationRequestBody,
 }
 
+/// Author, append and enqueue one authoritative account-status transition.
+///
+/// Keeping issuer-ledger append and publication scheduling behind one boundary
+/// prevents a caller from committing a signed successor without the exact
+/// immutable bytes also entering the durable outbox. The caller may perform
+/// the local account-row mutation and audit write before committing the shared
+/// repository transaction.
 #[allow(clippy::too_many_arguments)]
-pub async fn author_transition_plan(
+pub async fn author_and_enqueue_transition(
     repo: &mut BoxRepository,
+    rng: &mut (dyn RngCore + Send),
+    clock: &dyn Clock,
     station: &dyn coauth_principal::ConnectorAdmin,
     keyring: &coauth_keyring::Keyring,
     service_id: &str,
@@ -45,7 +54,6 @@ pub async fn author_transition_plan(
     target_status: AccountStatus,
     reason_code: Option<String>,
     now: chrono::DateTime<chrono::Utc>,
-    _rng: &mut (dyn RngCore + Send),
 ) -> Result<AccountStatusPublicationPlan, AccountStatusPublicationError> {
     let (destination_name, audience) = station
         .account_status_destination()
@@ -139,13 +147,24 @@ pub async fn author_transition_plan(
     };
     body.validate_shape()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
-    Ok(AccountStatusPublicationPlan {
+    let plan = AccountStatusPublicationPlan {
         audience_id: audience,
         destination_name,
         local_account_id,
         idempotency_key,
         body,
-    })
+    };
+    enqueue_exact_publication(
+        repo,
+        rng,
+        clock,
+        &plan.destination_name,
+        plan.local_account_id.clone(),
+        &plan.idempotency_key,
+        plan.body.clone(),
+    )
+    .await?;
+    Ok(plan)
 }
 
 pub fn validate_transition_plan(
@@ -175,7 +194,7 @@ pub fn validate_transition_plan(
     Ok(())
 }
 
-pub async fn enqueue_exact_publication(
+async fn enqueue_exact_publication(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,

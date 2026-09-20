@@ -12,7 +12,7 @@
 //! 2. durably records the erasure intent (`user_erasure_requests`), which is also the idempotency
 //!    carrier for the three-state `request_id` contract;
 //! 3. continues the existing `erasure_pending` AccountStatusRecord issuance flow: issuer-ledger
-//!    append + signature via [`author_transition_plan`], durable publication job, and the shared
+//!    append + signature via [`author_and_enqueue_transition`], durable publication job, and the shared
 //!    deactivation/projection-rewrite fanout jobs that already implement §8.
 //!
 //! This deployment grants **no withdrawal window** (§8.1 explicitly allows a
@@ -48,7 +48,7 @@ use salvo::prelude::*;
 use super::{ArkretRouteError, owning_station_id_for};
 use crate::handlers::common::{DepotExt, extract_session_info, make_clock, make_rng};
 use crate::services::account_status_publication::{
-    author_transition_plan, enqueue_exact_publication, validate_transition_plan,
+    author_and_enqueue_transition, validate_transition_plan,
 };
 
 /// `reason_code` stamped on the self-service `erasure_pending` record so the
@@ -314,8 +314,10 @@ pub(crate) async fn accept_erasure_request(
     // fanout jobs (session teardown + projection rewrite). All of it commits
     // with the intent in one transaction — receipt and issuance are same-side
     // by design, so no cross-service intermediate state exists.
-    let plan = author_transition_plan(
+    let plan = author_and_enqueue_transition(
         repo,
+        rng,
+        clock,
         station,
         keyring,
         owning_station_id_for(arkret_config).as_str(),
@@ -324,7 +326,6 @@ pub(crate) async fn accept_erasure_request(
         AccountStatus::ErasurePending,
         Some(SELF_ERASURE_REASON_CODE.to_owned()),
         now,
-        rng,
     )
     .await
     .map_err(|error| {
@@ -361,24 +362,6 @@ pub(crate) async fn accept_erasure_request(
             },
         )
         .await?;
-
-    enqueue_exact_publication(
-        repo,
-        rng,
-        clock,
-        &plan.destination_name,
-        plan.local_account_id,
-        &plan.idempotency_key,
-        plan.body,
-    )
-    .await
-    .map_err(|error| {
-        ArkretRouteError::coded(
-            StatusCode::PRECONDITION_FAILED,
-            arkret_wire::ErrorCode::FAILED_PRECONDITION,
-            error.to_string(),
-        )
-    })?;
 
     // Shared §8 fanout: DeactivateUserJob tears down local sessions without
     // downgrading the terminal status (`principal_erase = true` also keeps it
@@ -491,8 +474,10 @@ mod tests {
             .await
             .unwrap()
             .expect("seeded principal binding");
-        author_transition_plan(
+        author_and_enqueue_transition(
             &mut repo,
+            &mut rng,
+            &clock,
             state.station_admin.as_ref(),
             &state.keyring,
             owning_station_id_for(&state.arkret_config).as_str(),
@@ -501,7 +486,6 @@ mod tests {
             status,
             None,
             Utc::now(),
-            &mut rng,
         )
         .await
         .unwrap();

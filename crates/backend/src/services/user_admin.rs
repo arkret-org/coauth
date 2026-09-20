@@ -22,8 +22,7 @@ use crate::handlers::admin::audit_helper::{
     AdminAuditSigning, record_admin_operation, record_admin_operation_signed,
 };
 use crate::services::account_status_publication::{
-    AccountStatusPublicationPlan, author_transition_plan, enqueue_exact_publication,
-    validate_transition_plan,
+    author_and_enqueue_transition, validate_transition_plan,
 };
 use crate::services::user_profile::{sync_display_name_patch, validate_display_name_patch};
 
@@ -90,7 +89,6 @@ pub async fn patch_user(
     patch: AdminUserPatch,
     principal_erase: bool,
     audit_signing: Option<AdminAuditSigning<'_>>,
-    account_status_publication: Option<AccountStatusPublicationPlan>,
 ) -> Result<User, UserAdminServiceError> {
     validate_admin_patch(&patch)?;
 
@@ -108,8 +106,7 @@ pub async fn patch_user(
     let next_status = account_status_from_admin_patch(user.status, &patch);
     validate_admin_status_transition(user.status, next_status)?;
     let status_changes = user.status != next_status;
-    let mut account_status_publication = account_status_publication;
-    let publication_binding = if status_changes {
+    if status_changes {
         let (destination_name, audience) = station
             .account_status_destination()
             .map_err(UserAdminServiceError::Station)?;
@@ -118,44 +115,35 @@ pub async fn patch_user(
             .get_for_user_and_audience(&user, audience.as_str())
             .await?
             .ok_or(UserAdminServiceError::MissingAccountStatusPublication)?;
-        if account_status_publication.is_none() {
-            let signing = audit_signing
-                .as_ref()
-                .ok_or(UserAdminServiceError::MissingAccountStatusPublication)?;
-            account_status_publication = Some(
-                author_transition_plan(
-                    repo,
-                    station,
-                    signing.keyring,
-                    signing.service_id.as_str(),
-                    &user,
-                    &binding,
-                    next_status,
-                    None,
-                    clock.now(),
-                    rng,
-                )
-                .await
-                .map_err(|error| {
-                    UserAdminServiceError::InvalidAccountStatusPublication(error.to_string())
-                })?,
-            );
-        }
-        let plan = account_status_publication
+        let signing = audit_signing
             .as_ref()
             .ok_or(UserAdminServiceError::MissingAccountStatusPublication)?;
+        let plan = author_and_enqueue_transition(
+            repo,
+            rng,
+            clock,
+            station,
+            signing.keyring,
+            signing.service_id.as_str(),
+            &user,
+            &binding,
+            next_status,
+            None,
+            clock.now(),
+        )
+        .await
+        .map_err(|error| {
+            UserAdminServiceError::InvalidAccountStatusPublication(error.to_string())
+        })?;
         if plan.destination_name != destination_name || plan.audience_id != audience {
             return Err(UserAdminServiceError::InvalidAccountStatusPublication(
                 "publication destination does not match the configured Station".to_owned(),
             ));
         }
-        validate_transition_plan(&user, &binding, next_status, plan).map_err(|error| {
+        validate_transition_plan(&user, &binding, next_status, &plan).map_err(|error| {
             UserAdminServiceError::InvalidAccountStatusPublication(error.to_string())
         })?;
-        Some(binding)
-    } else {
-        None
-    };
+    }
     let should_schedule_deactivation = !account_status_needs_deactivation_fanout(user.status)
         && account_status_needs_deactivation_fanout(next_status);
     let should_schedule_erasure = user.status != AccountStatus::ErasurePending
@@ -165,22 +153,6 @@ pub async fn patch_user(
         .user()
         .patch(clock, user.clone(), patch.clone().into())
         .await?;
-
-    if let (Some(plan), Some(_binding)) = (account_status_publication, publication_binding) {
-        enqueue_exact_publication(
-            repo,
-            rng,
-            clock,
-            &plan.destination_name,
-            plan.local_account_id,
-            &plan.idempotency_key,
-            plan.body,
-        )
-        .await
-        .map_err(|error| {
-            UserAdminServiceError::InvalidAccountStatusPublication(error.to_string())
-        })?;
-    }
 
     if !account_status_needs_deactivation_fanout(updated.status) {
         sync_display_name_patch(station, &updated, display_name_patch)

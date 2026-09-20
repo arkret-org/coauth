@@ -93,8 +93,10 @@ pub async fn deactivate_current_account(
                 "durable principal/PCR authority binding is missing".to_owned(),
             )
         })?;
-    let publication = crate::services::account_status_publication::author_transition_plan(
+    crate::services::account_status_publication::author_and_enqueue_transition(
         &mut repo,
+        rng,
+        clock,
         station,
         keyring,
         service_id,
@@ -103,24 +105,11 @@ pub async fn deactivate_current_account(
         arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated,
         None,
         clock.now(),
-        rng,
     )
     .await
     .map_err(|error| AccountProfileError::AccountStatusPublication(error.to_string()))?;
 
     let user = repo.user().deactivate(clock, original_user).await?;
-
-    crate::services::account_status_publication::enqueue_exact_publication(
-        &mut repo,
-        rng,
-        clock,
-        &publication.destination_name,
-        publication.local_account_id,
-        &publication.idempotency_key,
-        publication.body,
-    )
-    .await
-    .map_err(|error| AccountProfileError::AccountStatusPublication(error.to_string()))?;
 
     repo.queue_job()
         .schedule_job(rng, clock, DeactivateUserJob::new(&user, principal_erase))

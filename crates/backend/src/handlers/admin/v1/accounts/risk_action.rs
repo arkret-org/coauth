@@ -878,7 +878,6 @@ pub async fn execute(
             patch,
             principal_erase,
             Some(audit_signing),
-            None,
         )
         .await
         .map_err(super::map_service_error)?,

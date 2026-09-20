@@ -546,7 +546,6 @@ async fn patch_account(
         patch,
         principal_erase,
         Some(audit_signing),
-        None,
     )
     .await
     .map_err(map_service_error)?;

@@ -867,8 +867,10 @@ impl TestState {
         // A registered account's issuer ledger opens with an active genesis
         // record; without it every later transition is rejected as a ledger
         // that does not begin at `active`.
-        crate::services::account_status_publication::author_transition_plan(
+        crate::services::account_status_publication::author_and_enqueue_transition(
             &mut repo,
+            &mut rng,
+            self.clock.as_ref(),
             self.station_admin.as_ref(),
             &self.keyring,
             crate::handlers::arkret::owning_station_id_for(&self.arkret_config).as_str(),
@@ -877,7 +879,6 @@ impl TestState {
             arkret_models_collaboration::objects::account_status::AccountStatus::Active,
             None,
             chrono::Utc::now(),
-            &mut rng,
         )
         .await
         .unwrap();

@@ -95,7 +95,6 @@ pub async fn update_account(
         patch,
         body.principal_erase.unwrap_or(true),
         Some(audit_signing),
-        None,
     )
     .await
     .map_err(map_service_error)?;

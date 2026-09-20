@@ -33,7 +33,7 @@ use super::session_grant::{
 };
 use crate::handlers::common::DepotExt;
 use crate::services::account_status_publication::{
-    author_transition_plan, enqueue_exact_publication, validate_transition_plan,
+    author_and_enqueue_transition, validate_transition_plan,
 };
 use crate::services::station_trust::{effective_audience, shared};
 
@@ -342,8 +342,10 @@ pub async fn issue_recovery_completion_grant_endpoint(
         AccountStatus::Active => {}
         AccountStatus::Deactivated => {
             let station = depot.station()?;
-            let plan = author_transition_plan(
+            let plan = author_and_enqueue_transition(
                 &mut repo,
+                &mut rng,
+                &*clock,
                 station.as_ref(),
                 &keyring,
                 super::owning_station_id_for(&config).as_str(),
@@ -352,7 +354,6 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 AccountStatus::Active,
                 Some("pcr_recovery_completed".to_owned()),
                 now,
-                &mut rng,
             )
             .await
             .map_err(account_status_reactivation_failed)?;
@@ -373,17 +374,6 @@ pub async fn issue_recovery_completion_grant_endpoint(
                     },
                 )
                 .await?;
-            enqueue_exact_publication(
-                &mut repo,
-                &mut rng,
-                &*clock,
-                &plan.destination_name,
-                plan.local_account_id,
-                &plan.idempotency_key,
-                plan.body,
-            )
-            .await
-            .map_err(account_status_reactivation_failed)?;
         }
         AccountStatus::ErasurePending => {
             repo.cancel().await.ok();

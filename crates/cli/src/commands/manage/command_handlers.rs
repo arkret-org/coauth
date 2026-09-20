@@ -14,7 +14,7 @@ use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
 use coauth_data::oauth::OAuthSessionFilter;
 use coauth_data::queue::{
-    DeactivateUserJob, ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob,
+    ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob,
 };
 use coauth_data::user::{
     BrowserSessionFilter, UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
@@ -365,65 +365,20 @@ pub(super) async fn handle_kill_sessions(
 }
 
 pub(super) async fn handle_lock_user(
-    figment: &Figment,
-    handle: String,
-    deactivate: bool,
+    _figment: &Figment,
+    _handle: String,
+    _deactivate: bool,
 ) -> anyhow::Result<ExitCode> {
-    let clock = SystemClock::default();
-    let mut rng = rand_chacha::ChaChaRng::from_entropy();
-
-    let _span = info_span!("cli.manage.lock_user", user.handle = handle).entered();
-    let config = DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
-    let pool = diesel_pool_from_config(&config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
-
-    let user = repo
-        .user()
-        .find_by_handle(&handle)
-        .await?
-        .context("User not found")?;
-
-    info!(%user.id, "Locking user");
-
-    // Even though the deactivation job will lock the user, we lock it here in case
-    // the worker is not running, as we don't have a good way to run a job
-    // synchronously yet.
-    let user = repo.user().lock(&clock, user).await?;
-
-    if deactivate {
-        warn!(%user.id, "Scheduling user deactivation");
-        repo.queue_job()
-            .schedule_job(&mut rng, &clock, DeactivateUserJob::new(&user, false))
-            .await?;
-    }
-
-    Ok(ExitCode::SUCCESS)
+    anyhow::bail!(
+        "direct CLI account-status mutation is disabled; use the admin account/risk-action API so the signed issuer-ledger successor, local row, audit and publication outbox commit atomically"
+    )
 }
 
 pub(super) async fn handle_unlock_user(
-    figment: &Figment,
-    handle: String,
+    _figment: &Figment,
+    _handle: String,
 ) -> anyhow::Result<ExitCode> {
-    let _span = info_span!("cli.manage.unlock_user", user.handle = handle).entered();
-    let config = DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
-    let pool = diesel_pool_from_config(&config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
-
-    let user = repo
-        .user()
-        .find_by_handle(&handle)
-        .await?
-        .context("User not found")?;
-
-    repo.user().unlock(user).await?;
-
-    Ok(ExitCode::SUCCESS)
+    anyhow::bail!(
+        "direct CLI account-status mutation is disabled; use the admin account/risk-action API so the signed issuer-ledger successor, local row, audit and publication outbox commit atomically"
+    )
 }

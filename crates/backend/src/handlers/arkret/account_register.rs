@@ -38,7 +38,7 @@ use crate::handlers::account::auth::oidc_bridge::{
 };
 use crate::handlers::{make_clock, make_rng};
 use crate::services::account_status_publication::{
-    author_transition_plan, enqueue_exact_publication, validate_transition_plan,
+    author_and_enqueue_transition, validate_transition_plan,
 };
 use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
 use crate::services::soland_webvh;
@@ -593,8 +593,10 @@ pub async fn account_register_endpoint(
         };
         let account_status_connector = depot.station()?;
         let account_authority_id = owning_station_id_for(&depot.arkret_config()?);
-        let initial_status_publication = author_transition_plan(
+        let initial_status_publication = author_and_enqueue_transition(
             &mut repo,
+            &mut *rng,
+            &*clock,
             account_status_connector.as_ref(),
             &keyring,
             account_authority_id.as_str(),
@@ -603,7 +605,6 @@ pub async fn account_register_endpoint(
             AccountStatus::Active,
             None,
             now,
-            &mut *rng,
         )
         .await
         .map_err(|error| failed_precondition(error.to_string()))?;
@@ -613,17 +614,6 @@ pub async fn account_register_endpoint(
             AccountStatus::Active,
             &initial_status_publication,
         )
-        .map_err(|error| failed_precondition(error.to_string()))?;
-        enqueue_exact_publication(
-            &mut repo,
-            &mut *rng,
-            &*clock,
-            &initial_status_publication.destination_name,
-            initial_status_publication.local_account_id,
-            &initial_status_publication.idempotency_key,
-            initial_status_publication.body,
-        )
-        .await
         .map_err(|error| failed_precondition(error.to_string()))?;
         repo.save().await?;
         repo = depot.repo().await?;
