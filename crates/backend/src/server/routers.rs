@@ -154,6 +154,7 @@ fn account_api_subrouters() -> (Router, Router) {
 
     let arkret_router = Router::with_path("/_arkret")
         .hoop(public_oidc_browser_cors())
+        .hoop(arkret_route_boundary)
         .hoop(crate::server::arkret_operation_selector_middleware)
         // Account Authority is a Station capability. This deployment-private
         // process does not publish a role-local Describe or service-resolution
@@ -505,6 +506,33 @@ fn account_api_subrouters() -> (Router, Router) {
 
 #[handler]
 async fn arkret_not_found(req: &Request, res: &mut Response) {
+    render_arkret_route_miss(req, res);
+}
+
+// Classify the deployed route before the operation selector. An unknown path
+// or wrong method has no operation to select and must not become a selector
+// version error or reach an account-authority handler.
+#[handler]
+async fn arkret_route_boundary(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let allowed = arkret_allowed_methods(req.uri().path());
+    if allowed.is_some_and(|methods| {
+        methods
+            .split(',')
+            .any(|method| method.trim() == req.method().as_str())
+    }) {
+        ctrl.call_next(req, depot, res).await;
+    } else {
+        render_arkret_route_miss(req, res);
+        ctrl.skip_rest();
+    }
+}
+
+fn render_arkret_route_miss(req: &Request, res: &mut Response) {
     let request_id = res
         .headers()
         .get(crate::server::ARKRET_REQUEST_ID_HEADER)
@@ -542,9 +570,13 @@ async fn arkret_not_found(req: &Request, res: &mut Response) {
 fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
     match path {
         "/_arkret/root/identity/document" => Some("GET"),
+        "/_arkret/root/identity/resolve" | "/_arkret/peer/account-status/resolve" => Some("POST"),
         "/_arkret/gate/account/onboarding" => Some("GET, OPTIONS"),
-        "/_arkret/root/identity/resolve"
-        | "/_arkret/gate/account/authentication-handoffs"
+        "/_arkret/gate/account/authentication-handoffs"
+        | "/_arkret/open/device-pairing/requests"
+        | "/_arkret/gate/account/device-pairing/finalizations"
+        | "/_arkret/gate/account/device-pair"
+        | "/_arkret/gate/account/device-pairing/code-claims"
         | "/_arkret/gate/account/did-binding-challenges"
         | "/_arkret/gate/account/identity-binding-challenges"
         | "/_arkret/gate/account/identity-abandonments"

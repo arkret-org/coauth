@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn arkret_unknown_path_and_method_fail_at_operation_selector() {
+    async fn arkret_unknown_path_and_wrong_method_fail_before_operation_selector() {
         let service = salvo::Service::new(build_account_api_router(Router::new()));
 
         let mut unknown = TestClient::get("http://127.0.0.1:8698/_arkret/missing")
@@ -478,11 +478,37 @@ mod tests {
             )
             .send(&service)
             .await;
-        assert_eq!(unknown.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+        assert_eq!(unknown.status_code, Some(StatusCode::NOT_FOUND));
         let unknown_body = unknown.take_json::<serde_json::Value>().await.unwrap();
         assert_eq!(
             unknown_body["type"],
-            "https://arkret.org/problems/unsupported_operation_version"
+            "https://arkret.org/problems/unrecognized_endpoint"
+        );
+
+        let mut wrong_method =
+            TestClient::get("http://127.0.0.1:8698/_arkret/gate/account/register")
+                .add_header(
+                    "Arkret-Operation",
+                    "ak.gate.account.command.register.v1",
+                    true,
+                )
+                .send(&service)
+                .await;
+        assert_eq!(
+            wrong_method.status_code,
+            Some(StatusCode::METHOD_NOT_ALLOWED)
+        );
+        assert_eq!(
+            wrong_method
+                .headers()
+                .get(http::header::ALLOW)
+                .and_then(|value| value.to_str().ok()),
+            Some("POST, OPTIONS")
+        );
+        let wrong_method_body = wrong_method.take_json::<serde_json::Value>().await.unwrap();
+        assert_eq!(
+            wrong_method_body["type"],
+            "https://arkret.org/problems/method_not_allowed"
         );
     }
 
