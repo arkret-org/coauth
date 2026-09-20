@@ -1,11 +1,11 @@
 //! Shared DID-signature verification and the canonical published-DID account
 //! registration control proof.
 
-use arkret_signatures::proof::verify_detached_ed25519_signature;
-use base64ct::{Base64UrlUnpadded, Encoding as _};
+use arkret_signatures::{
+    Ed25519DetachedJwsVerifier, VerifierError, proof::verify_detached_ed25519_signature,
+};
 use chrono::{DateTime, Utc};
-use coauth_iana::jose::JsonWebSignatureAlg;
-use coauth_jose::jwt::JsonWebSignatureHeader;
+use serde::Deserialize;
 use thiserror::Error;
 
 use crate::services::did_resolver::DidResolution;
@@ -163,58 +163,10 @@ pub(crate) enum SdkJwsVerifyError {
     TestSigningMaterialDenied,
 }
 
-fn verify_compact_jws_with_sdk(
-    proof_jws: &str,
-    verification_methods: &[crate::handlers::arkret::VerificationMethod],
-    verification_method_id: &str,
-) -> Result<(), SdkJwsVerifyError> {
-    let mut parts = proof_jws.split('.');
-    let header_b64u = parts
-        .next()
-        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing protected header".to_owned()))?;
-    let payload_b64u = parts
-        .next()
-        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing payload".to_owned()))?;
-    let signature_b64u = parts
-        .next()
-        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing signature".to_owned()))?;
-    if parts.next().is_some() {
-        return Err(SdkJwsVerifyError::InvalidShape(
-            "too many segments".to_owned(),
-        ));
-    }
-    let header_bytes = Base64UrlUnpadded::decode_vec(header_b64u)
-        .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?;
-    let header: JsonWebSignatureHeader = serde_json::from_slice(&header_bytes)
-        .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?;
-    if header.alg() != &JsonWebSignatureAlg::Ed25519 {
-        return Err(SdkJwsVerifyError::UnsupportedAlgorithm(
-            header.alg().to_string(),
-        ));
-    }
-    let method = verification_methods
-        .iter()
-        .find(|method| method.id == verification_method_id)
-        .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method_id.to_owned()))?;
-    method
-        .enforce_formal_key_admission(&method.controller, None)
-        .map_err(|error| match error {
-            crate::handlers::arkret::FormalKeyAdmissionError::TestSigningMaterialDenied => {
-                SdkJwsVerifyError::TestSigningMaterialDenied
-            }
-            crate::handlers::arkret::FormalKeyAdmissionError::Invalid(message) => {
-                SdkJwsVerifyError::UnsupportedJwk(message)
-            }
-        })?;
-    let material = method
-        .public_key_material()
-        .map_err(SdkJwsVerifyError::UnsupportedJwk)?;
-    let signing_input = format!("{header_b64u}.{payload_b64u}");
-    if verify_detached_ed25519_signature(&material, signing_input.as_bytes(), signature_b64u) {
-        Ok(())
-    } else {
-        Err(SdkJwsVerifyError::SignatureMismatch)
-    }
+#[derive(Deserialize)]
+struct DetachedJwsMethodHeader {
+    alg: String,
+    kid: Option<String>,
 }
 
 pub(crate) fn verify_detached_jws_with_sdk(
@@ -229,7 +181,7 @@ pub(crate) fn verify_detached_jws_with_sdk(
     let payload_b64u = parts
         .next()
         .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing payload".to_owned()))?;
-    let signature_b64u = parts
+    let _signature_b64u = parts
         .next()
         .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing signature".to_owned()))?;
     if parts.next().is_some() || !payload_b64u.is_empty() {
@@ -237,28 +189,124 @@ pub(crate) fn verify_detached_jws_with_sdk(
             "detached JWS must contain exactly protected..signature".to_owned(),
         ));
     }
-    let header_bytes = Base64UrlUnpadded::decode_vec(header_b64u)
+    let header_bytes = arkret_canonical::base64url_decode(header_b64u)
         .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?;
-    let header: JsonWebSignatureHeader = serde_json::from_slice(&header_bytes)
+    let header: DetachedJwsMethodHeader = serde_json::from_slice(&header_bytes)
         .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?;
+    if header.alg != "Ed25519" {
+        return Err(SdkJwsVerifyError::UnsupportedAlgorithm(header.alg));
+    }
     let verification_method = header
-        .kid()
+        .kid
         .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing kid".to_owned()))?
         .to_owned();
-    let attached = format!(
-        "{header_b64u}.{}.{signature_b64u}",
-        Base64UrlUnpadded::encode_string(payload_bytes)
-    );
-    verify_compact_jws_with_sdk(&attached, verification_methods, &verification_method)?;
+    let method = verification_methods
+        .iter()
+        .find(|method| method.id == verification_method)
+        .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method.clone()))?;
+    method
+        .enforce_formal_key_admission(&method.controller, None)
+        .map_err(|error| match error {
+            crate::handlers::arkret::FormalKeyAdmissionError::TestSigningMaterialDenied => {
+                SdkJwsVerifyError::TestSigningMaterialDenied
+            }
+            crate::handlers::arkret::FormalKeyAdmissionError::Invalid(message) => {
+                SdkJwsVerifyError::UnsupportedJwk(message)
+            }
+        })?;
+    let material = method
+        .public_key_material()
+        .map_err(SdkJwsVerifyError::UnsupportedJwk)?;
+    let verified = Ed25519DetachedJwsVerifier::new()
+        .verify_detached_jws_with_metadata(detached_jws, payload_bytes, &material)
+        .map_err(|error| match error {
+            VerifierError::Encoding(message) | VerifierError::Binding(message) => {
+                SdkJwsVerifyError::InvalidShape(message)
+            }
+            VerifierError::UnsupportedKey(message) => SdkJwsVerifyError::UnsupportedJwk(message),
+            VerifierError::Backend(_) => SdkJwsVerifyError::SignatureMismatch,
+        })?;
+    if verified.key_id() != Some(verification_method.as_str()) {
+        return Err(SdkJwsVerifyError::InvalidShape(
+            "canonical protected-header kid changed during verification".to_owned(),
+        ));
+    }
     Ok(verification_method)
 }
 
 #[cfg(test)]
 mod tests {
-    use base64ct::Base64UrlUnpadded;
+    use base64ct::{Base64UrlUnpadded, Encoding as _};
     use ed25519_dalek::Signer as _;
 
     use super::*;
+
+    fn detached_jws_fixture(
+        payload: &[u8],
+        extra_header: serde_json::Map<String, serde_json::Value>,
+    ) -> (String, Vec<crate::handlers::arkret::VerificationMethod>) {
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[37; 32]);
+        let verification_method = "did:web:issuer.example#key-1";
+        let mut header = serde_json::Map::from_iter([
+            ("alg".to_owned(), serde_json::json!("Ed25519")),
+            ("kid".to_owned(), serde_json::json!(verification_method)),
+        ]);
+        header.extend(extra_header);
+        let header_bytes = arkret_canonical::canonical_json_bytes(&header).unwrap();
+        let header_b64u = Base64UrlUnpadded::encode_string(&header_bytes);
+        let signing_input = format!(
+            "{header_b64u}.{}",
+            Base64UrlUnpadded::encode_string(payload)
+        );
+        let signature = Base64UrlUnpadded::encode_string(
+            &signing_key.sign(signing_input.as_bytes()).to_bytes(),
+        );
+        let methods = vec![
+            serde_json::from_value(serde_json::json!({
+                "id": verification_method,
+                "type": "JsonWebKey2020",
+                "controller": "did:web:issuer.example",
+                "publicKeyJwk": {
+                    "kty": "OKP",
+                    "crv": "Ed25519",
+                    "x": Base64UrlUnpadded::encode_string(
+                        signing_key.verifying_key().as_bytes()
+                    )
+                }
+            }))
+            .unwrap(),
+        ];
+        (format!("{header_b64u}..{signature}"), methods)
+    }
+
+    #[test]
+    fn detached_jws_consumer_uses_the_sdk_canonical_carrier() {
+        let payload = b"canonical payload";
+        let (jws, methods) = detached_jws_fixture(payload, serde_json::Map::new());
+        assert_eq!(
+            verify_detached_jws_with_sdk(&jws, payload, &methods).unwrap(),
+            "did:web:issuer.example#key-1"
+        );
+
+        let attached = jws.replacen("..", ".YXR0YWNoZWQ.", 1);
+        assert!(matches!(
+            verify_detached_jws_with_sdk(&attached, payload, &methods),
+            Err(SdkJwsVerifyError::InvalidShape(_))
+        ));
+    }
+
+    #[test]
+    fn detached_jws_consumer_rejects_unregistered_header_extensions() {
+        let payload = b"canonical payload";
+        let (jws, methods) = detached_jws_fixture(
+            payload,
+            serde_json::Map::from_iter([("crit".to_owned(), serde_json::json!(["exp"]))]),
+        );
+        assert!(matches!(
+            verify_detached_jws_with_sdk(&jws, payload, &methods),
+            Err(SdkJwsVerifyError::InvalidShape(_))
+        ));
+    }
 
     fn fixture() -> (
         arkret_models_identity::AccountRegistrationControlProof,
