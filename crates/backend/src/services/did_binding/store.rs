@@ -53,8 +53,10 @@ use arkret_identity::{
 };
 use chrono::{DateTime, Utc};
 use coauth_data::BoxRepository;
+use coauth_data::RepositoryError;
 use coauth_data::did_binding::{
-    VerifiedDidBindingInvalidation, VerifiedDidBindingKeyColumns, VerifiedDidBindingRow,
+    VerifiedDidBindingInvalidation, VerifiedDidBindingKeyColumns, VerifiedDidBindingRepository,
+    VerifiedDidBindingRow,
 };
 
 use super::DidBindingError;
@@ -206,14 +208,40 @@ impl DurableVerifiedDidBindingStore {
         key: &VerifiedDidBindingKey,
         now: DateTime<Utc>,
     ) -> Result<Option<AcceptedDidBinding>, DidBindingError> {
-        let row = repo
-            .verified_did_binding()
+        let mut repository = repo.verified_did_binding();
+        self.load_from_repository(repository.as_mut(), key, now)
+            .await
+    }
+
+    /// Load through the durable repository port.
+    ///
+    /// This is the production implementation behind [`Self::load`], exposed
+    /// so cross-repository conformance tests can execute the same get → current
+    /// admission → exact purge contract without requiring a live PostgreSQL
+    /// server. A row rejected by today's formal policy is deleted exactly,
+    /// removed from the mirror, and returned as a terminal error; it is never
+    /// converted into a miss that could fall through to a weaker resolver.
+    pub async fn load_from_repository(
+        &self,
+        repository: &mut dyn VerifiedDidBindingRepository<Error = RepositoryError>,
+        key: &VerifiedDidBindingKey,
+        now: DateTime<Utc>,
+    ) -> Result<Option<AcceptedDidBinding>, DidBindingError> {
+        let row = repository
             .get(&key_columns(key), now)
             .await
             .map_err(|error| DidBindingError::Store(error.to_string()))?;
         let accepted = row.and_then(|row| decode_row(key, row));
         match &accepted {
             Some(accepted) => {
+                if let Err(error) = super::enforce_formal_accepted_binding_admission(accepted) {
+                    self.forget_mirrored(key);
+                    repository
+                        .delete_exact(&key_columns(key))
+                        .await
+                        .map_err(|error| DidBindingError::Store(error.to_string()))?;
+                    return Err(error);
+                }
                 // Overwrites any mirrored entry under the same key.
                 self.mirror
                     .accept(accepted.clone())

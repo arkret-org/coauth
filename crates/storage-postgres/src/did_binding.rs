@@ -190,6 +190,27 @@ impl VerifiedDidBindingRepository for PgVerifiedDidBindingRepository<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(name = "db.verified_did_binding.delete_exact", skip_all, err)]
+    async fn delete_exact(
+        &mut self,
+        key: &VerifiedDidBindingKeyColumns,
+    ) -> Result<bool, Self::Error> {
+        let deleted = diesel::delete(
+            verified_did_bindings::table
+                .filter(verified_did_bindings::did.eq(&key.did))
+                .filter(verified_did_bindings::trust_domain.eq(&key.trust_domain))
+                .filter(verified_did_bindings::purpose.eq(&key.purpose))
+                .filter(verified_did_bindings::policy_digest.eq(&key.policy_digest))
+                .filter(
+                    verified_did_bindings::verification_method
+                        .eq(column(key.verification_method.as_ref())),
+                ),
+        )
+        .execute(self.conn)
+        .await?;
+        Ok(deleted != 0)
+    }
+
     #[tracing::instrument(name = "db.verified_did_binding.invalidate", skip_all, err)]
     async fn invalidate(
         &mut self,
@@ -316,13 +337,29 @@ mod tests {
             .expect("row is still readable");
         assert_eq!(stored.accepted["generation"], serde_json::json!(2));
 
-        repo.verified_did_binding()
-            .invalidate(&VerifiedDidBindingInvalidation {
-                did: Some(key(&label).did),
-                ..VerifiedDidBindingInvalidation::default()
-            })
-            .await
-            .unwrap();
+        assert!(
+            repo.verified_did_binding()
+                .delete_exact(&key(&label))
+                .await
+                .unwrap(),
+            "the exact five-dimension row must be deleted"
+        );
+        assert!(
+            repo.verified_did_binding()
+                .get(&key(&label), now)
+                .await
+                .unwrap()
+                .is_none(),
+            "the exact row must not remain readable"
+        );
+        assert!(
+            !repo
+                .verified_did_binding()
+                .delete_exact(&key(&label))
+                .await
+                .unwrap(),
+            "a second exact deletion must report a miss"
+        );
         repo.cancel().await.unwrap();
     }
 

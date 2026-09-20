@@ -471,6 +471,29 @@ pub fn from_shared_document(
     serde_json::from_value(value).map_err(|error| DidBindingError::Document(error.to_string()))
 }
 
+/// Re-apply today's formal test-material policy to a durable acceptance.
+///
+/// Durable bindings may predate a newly published deny-list entry. Loading
+/// one must therefore not treat its earlier acceptance as a bypass around the
+/// current formal admission boundary.
+pub fn enforce_formal_accepted_binding_admission(
+    accepted: &AcceptedDidBinding,
+) -> Result<(), DidBindingError> {
+    let document = from_shared_document(accepted.document())?;
+    crate::handlers::arkret::enforce_formal_document_admission(
+        &document,
+        accepted.binding().trust_domain(),
+    )
+    .map_err(|error| match error {
+        crate::handlers::arkret::FormalKeyAdmissionError::TestSigningMaterialDenied => {
+            DidBindingError::TestSigningMaterialDenied
+        }
+        crate::handlers::arkret::FormalKeyAdmissionError::Invalid(message) => {
+            DidBindingError::Document(message)
+        }
+    })
+}
+
 /// Full field mapping from a [`DidResolution`] to an [`AcceptedDidBinding`].
 ///
 /// | `DidResolution` | `VerifiedDidBinding` |

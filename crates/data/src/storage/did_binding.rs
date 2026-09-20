@@ -141,6 +141,22 @@ repository_impl! {
             now: DateTime<Utc>,
         ) -> Result<(), Self::Error>;
 
+        /// Delete the one row filed under `key`; returns whether it existed.
+        ///
+        /// This is intentionally distinct from [`Self::invalidate`]. A current
+        /// admission rule may reject one historical row whose optional
+        /// `verification_method` dimension is absent. The invalidation selector
+        /// uses `None` to mean "unconstrained", so it cannot express that exact
+        /// key without over-deleting sibling rows.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails.
+        async fn delete_exact(
+            &mut self,
+            key: &VerifiedDidBindingKeyColumns,
+        ) -> Result<bool, Self::Error>;
+
         /// Delete every acceptance matching `selector`; returns the number removed.
         /// An empty selector removes nothing and returns `0`.
         ///
