@@ -92,6 +92,45 @@ fn healthy_resolution(did: &str) -> DidResolution {
     }
 }
 
+fn resolution_with_ed25519_key(
+    did: &str,
+    key_id: &str,
+    key: &ed25519_dalek::VerifyingKey,
+    use_multibase: bool,
+) -> DidResolution {
+    let method = if use_multibase {
+        crate::handlers::arkret::VerificationMethod {
+            id: key_id.to_owned(),
+            kind: "Multikey".to_owned(),
+            controller: did.to_owned(),
+            public_key_jwk: None,
+            public_key_multibase: Some(arkret_canonical::ed25519_pubkey_to_did_key_multibase(
+                key.as_bytes(),
+            )),
+        }
+    } else {
+        crate::handlers::arkret::VerificationMethod {
+            id: key_id.to_owned(),
+            kind: "JsonWebKey2020".to_owned(),
+            controller: did.to_owned(),
+            public_key_jwk: Some(
+                serde_json::from_value(serde_json::json!({
+                    // Deliberately not canonical member order: admission must
+                    // fingerprint the decoded RFC 8032 bytes.
+                    "x": arkret_canonical::base64url_encode(key.as_bytes()),
+                    "crv": "Ed25519",
+                    "kty": "OKP"
+                }))
+                .unwrap(),
+            ),
+            public_key_multibase: None,
+        }
+    };
+    let mut resolution = healthy_resolution(did);
+    resolution.document.verification_method = vec![method];
+    resolution
+}
+
 fn accept(
     store: &dyn VerifiedDidBindingStore,
     resolution: &DidResolution,
@@ -114,6 +153,86 @@ fn accept(
     accepted
 }
 
+#[test]
+fn formal_admission_rejects_published_key_before_any_binding_state() {
+    let seed: [u8; 32] = std::array::from_fn(|index| index as u8);
+    let published = ed25519_dalek::SigningKey::from_bytes(&seed).verifying_key();
+    let domain = trust_domain("auth.production");
+    let policy = digest('b');
+    let now = protocol_now();
+    let store = arkret_identity::InMemoryVerifiedDidBindingStore::new(8);
+
+    for (did, key_id, multibase) in [
+        (
+            "did:web:live-one.example",
+            "did:web:live-one.example#runtime-1",
+            false,
+        ),
+        (
+            "did:web:live-two.example",
+            "did:web:live-two.example#unrelated-key",
+            true,
+        ),
+    ] {
+        let resolution = resolution_with_ed25519_key(did, key_id, &published, multibase);
+        let error = binding_from_resolution(
+            &resolution,
+            domain.clone(),
+            DidBindingPurpose::AccountBinding,
+            policy.clone(),
+            None,
+            &high_risk_freshness(),
+            now,
+        )
+        .expect_err("published material must not produce an accepted binding");
+        assert!(matches!(error, DidBindingError::TestSigningMaterialDenied));
+
+        let key = VerifiedDidBindingKey {
+            did: Did::new(did.to_owned()).unwrap(),
+            trust_domain: domain.clone(),
+            purpose: DidBindingPurpose::AccountBinding,
+            policy_digest: policy.clone(),
+            verification_method: None,
+        };
+        assert_eq!(
+            store.get(&key, now),
+            None,
+            "refusal must leave no cache state"
+        );
+    }
+}
+
+#[test]
+fn formal_admission_keeps_unlisted_key_on_the_ordinary_path() {
+    let unlisted = ed25519_dalek::SigningKey::from_bytes(&[91; 32]).verifying_key();
+    let did = "did:web:live.example";
+    let resolution =
+        resolution_with_ed25519_key(did, "did:web:live.example#runtime-1", &unlisted, false);
+    let domain = trust_domain("auth.production");
+    let policy = digest('b');
+    let now = protocol_now();
+    let store = arkret_identity::InMemoryVerifiedDidBindingStore::new(8);
+    let accepted = binding_from_resolution(
+        &resolution,
+        domain.clone(),
+        DidBindingPurpose::AccountBinding,
+        policy.clone(),
+        None,
+        &high_risk_freshness(),
+        now,
+    )
+    .expect("unlisted material remains governed by ordinary identity rules");
+    store.accept(accepted).unwrap();
+    let key = VerifiedDidBindingKey {
+        did: Did::new(did.to_owned()).unwrap(),
+        trust_domain: domain,
+        purpose: DidBindingPurpose::AccountBinding,
+        policy_digest: policy,
+        verification_method: None,
+    };
+    assert!(store.get(&key, now).is_some());
+}
+
 // ------------------------------------------------------------------
 // Field mapping
 // ------------------------------------------------------------------
@@ -124,7 +243,7 @@ fn resolution_fields_map_onto_the_shared_binding() {
     let resolution = healthy_resolution("did:web:alice.example");
     let accepted = binding_from_resolution(
         &resolution,
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::AccountBinding,
         digest('b'),
         None,
@@ -137,7 +256,7 @@ fn resolution_fields_map_onto_the_shared_binding() {
     assert_eq!(binding.did(), &did());
     assert_eq!(binding.method(), "web");
     assert_eq!(binding.purpose(), DidBindingPurpose::AccountBinding);
-    assert_eq!(binding.trust_domain(), &trust_domain("auth.example"));
+    assert_eq!(binding.trust_domain(), &trust_domain("auth.production"));
     assert_eq!(binding.policy_digest(), &digest('b'));
     // key_log_head -> history_head
     assert_eq!(binding.history_head(), Some(digest('a').as_str()));
@@ -188,7 +307,7 @@ fn missing_history_head_records_the_wider_limited_trust_reason() {
     resolution.key_log_head = None;
     let accepted = binding_from_resolution(
         &resolution,
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::Principal,
         digest('b'),
         None,
@@ -318,7 +437,7 @@ fn the_policy_digest_is_not_nested_inside_the_evidence_receipt() {
     let resolution = healthy_resolution("did:web:alice.example");
     let under_one_policy = binding_from_resolution(
         &resolution,
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::Principal,
         digest('b'),
         None,
@@ -328,7 +447,7 @@ fn the_policy_digest_is_not_nested_inside_the_evidence_receipt() {
     .expect("binding builds");
     let under_another_policy = binding_from_resolution(
         &resolution,
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::Principal,
         digest('c'),
         None,
@@ -372,7 +491,7 @@ fn did_key_local_resolution_is_never_stored_as_a_binding() {
     );
     let error = binding_from_resolution(
         &resolution,
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::Controller,
         digest('b'),
         None,
@@ -391,7 +510,7 @@ fn did_key_local_resolution_is_never_stored_as_a_binding() {
 fn a_binding_accepted_for_one_purpose_does_not_serve_another() {
     let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
-    let domain = trust_domain("auth.example");
+    let domain = trust_domain("auth.production");
     let policy = digest('b');
     let accepted = accept(
         &store,
@@ -424,13 +543,13 @@ fn a_binding_accepted_in_one_trust_domain_does_not_serve_another() {
         &store,
         &healthy_resolution("did:web:alice.example"),
         DidBindingPurpose::Principal,
-        &trust_domain("auth.example"),
+        &trust_domain("auth.production"),
         &digest('b'),
         now,
     );
 
     let mut key = accepted.binding().key();
-    key.trust_domain = trust_domain("other.example");
+    key.trust_domain = trust_domain("other.production");
     assert!(
         accepted_binding(&store, &key, now).is_none(),
         "a cross-trust-domain lookup must miss"
@@ -445,7 +564,7 @@ fn a_policy_change_retires_every_existing_binding() {
         &store,
         &healthy_resolution("did:web:alice.example"),
         DidBindingPurpose::Principal,
-        &trust_domain("auth.example"),
+        &trust_domain("auth.production"),
         &digest('b'),
         now,
     );
@@ -463,7 +582,7 @@ fn a_policy_change_retires_every_existing_binding() {
 fn rotation_invalidation_clears_only_the_rotated_did() {
     let now = protocol_now();
     let store = DurableVerifiedDidBindingStore::new(16);
-    let domain = trust_domain("auth.example");
+    let domain = trust_domain("auth.production");
     let policy = digest('b');
     let alice = accept(
         &store,
@@ -499,7 +618,7 @@ fn a_deactivated_binding_is_never_usable_even_for_ordinary_reads() {
         &store,
         &healthy_resolution("did:web:alice.example"),
         DidBindingPurpose::Principal,
-        &trust_domain("auth.example"),
+        &trust_domain("auth.production"),
         &digest('b'),
         now,
     );
@@ -523,7 +642,7 @@ fn a_quarantined_resolution_is_stored_but_never_served() {
         Some(DidResolutionIdentityFactRejection::ControllerProofUnverified);
     let accepted = binding_from_resolution(
         &resolution,
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::Principal,
         digest('b'),
         None,
@@ -580,7 +699,7 @@ fn stale_is_readable_for_low_risk_but_rejected_by_high_risk_freshness() {
         &store,
         &healthy_resolution("did:web:alice.example"),
         DidBindingPurpose::Principal,
-        &trust_domain("auth.example"),
+        &trust_domain("auth.production"),
         &digest('b'),
         now,
     );
@@ -612,7 +731,7 @@ fn hard_expiry_makes_the_entry_disappear_for_readers() {
         &store,
         &healthy_resolution("did:web:alice.example"),
         DidBindingPurpose::Principal,
-        &trust_domain("auth.example"),
+        &trust_domain("auth.production"),
         &digest('b'),
         now,
     );
@@ -650,7 +769,7 @@ fn a_fresh_binding_hit_short_circuits_before_the_resolver() {
             &store,
             &resolution,
             DidBindingPurpose::AccountBinding,
-            &trust_domain("auth.example"),
+            &trust_domain("auth.production"),
             &digest('b'),
             now,
         );
@@ -788,7 +907,7 @@ fn mirroring_a_purpose_copies_the_evidence_but_not_the_authority() {
         &store,
         &healthy_resolution("did:web:alice.example"),
         DidBindingPurpose::AccountBinding,
-        &trust_domain("auth.example"),
+        &trust_domain("auth.production"),
         &digest('b'),
         now,
     );
@@ -835,7 +954,7 @@ fn mirroring_never_upgrades_a_quarantined_acceptance() {
     resolution.identity_fact_rejection = Some(DidResolutionIdentityFactRejection::DidWebFallback);
     let source = binding_from_resolution(
         &resolution,
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::AccountBinding,
         digest('b'),
         None,
@@ -983,7 +1102,7 @@ fn an_acceptance_stored_under_an_older_policy_digest_misses_without_panicking() 
         &store,
         &healthy_resolution("did:web:alice.example"),
         DidBindingPurpose::Principal,
-        &trust_domain("auth.example"),
+        &trust_domain("auth.production"),
         &digest('b'),
         now,
     );
@@ -1006,7 +1125,7 @@ fn an_acceptance_stored_under_an_older_policy_digest_misses_without_panicking() 
 fn stored_acceptance(now: DateTime<Utc>) -> AcceptedDidBinding {
     binding_from_resolution(
         &healthy_resolution("did:web:alice.example"),
-        trust_domain("auth.example"),
+        trust_domain("auth.production"),
         DidBindingPurpose::Principal,
         digest('b'),
         None,
@@ -1028,14 +1147,14 @@ fn stored_acceptance(now: DateTime<Utc>) -> AcceptedDidBinding {
 fn all_five_key_dimensions_project_onto_distinct_columns() {
     let base = VerifiedDidBindingKey {
         did: did(),
-        trust_domain: trust_domain("auth.example"),
+        trust_domain: trust_domain("auth.production"),
         purpose: DidBindingPurpose::Principal,
         policy_digest: digest('b'),
         verification_method: None,
     };
     let columns = key_columns(&base);
     assert_eq!(columns.did, "did:web:alice.example");
-    assert_eq!(columns.trust_domain, "ak:trust_domain:auth.example");
+    assert_eq!(columns.trust_domain, "ak:trust_domain:auth.production");
     assert_eq!(columns.purpose, "principal");
     assert_eq!(columns.policy_digest, digest('b').as_str());
     assert_eq!(columns.verification_method, None);
@@ -1048,7 +1167,7 @@ fn all_five_key_dimensions_project_onto_distinct_columns() {
         ("did", Box::new(|key| key.did = other_did())),
         (
             "trust_domain",
-            Box::new(|key| key.trust_domain = trust_domain("other.example")),
+            Box::new(|key| key.trust_domain = trust_domain("other.production")),
         ),
         (
             "purpose",
@@ -1138,7 +1257,7 @@ fn a_tampered_row_is_discarded_rather_than_trusted() {
 
     // 4. Same, along the trust-domain dimension.
     let mut cross_domain = pristine.clone();
-    cross_domain.key.trust_domain = "ak:trust_domain:other.example".to_owned();
+    cross_domain.key.trust_domain = "ak:trust_domain:other.production".to_owned();
     assert!(
         decode_row(&key, cross_domain).is_none(),
         "a row moved into another trust domain must be discarded"
@@ -1170,7 +1289,7 @@ fn the_invalidation_selector_keeps_its_semantics_in_columns() {
     assert!(invalidation_columns(&BindingInvalidation::default()).is_empty());
 
     let selector = BindingInvalidation::for_did(did())
-        .with_trust_domain(trust_domain("auth.example"))
+        .with_trust_domain(trust_domain("auth.production"))
         .with_purpose(DidBindingPurpose::Principal)
         .with_policy_digest(digest('b'))
         .with_history_head(digest('a').as_str().to_owned())
@@ -1182,7 +1301,7 @@ fn the_invalidation_selector_keeps_its_semantics_in_columns() {
     assert_eq!(columns.did.as_deref(), Some("did:web:alice.example"));
     assert_eq!(
         columns.trust_domain.as_deref(),
-        Some("ak:trust_domain:auth.example")
+        Some("ak:trust_domain:auth.production")
     );
     assert_eq!(columns.purpose.as_deref(), Some("principal"));
     assert_eq!(columns.policy_digest.as_deref(), Some(digest('b').as_str()));

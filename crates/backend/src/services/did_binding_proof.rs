@@ -24,6 +24,8 @@ pub enum DidBindingProofError {
     VerificationMethodNotFound,
     #[error("control proof signature is invalid")]
     SignatureMismatch,
+    #[error("test_signing_material_denied")]
+    TestSigningMaterialDenied,
     #[error("control proof is expired")]
     Expired,
     #[error("DID authority binding failed: {0}")]
@@ -112,6 +114,16 @@ pub fn validate_account_registration_control_proof(
         .iter()
         .find(|method| method.id == proof.verification_method.as_str())
         .ok_or(DidBindingProofError::VerificationMethodNotFound)?;
+    method
+        .enforce_formal_key_admission(&resolution.document.id, Some(expected_trust_domain))
+        .map_err(|error| match error {
+            crate::handlers::arkret::FormalKeyAdmissionError::TestSigningMaterialDenied => {
+                DidBindingProofError::TestSigningMaterialDenied
+            }
+            crate::handlers::arkret::FormalKeyAdmissionError::Invalid(message) => {
+                DidBindingProofError::InvalidShape(message)
+            }
+        })?;
     let material = method
         .public_key_material()
         .map_err(DidBindingProofError::InvalidShape)?;
@@ -147,6 +159,8 @@ pub(crate) enum SdkJwsVerifyError {
     UnsupportedJwk(String),
     #[error("Ed25519 signature did not verify")]
     SignatureMismatch,
+    #[error("test_signing_material_denied")]
+    TestSigningMaterialDenied,
 }
 
 fn verify_compact_jws_with_sdk(
@@ -182,6 +196,16 @@ fn verify_compact_jws_with_sdk(
         .iter()
         .find(|method| method.id == verification_method_id)
         .ok_or_else(|| SdkJwsVerifyError::MethodNotFound(verification_method_id.to_owned()))?;
+    method
+        .enforce_formal_key_admission(&method.controller, None)
+        .map_err(|error| match error {
+            crate::handlers::arkret::FormalKeyAdmissionError::TestSigningMaterialDenied => {
+                SdkJwsVerifyError::TestSigningMaterialDenied
+            }
+            crate::handlers::arkret::FormalKeyAdmissionError::Invalid(message) => {
+                SdkJwsVerifyError::UnsupportedJwk(message)
+            }
+        })?;
     let material = method
         .public_key_material()
         .map_err(SdkJwsVerifyError::UnsupportedJwk)?;
@@ -245,6 +269,20 @@ mod tests {
         arkret_identifiers::DidCoreId,
         arkret_identifiers::TrustDomainId,
     ) {
+        fixture_with_seed([9; 32])
+    }
+
+    fn fixture_with_seed(
+        seed: [u8; 32],
+    ) -> (
+        arkret_models_identity::AccountRegistrationControlProof,
+        coauth_data::DidBindingChallengeRecord,
+        DidResolution,
+        coauth_data::Ulid,
+        arkret_identifiers::Hash,
+        arkret_identifiers::DidCoreId,
+        arkret_identifiers::TrustDomainId,
+    ) {
         let account_id = coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap();
         let grant_id = coauth_data::Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap();
         let did =
@@ -253,7 +291,7 @@ mod tests {
         let audience =
             arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
         let trust_domain =
-            arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.example".to_owned())
+            arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.production".to_owned())
                 .unwrap();
         let account_subject =
             arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap();
@@ -263,7 +301,7 @@ mod tests {
             arkret_identifiers::Hash::new(format!("sha256:{}", "c".repeat(64))).unwrap();
         let issued_at = DateTime::<Utc>::from_timestamp(1_800_000_000, 0).unwrap();
         let expires_at = issued_at + chrono::Duration::minutes(5);
-        let signing_key = ed25519_dalek::SigningKey::from_bytes(&[9u8; 32]);
+        let signing_key = ed25519_dalek::SigningKey::from_bytes(&seed);
         let control_key_digest = arkret_identifiers::Hash::new(format!(
             "sha256:{}",
             arkret_canonical::sha256_hex(signing_key.verifying_key().as_bytes())
@@ -367,6 +405,67 @@ mod tests {
             audience,
             trust_domain,
         )
+    }
+
+    #[test]
+    fn valid_published_signature_is_denied_before_it_becomes_an_authorization_basis() {
+        let seed: [u8; 32] = std::array::from_fn(|index| index as u8);
+        let (proof, challenge, mut resolution, account_id, subject, audience, trust_domain) =
+            fixture_with_seed(seed);
+        let method = &resolution.document.verification_method[0];
+        let material = method.public_key_material().unwrap();
+        assert!(verify_detached_ed25519_signature(
+            &material,
+            &proof.canonical_signing_bytes().unwrap(),
+            &proof.signature,
+        ));
+
+        let error = validate_account_registration_control_proof(
+            &proof,
+            &challenge,
+            &resolution,
+            account_id,
+            &subject,
+            &audience,
+            "https://auth.example",
+            &trust_domain,
+            "dpop-thumbprint",
+            proof.issued_at + chrono::Duration::seconds(1),
+        )
+        .expect_err("valid published signing material must still be refused");
+        assert!(matches!(
+            &error,
+            DidBindingProofError::TestSigningMaterialDenied
+        ));
+        assert_eq!(
+            error.to_string(),
+            arkret_identity::test_material::TEST_SIGNING_MATERIAL_DENIED
+        );
+
+        let public_key = ed25519_dalek::SigningKey::from_bytes(&seed)
+            .verifying_key()
+            .to_bytes();
+        resolution.document.verification_method[0].public_key_jwk = None;
+        resolution.document.verification_method[0].public_key_multibase = Some(
+            arkret_canonical::ed25519_pubkey_to_did_key_multibase(&public_key),
+        );
+        let error = validate_account_registration_control_proof(
+            &proof,
+            &challenge,
+            &resolution,
+            account_id,
+            &subject,
+            &audience,
+            "https://auth.example",
+            &trust_domain,
+            "dpop-thumbprint",
+            proof.issued_at + chrono::Duration::seconds(1),
+        )
+        .expect_err("re-encoding the same key must not evade the refusal");
+        assert!(matches!(
+            error,
+            DidBindingProofError::TestSigningMaterialDenied
+        ));
     }
 
     #[test]

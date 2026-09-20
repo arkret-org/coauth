@@ -313,6 +313,12 @@ pub enum DidBindingError {
     #[error("binding store rejected the acceptance: {0}")]
     Store(String),
 
+    /// A canonical public test key or reserved test identifier reached a
+    /// formal identity/trust admission path. This is terminal and must be
+    /// returned before any accepted binding is cached or persisted.
+    #[error("test_signing_material_denied")]
+    TestSigningMaterialDenied,
+
     /// The resolution carries no authority-grade evidence and MUST NOT be
     /// accepted as a binding (see [`is_storable`]).
     #[error("resolution for {did} is not authority-grade ({reason}) and was not accepted")]
@@ -494,6 +500,16 @@ pub fn binding_from_resolution(
             reason,
         });
     }
+
+    crate::handlers::arkret::enforce_formal_document_admission(&resolution.document, &trust_domain)
+        .map_err(|error| match error {
+            crate::handlers::arkret::FormalKeyAdmissionError::TestSigningMaterialDenied => {
+                DidBindingError::TestSigningMaterialDenied
+            }
+            crate::handlers::arkret::FormalKeyAdmissionError::Invalid(message) => {
+                DidBindingError::Document(message)
+            }
+        })?;
 
     let document = to_shared_document(&resolution.document)?;
     let receipt = evidence_receipt(resolution, &document)?;

@@ -17,6 +17,9 @@
 //! conversion in `services::did_binding` is therefore the explicit handoff,
 //! not a second protocol model.
 
+use arkret_identity::test_material::{
+    FormalTestMaterialPolicyError, PublicKeyFingerprintInput, enforce_formal_test_material_policy,
+};
 use arkret_signatures::proof::PublicKeyMaterial;
 use coauth_jose::jwk::{JsonWebKeyPublicParameters, PublicJsonWebKey};
 use ed25519_dalek::VerifyingKey;
@@ -90,6 +93,16 @@ pub struct VerificationMethod {
     pub public_key_multibase: Option<String>,
 }
 
+/// Failure returned before resolved key material may become a formal
+/// verification or trust-admission basis.
+#[derive(Debug, thiserror::Error)]
+pub enum FormalKeyAdmissionError {
+    #[error("test_signing_material_denied")]
+    TestSigningMaterialDenied,
+    #[error("formal key admission input is invalid: {0}")]
+    Invalid(String),
+}
+
 impl VerificationMethod {
     pub fn public_key_material(&self) -> Result<PublicKeyMaterial, String> {
         match (&self.public_key_jwk, &self.public_key_multibase) {
@@ -125,6 +138,113 @@ impl VerificationMethod {
             &verifying_key,
         )))
     }
+
+    /// Apply the SDK-owned public-test-material policy to this method.
+    ///
+    /// The fingerprint is computed from the algorithm-defined bytes, never
+    /// from the JWK / multibase serialization. There is deliberately no
+    /// configuration or test-mode argument on this formal-path API.
+    pub fn enforce_formal_key_admission(
+        &self,
+        document_did: &str,
+        trust_domain: Option<&arkret_wire::TrustDomainId>,
+    ) -> Result<(), FormalKeyAdmissionError> {
+        let did = arkret_wire::Did::new(document_did.to_owned())
+            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+        let key_id = arkret_wire::DidUrl::new(self.id.clone())
+            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+
+        let enforce = |key: Option<&PublicKeyFingerprintInput<'_>>| {
+            enforce_formal_test_material_policy(key, Some(&did), Some(&key_id), trust_domain)
+                .map_err(|error| match error {
+                    FormalTestMaterialPolicyError::Denied(_) => {
+                        FormalKeyAdmissionError::TestSigningMaterialDenied
+                    }
+                    FormalTestMaterialPolicyError::InvalidPublicKey(error) => {
+                        FormalKeyAdmissionError::Invalid(error.to_string())
+                    }
+                })
+        };
+
+        if let Some(multibase) = self.public_key_multibase.as_ref() {
+            let bytes = PublicKeyMaterial::Ed25519Multibase {
+                value: multibase.clone(),
+            }
+            .ed25519_bytes()
+            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+            return enforce(Some(&PublicKeyFingerprintInput::Ed25519Rfc8032(&bytes)));
+        }
+
+        let Some(jwk) = self.public_key_jwk.as_ref() else {
+            return enforce(None);
+        };
+        let value = serde_json::to_value(jwk)
+            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+        match (
+            value.get("kty").and_then(serde_json::Value::as_str),
+            value.get("crv").and_then(serde_json::Value::as_str),
+        ) {
+            (Some("OKP"), Some("Ed25519")) => {
+                let bytes = self
+                    .public_key_material()
+                    .map_err(FormalKeyAdmissionError::Invalid)?
+                    .ed25519_bytes()
+                    .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+                enforce(Some(&PublicKeyFingerprintInput::Ed25519Rfc8032(&bytes)))
+            }
+            (Some("EC"), Some("P-256")) => {
+                let decode = |field: &str| {
+                    value
+                        .get(field)
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| {
+                            FormalKeyAdmissionError::Invalid(format!(
+                                "P-256 JWK is missing {field}"
+                            ))
+                        })
+                        .and_then(|encoded| {
+                            arkret_canonical::base64url::base64url_decode(encoded).map_err(
+                                |error| FormalKeyAdmissionError::Invalid(error.to_string()),
+                            )
+                        })
+                };
+                let x = decode("x")?;
+                let y = decode("y")?;
+                let mut point = Vec::with_capacity(65);
+                point.push(0x04);
+                point.extend_from_slice(&x);
+                point.extend_from_slice(&y);
+                enforce(Some(&PublicKeyFingerprintInput::P256Sec1Uncompressed(
+                    &point,
+                )))
+            }
+            _ => enforce(None),
+        }
+    }
+}
+
+/// Reject reserved identifiers and published key material before a resolved
+/// document is converted into a cached or durable accepted binding.
+pub fn enforce_formal_document_admission(
+    document: &DidDocument,
+    trust_domain: &arkret_wire::TrustDomainId,
+) -> Result<(), FormalKeyAdmissionError> {
+    let did = arkret_wire::Did::new(document.id.clone())
+        .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+    enforce_formal_test_material_policy(None, Some(&did), None, Some(trust_domain)).map_err(
+        |error| match error {
+            FormalTestMaterialPolicyError::Denied(_) => {
+                FormalKeyAdmissionError::TestSigningMaterialDenied
+            }
+            FormalTestMaterialPolicyError::InvalidPublicKey(error) => {
+                FormalKeyAdmissionError::Invalid(error.to_string())
+            }
+        },
+    )?;
+    for method in &document.verification_method {
+        method.enforce_formal_key_admission(&document.id, Some(trust_domain))?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

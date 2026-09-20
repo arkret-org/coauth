@@ -334,8 +334,22 @@ fn map_did_binding_proof_error(error: DidBindingProofError) -> AppError {
         | DidBindingProofError::Expired => {
             AppError::bad_request(format!("control_proof_invalid: {error}"))
         }
+        DidBindingProofError::TestSigningMaterialDenied => {
+            AppError::bad_request(arkret_identity::test_material::TEST_SIGNING_MATERIAL_DENIED)
+                .with_protocol_code(arkret_identity::test_material::TEST_SIGNING_MATERIAL_DENIED)
+        }
         DidBindingProofError::Binding(inner) => {
-            AppError::bad_request(format!("did_resolver_not_authority_grade: {inner}"))
+            if matches!(
+                inner,
+                crate::services::did_binding::DidBindingError::TestSigningMaterialDenied
+            ) {
+                AppError::bad_request(arkret_identity::test_material::TEST_SIGNING_MATERIAL_DENIED)
+                    .with_protocol_code(
+                        arkret_identity::test_material::TEST_SIGNING_MATERIAL_DENIED,
+                    )
+            } else {
+                AppError::bad_request(format!("did_resolver_not_authority_grade: {inner}"))
+            }
         }
     }
 }
