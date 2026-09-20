@@ -24,6 +24,7 @@ pub mod user_admin;
 pub mod user_profile;
 pub mod verified_profiles;
 pub mod webauthn;
+pub mod websocket_auth;
 
 /// The service-wide JWS algorithm preference order for coauth-issued
 /// artefacts (session grant JWTs, handle-claim proofs, policy decisions,
