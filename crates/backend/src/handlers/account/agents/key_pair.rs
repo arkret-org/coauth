@@ -325,7 +325,7 @@ pub async fn post_agent_key_pair(
     // verify against key material this service resolved for itself.
     let controller_verification_methods = body
         .authorize_event
-        .proofs
+        .producer_proof
         .iter()
         .map(|proof| proof.verification_method.as_str())
         .chain(
@@ -342,7 +342,7 @@ pub async fn post_agent_key_pair(
         now,
     )
     .await?;
-    verify_controller_authorize_event_proofs(&body.authorize_event, &controller_keys)?;
+    verify_controller_authorize_event_proof(&body.authorize_event, &controller_keys)?;
     for proof in &disclosure.proofs {
         if proof.created_at < disclosure.issued_at || proof.created_at > disclosure.expires_at {
             return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
@@ -791,20 +791,19 @@ fn ensure_body_pairing_request_id_present(pairing_request_id: &str) -> Result<()
 /// This is the AUTH-1 edge check: it only proves the proof *names* a method
 /// under the controller's DID, so a principal-binding bug cannot hide behind a
 /// crypto bug. The signature itself is verified later, against key material
-/// this service resolved, by [`verify_controller_authorize_event_proofs`].
+/// this service resolved, by [`verify_controller_authorize_event_proof`].
 fn ensure_authorize_event_has_controller_signature(
     event: &arkret_wire::Event,
     controller_principal_id: &str,
 ) -> Result<(), AppError> {
-    if event.proofs.is_empty() {
+    let Some(proof) = event.producer_proof.as_ref() else {
         return Err(AppError::bad_request(
-            "authorize_event must carry controller signature proofs",
+            "authorize_event must carry a controller signature proof",
         ));
-    }
-    let signed_by_controller = event.proofs.iter().any(|proof| {
+    };
+    let signed_by_controller =
         verification_method_controller_principal_id(&proof.verification_method)
-            .is_some_and(|proof_controller| proof_controller.as_str() == controller_principal_id)
-    });
+            .is_some_and(|proof_controller| proof_controller.as_str() == controller_principal_id);
     if !signed_by_controller {
         return Err(AppError::bad_request(
             "authorize_event proof verification_method controller must match executed_by.account_id.principal_id",
@@ -1016,36 +1015,31 @@ fn controller_station_for_pairing<'a>(
         })
 }
 
-/// Verify every producer proof on the controller-signed authorize Event.
+/// Verify the producer proof on the controller-signed authorize Event.
 ///
 /// The signed transcript is the proof binding object, not the raw Event bytes;
 /// the SDK verifier builds it from the proof plus `actor_id` and re-derives the
 /// covered `event_digest` from the canonical preimage passed in here. Requiring
-/// *every* producer proof to verify, rather than any one of them, keeps a
-/// second unverifiable proof from riding along on a valid one.
-fn verify_controller_authorize_event_proofs(
+fn verify_controller_authorize_event_proof(
     event: &arkret_wire::Event,
     controller_keys: &ControllerSigningKeys,
 ) -> Result<(), AppError> {
     let canonical_bytes = authorize_event_preimage_bytes(event)?;
-    let mut verified = 0usize;
-    for proof in &event.proofs {
-        let material = controller_keys.material(proof.verification_method.as_str())?;
-        arkret_signatures::proof::verify_ed25519_detached_jws_proof(
-            proof,
-            &canonical_bytes,
-            &event.actor_id,
-            &material,
-        )
-        .map_err(|error| {
-            tracing::debug!(%error, "controller authorize Event proof failed verification");
-            AgentAuthRejection::ProofInvalid.into_app_error()
-        })?;
-        verified += 1;
-    }
-    if verified == 0 {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
-    }
+    let proof = event
+        .producer_proof
+        .as_ref()
+        .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
+    let material = controller_keys.material(proof.verification_method.as_str())?;
+    arkret_signatures::proof::verify_ed25519_detached_jws_proof(
+        proof,
+        &canonical_bytes,
+        &event.actor_id,
+        &material,
+    )
+    .map_err(|error| {
+        tracing::debug!(%error, "controller authorize Event proof failed verification");
+        AgentAuthRejection::ProofInvalid.into_app_error()
+    })?;
     Ok(())
 }
 

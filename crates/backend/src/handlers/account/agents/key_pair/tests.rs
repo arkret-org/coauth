@@ -126,7 +126,7 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
                 "approved_by": CONTROLLER
             }
         },
-        "proofs": []
+        "producer_proof": null
     }))
     .unwrap();
     let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
@@ -284,7 +284,11 @@ fn pairing_scope_precheck_returns_key_reason_before_queueing() {
 #[test]
 fn authorize_event_controller_proof_verifies_and_one_changed_byte_breaks_it() {
     let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    let proof = event.proofs[0].clone();
+    let proof = event
+        .producer_proof
+        .as_ref()
+        .expect("producer proof")
+        .clone();
     let material = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
         bytes: controller_signer().verifying_key().to_bytes().to_vec(),
     };
@@ -527,13 +531,13 @@ fn authorize_event_pairing_evidence_rejects_durable_ref() {
 fn pairing_verifies_the_authorize_event_proof_against_the_resolved_controller_key() {
     let keys = controller_signing_keys();
     let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    verify_controller_authorize_event_proofs(&event, &keys)
+    verify_controller_authorize_event_proof(&event, &keys)
         .expect("the controller Event proof must verify against the published controller key");
 
     let mut tampered = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    let proof = &mut tampered.proofs[0];
+    let proof = tampered.producer_proof.as_mut().expect("producer proof");
     proof.jws = tamper_jws_signature(&proof.jws);
-    let err = verify_controller_authorize_event_proofs(&tampered, &keys)
+    let err = verify_controller_authorize_event_proof(&tampered, &keys)
         .expect_err("one changed signature byte must fail closed");
     assert_eq!(err.status(), http::StatusCode::UNAUTHORIZED);
 
@@ -541,7 +545,7 @@ fn pairing_verifies_the_authorize_event_proof_against_the_resolved_controller_ke
     // fixture just accepted is rejected once the controller document publishes
     // a different key under the method that proof names -- which is what stops
     // a caller submitting evidence signed by a key of its own.
-    verify_controller_authorize_event_proofs(&event, &impostor_controller_signing_keys())
+    verify_controller_authorize_event_proof(&event, &impostor_controller_signing_keys())
         .expect_err("a proof only verifies under the key the controller document publishes");
 
     // An unpublished method is a rejection, not a fallback to whatever key
@@ -553,7 +557,7 @@ fn pairing_verifies_the_authorize_event_proof_against_the_resolved_controller_ke
         ),
         accepted_device_material: BTreeMap::new(),
     };
-    verify_controller_authorize_event_proofs(&event, &other_method)
+    verify_controller_authorize_event_proof(&event, &other_method)
         .expect_err("a verification method absent from the controller document must reject");
 }
 
@@ -573,9 +577,7 @@ fn authorize_event_key_is_the_only_runtime_key_authority() {
     changed.payload.get_mut("public_key").unwrap()["key"] =
         json!(Base64UrlUnpadded::encode_string(&[7u8; 32]));
     assert!(verify_authorize_event_identity(&changed).is_err());
-    assert!(
-        verify_controller_authorize_event_proofs(&changed, &controller_signing_keys()).is_err()
-    );
+    assert!(verify_controller_authorize_event_proof(&changed, &controller_signing_keys()).is_err());
 }
 
 #[test]
