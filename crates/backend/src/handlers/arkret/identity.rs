@@ -1,23 +1,16 @@
 use std::collections::BTreeMap;
-use std::time::{Duration, Instant};
 
 use arkret_identifiers::Did;
 use arkret_identity::DidBindingPurpose;
-use arkret_models_discovery::{
-    DirectoryHandleResolutionOutcome, DirectoryResolveHandleRequestBody,
-};
 use arkret_models_identity::http_bodies::IdentityDocumentViewOutcome;
 use arkret_models_identity::{
     IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody,
 };
-use coauth_data::RepositoryAccess;
 use salvo::prelude::*;
 
 use super::*;
 use crate::handlers::common::{DepotExt, extract_bound_activity_tracker};
 use crate::services::did_binding;
-
-const DIRECTORY_RESOLVE_FAILURE_FLOOR: Duration = Duration::from_millis(25);
 
 #[handler]
 pub async fn identity_resolve(
@@ -133,173 +126,6 @@ async fn enforce_identity_resolution_rate_limit(
         })
 }
 
-#[handler]
-pub async fn directory_resolve_handle(
-    req: &mut Request,
-    depot: &Depot,
-) -> Result<Json<DirectoryHandleResolutionOutcome>, ArkretRouteError> {
-    let started_at = Instant::now();
-    let body: DirectoryResolveHandleRequestBody = req
-        .parse_json()
-        .await
-        .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
-    let url_builder = depot.url_builder()?;
-    let arkret_config = depot.arkret_config()?;
-    let keyring = depot.keyring()?;
-    let binding_store = depot.verified_did_binding_store()?;
-    let limiter = depot.limiter()?;
-    let requester = extract_bound_activity_tracker(req, depot).requester_fingerprint();
-    limiter
-        .check_directory_lookup(requester)
-        .await
-        .map_err(|error| {
-            ArkretRouteError::coded(
-                StatusCode::TOO_MANY_REQUESTS,
-                arkret_wire::ErrorCode::RATE_LIMITED,
-                error.to_string(),
-            )
-        })?;
-
-    if !directory_resolve_request_has_disclosure_gate(&body) {
-        return Err(directory_resolve_not_found(started_at).await);
-    }
-    let Some(handle) = parse_local_handle(&url_builder, &body.handle) else {
-        return Err(directory_resolve_not_found(started_at).await);
-    };
-
-    let mut repo = depot.repo().await?;
-    let Some(user) = repo.user().find_by_handle(&handle).await? else {
-        return Err(directory_resolve_not_found(started_at).await);
-    };
-
-    // Resolve only a verified principal binding. Unbound accounts have no
-    // principal identity and remain undiscoverable.
-    let principal_binding =
-        principal_did_binding_for_user(&mut repo, &arkret_config, &user).await?;
-    let Some(principal_binding) = principal_binding else {
-        return Err(directory_resolve_not_found(started_at).await);
-    };
-    let verified = body
-        .expected_account_id
-        .as_ref()
-        .is_some_and(|expected| expected == &principal_binding.account_id);
-    if !verified {
-        return Err(directory_resolve_not_found(started_at).await);
-    }
-    // §3: directory rendering is an ordinary read. The handle endorsement check
-    // below runs against the *pinned* document of an already accepted principal
-    // binding; a miss is blinded into the same not-found every other
-    // non-disclosable case produces, and never into a live resolution.
-    let read = did_binding::ordinary_read_document(
-        &url_builder,
-        &arkret_config,
-        &mut repo,
-        binding_store.as_ref(),
-        principal_binding.did.as_str(),
-        DidBindingPurpose::Principal,
-        crate::handlers::make_clock().now(),
-    )
-    .await;
-    let Ok(read) = read else {
-        return Err(directory_resolve_not_found(started_at).await);
-    };
-    let canonical_handle = user_handle(&url_builder, &user);
-    if !did_document_endorses_handle(&read.document, &canonical_handle) {
-        return Err(directory_resolve_not_found(started_at).await);
-    }
-    let clock = crate::handlers::make_clock();
-    let handle_claim_audience =
-        directory_handle_claim_audience(&body, &principal_binding.audience_id);
-    let claim_material = issue_handle_claim(
-        &*clock,
-        &url_builder,
-        &arkret_config,
-        &keyring,
-        &user,
-        &principal_binding.account_id,
-        arkret_models_identity::HandleClaimKind::HandleBinding,
-        handle_claim_audience.clone(),
-    )
-    .map_err(map_handle_claim_issue_error)?;
-    claim_material.payload.validate().map_err(|error| {
-        ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
-            "issued handle claim failed SDK validation: {error}"
-        ))))
-    })?;
-
-    Ok(Json(DirectoryHandleResolutionOutcome {
-        account_id: principal_binding.account_id,
-        handle: canonical_handle,
-        verified,
-        claims: Some(vec![claim_material.payload.clone()]),
-        // The claim digest is not an Event identifier. This Authority has no
-        // resolvable source Event for the locally issued claim.
-        source_refs: Vec::new(),
-        expires_at: Some(claim_material.expires_at),
-    }))
-}
-
-fn directory_handle_claim_audience(
-    body: &DirectoryResolveHandleRequestBody,
-    principal_audience: &str,
-) -> String {
-    body.audience
-        .clone()
-        .or_else(|| body.realm_id.as_ref().map(ToString::to_string))
-        .or_else(|| body.requester_id.as_ref().map(ToString::to_string))
-        .unwrap_or_else(|| principal_audience.to_owned())
-}
-
-fn map_handle_claim_issue_error(error: SessionGrantError) -> ArkretRouteError {
-    match error {
-        SessionGrantError::HandleClaimSubject(error) => ArkretRouteError::coded(
-            StatusCode::BAD_REQUEST,
-            arkret_wire::ErrorCode::PARAM_INVALID,
-            error.to_string(),
-        ),
-        SessionGrantError::PrincipalUnknown => ArkretRouteError::coded(
-            StatusCode::NOT_FOUND,
-            arkret_wire::ErrorCode::PRINCIPAL_UNKNOWN,
-            "principal_unknown",
-        ),
-        other => ArkretRouteError::Internal(Box::new(other)),
-    }
-}
-
-fn did_document_endorses_handle(document: &DidDocument, canonical_handle: &str) -> bool {
-    document
-        .also_known_as
-        .iter()
-        .any(|alias| alias == canonical_handle)
-}
-
-async fn directory_resolve_not_found(started_at: Instant) -> ArkretRouteError {
-    let elapsed = started_at.elapsed();
-    if let Some(remaining) = DIRECTORY_RESOLVE_FAILURE_FLOOR.checked_sub(elapsed) {
-        tokio::time::sleep(remaining).await;
-    }
-    ArkretRouteError::NotFound
-}
-
-fn directory_resolve_request_has_disclosure_gate(body: &DirectoryResolveHandleRequestBody) -> bool {
-    let intent_allowed = body.intent.as_ref().is_some_and(|intent| {
-        matches!(
-            intent.as_str(),
-            "lookup" | "mention" | "invite" | "member_add"
-        )
-    });
-    let challenge_present = body
-        .proof_challenge
-        .as_deref()
-        .is_some_and(|challenge| !challenge.trim().is_empty());
-
-    intent_allowed
-        && body.expected_account_id.is_some()
-        && body.requester_id.is_some()
-        && challenge_present
-        && !body.proofs.is_empty()
-}
-
 fn parse_did_field(field: &str, value: String) -> Result<Did, ArkretRouteError> {
     Did::new(value)
         .map_err(|error| ArkretRouteError::BadRequest(format!("invalid {field}: {error}")))
@@ -310,42 +136,4 @@ fn did_document_object(
 ) -> Result<BTreeMap<String, serde_json::Value>, ArkretRouteError> {
     parse_did_field("did_document.id", document.id.clone())?;
     Ok(serde_json::from_value(serde_json::to_value(document)?)?)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn document_with_alias(alias: &str) -> DidDocument {
-        DidDocument {
-            id: "did:webvh:zExample:example.com".to_owned(),
-            also_known_as: vec![alias.to_owned()],
-            verification_method: Vec::new(),
-            authentication: Vec::new(),
-            assertion_method: Vec::new(),
-            service: Vec::new(),
-            metadata: None,
-        }
-    }
-
-    #[test]
-    fn handle_endorsement_requires_exact_canonical_alias() {
-        let canonical = "alice:example.com";
-        assert!(did_document_endorses_handle(
-            &document_with_alias(canonical),
-            canonical
-        ));
-        for non_canonical in [
-            "acct:alice@example.com",
-            "@alice:example.com",
-            "alice@example.com",
-            "Alice:example.com",
-            " alice:example.com ",
-        ] {
-            assert!(!did_document_endorses_handle(
-                &document_with_alias(non_canonical),
-                canonical
-            ));
-        }
-    }
 }

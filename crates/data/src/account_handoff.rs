@@ -198,13 +198,16 @@ pub struct DevicePairingPendingRecord {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DevicePairingAdmissionState {
-    Prepared,
-    StationAccepted,
+    SubmissionPending,
+    CommitRecorded,
     Completed,
 }
 
-/// Account Authority-owned external-effect fence for one terminal pairing.
-/// All byte fields are the exact canonical wire units used for replay.
+/// Private Account Authority journal for one terminal pairing.
+///
+/// These states are an implementation recovery choice, not Arkret protocol
+/// vocabulary. Only the accepted Event/RealmCommit and byte-exact terminal
+/// public outcome cross the journal boundary.
 #[derive(Clone, Debug)]
 pub struct DevicePairingAdmissionRecord {
     pub state: DevicePairingAdmissionState,
@@ -214,14 +217,11 @@ pub struct DevicePairingAdmissionRecord {
     pub canonical_request_bytes: Vec<u8>,
     pub authorize_event_bytes: Vec<u8>,
     pub authorize_event_id: arkret_identifiers::EventId,
-    pub downstream_request_bytes: Vec<u8>,
-    pub downstream_request_digest: arkret_identifiers::Hash,
     pub target_station_id: arkret_identifiers::DidCoreId,
     pub target_authority_generation: u64,
     pub target_stream_head: arkret_wire::CommitStreamHead,
-    pub verified_peer_outcome_bytes: Option<Vec<u8>>,
-    pub verified_realm_commit_bytes: Option<Vec<u8>>,
-    pub verified_realm_commit_digest: Option<arkret_identifiers::Hash>,
+    pub recorded_commit_bytes: Option<Vec<u8>>,
+    pub recorded_commit_digest: Option<arkret_identifiers::Hash>,
     pub terminal_outcome_bytes: Option<Vec<u8>>,
 }
 
@@ -236,8 +236,6 @@ pub struct NewDevicePairingAdmission {
     pub canonical_request_bytes: Vec<u8>,
     pub authorize_event_bytes: Vec<u8>,
     pub authorize_event_id: arkret_identifiers::EventId,
-    pub downstream_request_bytes: Vec<u8>,
-    pub downstream_request_digest: arkret_identifiers::Hash,
     pub target_station_id: arkret_identifiers::DidCoreId,
     pub target_authority_generation: u64,
     pub target_stream_head: arkret_wire::CommitStreamHead,
@@ -245,7 +243,7 @@ pub struct NewDevicePairingAdmission {
 
 #[derive(Clone, Debug)]
 pub enum DevicePairingAdmissionReserve {
-    Prepared(DevicePairingAdmissionRecord),
+    Started(DevicePairingAdmissionRecord),
     Resume(DevicePairingAdmissionRecord),
     Replay(Vec<u8>),
     DuplicateConflict,
@@ -381,7 +379,7 @@ pub struct IdentityCreationLeaseRecord {
     /// older registry receipt.
     pub registration_did_evidence: Option<arkret_wire::RegistrationDidEvidence>,
     pub pcr_genesis_request_digest: Option<arkret_identifiers::Hash>,
-    pub pcr_genesis_receipt:
+    pub pcr_genesis_outcome:
         Option<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome>,
     pub binding_receipt: Option<arkret_models_identity::AccountBindingReceipt>,
     pub register_reservation: Option<IdentityCreationRegisterReservation>,

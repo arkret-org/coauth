@@ -13,15 +13,9 @@ use arkret_models_collaboration::account_lifecycle::{
 use arkret_models_collaboration::agent_operations::{
     AgentKeyPairOutcome, AgentKeyPairRequestBody, AgentView,
 };
-use arkret_models_collaboration::authority_commit::{
-    PeerAuthoritySubmitOutcome, PeerAuthoritySubmitRequest,
-};
 use arkret_models_collaboration::governance::erasure::ErasureReceiptResource;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryOutcome, InviteDeliveryRequestBody,
-};
-use arkret_models_collaboration::principal_operations::{
-    PcrGenesisSubmitOutcome, PcrGenesisSubmitRequestBody,
 };
 use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_signatures::http_signature::{
@@ -29,9 +23,8 @@ use arkret_signatures::http_signature::{
     format_signature_header, parse_signature_input,
 };
 use arkret_wire::{
-    AuthorityBundleRequest, DeviceRevocationGateCheckOutcome, DeviceRevocationGateCheckRequestBody,
-    Did, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
-    PATH_PEER_DEVICE_REVOCATIONS_CHECK, RealmAuthorityBundle, ServiceOperationId,
+    AuthorityBundleRequest, Did, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
+    RealmAuthorityBundle, ServiceOperationId,
 };
 use coauth_keyring::Keyring;
 use serde::Serialize;
@@ -82,10 +75,8 @@ pub enum PeerProtocolClientError {
     },
     #[error("peer protocol response body invalid: {0}")]
     Response(String),
-    /// The deployment-internal authenticated channel
-    /// (`sync/service-http-binding.md` §2.2.3) for this operation is not
-    /// completely configured. Never a reason to fall back to guessing the
-    /// peer or to an unauthenticated call: the operation fails closed.
+    /// The implementation-private Station-TCB channel is not completely
+    /// configured. Never a reason to guess the peer or call anonymously.
     #[error("deployment-internal authenticated channel is not configured: {0}")]
     InternalChannelNotConfigured(String),
 }
@@ -284,32 +275,6 @@ impl<'a> PeerProtocolClient<'a> {
         .await
     }
 
-    /// Relay the exact client-signed PCR genesis unit. The Account Authority
-    /// authenticates the service transport but does not author or modify any
-    /// principal Event.
-    pub async fn post_principal_genesis(
-        &self,
-        request: &PcrGenesisSubmitRequestBody,
-    ) -> Result<PcrGenesisSubmitOutcome, PeerProtocolClientError> {
-        request
-            .validate()
-            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let url = self.join_absolute("/_arkret/peer/principal-genesis")?;
-        let outcome: PcrGenesisSubmitOutcome = self
-            .post_json(
-                "peer_principal_genesis_submit",
-                url,
-                ServiceOperationId::PEER_PRINCIPAL_GENESIS_COMMAND_SUBMIT_V1,
-                request,
-                Some(request.idempotency_key.as_str()),
-            )
-            .await?;
-        outcome
-            .validate_against(request)
-            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
-        Ok(outcome)
-    }
-
     /// Resolve the nonce-bound current authority chain from the exact owning
     /// Station before freezing an external-effect request. The response is
     /// only a carrier here; callers must run the SDK cryptographic verifier.
@@ -332,33 +297,6 @@ impl<'a> PeerProtocolClient<'a> {
             .await?;
         outcome
             .validate_for_request(request, chrono::Utc::now())
-            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
-        Ok(outcome)
-    }
-
-    /// Submit one frozen `authority_forward` request through the ordinary
-    /// RFC 9421 peer Event operation. The Event id is the stable idempotency
-    /// identity for crash recovery and lost-response replay.
-    pub async fn post_peer_authority_submit(
-        &self,
-        request: &PeerAuthoritySubmitRequest,
-        idempotency_key: &str,
-    ) -> Result<PeerAuthoritySubmitOutcome, PeerProtocolClientError> {
-        request
-            .validate()
-            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let url = self.join_absolute("/_arkret/peer/events")?;
-        let outcome: PeerAuthoritySubmitOutcome = self
-            .post_json(
-                "peer_events_submit",
-                url,
-                ServiceOperationId::PEER_EVENTS_COMMAND_SUBMIT_V1,
-                request,
-                Some(idempotency_key),
-            )
-            .await?;
-        outcome
-            .validate_for_request(request)
             .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
         Ok(outcome)
     }
@@ -524,17 +462,12 @@ impl<'a> PeerProtocolClient<'a> {
     }
 }
 
-/// One registered deployment-internal authenticated channel
-/// (`sync/service-http-binding.md` §2.2.3).
+/// Implementation-private authenticated channel inside one Station TCB.
 ///
-/// The configured Station origin, per-edge credential and trust-domain-bearing
-/// peer entry define this relationship. Request headers do not repeat it, and
-/// a missing configuration fails closed rather than falling back to `describe`
-/// or an anonymous call.
-///
-/// The channel is per-operation: only the operations registered in §2.2.3 may
-/// use it. Everything else on `/_arkret/peer/*` keeps the RFC 9421 service
-/// signature of [`PeerProtocolClient`].
+/// The configured Station origin and per-edge credential define this
+/// deployment relationship. It has no Arkret operation identity and is never
+/// advertised through Describe or protocol OpenAPI. Missing configuration
+/// fails closed rather than falling back to discovery or an anonymous call.
 pub struct InternalAuthorityChannel<'a> {
     base_url: &'a Url,
     http_client: &'a reqwest::Client,
@@ -579,48 +512,15 @@ impl<'a> InternalAuthorityChannel<'a> {
         &self.destination_service_id
     }
 
-    /// Linearize one exact session-grant issue or refresh intent against the
-    /// origin Station's durable device-revocation state
-    /// (`ak.peer.device_revocations.command.check.v1`).
-    ///
-    /// The decision receipt's authenticity and integrity come from this
-    /// channel; `crypto-media/device-lifecycle.md` §2.2 forbids the receipt
-    /// from carrying a detached proof or a `verification_method`, and the SDK
-    /// wire type rejects either member on arrival.
-    pub async fn post_device_revocation_gate_check(
-        &self,
-        request: &DeviceRevocationGateCheckRequestBody,
-    ) -> Result<DeviceRevocationGateCheckOutcome, PeerProtocolClientError> {
-        request
-            .validate()
-            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let outcome: DeviceRevocationGateCheckOutcome = self
-            .post_json(
-                "peer_device_revocations_check",
-                PATH_PEER_DEVICE_REVOCATIONS_CHECK,
-                ServiceOperationId::PEER_DEVICE_REVOCATIONS_COMMAND_CHECK_V1,
-                request,
-            )
-            .await?;
-        outcome
-            .validate_for_request(request)
-            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
-        Ok(outcome)
-    }
-
-    /// POST one canonical intent over the channel.
-    ///
-    /// No `Content-Digest` and no RFC 9421 signature: with no signature
-    /// covering the transport shell, §2.5.1 forbids the shell digest, and the
-    /// receiver MUST NOT treat whole-body byte equality as an authentication
-    /// means. The fixed call site and target origin supply operation and
-    /// destination; no redundant identity or trust-domain headers are sent.
-    async fn post_json<T, R>(
+    /// POST one implementation-private Station-TCB intent. The configured
+    /// origin and per-edge credential supply the boundary; no Arkret operation
+    /// selector or service-signature scenario is involved.
+    pub(crate) async fn post_private_json<T, R>(
         &self,
         policy_name: &'static str,
         path: &str,
-        operation_id: &str,
         body: &T,
+        idempotency_key: Option<&str>,
     ) -> Result<R, PeerProtocolClientError>
     where
         T: Serialize,
@@ -635,12 +535,16 @@ impl<'a> InternalAuthorityChannel<'a> {
         let response = outbound_http::send_with_policy(
             outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
             || {
-                self.http_client
+                let mut request = self
+                    .http_client
                     .post(url.clone())
                     .bearer_auth(self.credential)
                     .header(reqwest::header::CONTENT_TYPE, "application/json")
-                    .header(ARKRET_OPERATION_HEADER, operation_id)
-                    .body(body_bytes.clone())
+                    .body(body_bytes.clone());
+                if let Some(key) = idempotency_key {
+                    request = request.header("Idempotency-Key", key);
+                }
+                request
             },
         )
         .await

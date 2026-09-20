@@ -897,7 +897,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
 
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/auth-sessions/logout")
+            Request::post("/_coauth/internal/auth-sessions/logout")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(&logout_body),
         )
@@ -935,7 +935,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
     // state written by logout; there is no second local session truth.
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
@@ -952,7 +952,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
     // either revocation timestamp.
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/auth-sessions/logout")
+            Request::post("/_coauth/internal/auth-sessions/logout")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(&logout_body),
         )
@@ -1006,13 +1006,13 @@ async fn auth_session_logout_rejects_unbound_bearers_without_state_change() {
     });
 
     let missing = state
-        .request(Request::post("/_arkret/gate/account/auth-sessions/logout").json(&logout_body))
+        .request(Request::post("/_coauth/internal/auth-sessions/logout").json(&logout_body))
         .await;
     missing.assert_status(StatusCode::UNAUTHORIZED);
 
     let wrong = state
         .request(
-            Request::post("/_arkret/gate/account/auth-sessions/logout")
+            Request::post("/_coauth/internal/auth-sessions/logout")
                 .bearer("wrong-channel")
                 .json(&logout_body),
         )
@@ -1021,7 +1021,7 @@ async fn auth_session_logout_rejects_unbound_bearers_without_state_change() {
 
     let other_station = state
         .request(
-            Request::post("/_arkret/gate/account/auth-sessions/logout")
+            Request::post("/_coauth/internal/auth-sessions/logout")
                 .bearer("other-station-channel")
                 .json(&logout_body),
         )
@@ -1144,7 +1144,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
 
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
@@ -1187,7 +1187,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     // first call did not revoke it).
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
@@ -1206,7 +1206,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
@@ -1226,7 +1226,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
 
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
@@ -1343,7 +1343,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     // advisory flag only — the default grant+DPoP path ignores it.
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
@@ -1367,7 +1367,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let proof_jwt = session_grant_introspection_proof(&grant, &material, &session_key, &challenge);
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
@@ -1593,7 +1593,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         session_grant_introspection_proof(&persisted, &material, &session_key, &challenge);
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(bearer)
                 .json(serde_json::json!({
                     "grant_jwt": material.grant_jwt,
@@ -1658,7 +1658,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     let (_browser_session, grant, material, _session_key) =
         seed_persisted_session_grant(&mut state).await;
 
-    // Hits the canonical spec path `/_arkret/gate/account/session-grants/introspect`
+    // Hits the deployment-private Account Authority introspection adapter.
     // (the surface soland calls). The selector check runs before auth, so an
     // ambiguous selector is rejected regardless of bearer.
 
@@ -1666,7 +1666,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     // oneOf selector constraint, which is not json_invalid (400).
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
@@ -1682,7 +1682,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
     // Neither present → 422 schema_violation.
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({ "audience_id": grant.audience_id })),
         )
@@ -1722,7 +1722,7 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
 
     let response = state
         .request(
-            Request::post("/_arkret/gate/account/session-grants/introspect")
+            Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),

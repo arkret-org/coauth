@@ -29,12 +29,10 @@ use super::account_handoff::{
     verify_account_handoff_holder_without_lookup,
 };
 use super::session_grant::{
-    SessionGrantIssuanceSeed, acquire_human_device_binding, issue_session_grant_for_audience,
-    persist_session_grant,
+    SessionGrantIssuanceSeed, acquire_private_current_device_binding,
+    issue_session_grant_for_audience, persist_session_grant,
 };
-use super::{
-    ArkretRouteError, DepotExt, owning_station_did_for, owning_station_id_for, trust_domain_for,
-};
+use super::{ArkretRouteError, DepotExt, owning_station_did_for, owning_station_id_for};
 use crate::handlers::account::auth::oidc_bridge::{
     VerifiedPrincipalIdentity, ensure_soland_account_registered,
 };
@@ -42,8 +40,10 @@ use crate::handlers::{make_clock, make_rng};
 use crate::services::account_status_publication::{
     author_transition_plan, enqueue_exact_publication, validate_transition_plan,
 };
-use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
+use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
 use crate::services::soland_webvh;
+
+const PRIVATE_PRINCIPAL_GENESIS_PATH: &str = "/_soland/account-authority/principal-genesis/admit";
 
 /// `POST /_arkret/gate/account/register` identity-creation branch.
 #[handler]
@@ -410,24 +410,12 @@ pub async fn account_register_endpoint(
         context.lease.state,
         IdentityCreationLeaseState::Reserved | IdentityCreationLeaseState::DidPublished
     ) {
-        let config = depot.arkret_config()?;
-        let trust_domain = arkret_identifiers::TrustDomainId::new(trust_domain_for(
-            &depot.url_builder()?,
-            &config,
-        ))?;
         let http_client = depot.http_client()?;
-        let keyring = depot.keyring()?;
-        let peer = PeerProtocolClient::new(
-            Some(&station.endpoint),
+        let channel = InternalAuthorityChannel::new(
+            &station.endpoint,
             &http_client,
-            &keyring,
-            owning_station_did_for(&config),
-            arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-                source_id: owning_station_id_for(&config),
-                destination_id: station.service_id.clone(),
-            },
-            trust_domain.clone(),
-            trust_domain,
+            station.internal_authority_shared_secret.as_deref(),
+            station.service_id.clone(),
         )
         .map_err(map_peer_error)?;
         let mut repo = depot.repo().await?;
@@ -442,10 +430,19 @@ pub async fn account_register_endpoint(
             ));
         }
         repo.save().await?;
-        let outcome = peer
-            .post_principal_genesis(&pcr_request)
-            .await
-            .map_err(map_peer_error)?;
+        let outcome: arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome =
+            channel
+                .post_private_json(
+                    "private_principal_genesis_admission",
+                    PRIVATE_PRINCIPAL_GENESIS_PATH,
+                    &pcr_request,
+                    Some(pcr_request.idempotency_key.as_str()),
+                )
+                .await
+                .map_err(map_peer_error)?;
+        outcome
+            .validate_against(&pcr_request)
+            .map_err(|error| failed_precondition(error.to_string()))?;
         let mut repo = depot.repo().await?;
         if !repo
             .account_handoff()
@@ -454,7 +451,7 @@ pub async fn account_register_endpoint(
         {
             repo.cancel().await.ok();
             return Err(failed_precondition(
-                "PCR genesis receipt could not be durably attached to this registration",
+                "PCR genesis outcome could not be durably attached to this registration",
             ));
         }
         repo.save().await?;
@@ -462,9 +459,9 @@ pub async fn account_register_endpoint(
     } else {
         let outcome = context
             .lease
-            .pcr_genesis_receipt
+            .pcr_genesis_outcome
             .clone()
-            .ok_or_else(|| failed_precondition("PCR-accepted saga has no durable receipt"))?;
+            .ok_or_else(|| failed_precondition("PCR-accepted saga has no durable outcome"))?;
         if context.lease.pcr_genesis_request_digest.as_ref() != Some(&pcr_request_digest) {
             return Err(duplicate_conflict(
                 "PCR genesis request differs from the durable accepted request",
@@ -480,15 +477,10 @@ pub async fn account_register_endpoint(
     // that this authenticated outcome matches its own frozen material verbatim
     // — account/principal/PCR, the DID operation and its log pins, the
     // registration evidence digest, the device/key/HPKE descriptor, the lease
-    // fence and the request identity, all covered by `validate_against` above
-    // plus the issuer check here. It does not re-resolve the two accepted
-    // Events or replay the genesis. A 2xx, a bare Event id or a receipt not
-    // bound to this frozen request is never enough to commit the binding.
-    if pcr_outcome.receipt.issuer_id != station.service_id {
-        return Err(failed_precondition(
-            "PCR genesis receipt issuer does not match the selected Station",
-        ));
-    }
+    // fence and the request identity, all covered by `validate_against` above.
+    // The pinned private channel supplies the selected Station identity; the
+    // outcome carries only the two accepted RealmCommits and never repeats a
+    // receipt issuer. It does not re-resolve the two Events or replay genesis.
     let account_id =
         arkret_wire::AccountId::new(body.principal_id.clone(), station.service_id.clone());
 
@@ -680,7 +672,7 @@ pub async fn account_register_endpoint(
     let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
         serde_json::from_str(initial.session_public_key.as_str())
             .map_err(|error| proof_invalid(error.to_string()))?;
-    let device_binding = acquire_human_device_binding(
+    let device_binding = acquire_private_current_device_binding(
         depot,
         &account_id,
         initial.device_id.clone(),
@@ -732,7 +724,7 @@ pub async fn account_register_endpoint(
         profile: None,
         registration_audit: None,
         binding_receipt: receipt,
-        pcr_genesis_receipt: Some(pcr_outcome.receipt),
+        pcr_genesis_commits: Some(pcr_outcome.commits),
         session_grant_outcome: Some(session_grant_outcome),
     };
     outcome
@@ -876,6 +868,7 @@ struct StationTarget {
     endpoint: url::Url,
     service_id: arkret_identifiers::DidCoreId,
     bearer: Option<String>,
+    internal_authority_shared_secret: Option<String>,
 }
 
 fn station_target(depot: &Depot, audience: &str) -> Result<StationTarget, ArkretRouteError> {
@@ -899,6 +892,9 @@ fn station_target(depot: &Depot, audience: &str) -> Result<StationTarget, Arkret
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned),
+        internal_authority_shared_secret: server
+            .internal_authority_shared_secret()
             .map(ToOwned::to_owned),
     })
 }

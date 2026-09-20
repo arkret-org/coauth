@@ -1,8 +1,8 @@
 use arkret_identifiers::Hash;
 use arkret_models_identity::SessionGrantDeviceBinding;
 use arkret_wire::{
-    AccountId, DeviceId, DeviceRevocationGateActionClass, DeviceRevocationGateCheckRequestBody,
-    DeviceRevocationGateDecision,
+    AcceptedDevicePossessionProof, AccountId, DeviceId, DeviceRevocationGateActionClass, EventId,
+    RealmCommitId,
 };
 use chrono::{DateTime, Utc};
 use salvo::prelude::{Depot, StatusCode};
@@ -11,7 +11,59 @@ use crate::handlers::arkret::ArkretRouteError;
 use crate::handlers::common::DepotExt as _;
 use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
 
-pub(crate) async fn acquire_human_device_binding(
+const PRIVATE_CURRENT_DEVICE_PATH: &str = "/_soland/account-authority/current-device/check";
+
+#[derive(serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct PrivateCurrentDeviceRequest {
+    account_id: AccountId,
+    device_id: DeviceId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expected_device_authorize_event_id: Option<EventId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expected_device_generation_ref: Option<u64>,
+    action_class: DeviceRevocationGateActionClass,
+    intent_digest: Hash,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    accepted_device_possession_proof: Option<AcceptedDevicePossessionProof>,
+    requested_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum PrivateCurrentDeviceDecision {
+    Allow,
+    RevocationPending,
+    Revoked,
+    AuthorityMismatch,
+    GenerationMismatch,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrivateCurrentDeviceResponse {
+    account_id: AccountId,
+    device_id: DeviceId,
+    #[serde(default)]
+    authorization_event_id: Option<EventId>,
+    #[serde(default)]
+    device_generation_ref: Option<u64>,
+    action_class: DeviceRevocationGateActionClass,
+    intent_digest: Hash,
+    #[serde(default)]
+    accepted_device_possession_proof_digest: Option<Hash>,
+    decision: PrivateCurrentDeviceDecision,
+    linearization_seq: u64,
+    linearized_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    #[serde(default)]
+    accepted_commit_id: Option<RealmCommitId>,
+}
+
+/// Resolve and linearize the current-device decision through the owning
+/// Station's private TCB adapter. The adapter response is consumed here and
+/// never exposed as an Arkret receipt or canonical operation outcome.
+pub(crate) async fn acquire_private_current_device_binding(
     depot: &Depot,
     account_id: &AccountId,
     device_id: DeviceId,
@@ -46,7 +98,7 @@ pub(crate) async fn acquire_human_device_binding(
             (None, None),
             SessionGrantDeviceBinding::as_expected_gate_binding,
         );
-    let request = DeviceRevocationGateCheckRequestBody {
+    let request = PrivateCurrentDeviceRequest {
         account_id: account_id.clone(),
         device_id,
         expected_device_authorize_event_id,
@@ -56,7 +108,7 @@ pub(crate) async fn acquire_human_device_binding(
         accepted_device_possession_proof,
         requested_at: arkret_canonical::normalize_timestamp_canonical(now),
     };
-    request.validate().map_err(gate_protocol_error)?;
+    validate_private_request(&request).map_err(gate_protocol_error)?;
 
     let http_client = depot.http_client()?;
     // `PeerProtocolClientError` deliberately has no `From` for
@@ -70,29 +122,39 @@ pub(crate) async fn acquire_human_device_binding(
         account_id.station_id.clone(),
     )
     .map_err(map_peer_gate_error)?;
-    let outcome = channel
-        .post_device_revocation_gate_check(&request)
+    let outcome: PrivateCurrentDeviceResponse = channel
+        .post_private_json(
+            "private_current_device_check",
+            PRIVATE_CURRENT_DEVICE_PATH,
+            &request,
+            None,
+        )
         .await
         .map_err(map_peer_gate_error)?;
-    ensure_receipt_answers_this_channel(&channel, &outcome)?;
+    validate_private_response(&channel, &request, &outcome, now).map_err(gate_protocol_error)?;
 
-    match outcome.decision_receipt.decision {
-        DeviceRevocationGateDecision::Allow => {
-            SessionGrantDeviceBinding::from_gate_outcome(&outcome, &request, now)
-                .map_err(gate_protocol_error)
-        }
-        DeviceRevocationGateDecision::AuthorityMismatch => Err(ArkretRouteError::coded(
+    match outcome.decision {
+        PrivateCurrentDeviceDecision::Allow => Ok(SessionGrantDeviceBinding {
+            device_id: outcome.device_id,
+            authorization_event_id: outcome
+                .authorization_event_id
+                .ok_or_else(|| gate_protocol_error("allow omitted authorization Event"))?,
+            model_generation_ref: outcome
+                .device_generation_ref
+                .ok_or_else(|| gate_protocol_error("allow omitted device generation"))?,
+        }),
+        PrivateCurrentDeviceDecision::AuthorityMismatch => Err(ArkretRouteError::coded(
             StatusCode::FORBIDDEN,
             arkret_wire::ErrorCode::DEVICE_UNAUTHORIZED,
             "device is not currently authorized for this principal",
         )),
-        DeviceRevocationGateDecision::RevocationPending => Err(ArkretRouteError::coded(
+        PrivateCurrentDeviceDecision::RevocationPending => Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
             arkret_wire::ErrorCode::DEVICE_REVOCATION_PENDING,
             "device revocation is pending",
         )),
-        DeviceRevocationGateDecision::Revoked
-        | DeviceRevocationGateDecision::GenerationMismatch => Err(ArkretRouteError::coded(
+        PrivateCurrentDeviceDecision::Revoked
+        | PrivateCurrentDeviceDecision::GenerationMismatch => Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
             arkret_wire::ErrorCode::DEVICE_REVOKED,
             "device authorization is revoked or generation-fenced",
@@ -145,32 +207,96 @@ fn map_peer_gate_error(error: PeerProtocolClientError) -> ArkretRouteError {
     }
 }
 
-/// Bind the decision receipt to the registered internal channel it arrived on.
-///
-/// `crypto-media/device-lifecycle.md` §2.2: the receipt is delivered only on
-/// the registered deployment-internal authenticated channel between the
-/// Account Authority this exact account is bound to and its origin Station,
-/// and that channel — not a detached proof — supplies its authenticity and
-/// integrity. The receipt therefore carries neither `proof` nor
-/// `verification_method` (the SDK wire type rejects either member), and a
-/// receipt that did not arrive on this channel is rejected. There is no
-/// "verify it when a proof is present, pass it through otherwise" path.
-///
-/// What remains here is the binding check the channel cannot make for us: the
-/// answer must be about the exact account whose configured origin Station this
-/// channel was opened to. Every other non-signature check — complete
-/// `AccountId`, `device_id`, `action_class`, `intent_digest`, the closed
-/// decision branches, `linearization_seq`, the ≤30 second window, exact replay
-/// and the `accepted_device_possession_proof_digest` comparison — runs in the
-/// SDK's `validate_for_request` / `session_grant_admission` and is unchanged.
-fn ensure_receipt_answers_this_channel(
+fn validate_private_request(request: &PrivateCurrentDeviceRequest) -> Result<(), String> {
+    request
+        .account_id
+        .validate()
+        .map_err(|error| error.to_string())?;
+    let needs_proof = matches!(
+        request.action_class,
+        DeviceRevocationGateActionClass::ReturningSessionGrantIssue
+            | DeviceRevocationGateActionClass::SessionGrantRefresh
+    );
+    if needs_proof != request.accepted_device_possession_proof.is_some() {
+        return Err("current-device proof presence does not match the action".to_owned());
+    }
+    if let Some(proof) = &request.accepted_device_possession_proof {
+        proof.validate().map_err(|error| error.to_string())?;
+        if proof.account_id() != &request.account_id
+            || proof.device_id() != &request.device_id
+            || proof.session_intent_digest() != &request.intent_digest
+        {
+            return Err("current-device proof does not bind the request".to_owned());
+        }
+    }
+    match (
+        &request.expected_device_authorize_event_id,
+        request.expected_device_generation_ref,
+    ) {
+        (Some(_), Some(generation)) if generation > 0 => Ok(()),
+        (None, None)
+            if matches!(
+                request.action_class,
+                DeviceRevocationGateActionClass::SessionGrantIssue
+                    | DeviceRevocationGateActionClass::ReturningSessionGrantIssue
+            ) =>
+        {
+            Ok(())
+        }
+        _ => Err("current-device expected binding is incomplete or forbidden".to_owned()),
+    }
+}
+
+fn validate_private_response(
     channel: &InternalAuthorityChannel<'_>,
-    outcome: &arkret_wire::DeviceRevocationGateCheckOutcome,
-) -> Result<(), ArkretRouteError> {
-    if &outcome.decision_receipt.account_id.station_id != channel.destination_service_id() {
-        return Err(gate_protocol_error(
-            "gate receipt is not bound to the configured origin Station of this channel",
-        ));
+    request: &PrivateCurrentDeviceRequest,
+    response: &PrivateCurrentDeviceResponse,
+    now: DateTime<Utc>,
+) -> Result<(), String> {
+    if &response.account_id.station_id != channel.destination_service_id()
+        || response.account_id != request.account_id
+        || response.device_id != request.device_id
+        || response.action_class != request.action_class
+        || response.intent_digest != request.intent_digest
+    {
+        return Err("private current-device response does not bind the request/channel".to_owned());
+    }
+    let expected_proof_digest = request
+        .accepted_device_possession_proof
+        .as_ref()
+        .map(AcceptedDevicePossessionProof::proof_digest)
+        .transpose()
+        .map_err(|error| error.to_string())?;
+    if response.accepted_device_possession_proof_digest != expected_proof_digest {
+        return Err(
+            "private current-device response does not bind the possession proof".to_owned(),
+        );
+    }
+    let has_binding = matches!(
+        (&response.authorization_event_id, response.device_generation_ref),
+        (Some(_), Some(generation)) if generation > 0
+    );
+    if has_binding != (response.decision == PrivateCurrentDeviceDecision::Allow)
+        || response.accepted_commit_id.is_some()
+            != (response.decision == PrivateCurrentDeviceDecision::Allow)
+    {
+        return Err("private current-device response has an invalid decision witness".to_owned());
+    }
+    if response.decision == PrivateCurrentDeviceDecision::Allow
+        && request.expected_device_authorize_event_id.is_some()
+        && (response.authorization_event_id != request.expected_device_authorize_event_id
+            || response.device_generation_ref != request.expected_device_generation_ref)
+    {
+        return Err("private current-device allow changed the expected binding".to_owned());
+    }
+    if response.linearization_seq == 0
+        || response.expires_at <= response.linearized_at
+        || response.expires_at - response.linearized_at > chrono::Duration::seconds(30)
+        || now >= response.expires_at
+    {
+        return Err(
+            "private current-device response is stale or has an invalid lifetime".to_owned(),
+        );
     }
     Ok(())
 }
@@ -208,34 +334,33 @@ mod tests {
         .expect("configured internal channel")
     }
 
-    fn allow_receipt(station_id: &str) -> arkret_wire::DeviceRevocationGateCheckOutcome {
+    fn allow_response(station_id: &str) -> PrivateCurrentDeviceResponse {
         let linearized_at = chrono::DateTime::<chrono::Utc>::from_timestamp(1_800_000_000, 0)
             .expect("test timestamp");
-        arkret_wire::DeviceRevocationGateCheckOutcome {
-            decision_receipt: arkret_wire::DeviceRevocationGateDecisionReceipt {
-                account_id: AccountId::new(
-                    core_id("ak:did_core:web:alice.example"),
-                    core_id(station_id),
-                ),
-                device_id: DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
-                    .expect("test device id"),
-                target_device_authorize_event_id: Some(
-                    arkret_wire::EventId::new(
-                        "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
-                    )
+        PrivateCurrentDeviceResponse {
+            account_id: AccountId::new(
+                core_id("ak:did_core:web:alice.example"),
+                core_id(station_id),
+            ),
+            device_id: DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001")
+                .expect("test device id"),
+            authorization_event_id: Some(
+                arkret_wire::EventId::new("ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e")
                     .expect("test event id"),
-                ),
-                target_device_generation_ref: Some(1),
-                action_class: DeviceRevocationGateActionClass::SessionGrantIssue,
-                intent_digest: Hash::new(format!("sha256:{}", "a".repeat(64)))
-                    .expect("test intent digest"),
-                accepted_device_possession_proof_digest: None,
-                decision: DeviceRevocationGateDecision::Allow,
-                linearization_seq: 1,
-                linearized_at,
-                expires_at: linearized_at + chrono::Duration::seconds(30),
-                accepted_commit_id: None,
-            },
+            ),
+            device_generation_ref: Some(1),
+            action_class: DeviceRevocationGateActionClass::SessionGrantIssue,
+            intent_digest: Hash::new(format!("sha256:{}", "a".repeat(64)))
+                .expect("test intent digest"),
+            accepted_device_possession_proof_digest: None,
+            decision: PrivateCurrentDeviceDecision::Allow,
+            linearization_seq: 1,
+            linearized_at,
+            expires_at: linearized_at + chrono::Duration::seconds(30),
+            accepted_commit_id: Some(
+                RealmCommitId::new("ak:realm_commit:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e")
+                    .expect("test RealmCommit id"),
+            ),
         }
     }
 
@@ -268,25 +393,35 @@ mod tests {
         ));
     }
 
-    /// The channel is the receipt's only authenticity source, so the answer
+    /// The channel is the private adapter's authenticity source, so the answer
     /// must be about the exact account whose configured origin Station this
     /// channel was opened to.
     #[test]
-    fn receipt_for_another_station_is_rejected() {
+    fn private_response_for_another_station_is_rejected() {
         let endpoint = url::Url::parse("https://station.example/").expect("test endpoint");
         let http_client = crate::reqwest_client();
         let channel = channel_to(&endpoint, &http_client, "ak:did_core:web:station.example");
-        ensure_receipt_answers_this_channel(
+        let response = allow_response("ak:did_core:web:station.example");
+        let request = PrivateCurrentDeviceRequest {
+            account_id: response.account_id.clone(),
+            device_id: response.device_id.clone(),
+            expected_device_authorize_event_id: None,
+            expected_device_generation_ref: None,
+            action_class: response.action_class,
+            intent_digest: response.intent_digest.clone(),
+            accepted_device_possession_proof: None,
+            requested_at: response.linearized_at,
+        };
+        validate_private_response(&channel, &request, &response, response.linearized_at)
+            .expect("a response bound to the configured origin Station is accepted");
+        let error = validate_private_response(
             &channel,
-            &allow_receipt("ak:did_core:web:station.example"),
+            &request,
+            &allow_response("ak:did_core:web:other-station.example"),
+            response.linearized_at,
         )
-        .expect("a receipt bound to the configured origin Station is accepted");
-        let error = ensure_receipt_answers_this_channel(
-            &channel,
-            &allow_receipt("ak:did_core:web:other-station.example"),
-        )
-        .expect_err("a receipt bound to another Station must be rejected");
-        assert!(matches!(error, ArkretRouteError::Coded { .. }));
+        .expect_err("a response bound to another Station must be rejected");
+        assert!(error.contains("request/channel"));
     }
 
     #[test]

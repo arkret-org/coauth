@@ -160,10 +160,6 @@ fn account_api_subrouters() -> (Router, Router) {
         // endpoint; the owning Station advertises the Account Authority URL.
         .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
         .push(Router::with_path("root/identity/document").get(arkret::identity_document))
-        .push(
-            Router::with_path("find/directory/resolve-handle")
-                .post(arkret::directory_resolve_handle),
-        )
         // Protocol surface for DPoP-bound session-grant rotation. The grant is
         // the (minutes-to-hours) refresh credential; an authorized device
         // proves possession of the key bound into the grant's `cnf.jkt` and
@@ -193,18 +189,6 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::pair_device),
         )
         .push(
-            Router::with_path("gate/account/device-pairing/stages")
-                .post(arkret::stage_device_pairing_internal),
-        )
-        .push(
-            Router::with_path("gate/account/device-pairing/resolutions")
-                .post(arkret::resolve_device_pairing_internal),
-        )
-        .push(
-            Router::with_path("gate/account/device-pairing/status-queries")
-                .post(arkret::device_pairing_status_internal),
-        )
-        .push(
             Router::with_path("gate/account/device-pairing/code-claims")
                 .options(oidc_preflight_handler)
                 .post(arkret::claim_device_pairing_code),
@@ -230,10 +214,6 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::abandon_identity_creation),
         )
         .push(
-            Router::with_path("gate/account/controller-gate-attestations")
-                .post(arkret::issue_controller_gate_attestation),
-        )
-        .push(
             Router::with_path("gate/account/register")
                 .options(oidc_preflight_handler)
                 .post(arkret::account_register_endpoint),
@@ -247,26 +227,6 @@ fn account_api_subrouters() -> (Router, Router) {
             Router::with_path("gate/account/session-grants/revoke")
                 .options(oidc_preflight_handler)
                 .post(arkret::revoke_session_grant_endpoint),
-        )
-        // Auth-side hard logout sub-operation (account-lifecycle §4.1).
-        // This is an internal Account Authority sub-operation:
-        // the client-visible hard logout endpoint is the Principal/Account
-        // Authority `POST /_arkret/gate/account/logout`, and clients must not
-        // call this path directly.
-        .push(
-            Router::with_path("gate/account/auth-sessions/logout")
-                .post(arkret::logout_auth_session),
-        )
-        // Server-to-server session-grant introspection (RFC 7662-style): the
-        // Station validating a presented grant calls this to learn
-        // whether it is active and to obtain the session public key for RFC 9421
-        // PoP verification. It is a spec operation
-        // (`ak.gate.account.command.introspect_session_grant.v1`), so it lives under
-        // `/_arkret`; the handler self-authorizes via the configured
-        // `internal_authority_shared_secret` (or an admin scope).
-        .push(
-            Router::with_path("gate/account/session-grants/introspect")
-                .post(arkret::introspect_session_grant),
         )
         // Canonical Account Authority session-grant issuance. Human issuance
         // consumes a holder-bound AccountHandoff plus accepted-device PoP;
@@ -315,6 +275,34 @@ fn account_api_subrouters() -> (Router, Router) {
         // are served solely under `/_arkret` above — clients speaking the
         // protocol must use `/_arkret`, never a `/_coauth` path.
         .push(
+            // Same-Station TCB adapters are product-private implementation
+            // APIs. They deliberately do not pass through the Arkret
+            // operation-selector middleware and are absent from protocol
+            // OpenAPI/Describe.
+            Router::with_path("internal/controller-gate-attestations")
+                .post(arkret::issue_controller_gate_attestation),
+        )
+        .push(
+            Router::with_path("internal/device-pairing/stages")
+                .post(arkret::private_stage_device_pairing_adapter),
+        )
+        .push(
+            Router::with_path("internal/device-pairing/resolutions")
+                .post(arkret::private_resolve_device_pairing_adapter),
+        )
+        .push(
+            Router::with_path("internal/device-pairing/status-queries")
+                .post(arkret::private_device_pairing_status_adapter),
+        )
+        .push(
+            Router::with_path("internal/auth-sessions/logout")
+                .post(arkret::logout_auth_session),
+        )
+        .push(
+            Router::with_path("internal/session-grants/introspect")
+                .post(arkret::introspect_session_grant),
+        )
+        .push(
             // `account/identity/primary-handle` is a coauth product-private
             // path (not a spec operation). It deliberately avoids the protocol
             // trust-surface classifier `root/identity/` (reserved for the
@@ -326,9 +314,9 @@ fn account_api_subrouters() -> (Router, Router) {
         )
         .push(
             // Product-private account-management UI surface: `list` and
-            // `{id}/revoke`. `introspect` is the spec operation served under
-            // `/_arkret` above; the DPoP-bound `refresh` / hard-logout `revoke`
-            // are protocol operations and live under `/_arkret` only.
+            // `{id}/revoke`. Deployment-private introspection/logout adapters
+            // live under `/_coauth/internal`; DPoP-bound public refresh/revoke
+            // operations remain under `/_arkret`.
             //
             // Product-private paths deliberately avoid the protocol
             // trust-surface classifier `gate/`; they live under
@@ -556,14 +544,10 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         "/_arkret/root/identity/document" => Some("GET"),
         "/_arkret/gate/account/onboarding" => Some("GET, OPTIONS"),
         "/_arkret/root/identity/resolve"
-        | "/_arkret/find/directory/resolve-handle"
-        | "/_arkret/gate/account/auth-sessions/logout"
-        | "/_arkret/gate/account/session-grants/introspect"
         | "/_arkret/gate/account/authentication-handoffs"
         | "/_arkret/gate/account/did-binding-challenges"
         | "/_arkret/gate/account/identity-binding-challenges"
         | "/_arkret/gate/account/identity-abandonments"
-        | "/_arkret/gate/account/controller-gate-attestations"
         | "/_arkret/gate/account/register"
         | "/_arkret/gate/account/session-grants/refresh"
         | "/_arkret/gate/account/session-grants/revoke"
@@ -572,6 +556,44 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/gate/account/erasure-requests"
         | "/_arkret/gate/account/recovery-session-grants/issue" => Some("POST, OPTIONS"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod private_tcb_surface_tests {
+    #[test]
+    fn removed_account_authority_self_calls_are_not_protocol_routes() {
+        let source = include_str!("routers.rs");
+        let production = source
+            .split_once("mod private_tcb_surface_tests")
+            .unwrap()
+            .0;
+        for removed in [
+            "gate/account/device-pairing/stages",
+            "gate/account/device-pairing/resolutions",
+            "gate/account/device-pairing/status-queries",
+            "gate/account/controller-gate-attestations",
+            "gate/account/auth-sessions/logout",
+            "gate/account/session-grants/introspect",
+        ] {
+            assert!(
+                !production.contains(removed),
+                "stale canonical route: {removed}"
+            );
+        }
+        for private in [
+            "internal/controller-gate-attestations",
+            "internal/auth-sessions/logout",
+            "internal/session-grants/introspect",
+            "internal/device-pairing/stages",
+            "internal/device-pairing/resolutions",
+            "internal/device-pairing/status-queries",
+        ] {
+            assert!(
+                production.contains(private),
+                "missing private adapter: {private}"
+            );
+        }
     }
 }
 

@@ -37,7 +37,7 @@ impl Scribe for ControllerGateCanonicalJson {
     }
 }
 
-/// `POST /_arkret/gate/account/controller-gate-attestations`.
+/// Deployment-private controller-gate attestation issuance adapter.
 #[handler]
 pub async fn issue_controller_gate_attestation(
     req: &mut Request,

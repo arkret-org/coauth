@@ -725,7 +725,7 @@ async fn issue_account_handoff_session_grant(
     repo.cancel().await.ok();
 
     let device_id = body.device_id.clone();
-    let device_binding = acquire_human_device_binding(
+    let device_binding = acquire_private_current_device_binding(
         depot,
         &binding.account_id,
         device_id.clone(),

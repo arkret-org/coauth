@@ -152,9 +152,9 @@ repository_impl! {
             now: DateTime<Utc>,
         ) -> Result<DevicePairingFinalizeCommit, Self::Error>;
 
-        /// Install or recover the Authority-owned pairing admission fence.
-        /// The first write freezes every downstream byte before any Event
-        /// submission. Equal intent resumes; a changed digest or holder is a
+        /// Install or recover the Authority-owned private pairing journal.
+        /// The first write freezes the canonical request and Event submission
+        /// before any external effect. Equal intent resumes; a changed digest or holder is a
         /// zero-write conflict; completed intent replays exact outcome bytes.
         async fn reserve_device_pairing_admission(
             &mut self,
@@ -162,12 +162,13 @@ repository_impl! {
             now: DateTime<Utc>,
         ) -> Result<DevicePairingAdmissionReserve, Self::Error>;
 
-        /// Persist a cryptographically verified Station acceptance receipt.
-        async fn mark_device_pairing_station_accepted(
+        /// Persist the cryptographically verified RealmCommit used to resume
+        /// after a lost local response. This is private journal state, not a
+        /// protocol receipt or canonical intermediate state.
+        async fn record_device_pairing_commit(
             &mut self,
             request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
             request_digest: &arkret_identifiers::Hash,
-            peer_outcome_bytes: &[u8],
             realm_commit_bytes: &[u8],
             realm_commit_digest: &arkret_identifiers::Hash,
             now: DateTime<Utc>,
@@ -185,9 +186,9 @@ repository_impl! {
             now: DateTime<Utc>,
         ) -> Result<DevicePairingAdmissionCommit, Self::Error>;
 
-        /// Remove only a still-prepared fence after an authenticated terminal
+        /// Remove only a still-pending journal after an authenticated terminal
         /// peer rejection proves the Station wrote nothing.
-        async fn abandon_prepared_device_pairing_admission(
+        async fn abandon_pending_device_pairing_admission(
             &mut self,
             request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
             request_digest: &arkret_identifiers::Hash,
@@ -309,12 +310,12 @@ repository_impl! {
         registration_request_digest: &arkret_identifiers::Hash,
         ) -> Result<bool, Self::Error>;
 
-        /// Record the verified remote PCR-genesis acceptance receipt.
+        /// Record the verified remote PCR-genesis acceptance outcome.
         async fn mark_pcr_accepted(
             &mut self,
             context: &IdentityCreationRegistrationContext,
             request_digest: &arkret_identifiers::Hash,
-            receipt: &arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome,
+            outcome: &arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome,
             now: DateTime<Utc>,
         ) -> Result<bool, Self::Error>;
 

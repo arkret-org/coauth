@@ -28,8 +28,8 @@ use super::account_handoff::{
 };
 use super::canonical_response::ArkretCanonicalJson;
 use super::session_grant::{
-    SessionGrantIssuanceSeed, acquire_human_device_binding, issue_session_grant_for_audience,
-    new_session_grant_record,
+    SessionGrantIssuanceSeed, acquire_private_current_device_binding,
+    issue_session_grant_for_audience, new_session_grant_record,
 };
 use crate::handlers::common::DepotExt;
 use crate::services::account_status_publication::{
@@ -274,7 +274,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             .clone(),
         model_generation_ref: request.result_model_generation_ref,
     };
-    let device_binding = acquire_human_device_binding(
+    let device_binding = acquire_private_current_device_binding(
         depot,
         &account_id,
         initial.device_id.clone(),

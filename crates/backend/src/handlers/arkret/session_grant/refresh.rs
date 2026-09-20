@@ -792,7 +792,7 @@ pub async fn refresh_session_grant(
             "human session-grant predecessor has no accepted-device binding",
         )
     })?;
-    let device_binding = acquire_human_device_binding(
+    let device_binding = acquire_private_current_device_binding(
         depot,
         &principal_binding.account_id,
         arkret_identifiers::DeviceId::new(device_id.to_owned())?,

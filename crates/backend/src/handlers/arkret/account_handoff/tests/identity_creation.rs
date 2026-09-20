@@ -48,8 +48,9 @@ fn pcr_outcome(
     request: &arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody,
 ) -> arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome {
     use arkret_wire::{
-        EventBatchReceipt, EventBatchReceiptRow, EventBatchReceiptScope, PcrGenesisReceiptScope,
-        PcrGenesisReceiptScopeKind,
+        Base64UrlString, CommitStreamRef, DetachedObjectSignature, DetachedSignatureAlgorithm,
+        DetachedSignatureContext, DidUrl, Hash, RealmCommit, RealmCommitAuthorityRef,
+        RealmCommitId,
     };
     let descriptor: arkret_models_collaboration::events_payloads::realm::FoundingDeviceDescriptor =
         serde_json::from_value(
@@ -64,63 +65,47 @@ fn pcr_outcome(
         )
         .unwrap();
     let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
-    let mut receipt = EventBatchReceipt {
-        schema: EventBatchReceipt::SCHEMA.to_owned(),
-        receipt_id: arkret_wire::ReceiptId::new("ak:receipt:0196419b-0000-7000-8000-000000000003")
-            .unwrap(),
-        issuer_id: request
-            .genesis_unit
-            .create()
-            .actor_id
-            .route_service_id()
-            .clone(),
-        scope: EventBatchReceiptScope::PcrGenesis(PcrGenesisReceiptScope {
-            kind: PcrGenesisReceiptScopeKind::PcrGenesisUnit,
-            principal_id: request.principal_id.clone(),
+    let commit_id =
+        RealmCommitId::new("ak:realm_commit:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e").unwrap();
+    let signature = |suffix: char| DetachedObjectSignature {
+        context: DetachedSignatureContext::RealmCommit,
+        signature_algorithm: DetachedSignatureAlgorithm::Ed25519,
+        verification_method: DidUrl::new(format!("{REGISTRATION_STATION_DID}#notary")).unwrap(),
+        signed_digest: Hash::new(format!("sha256:{}", suffix.to_string().repeat(64))).unwrap(),
+        created_at: now,
+        sig: Base64UrlString::new(suffix.to_string()).unwrap(),
+    };
+    let create_commit = RealmCommit {
+        commit_id: commit_id.clone(),
+        realm_id: request.pcr_realm_id.clone(),
+        stream_ref: CommitStreamRef::Realm {
             realm_id: request.pcr_realm_id.clone(),
-            did_version_id: request.did_version_id.clone(),
-            control_key_digest: request.control_key_digest.clone(),
-            registration_evidence_digest: request
-                .registration_did_evidence
-                .canonical_digest()
-                .unwrap(),
-            accepted_device_id: descriptor.device_id.clone(),
-            device_key_digest: descriptor.device_key_digest().unwrap(),
-            hpke_key_digest: descriptor.hpke_key_digest().unwrap(),
-            accepted_at: now,
-            audience_id: request.account_authority_id.clone(),
-        }),
-        events: [
-            request.genesis_unit.create(),
-            request.genesis_unit.founding_authorize(),
-        ]
-        .into_iter()
-        .map(|event| EventBatchReceiptRow {
-            event_id: event.event_id.clone(),
-            kind: arkret_wire::NonEmptyString::new(event.kind.as_str()).unwrap(),
-        })
-        .collect(),
-        created_at: now,
-        proofs: Vec::new(),
+        },
+        stream_position: 0,
+        previous_commit_ref: None,
+        event_ref: request.genesis_unit.create().event_id.clone(),
+        governance_generation: 0,
+        authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(
+            request.genesis_unit.create().event_id.clone(),
+        ),
+        committed_at: now,
+        signature: signature('a'),
     };
-    receipt.canonicalize_events().unwrap();
-    let unsigned = arkret_wire::UnsignedPayloadProof {
-        kind: arkret_wire::proof_kind::DETACHED_JWS.to_owned(),
-        verification_method: arkret_wire::DidUrl::new(format!("{REGISTRATION_STATION_DID}#notary"))
-            .unwrap(),
-        payload_digest: receipt.payload_digest().unwrap(),
-        created_at: now,
-        domain: None,
-        audience: None,
-        proof_purpose: None,
+    let authorize_commit = RealmCommit {
+        commit_id: RealmCommitId::new(
+            "ak:realm_commit:BfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
+        )
+        .unwrap(),
+        realm_id: request.pcr_realm_id.clone(),
+        stream_ref: create_commit.stream_ref.clone(),
+        stream_position: 1,
+        previous_commit_ref: Some(commit_id),
+        event_ref: request.genesis_unit.founding_authorize().event_id.clone(),
+        governance_generation: 0,
+        authority_ref: create_commit.authority_ref.clone(),
+        committed_at: now,
+        signature: signature('b'),
     };
-    let jws = arkret_signatures::sign_ed25519_detached_jws(
-        &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[23; 32]),
-        &receipt.proof_signing_bytes(&unsigned).unwrap(),
-    )
-    .unwrap();
-    receipt.proofs.push(unsigned.finalize(jws).unwrap());
-    receipt.validate().unwrap();
     let outcome = arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome {
         principal_id: request.principal_id.clone(),
         pcr_realm_id: request.pcr_realm_id.clone(),
@@ -135,7 +120,7 @@ fn pcr_outcome(
             resolution_event_ref: request.genesis_unit.create().event_id.to_string(),
             updated_at: request.registration_did_evidence.accepted_at,
         },
-        receipt,
+        commits: [create_commit, authorize_commit],
     };
     outcome.validate_against(request).unwrap();
     outcome
@@ -178,37 +163,29 @@ async fn accept_current_registration_station(state: &TestState) {
     repo.save().await.unwrap();
 }
 
-/// The origin Station's gate answer in its current shape.
-///
-/// `crypto-media/device-lifecycle.md` §2.2: the receipt is delivered on the
-/// registered deployment-internal authenticated channel, which supplies its
-/// authenticity and integrity, so it carries neither `proof` nor
-/// `verification_method`. Every other member — complete `AccountId`,
-/// `device_id`, `action_class`, `intent_digest`, the closed decision branch,
-/// `linearization_seq` and the ≤30 second window — is unchanged and still
-/// checked by `validate_for_request`.
+/// The owning Station's private current-device response.
 fn registration_device_gate_outcome(
-    request: &arkret_wire::DeviceRevocationGateCheckRequestBody,
+    request: &serde_json::Value,
     authorization_event_id: &arkret_wire::EventId,
-) -> arkret_wire::DeviceRevocationGateCheckOutcome {
-    let outcome = arkret_wire::DeviceRevocationGateCheckOutcome {
-        decision_receipt: arkret_wire::DeviceRevocationGateDecisionReceipt {
-            account_id: request.account_id.clone(),
-            device_id: request.device_id.clone(),
-            target_device_authorize_event_id: Some(authorization_event_id.clone()),
-            target_device_generation_ref: Some(1),
-            action_class: request.action_class,
-            intent_digest: request.intent_digest.clone(),
-            accepted_device_possession_proof_digest: None,
-            decision: arkret_wire::DeviceRevocationGateDecision::Allow,
-            linearization_seq: 1,
-            linearized_at: request.requested_at,
-            expires_at: request.requested_at + Duration::seconds(30),
-            accepted_commit_id: None,
-        },
-    };
-    outcome.validate_for_request(request).unwrap();
-    outcome
+) -> serde_json::Value {
+    let linearized_at = chrono::DateTime::parse_from_rfc3339(
+        request["requested_at"].as_str().expect("requested_at"),
+    )
+    .unwrap()
+    .with_timezone(&chrono::Utc);
+    serde_json::json!({
+        "account_id": request["account_id"].clone(),
+        "device_id": request["device_id"].clone(),
+        "authorization_event_id": authorization_event_id,
+        "device_generation_ref": 1,
+        "action_class": request["action_class"].clone(),
+        "intent_digest": request["intent_digest"].clone(),
+        "decision": "allow",
+        "linearization_seq": 1,
+        "linearized_at": linearized_at,
+        "expires_at": linearized_at + Duration::seconds(30),
+        "accepted_commit_id": "ak:realm_commit:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e"
+    })
 }
 
 #[tokio::test]
@@ -389,7 +366,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let pcr_calls_for_mock = pcr_calls.clone();
     let pcr_bodies_for_mock = pcr_bodies.clone();
     Mock::given(method("POST"))
-        .and(path("/_arkret/peer/principal-genesis"))
+        .and(path("/_soland/account-authority/principal-genesis/admit"))
         .respond_with(move |request: &wiremock::Request| {
             pcr_bodies_for_mock
                 .lock()
@@ -611,10 +588,9 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         .mount(&peer)
         .await;
     Mock::given(method("POST"))
-        .and(path(arkret_wire::PATH_PEER_DEVICE_REVOCATIONS_CHECK))
+        .and(path("/_soland/account-authority/current-device/check"))
         .respond_with(move |request: &wiremock::Request| {
-            let check: arkret_wire::DeviceRevocationGateCheckRequestBody =
-                request.body_json().unwrap();
+            let check: serde_json::Value = request.body_json().unwrap();
             ResponseTemplate::new(200).set_body_json(registration_device_gate_outcome(
                 &check,
                 &authorization_event_id,

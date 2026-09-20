@@ -8,7 +8,7 @@ use sha2::Digest as _;
 use super::*;
 use crate::handlers::arkret::*;
 
-/// `POST /_arkret/gate/account/auth-sessions/logout` — Auth-side S2S logout
+/// Deployment-private Auth-side hard-logout adapter.
 /// sub-operation used by the Account Authority after it has validated the
 /// client-visible `ak.gate.account.command.logout.v1` request.
 #[handler]

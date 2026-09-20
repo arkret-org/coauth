@@ -197,12 +197,7 @@ pub async fn introspect_session_grant(
             )
         })?;
 
-    let caller = require_session_grant_caller(
-        req,
-        depot,
-        Some(arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_INTROSPECT_SESSION_GRANT_V1),
-    )
-    .await?;
+    let caller = require_session_grant_caller(req, depot, None).await?;
     let clock = crate::handlers::make_clock();
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
