@@ -21,7 +21,7 @@
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_identifiers::{
-    DidCoreId, DigestSuiteCode, EventId, Hash, RealmCommitId, RealmId, new_prefixed_uuid7,
+    DidCoreId, DigestSuiteCode, EventId, RealmCommitId, RealmId, new_prefixed_uuid7,
     project_did_to_core_id,
 };
 use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};

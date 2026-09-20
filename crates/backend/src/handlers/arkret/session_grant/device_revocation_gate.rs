@@ -186,8 +186,8 @@ fn map_peer_gate_error(error: PeerProtocolClientError) -> ArkretRouteError {
         PeerProtocolClientError::Status { .. }
         | PeerProtocolClientError::Http(_)
         | PeerProtocolClientError::BaseUrlNotConfigured => ArkretRouteError::coded(
-            StatusCode::BAD_GATEWAY,
-            arkret_wire::ErrorCode::UPSTREAM_UNAVAILABLE,
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
             "origin Station device revocation gate is unavailable",
         ),
         PeerProtocolClientError::Response(error) => ArkretRouteError::coded(
@@ -445,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn peer_5xx_is_an_attributable_upstream_failure() {
+    fn peer_5xx_fails_closed_as_service_unavailable() {
         let error = map_peer_gate_error(PeerProtocolClientError::Status {
             status: 503,
             problem: None,
@@ -453,8 +453,8 @@ mod tests {
         assert!(matches!(
             error,
             ArkretRouteError::Coded {
-                status: StatusCode::BAD_GATEWAY,
-                code: arkret_wire::ErrorCode::UPSTREAM_UNAVAILABLE,
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code: arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
                 ..
             }
         ));

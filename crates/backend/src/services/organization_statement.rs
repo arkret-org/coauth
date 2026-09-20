@@ -34,7 +34,7 @@ use arkret_policy::{
     NoDelegationResolver, RealmOrganizationDelegation, RealmOrganizationDelegationResolver,
     verify_realm_organization_statement,
 };
-use arkret_wire::{DidCoreId, DidUrl, Hash, NonEmptyString, ObjectRef, RealmId};
+use arkret_wire::{DidCoreId, DidUrl, NonEmptyString, ObjectRef, RealmId};
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_keyring::Keyring;
