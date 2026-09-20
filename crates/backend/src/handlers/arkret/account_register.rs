@@ -3,7 +3,7 @@ use arkret_models_collaboration::account_operations::{
     AccountRegisterOutcome, AccountRegisterRequestBody,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
-use arkret_models_collaboration::principal_operations::PcrGenesisSubmitRequestBody;
+use arkret_models_collaboration::principal_operations::PcrGenesisAdmissionInput;
 use arkret_models_collaboration::session_grants::SessionGrantOutcome;
 use arkret_models_identity::{
     AccountBindingKind, AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
@@ -384,7 +384,7 @@ pub async fn account_register_endpoint(
         }
     };
 
-    let pcr_request = PcrGenesisSubmitRequestBody {
+    let pcr_request = PcrGenesisAdmissionInput {
         account_authority_id: owning_station_id_for(&depot.arkret_config()?),
         principal_id: body.principal_id.clone(),
         did: body.did.clone(),
@@ -430,7 +430,7 @@ pub async fn account_register_endpoint(
             ));
         }
         repo.save().await?;
-        let outcome: arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome =
+        let outcome: arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult =
             channel
                 .post_private_json(
                     "private_principal_genesis_admission",
@@ -676,7 +676,7 @@ pub async fn account_register_endpoint(
         depot,
         &account_id,
         initial.device_id.clone(),
-        arkret_wire::DeviceRevocationGateActionClass::SessionGrantIssue,
+        arkret_wire::DeviceRevocationAdmissionAction::SessionGrantIssue,
         None,
         None,
         request_digest.clone(),

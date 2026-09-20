@@ -380,7 +380,7 @@ pub struct IdentityCreationLeaseRecord {
     pub registration_did_evidence: Option<arkret_wire::RegistrationDidEvidence>,
     pub pcr_genesis_request_digest: Option<arkret_identifiers::Hash>,
     pub pcr_genesis_outcome:
-        Option<arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome>,
+        Option<arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult>,
     pub binding_receipt: Option<arkret_models_identity::AccountBindingReceipt>,
     pub register_reservation: Option<IdentityCreationRegisterReservation>,
     pub register_ledger: Option<IdentityCreationRegisterLedger>,

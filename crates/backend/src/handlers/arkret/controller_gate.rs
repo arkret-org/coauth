@@ -3,8 +3,8 @@
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::agent_signer_evidence::{
     AgentDetachedJws, ControllerAccountEligibility, ControllerAccountGateAttestation,
-    ControllerAccountGateAttestationIssueOutcome, ControllerAccountGateAttestationIssueRequestBody,
-    ControllerAccountGateBasis, ControllerAccountStatus,
+    ControllerAccountGateBasis, ControllerAccountGateIssuanceInput,
+    ControllerAccountGateIssuanceResult, ControllerAccountStatus,
 };
 use arkret_wire::{DidUrl, NonEmptyString};
 use chrono::{Duration, Timelike as _};
@@ -48,9 +48,8 @@ pub async fn issue_controller_gate_attestation(
         .await
         .map_err(|_| schema_violation("invalid controller gate attestation request"))?
         .to_vec();
-    let request: ControllerAccountGateAttestationIssueRequestBody =
-        serde_json::from_slice(&canonical_body)
-            .map_err(|_| schema_violation("invalid controller gate attestation request"))?;
+    let request: ControllerAccountGateIssuanceInput = serde_json::from_slice(&canonical_body)
+        .map_err(|_| schema_violation("invalid controller gate attestation request"))?;
 
     let canonical_intent = arkret_canonical::canonical_json_bytes(&request)
         .map_err(|error| schema_violation(error.to_string()))?;
@@ -174,7 +173,7 @@ pub async fn issue_controller_gate_attestation(
         .map_err(|_| ArkretRouteError::Internal("controller gate signing failed".into()))?;
     attestation.proof.jws = NonEmptyString::new(jws)
         .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?;
-    let outcome = ControllerAccountGateAttestationIssueOutcome {
+    let outcome = ControllerAccountGateIssuanceResult {
         request_id: request.request_id.clone(),
         controller_account_gate_attestation: attestation,
     };
@@ -225,7 +224,7 @@ pub async fn issue_controller_gate_attestation(
 fn authenticate_internal_channel_caller(
     req: &Request,
     depot: &Depot,
-    request: &ControllerAccountGateAttestationIssueRequestBody,
+    request: &ControllerAccountGateIssuanceInput,
 ) -> Result<(), ArkretRouteError> {
     let config = depot.arkret_config()?;
     let credential = req

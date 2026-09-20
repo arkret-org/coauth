@@ -5,7 +5,7 @@ use arkret_models_collaboration::account_lifecycle::{
     AccountStatusResolveOutcome, AccountStatusResolveRequestBody,
 };
 use arkret_signatures::http_signature::{
-    Component, SignatureVerificationPolicy, parse_signature_input,
+    HttpSignatureScenario, SignatureVerificationPolicy, parse_signature_input,
     verify_signed_canonical_json_message,
 };
 use arkret_wire::DidUrl;
@@ -171,19 +171,15 @@ fn verify_request(
             .ok()
             .map(|value| (name.as_str().to_owned(), value.to_owned()))
     });
-    let policy = SignatureVerificationPolicy::new(vec![
-        Component::Method,
-        Component::TargetUri,
-        Component::Authority,
-        Component::Header("source-service-id".to_owned()),
-        Component::Header("destination-service-id".to_owned()),
-        Component::Header("source-trust-domain".to_owned()),
-        Component::Header("destination-trust-domain".to_owned()),
-        Component::Header("content-digest".to_owned()),
-    ])
-    .require_content_digest(true)
-    .max_clock_skew_seconds(300)
-    .max_validity_window_seconds(300);
+    let policy = SignatureVerificationPolicy::for_scenario(
+        HttpSignatureScenario::ServiceToServiceV1,
+        &[
+            "content-digest",
+            "source-trust-domain",
+            "destination-trust-domain",
+        ],
+    )
+    .map_err(|_| not_found())?;
     let sdk_public_key =
         sdk_verifying_key_from_jose_verifying_key(public_key).map_err(|_| not_found())?;
     verify_signed_canonical_json_message(

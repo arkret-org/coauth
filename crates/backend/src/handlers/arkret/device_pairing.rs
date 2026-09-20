@@ -544,7 +544,7 @@ pub async fn pair_device(
         depot,
         &authenticated.account_id,
         authenticated.device_id.clone(),
-        arkret_wire::DeviceRevocationGateActionClass::EventWrite,
+        arkret_wire::DeviceRevocationAdmissionAction::EventWrite,
         Some(&authenticated.device_binding),
         None,
         intent_digest,
@@ -1115,7 +1115,7 @@ pub async fn claim_device_pairing_code(
         depot,
         &authenticated.account_id,
         authenticated.device_id.clone(),
-        arkret_wire::DeviceRevocationGateActionClass::DevicePairingCodeClaim,
+        arkret_wire::DeviceRevocationAdmissionAction::DevicePairingCodeClaim,
         Some(&authenticated.device_binding),
         None,
         intent_digest,
@@ -1439,8 +1439,8 @@ mod tests {
         let lookup = claim.find(".get_device_pairing_by_code(").unwrap();
         let budget = claim.find(".record_device_pairing_failure(").unwrap();
         assert!(auth < rate && rate < gate && gate < lookup && lookup < budget);
-        assert!(claim.contains("DeviceRevocationGateActionClass::DevicePairingCodeClaim"));
-        assert!(!claim.contains("DeviceRevocationGateActionClass::EventWrite"));
+        assert!(claim.contains("DeviceRevocationAdmissionAction::DevicePairingCodeClaim"));
+        assert!(!claim.contains("DeviceRevocationAdmissionAction::EventWrite"));
     }
 
     #[test]
@@ -1458,7 +1458,7 @@ mod tests {
         let rate = pair.find(".check_device_pairing(").unwrap();
         let ledger = pair.find(".get_device_pairing_stage(").unwrap();
         let event_write = pair
-            .find("DeviceRevocationGateActionClass::EventWrite")
+            .find("DeviceRevocationAdmissionAction::EventWrite")
             .unwrap();
         let authority = pair.find("load_current_realm_authority(").unwrap();
         let reserve = pair.find(".reserve_device_pairing_admission(").unwrap();
@@ -1498,7 +1498,7 @@ mod tests {
             .0;
         let terminal = pair.find("terminal_outcome_bytes").unwrap();
         let current_gate = pair
-            .find("DeviceRevocationGateActionClass::EventWrite")
+            .find("DeviceRevocationAdmissionAction::EventWrite")
             .unwrap();
         assert!(
             terminal < current_gate,

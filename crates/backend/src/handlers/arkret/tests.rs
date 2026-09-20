@@ -1,6 +1,6 @@
 use arkret_models_collaboration::session_grants::{
-    AuthSessionLogoutOutcome, SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND,
-    SessionGrantIntrospectOutcome, SessionGrantIntrospectionProofClaims,
+    AuthSessionTerminationResult, SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND,
+    SessionGrantHolderProofClaims, SessionGrantValidationResult,
 };
 use arkret_models_identity::{
     SessionGrantAdminIntrospectionStatus, SessionGrantCredentialClass, SessionGrantHolderBinding,
@@ -903,7 +903,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
         )
         .await;
     response.assert_status(StatusCode::OK);
-    let outcome: AuthSessionLogoutOutcome = response.json();
+    let outcome: AuthSessionTerminationResult = response.json();
     assert!(outcome.grant_chain_terminated);
     assert!(outcome.auth_session_logged_out);
 
@@ -958,7 +958,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
         )
         .await;
     response.assert_status(StatusCode::OK);
-    let replay: AuthSessionLogoutOutcome = response.json();
+    let replay: AuthSessionTerminationResult = response.json();
     assert!(replay.grant_chain_terminated);
     assert!(replay.auth_session_logged_out);
 
@@ -1061,8 +1061,8 @@ fn session_grant_introspection_proof(
         .signing_key_for_alg(&JsonWebSignatureAlg::Ed25519)
         .unwrap();
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519);
-    let claims = SessionGrantIntrospectionProofClaims {
-        kind: SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND.to_owned(),
+    let claims = SessionGrantHolderProofClaims {
+        kind: SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND.to_owned(),
         session_grant_id: grant.grant_id.to_string(),
         grant_jwt_digest: session_grant_jwt_digest(&material.grant_jwt),
         audience_id: grant.audience_id.clone(),
@@ -1163,7 +1163,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     // the same grant still sees it active.
     assert_eq!(body["one_time_use_consumed"], false);
     assert_eq!(body["grant"]["id"], grant.grant_id.to_string());
-    // `service-operation-dtos.schema.json#/$defs/SessionGrantIntrospectGrant`
+    // `service-operation-dtos.schema.json#/$defs/SessionGrantValidationMetadata`
     // carries the complete `account_id`; it has no bare `subject_id` member.
     assert_eq!(
         body["grant"]["account_id"]["principal_id"],
@@ -1526,7 +1526,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     assert!(raw_payload.get("cnf").is_none());
     // `proof_kind` and `scope_details` ride the signed grant payload; the
     // wire introspection grant record omits them (spec
-    // SessionGrantIntrospectGrant is additionalProperties:false without
+    // SessionGrantValidationMetadata is additionalProperties:false without
     // these members), so they are asserted here rather than on the response.
     assert_eq!(raw_payload["proof_kind"], "agent_key_proof");
     assert_eq!(
@@ -1642,7 +1642,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         serde_json::from_str::<serde_json::Value>(&session_public_key).unwrap()
     );
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
-    serde_json::from_value::<SessionGrantIntrospectOutcome>(body)
+    serde_json::from_value::<SessionGrantValidationResult>(body)
         .expect("agent introspection response must satisfy the shared closed wire model");
 }
 

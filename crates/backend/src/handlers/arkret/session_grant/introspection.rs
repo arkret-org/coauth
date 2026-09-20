@@ -1,8 +1,7 @@
 use arkret_identifiers::{DeviceId, DidCoreId};
 use arkret_models_collaboration::session_grants::{
-    SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND, SessionGrantIntrospectGrant,
-    SessionGrantIntrospectOutcome, SessionGrantIntrospectRequestBody,
-    SessionGrantIntrospectionProof, SessionGrantIntrospectionProofClaims,
+    SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND, SessionGrantHolderProof, SessionGrantHolderProofClaims,
+    SessionGrantValidationInput, SessionGrantValidationMetadata, SessionGrantValidationResult,
 };
 use arkret_models_identity::SessionGrantAdminIntrospectionStatus;
 use chrono::{DateTime, Duration, Utc};
@@ -18,7 +17,7 @@ use crate::handlers::arkret::*;
 fn introspection_grant_record(
     grant: &SessionGrant,
     _browser_session: Option<&BrowserSession>,
-) -> Result<SessionGrantIntrospectGrant, ArkretRouteError> {
+) -> Result<SessionGrantValidationMetadata, ArkretRouteError> {
     // The thumbprint is derived from the signed session_public_key; it is not
     // duplicated as an independently authorable claim or database column.
     // `JwtDecodeError` deliberately has no `From` for `ArkretRouteError`:
@@ -67,7 +66,7 @@ fn introspection_grant_record(
     };
     let audience_id = grant.audience_id.clone();
 
-    let record = SessionGrantIntrospectGrant {
+    let record = SessionGrantValidationMetadata {
         id: grant.grant_id.clone(),
         issuer_id: grant.issuer_id.clone(),
         account_id: parsed_payload.account_id,
@@ -140,15 +139,14 @@ pub(crate) fn session_grant_jwt_digest(grant_jwt: &str) -> String {
 
 fn verify_session_grant_introspection_proof(
     grant: &SessionGrant,
-    proof: &SessionGrantIntrospectionProof,
+    proof: &SessionGrantHolderProof,
     now: DateTime<Utc>,
 ) -> SessionGrantAdminIntrospectionStatus {
     if proof.challenge.trim().is_empty() || proof.proof_jwt.trim().is_empty() {
         return SessionGrantAdminIntrospectionStatus::InvalidProof;
     }
 
-    let Ok(jwt) = Jwt::<SessionGrantIntrospectionProofClaims>::try_from(proof.proof_jwt.as_str())
-    else {
+    let Ok(jwt) = Jwt::<SessionGrantHolderProofClaims>::try_from(proof.proof_jwt.as_str()) else {
         return SessionGrantAdminIntrospectionStatus::InvalidProof;
     };
     let Ok(public_key) = serde_json::from_str::<PublicJsonWebKey>(&grant.session_public_key) else {
@@ -161,7 +159,7 @@ fn verify_session_grant_introspection_proof(
 
     let claims = jwt.payload();
     let max_future_skew = Duration::try_seconds(30).unwrap();
-    if claims.kind != SESSION_GRANT_INTROSPECTION_PROOF_CLAIMS_KIND
+    if claims.kind != SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND
         || claims.session_grant_id != grant.grant_id.to_string()
         || claims.grant_jwt_digest != session_grant_jwt_digest(&grant.grant_jwt)
         || claims.audience_id != grant.audience_id
@@ -179,7 +177,7 @@ fn verify_session_grant_introspection_proof(
 pub async fn introspect_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantIntrospectOutcome>, ArkretRouteError> {
+) -> Result<Json<SessionGrantValidationResult>, ArkretRouteError> {
     // `json_invalid` (400) means the bytes are not JSON; a body that parses but
     // breaks the request contract — such as carrying both selectors, or
     // neither — is `schema_violation` (422). Deserializing straight into the
@@ -188,14 +186,13 @@ pub async fn introspect_session_grant(
         .parse_json()
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".into()))?;
-    let body: SessionGrantIntrospectRequestBody =
-        serde_json::from_value(raw_body).map_err(|error| {
-            ArkretRouteError::coded(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                arkret_wire::ErrorCode::SCHEMA_VIOLATION,
-                error.to_string(),
-            )
-        })?;
+    let body: SessionGrantValidationInput = serde_json::from_value(raw_body).map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            arkret_wire::ErrorCode::SCHEMA_VIOLATION,
+            error.to_string(),
+        )
+    })?;
 
     let caller = require_session_grant_caller(req, depot, None).await?;
     let clock = crate::handlers::make_clock();
@@ -205,14 +202,14 @@ pub async fn introspect_session_grant(
     let mut repo = depot.repo().await?;
 
     let (grant, requested_audience, presented_proof) = match body {
-        SessionGrantIntrospectRequestBody::ById(body) => (
+        SessionGrantValidationInput::ById(body) => (
             repo.oauth_session_grant()
                 .lookup_by_grant_id(&body.id)
                 .await?,
             body.audience_id,
             body.proof,
         ),
-        SessionGrantIntrospectRequestBody::ByJwt(body) => (
+        SessionGrantValidationInput::ByJwt(body) => (
             repo.oauth_session_grant()
                 .lookup_by_grant_jwt(&body.grant_jwt)
                 .await?,
@@ -223,7 +220,7 @@ pub async fn introspect_session_grant(
 
     let Some(grant) = grant else {
         repo.cancel().await?;
-        return Ok(Json(SessionGrantIntrospectOutcome {
+        return Ok(Json(SessionGrantValidationResult {
             active: false,
             status: SessionGrantAdminIntrospectionStatus::NotFound,
             proof_required: false,
@@ -242,7 +239,7 @@ pub async fn introspect_session_grant(
             .any(|audience_id| audience_id == grant.audience_id.as_str())
     {
         repo.cancel().await?;
-        return Ok(Json(SessionGrantIntrospectOutcome {
+        return Ok(Json(SessionGrantValidationResult {
             active: false,
             status: SessionGrantAdminIntrospectionStatus::AudienceMismatch,
             proof_required: false,
@@ -393,7 +390,7 @@ pub async fn introspect_session_grant(
     // Station exchange and silently broke the refresh chain.
     repo.cancel().await?;
 
-    Ok(Json(SessionGrantIntrospectOutcome {
+    Ok(Json(SessionGrantValidationResult {
         active,
         status,
         proof_required,

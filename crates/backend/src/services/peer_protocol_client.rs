@@ -19,8 +19,9 @@ use arkret_models_collaboration::governance::invite_addressing::{
 };
 use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_signatures::http_signature::{
-    Component, ContentDigest, ContentDigestAlgorithm, SignedRequestParts, canonical_message,
-    format_signature_header, parse_signature_input,
+    ContentDigest, ContentDigestAlgorithm, HTTP_SIGNATURE_MAX_LIFETIME_SECONDS,
+    HttpSignatureScenario, SignedRequestParts, canonical_message, format_signature_header,
+    http_signature_scenario_components, parse_signature_input,
 };
 use arkret_wire::{
     AuthorityBundleRequest, Did, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
@@ -39,7 +40,6 @@ const SIGNATURE_LABEL: &str = "sig1";
 /// the SDK owns the spelling so Station and Authority cannot drift.
 pub(crate) const ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT: &str =
     arkret_models_identity::service_identity::ACCOUNT_AUTHORITY_ASSERTION_METHOD_FRAGMENT;
-const SIGNATURE_WINDOW_SECONDS: i64 = 300;
 const SOURCE_SERVICE_ID_HEADER: &str = "Source-Service-ID";
 const DESTINATION_SERVICE_ID_HEADER: &str = "Destination-Service-ID";
 const ARKRET_OPERATION_HEADER: &str = "Arkret-Operation";
@@ -402,32 +402,27 @@ impl<'a> PeerProtocolClient<'a> {
             (ARKRET_OPERATION_HEADER.to_owned(), operation_id.to_owned()),
         ];
 
-        let mut covered = vec![
-            Component::Method,
-            Component::TargetUri,
-            Component::Authority,
-            Component::Header(SOURCE_SERVICE_ID_HEADER.to_ascii_lowercase()),
-            Component::Header(DESTINATION_SERVICE_ID_HEADER.to_ascii_lowercase()),
-            Component::Header(HEADER_SOURCE_TRUST_DOMAIN.to_ascii_lowercase()),
-            Component::Header(HEADER_DESTINATION_TRUST_DOMAIN.to_ascii_lowercase()),
-            Component::Header(ARKRET_OPERATION_HEADER.to_ascii_lowercase()),
-        ];
-
         let body_digest =
             body.map(|bytes| ContentDigest::compute(bytes, ContentDigestAlgorithm::Sha256));
+        let mut applicable_components = vec!["source-trust-domain", "destination-trust-domain"];
         if let Some(digest) = &body_digest {
             headers.push(("Content-Digest".to_owned(), digest.wire_value.clone()));
-            covered.push(Component::Header("content-digest".to_owned()));
+            applicable_components.push("content-digest");
         }
 
         if let Some(key) = idempotency_key.filter(|key| !key.trim().is_empty()) {
             headers.push(("Idempotency-Key".to_owned(), key.to_owned()));
-            covered.push(Component::Header("idempotency-key".to_owned()));
+            applicable_components.push("idempotency-key");
         }
+        let covered = http_signature_scenario_components(
+            HttpSignatureScenario::ServiceToServiceV1,
+            &applicable_components,
+        )
+        .map_err(|_| PeerProtocolClientError::Sign)?;
 
         let signer = ed25519_signer(self.keyring)?;
         let created = chrono::Utc::now().timestamp();
-        let expires = created.saturating_add(SIGNATURE_WINDOW_SECONDS);
+        let expires = created.saturating_add(HTTP_SIGNATURE_MAX_LIFETIME_SECONDS);
         let covered_wire = covered
             .iter()
             .map(|component| format!("\"{}\"", component.canonical_name()))
@@ -713,19 +708,16 @@ mod tests {
         let service_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
             &keyring.account_authority_seed().unwrap(),
         );
-        let policy = arkret_signatures::http_signature::SignatureVerificationPolicy::new(vec![
-            Component::Method,
-            Component::TargetUri,
-            Component::Authority,
-            Component::Header("source-service-id".to_owned()),
-            Component::Header("destination-service-id".to_owned()),
-            Component::Header("source-trust-domain".to_owned()),
-            Component::Header("destination-trust-domain".to_owned()),
-            Component::Header("arkret-operation".to_owned()),
-            Component::Header("content-digest".to_owned()),
-            Component::Header("idempotency-key".to_owned()),
-        ])
-        .require_content_digest(true);
+        let policy = arkret_signatures::http_signature::SignatureVerificationPolicy::for_scenario(
+            HttpSignatureScenario::ServiceToServiceV1,
+            &[
+                "content-digest",
+                "source-trust-domain",
+                "destination-trust-domain",
+                "idempotency-key",
+            ],
+        )
+        .expect("service-to-service signing components are registry-generated");
         arkret_signatures::http_signature::verify_signed_http_message(
             "POST",
             url.as_str(),

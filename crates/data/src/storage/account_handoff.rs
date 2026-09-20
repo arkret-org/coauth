@@ -315,7 +315,7 @@ repository_impl! {
             &mut self,
             context: &IdentityCreationRegistrationContext,
             request_digest: &arkret_identifiers::Hash,
-            outcome: &arkret_models_collaboration::principal_operations::PcrGenesisSubmitOutcome,
+            outcome: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult,
             now: DateTime<Utc>,
         ) -> Result<bool, Self::Error>;
 
