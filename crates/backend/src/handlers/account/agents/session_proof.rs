@@ -1568,9 +1568,9 @@ mod tests {
             "ak.self.device_messages.command.ack.v1",
             "ak.self.device_messages.read.list.v1",
             "ak.self.events.command.submit.v1",
-            "ak.self.events.read.scan.v1",
-            "ak.self.events.resource.get.v1",
-            "ak.self.events.stream.subscribe.v1",
+            "ak.self.committed_event.read.scan.v1",
+            "ak.self.committed_event.resource.get.v1",
+            "ak.self.committed_event.stream.subscribe.v1",
             "ak.self.keys.keypackages.command.consume.v1",
             "ak.self.keys.keypackages.command.revoke.v1",
             "ak.self.keys.keypackages.upload.create.v1",
@@ -1860,7 +1860,7 @@ mod tests {
     fn spec_agent_key_scope_object_limits_requested_actions() {
         let agent_key_scope = serde_json::json!({
             "actions": [
-                "ak.self.events.stream.subscribe.v1",
+                "ak.self.committed_event.stream.subscribe.v1",
                 "ak.event.read"
             ],
             "resources": []
@@ -1870,7 +1870,7 @@ mod tests {
         let scope = intersect_requested_scope_with_agent_key_scope(
             &agent_key_scope,
             &[
-                "ak.self.events.stream.subscribe.v1".to_owned(),
+                "ak.self.committed_event.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
         )
@@ -1879,7 +1879,7 @@ mod tests {
             scope,
             vec![
                 "ak.event.read".to_owned(),
-                "ak.self.events.stream.subscribe.v1".to_owned(),
+                "ak.self.committed_event.stream.subscribe.v1".to_owned(),
             ]
         );
 
@@ -1926,7 +1926,7 @@ mod tests {
 
     #[test]
     fn unregistered_events_subscribe_scope_rejects_fail_closed() {
-        // The registered stream action is `ak.self.events.stream.subscribe.v1`
+        // The registered stream action is `ak.self.committed_event.stream.subscribe.v1`
         // (capabilities.md §5.5). `ak.self.events.subscribe` is not in the
         // closed set, and §5.0 requires verbatim `actions[]` matching with no
         // subsumption, so the canonical key scope must fail closed on it.
@@ -1944,7 +1944,7 @@ mod tests {
     fn schema_external_agent_key_scope_rejects_fail_closed() {
         let err = intersect_requested_scope_with_agent_key_scope(
             "delegated-root",
-            &["ak.self.events.read.scan.v1".to_owned()],
+            &["ak.self.committed_event.read.scan.v1".to_owned()],
         )
         .expect_err("schema-external key scope must fail closed");
 
@@ -2017,7 +2017,7 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
             &[
-                "ak.self.events.stream.subscribe.v1".to_owned(),
+                "ak.self.committed_event.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
             &scope_request,
@@ -2032,7 +2032,7 @@ mod tests {
             effective_scope.granted_scope,
             vec![
                 "ak.event.read".to_owned(),
-                "ak.self.events.stream.subscribe.v1".to_owned()
+                "ak.self.committed_event.stream.subscribe.v1".to_owned()
             ]
         );
     }
@@ -2054,7 +2054,7 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
             &[
-                "ak.self.events.stream.subscribe.v1".to_owned(),
+                "ak.self.committed_event.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
             &scope_request,
@@ -2067,7 +2067,7 @@ mod tests {
 
         assert_eq!(
             effective_scope.granted_scope,
-            vec!["ak.self.events.stream.subscribe.v1"]
+            vec!["ak.self.committed_event.stream.subscribe.v1"]
         );
     }
 
@@ -2110,7 +2110,7 @@ mod tests {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
             &[
-                "ak.self.events.stream.subscribe.v1".to_owned(),
+                "ak.self.committed_event.stream.subscribe.v1".to_owned(),
                 "ak.event.read".to_owned(),
             ],
             &AgentScopeRequestInput::default(),
@@ -2123,7 +2123,7 @@ mod tests {
 
         assert_eq!(
             effective_scope.granted_scope,
-            vec!["ak.self.events.stream.subscribe.v1"]
+            vec!["ak.self.committed_event.stream.subscribe.v1"]
         );
         assert!(effective_scope.realm_ids.is_empty());
         assert!(effective_scope.policy_refs.is_empty());

@@ -766,7 +766,7 @@ mod tests {
             .signed_request(
                 "QUERY",
                 &url,
-                ServiceOperationId::PEER_EVENTS_READ_SCAN_V1,
+                ServiceOperationId::PEER_COMMITTED_EVENT_READ_SCAN_V1,
                 Some(body),
                 None,
             )
