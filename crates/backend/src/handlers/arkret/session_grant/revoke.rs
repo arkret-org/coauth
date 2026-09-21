@@ -807,11 +807,9 @@ mod tests {
             service_id: None,
             capability_grant_refs: Vec::new(),
             audience_id: material.audience_id,
-            scope: Scope::from_iter([
-                "ak.self.committed_event.stream.subscribe.v1"
-                    .parse()
-                    .unwrap(),
-            ]),
+            scope: Scope::from_iter(["ak.self.committed_event.stream.subscribe.v1"
+                .parse()
+                .unwrap()]),
             grant_jwt: material.grant_jwt,
             session_id: material.session_id,
             issuance_nonce: material.issuance_nonce,

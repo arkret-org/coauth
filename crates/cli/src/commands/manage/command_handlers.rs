@@ -13,9 +13,7 @@ use chrono::Duration;
 use coauth_backend::util::{diesel_pool_from_config, password_manager_from_config};
 use coauth_config::{ConfigurationSectionExt, DatabaseConfig, PasswordsConfig};
 use coauth_data::oauth::OAuthSessionFilter;
-use coauth_data::queue::{
-    ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob,
-};
+use coauth_data::queue::{ProvisionUserJob, QueueJobRepositoryExt as _, SyncDevicesJob};
 use coauth_data::user::{
     BrowserSessionFilter, UserEmailRepository, UserFilter, UserPasswordRepository, UserRepository,
 };
