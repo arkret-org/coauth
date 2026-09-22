@@ -1,11 +1,9 @@
 //! Shared DID-signature verification and the canonical published-DID account
 //! registration control proof.
 
-use arkret_signatures::{
-    Ed25519DetachedJwsVerifier, VerifierError, proof::verify_detached_ed25519_signature,
-};
+use arkret_signatures::proof::verify_detached_ed25519_signature;
+use arkret_signatures::{Ed25519DetachedJwsVerifier, VerifierError};
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
 use thiserror::Error;
 
 use crate::services::did_resolver::DidResolution;
@@ -151,8 +149,6 @@ pub fn validate_account_registration_control_proof(
 pub(crate) enum SdkJwsVerifyError {
     #[error("compact JWS shape is invalid: {0}")]
     InvalidShape(String),
-    #[error("compact JWS alg must be Ed25519, got {0}")]
-    UnsupportedAlgorithm(String),
     #[error("verification_method '{0}' not present in the resolved DID document")]
     MethodNotFound(String),
     #[error("resolved verification_method JWK is not a supported Ed25519 key: {0}")]
@@ -163,41 +159,15 @@ pub(crate) enum SdkJwsVerifyError {
     TestSigningMaterialDenied,
 }
 
-#[derive(Deserialize)]
-struct DetachedJwsMethodHeader {
-    alg: String,
-    kid: Option<String>,
-}
-
 pub(crate) fn verify_detached_jws_with_sdk(
     detached_jws: &str,
     payload_bytes: &[u8],
     verification_methods: &[crate::handlers::arkret::VerificationMethod],
 ) -> Result<String, SdkJwsVerifyError> {
-    let mut parts = detached_jws.split('.');
-    let header_b64u = parts
-        .next()
-        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing protected header".to_owned()))?;
-    let payload_b64u = parts
-        .next()
-        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing payload".to_owned()))?;
-    let _signature_b64u = parts
-        .next()
-        .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing signature".to_owned()))?;
-    if parts.next().is_some() || !payload_b64u.is_empty() {
-        return Err(SdkJwsVerifyError::InvalidShape(
-            "detached JWS must contain exactly protected..signature".to_owned(),
-        ));
-    }
-    let header_bytes = arkret_canonical::base64url_decode(header_b64u)
-        .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?;
-    let header: DetachedJwsMethodHeader = serde_json::from_slice(&header_bytes)
-        .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?;
-    if header.alg != "Ed25519" {
-        return Err(SdkJwsVerifyError::UnsupportedAlgorithm(header.alg));
-    }
-    let verification_method = header
-        .kid
+    let verifier = Ed25519DetachedJwsVerifier::new();
+    let verification_method = verifier
+        .detached_jws_key_id(detached_jws)
+        .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?
         .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing kid".to_owned()))?
         .to_owned();
     let method = verification_methods
@@ -217,7 +187,7 @@ pub(crate) fn verify_detached_jws_with_sdk(
     let material = method
         .public_key_material()
         .map_err(SdkJwsVerifyError::UnsupportedJwk)?;
-    let verified = Ed25519DetachedJwsVerifier::new()
+    let verified = verifier
         .verify_detached_jws_with_metadata(detached_jws, payload_bytes, &material)
         .map_err(|error| match error {
             VerifierError::Encoding(message) | VerifierError::Binding(message) => {
@@ -292,6 +262,16 @@ mod tests {
         assert!(matches!(
             verify_detached_jws_with_sdk(&attached, payload, &methods),
             Err(SdkJwsVerifyError::InvalidShape(_))
+        ));
+
+        let protected = jws.split_once("..").unwrap().0;
+        let tampered = format!(
+            "{protected}..{}",
+            Base64UrlUnpadded::encode_string(&[0_u8; 64])
+        );
+        assert!(matches!(
+            verify_detached_jws_with_sdk(&tampered, payload, &methods),
+            Err(SdkJwsVerifyError::SignatureMismatch)
         ));
     }
 
