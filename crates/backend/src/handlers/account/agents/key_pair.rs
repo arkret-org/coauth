@@ -15,7 +15,6 @@
 use std::collections::BTreeMap;
 
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
-use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::{DateTime, Utc};
 use coauth_data::RepositoryAccess;
 use coauth_data::accountability::AccountabilityGrantFanoutState;
@@ -350,19 +349,12 @@ pub async fn post_agent_key_pair(
         let transcript = disclosure
             .canonical_proof_binding_bytes(proof)
             .map_err(|error| AppError::bad_request(error.to_string()))?;
-        let parts = arkret_signatures::proof::validate_ed25519_detached_jws_shape(&proof.jws)
-            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-        let signing_input = format!(
-            "{}.{}",
-            parts[0],
-            Base64UrlUnpadded::encode_string(&transcript)
-        );
-        arkret_signatures::proof::verify_ed25519_raw_transcript_signature(
-            signing_input.as_bytes(),
-            parts[2],
+        verify_requested_scope_disclosure_proof(
+            &proof.jws,
+            &transcript,
+            proof.verification_method.as_str(),
             &controller_keys.material(proof.verification_method.as_str())?,
-        )
-        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+        )?;
     }
     super::session_proof::validate_agent_runtime_key_scope_layers(
         &authoritative_key_state.requested_scope.actions,
@@ -538,6 +530,28 @@ pub async fn post_agent_key_pair(
     .await?;
 
     Ok(Json(outcome))
+}
+
+/// Verify the controller's requested-scope proof through the SDK's canonical
+/// detached-JWS carrier. Shape-only parsing plus raw-signature verification
+/// would accept protected headers outside the Arkret v1 profile (for example a
+/// non-Ed25519 `alg`, an attached payload, or unsupported extensions).
+fn verify_requested_scope_disclosure_proof(
+    detached_jws: &str,
+    transcript: &[u8],
+    verification_method: &str,
+    public_key: &arkret_signatures::PublicKeyMaterial,
+) -> Result<(), AppError> {
+    let verified = arkret_signatures::Ed25519DetachedJwsVerifier::new()
+        .verify_detached_jws_with_metadata(detached_jws, transcript, public_key)
+        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
+    if verified
+        .key_id()
+        .is_some_and(|key_id| key_id != verification_method)
+    {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
+    }
+    Ok(())
 }
 
 /// The controller-signed authorize Event after every business-field check.

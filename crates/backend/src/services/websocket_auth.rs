@@ -135,9 +135,9 @@ mod tests {
         WebSocketAuthProofRequest, build_websocket_auth_proof,
     };
     use arkret_wire::WebOrigin;
-    use ed25519_dalek_3::SigningKey;
 
     use super::*;
+    use crate::arkret_key_bridge::{SdkSigningKey, sdk_signing_key_from_seed_bytes};
 
     const BASE_URL: &str = "wss://server.example/_arkret/ws";
     const ORIGIN: &str = "https://app.example";
@@ -193,7 +193,7 @@ mod tests {
         }
     }
 
-    fn frame(key: &SigningKey, now: DateTime<Utc>, jti: &str) -> (WebSocketClientFrame, String) {
+    fn frame(key: &SdkSigningKey, now: DateTime<Utc>, jti: &str) -> (WebSocketClientFrame, String) {
         let proof = build_websocket_auth_proof(
             &WebSocketAuthProofRequest {
                 base_url: BASE_URL,
@@ -220,7 +220,7 @@ mod tests {
         let now = DateTime::from_timestamp(1_785_283_200, 0).expect("fixed instant");
         let challenge = challenge(now);
         let (frame, jkt) = frame(
-            &SigningKey::from_bytes(&RFC8032_TEST_1_SEED),
+            &sdk_signing_key_from_seed_bytes(&RFC8032_TEST_1_SEED),
             now,
             "d3MtYXV0aC1qdGktMDAwMQ",
         );
@@ -248,7 +248,7 @@ mod tests {
         let now = DateTime::from_timestamp(1_785_283_200, 0).expect("fixed instant");
         let challenge = challenge(now);
         let (frame, jkt) = frame(
-            &SigningKey::from_bytes(&[91; 32]),
+            &sdk_signing_key_from_seed_bytes(&[91; 32]),
             now,
             "d3MtYXV0aC1qdGktMDAwMg",
         );

@@ -1,4 +1,4 @@
-use base64ct::Base64UrlUnpadded;
+use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::DateTime;
 use serde_json::json;
 
@@ -203,6 +203,36 @@ fn tamper_jws_signature(jws: &str) -> String {
     };
     jws.replace_range(signature_start..=signature_start, flipped);
     jws
+}
+
+#[test]
+fn requested_scope_disclosure_uses_canonical_detached_jws_verifier() {
+    let signer =
+        arkret_signatures::Ed25519DetachedJwsSigner::from_seed(CONTROLLER_KEY_SEED, CONTROLLER_VM);
+    let material = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+        bytes: signer.verifying_key().to_bytes().to_vec(),
+    };
+    let transcript = b"requested-scope disclosure proof transcript";
+    let jws = signer.sign_detached_jws(transcript);
+
+    assert!(
+        verify_requested_scope_disclosure_proof(&jws, transcript, CONTROLLER_VM, &material).is_ok()
+    );
+    assert!(
+        verify_requested_scope_disclosure_proof(
+            &jws,
+            b"tampered requested-scope disclosure proof transcript",
+            CONTROLLER_VM,
+            &material,
+        )
+        .is_err()
+    );
+
+    let attached = jws.replacen("..", ".YXR0YWNoZWQ.", 1);
+    assert!(
+        verify_requested_scope_disclosure_proof(&attached, transcript, CONTROLLER_VM, &material,)
+            .is_err()
+    );
 }
 
 fn valid_authorize_event(pairing_request_id: &str) -> Value {
