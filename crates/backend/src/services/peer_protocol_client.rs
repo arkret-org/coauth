@@ -19,9 +19,8 @@ use arkret_models_collaboration::governance::invite_addressing::{
 };
 use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_signatures::http_signature::{
-    ContentDigest, ContentDigestAlgorithm, HTTP_SIGNATURE_MAX_LIFETIME_SECONDS,
-    HttpSignatureScenario, SignedRequestParts, canonical_message, format_signature_header,
-    http_signature_scenario_components, parse_signature_input,
+    ContentDigest, ContentDigestAlgorithm, HttpSignatureScenario, SignedRequestParts,
+    sign_http_message_for_scenario,
 };
 use arkret_wire::{
     AuthorityBundleRequest, Did, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
@@ -414,44 +413,30 @@ impl<'a> PeerProtocolClient<'a> {
             headers.push(("Idempotency-Key".to_owned(), key.to_owned()));
             applicable_components.push("idempotency-key");
         }
-        let covered = http_signature_scenario_components(
-            HttpSignatureScenario::ServiceToServiceV1,
-            &applicable_components,
-        )
-        .map_err(|_| PeerProtocolClientError::Sign)?;
-
-        let signer = ed25519_signer(self.keyring)?;
         let created = chrono::Utc::now().timestamp();
-        let expires = created.saturating_add(HTTP_SIGNATURE_MAX_LIFETIME_SECONDS);
-        let covered_wire = covered
-            .iter()
-            .map(|component| format!("\"{}\"", component.canonical_name()))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let signature_input_header = format!(
-            "{SIGNATURE_LABEL}=({covered_wire});created={created};expires={expires};keyid=\"{}#{}\";alg=\"ed25519\"",
+        let request_parts = request_parts(method, url, &headers, body_digest.as_ref());
+        let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
+            &self
+                .keyring
+                .account_authority_seed()
+                .map_err(|_| PeerProtocolClientError::NoSigningKey)?,
+        );
+        let key_id = format!(
+            "{}#{}",
             self.source_did, ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
         );
-        let signature_input = parse_signature_input(&signature_input_header)
-            .map_err(|_| PeerProtocolClientError::Sign)?;
-        let request_parts = request_parts(method, url, &headers, body_digest.as_ref());
-        let message = canonical_message(&request_parts, &signature_input)
-            .map_err(|_| PeerProtocolClientError::Sign)?;
-
-        use rand_core::SeedableRng as _;
-        use signature::RandomizedSigner as _;
-        let mut rng = rand_chacha::ChaChaRng::from_rng(rand_core::OsRng)
-            .map_err(|_| PeerProtocolClientError::Sign)?;
-        let raw = signer
-            .try_sign_with_rng(&mut rng, &message)
-            .map_err(|_| PeerProtocolClientError::Sign)?;
-        let sig_bytes: Box<[u8]> = raw.into();
-        let signature = arkret_canonical::base64url::base64_standard_encode(&sig_bytes);
-        let signature_header = format_signature_header(SIGNATURE_LABEL, &signature)
-            .map_err(|_| PeerProtocolClientError::Sign)?;
-
-        headers.push(("Signature-Input".to_owned(), signature_input_header));
-        headers.push(("Signature".to_owned(), signature_header));
+        let signed = sign_http_message_for_scenario(
+            &request_parts,
+            HttpSignatureScenario::ServiceToServiceV1,
+            &applicable_components,
+            SIGNATURE_LABEL,
+            &key_id,
+            created,
+            &signing_key,
+        )
+        .map_err(|_| PeerProtocolClientError::Sign)?;
+        headers.push(("Signature-Input".to_owned(), signed.signature_input_header));
+        headers.push(("Signature".to_owned(), signed.signature_header));
 
         Ok(SignedPeerRequest { headers })
     }
@@ -577,14 +562,6 @@ fn request_parts(
             .collect(),
         body_digest: body_digest.map(|digest| digest.wire_value.clone()),
     }
-}
-
-fn ed25519_signer(
-    keyring: &Keyring,
-) -> Result<std::sync::Arc<coauth_jose::jwa::AsymmetricSigningKey>, PeerProtocolClientError> {
-    keyring
-        .account_authority_signer()
-        .map_err(|_| PeerProtocolClientError::NoSigningKey)
 }
 
 async fn parse_json_response<R>(response: reqwest::Response) -> Result<R, PeerProtocolClientError>
@@ -733,6 +710,24 @@ mod tests {
             chrono::Utc::now().timestamp(),
         )
         .expect("peer HTTP signature must verify with the Account Authority key");
+
+        assert!(
+            arkret_signatures::http_signature::verify_signed_http_message(
+                "POST",
+                url.as_str(),
+                "server.example",
+                url.path(),
+                signed
+                    .headers
+                    .iter()
+                    .map(|(name, value)| (name.as_str(), value.as_str())),
+                br#"{"tampered":true}"#,
+                &service_key.verifying_key(),
+                &policy,
+                chrono::Utc::now().timestamp(),
+            )
+            .is_err()
+        );
     }
 
     #[test]
