@@ -34,6 +34,41 @@ and rejection of legacy inline fields. They do **not** test an old-installation
 key import. The missing import/continuity decision keeps this Coauth inventory
 partial and the cross-repository 1250 task active.
 
+### Legacy-key import feasibility (2026-09-23)
+
+There is no migration command in `crates/cli/src/commands/mod.rs`, and the
+current `KeyStoreConfig` rejects legacy `secrets.encryption`,
+`encryption_file`, `keys` and `keys_dir`. The old semantics can be read from
+the two `git show 7df75d5d^:crates/config/src/sections/secrets/<file>.rs`
+sources (`encryption.rs` and `key_config.rs`):
+`encryption_file` was exactly 64 hex digits; an explicit key could be inline
+or file-backed PEM/DER, with optional inline password or raw password-file
+bytes; `keys_dir` collected regular files without passwords and merged those
+entries before explicit `keys`. An absent `kid` became the JWK thumbprint.
+
+The parsing and bundle primitives largely exist: `coauth_keyring::PrivateKey`
+still has `load`, `load_encrypted`, `to_pkcs8_der` and thumbprint derivation;
+`StoredKeyBundle` stores a 32-byte encryption key plus up to 64 `(kid, DER)`
+entries. `build_runtime` validates reserved Account Authority / audit /
+session-grant signers and the required signing algorithms. Thus an importer
+would have to preserve every old key and its effective `kid`, preserve the
+application encryption key byte-for-byte, and reject an old set that does not
+meet today's required runtime-key set. Generating replacements during import
+would change issuer or decryption identity.
+
+The **blocking API gap** is in `arkret-rust-sdk/crates/keystore/src/contract.rs`:
+`KeyStore::store(id, bytes)` explicitly **must overwrite** an existing id.
+Coauth only has separate `load` and `store` calls around `KEY_BUNDLE_ID`;
+neither is a cross-process atomic create-if-absent. The encrypted-file backend
+locks each individual operation, and the platform backends also implement
+overwrite. A `load` then `store` migration command could race another import
+or `server --first-provisioning` and silently replace a live signing and
+encryption bundle. No safe one-time import was implemented on that contract.
+The prerequisite is a backend-wide atomic create-if-absent operation for this
+single bundle, followed by reload and exact key/`kid`/encryption-key
+continuity checks. Legacy inputs should remain one-time command inputs rather
+than production configuration fallbacks.
+
 ## Migrated
 
 | Capability / entry point (before) | Implementation now | Test |
