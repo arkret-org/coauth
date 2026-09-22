@@ -163,16 +163,7 @@ pub async fn issue_controller_gate_attestation(
         },
     };
     let sdk_signing_key = sdk_signing_key_from_seed_bytes(&signing_seed);
-    // The SDK owns both halves: the attestation canonicalizes its own
-    // domain-separated signing bytes with `proof.jws` excluded, and the
-    // signature primitive produces the canonical detached JWS wire form.
-    let signing_bytes = attestation
-        .signing_bytes()
-        .map_err(|_| ArkretRouteError::Internal("controller gate signing failed".into()))?;
-    let jws = arkret_signatures::sign_ed25519_detached_jws(&sdk_signing_key, &signing_bytes)
-        .map_err(|_| ArkretRouteError::Internal("controller gate signing failed".into()))?;
-    attestation.proof.jws = NonEmptyString::new(jws)
-        .map_err(|error| ArkretRouteError::Internal(std::io::Error::other(error).into()))?;
+    sign_controller_gate_with_sdk(&mut attestation, &sdk_signing_key)?;
     let outcome = ControllerAccountGateIssuanceResult {
         request_id: request.request_id.clone(),
         controller_account_gate_attestation: attestation,
@@ -201,6 +192,21 @@ pub async fn issue_controller_gate_attestation(
     };
     repo.save().await?;
     Ok(ControllerGateCanonicalJson(response))
+}
+
+fn sign_controller_gate_with_sdk(
+    attestation: &mut ControllerAccountGateAttestation,
+    signing_key: &crate::arkret_key_bridge::SdkSigningKey,
+) -> Result<(), ArkretRouteError> {
+    arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
+        attestation,
+        signing_key,
+    )
+    .map_err(|error| {
+        ArkretRouteError::Internal(Box::new(std::io::Error::other(format!(
+            "controller gate signing failed: {error}"
+        ))))
+    })
 }
 
 /// Authenticate the caller on the registered deployment-internal channel
@@ -310,4 +316,77 @@ fn schema_violation(message: impl Into<String>) -> ArkretRouteError {
         arkret_wire::ErrorCode::SCHEMA_VIOLATION,
         message,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use arkret_identifiers::{DidCoreId, Hash};
+    use arkret_signatures::PublicKeyMaterial;
+    use arkret_signatures::agent_evidence::verify_controller_account_gate_attestation;
+
+    use super::*;
+
+    fn digest(byte: u8) -> Hash {
+        Hash::new(format!("sha256:{}", format!("{byte:02x}").repeat(32))).unwrap()
+    }
+
+    fn attestation() -> ControllerAccountGateAttestation {
+        ControllerAccountGateAttestation {
+            schema: NonEmptyString::new(
+                arkret_wire::SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1.to_owned(),
+            )
+            .unwrap(),
+            principal_id: DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
+            eligibility: ControllerAccountEligibility::Active,
+            status: ControllerAccountStatus::Active,
+            basis: ControllerAccountGateBasis::AccountBindingDefault {
+                binding_version: 7,
+                binding_receipt_digest: digest(0x11),
+            },
+            basis_digest: digest(0x22),
+            authority_id: DidCoreId::new("ak:did_core:web:authority.example").unwrap(),
+            verification_method: DidUrl::new("did:web:authority.example#account-authority")
+                .unwrap(),
+            issued_at: "2026-09-16T00:00:00.000Z".parse().unwrap(),
+            expires_at: "2026-09-16T00:05:00.000Z".parse().unwrap(),
+            proof: AgentDetachedJws {
+                kind: NonEmptyString::new(arkret_wire::proof_kind::DETACHED_JWS.to_owned())
+                    .unwrap(),
+                jws: NonEmptyString::new("pending".to_owned()).unwrap(),
+            },
+        }
+    }
+
+    #[test]
+    fn production_controller_gate_signer_uses_sdk_carrier_and_binds_basis_digest() {
+        let signing_key = sdk_signing_key_from_seed_bytes(&[41; 32]);
+        let mut gate = attestation();
+        sign_controller_gate_with_sdk(&mut gate, &signing_key).unwrap();
+        let public_key = PublicKeyMaterial::Ed25519Raw {
+            bytes: signing_key.verifying_key().to_bytes().to_vec(),
+        };
+        let now = "2026-09-16T00:02:00.000Z".parse().unwrap();
+
+        verify_controller_account_gate_attestation(
+            &gate,
+            &gate.principal_id,
+            &gate.authority_id,
+            &public_key,
+            now,
+        )
+        .unwrap();
+
+        let mut tampered = gate;
+        tampered.basis_digest = digest(0x23);
+        assert!(
+            verify_controller_account_gate_attestation(
+                &tampered,
+                &tampered.principal_id,
+                &tampered.authority_id,
+                &public_key,
+                now,
+            )
+            .is_err()
+        );
+    }
 }
