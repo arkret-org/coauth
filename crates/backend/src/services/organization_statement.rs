@@ -35,12 +35,8 @@ use arkret_policy::{
     verify_realm_organization_statement,
 };
 use arkret_wire::{DidCoreId, DidUrl, NonEmptyString, ObjectRef, RealmId};
-use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::organization_control::OrganizationDelegation;
 use coauth_keyring::Keyring;
-use rand_chacha::ChaChaRng;
-use rand_core::SeedableRng as _;
-use signature::RandomizedSigner as _;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -51,8 +47,8 @@ pub enum OrganizationStatementError {
     KeyAlgMismatch,
     #[error("canonical-JSON encoding of the organization statement failed: {0}")]
     Canonical(String),
-    #[error("ed25519 / ecdsa signing of the organization statement failed")]
-    Sign,
+    #[error("SDK organization statement signing failed: {0}")]
+    Sign(String),
     #[error("delegated issuer_role requires a delegation_ref")]
     MissingDelegationRef,
     #[error("non-delegated issuer_role must not carry a delegation_ref")]
@@ -124,8 +120,8 @@ where
     // Account Authority under one fragment holding the designated key. The
     // verifier resolves the method from that document, so an algorithm-chosen
     // key named by its keyring `kid` is unverifiable by construction.
-    let signer = keyring
-        .account_authority_signer()
+    let signing_seed = keyring
+        .account_authority_seed()
         .map_err(|error| match error {
             coauth_keyring::AccountAuthorityKeyError::WrongKeyType => {
                 OrganizationStatementError::KeyAlgMismatch
@@ -142,7 +138,7 @@ where
     // are produced by the SDK (shared with soland's verifier) and exclude
     // authorization.proof and authorization.signed_at, so signing over them and
     // writing the real proof back yields a verifiable statement.
-    let mut payload = RealmOrganizationPayload {
+    let payload = RealmOrganizationPayload {
         statement_id: request.statement_id,
         realm_id: request.realm_id,
         organization_id: request.organization_id,
@@ -170,19 +166,32 @@ where
         },
     };
 
-    let canonical = realm_organization_statement_signing_bytes(&payload)
-        .map_err(|e| OrganizationStatementError::Canonical(e.to_string()))?;
+    let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&signing_seed);
+    let payload = arkret_signatures::realm_organization_statement_sign(&payload, &signing_key)
+        .map_err(|error| OrganizationStatementError::Sign(error.to_string()))?;
 
-    let mut rng =
-        ChaChaRng::from_rng(rand_core::OsRng).map_err(|_| OrganizationStatementError::Sign)?;
-    let raw = signer
-        .try_sign_with_rng(&mut rng, &canonical)
-        .map_err(|_| OrganizationStatementError::Sign)?;
-    let sig_bytes: Box<[u8]> = raw.into();
-    payload.authorization.proof = SignatureMaterial::NonEmptyString(
-        NonEmptyString::new(Base64UrlUnpadded::encode_string(&sig_bytes))
-            .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?,
-    );
+    // This is a real cryptographic self-check, not only the policy verifier
+    // below: that verifier intentionally validates statement semantics while
+    // leaving signature verification to the caller's crypto layer.
+    let canonical = realm_organization_statement_signing_bytes(&payload)
+        .map_err(|error| OrganizationStatementError::Canonical(error.to_string()))?;
+    let SignatureMaterial::NonEmptyString(signature) = &payload.authorization.proof else {
+        return Err(OrganizationStatementError::SelfVerify(
+            "SDK signer returned non-string signature material".to_owned(),
+        ));
+    };
+    let public_key = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+        bytes: signing_key.verifying_key().to_bytes().to_vec(),
+    };
+    if !arkret_signatures::verify_detached_ed25519_signature(
+        &public_key,
+        &canonical,
+        signature.as_str(),
+    ) {
+        return Err(OrganizationStatementError::SelfVerify(
+            "SDK-issued organization statement signature did not verify".to_owned(),
+        ));
+    }
 
     // COA-ORG-03 acceptance: the statement we sign is exactly the statement
     // soland's SDK verifier accepts. Self-verify before returning.
@@ -326,8 +335,9 @@ mod tests {
 
     #[test]
     fn direct_organization_statement_self_verifies() {
+        let keyring = keyring();
         let payload = issue_organization_statement(
-            &keyring(),
+            &keyring,
             "did:web:coauth.example",
             base_request(),
             now(),
@@ -349,6 +359,24 @@ mod tests {
             "the statement must name the Station-authorized Account Authority method, got {}",
             payload.authorization.verification_method
         );
+
+        let SignatureMaterial::NonEmptyString(signature) = &payload.authorization.proof else {
+            panic!("SDK signer must return string signature material");
+        };
+        let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
+            &keyring.account_authority_seed().unwrap(),
+        );
+        let material = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: signing_key.verifying_key().to_bytes().to_vec(),
+        };
+        let mut tampered = payload.clone();
+        tampered.relationship = RealmOrganizationRelationship::Sponsor;
+        let tampered_bytes = realm_organization_statement_signing_bytes(&tampered).unwrap();
+        assert!(!arkret_signatures::verify_detached_ed25519_signature(
+            &material,
+            &tampered_bytes,
+            signature.as_str(),
+        ));
     }
 
     #[test]
