@@ -1276,9 +1276,9 @@ pub(crate) fn account_subject(
         "account_authority_id": account_authority_id,
         "local_account_id": local_account_id.to_string(),
     });
-    let mut bytes = b"ak.account-subject.v1\n".to_vec();
-    bytes.extend(arkret_canonical::canonical_json_bytes(&value)?);
-    sha256_hash(&bytes)
+    Ok(arkret_identifiers::Hash::new(
+        arkret_canonical::domain_prefixed_canonical_sha256("ak.account-subject.v1", &value)?,
+    )?)
 }
 
 fn canonical_account_handle(
@@ -1358,6 +1358,20 @@ mod tests {
     };
 
     const HANDOFF_PATH: &str = "/_arkret/gate/account/authentication-handoffs";
+
+    #[test]
+    fn account_subject_uses_the_registered_domain_prefixed_digest() {
+        let authority =
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:station.example".to_owned())
+                .unwrap();
+
+        let subject = account_subject(&authority, Ulid::from(0_u128)).unwrap();
+
+        assert_eq!(
+            subject.as_str(),
+            "sha256:f143c94d633c005e9c04982ec7f82d25b23b472f84c53e2442a52482e69ff1c8"
+        );
+    }
 
     /// Seeded local-issuer state for one account-handoff exchange: a public
     /// OIDC client, a user with a browser session, an `openid` OAuth session,
