@@ -10,7 +10,6 @@ use arkret_models_identity::{
     DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationLeaseState,
     IdentityCreationOperationStatus, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
-use base64ct::{Base64UrlUnpadded, Encoding as _};
 use coauth_data::RepositoryAccess as _;
 use coauth_data::account_handoff::{
     IdentityCreationBindingCommit, IdentityCreationRegisterReplay,
@@ -20,9 +19,7 @@ use coauth_data::storage::user::BrowserSessionRepository as _;
 use coauth_data::user::{
     PrincipalDidRepository as _, UserRepository as _, VerifiedPrincipalDidBindingInput,
 };
-use coauth_iana::jose::JsonWebSignatureAlg;
 use salvo::prelude::*;
-use signature::RandomizedSigner as _;
 
 use super::account_handoff::{
     authenticate_account_handoff, enforce_handoff_operation,
@@ -822,26 +819,12 @@ fn sign_account_binding_receipt(
     let payload_digest = receipt.canonical_payload_digest()?;
     receipt.proof.payload_digest = payload_digest.clone();
     let payload = receipt.canonical_proof_binding_bytes()?;
-    let algorithm = JsonWebSignatureAlg::Ed25519;
-    let header = coauth_jose::jwt::JsonWebSignatureHeader::new(algorithm)
-        .with_kid(receipt.proof.verification_method.to_string());
-    let protected = serde_json::to_vec(&header)?;
-    let protected = Base64UrlUnpadded::encode_string(&protected);
-    let payload = Base64UrlUnpadded::encode_string(&payload);
-    let signing_input = format!("{protected}.{payload}");
-    let signer = keyring
-        .account_authority_signer()
+    let signing_seed = keyring
+        .account_authority_seed()
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let mut entropy = make_rng();
-    let mut rng = crate::handlers::make_rng_from(&mut *entropy);
-    let signature = signer
-        .try_sign_with_rng(&mut rng, signing_input.as_bytes())
+    let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&signing_seed);
+    receipt.proof.jws = arkret_signatures::sign_ed25519_detached_jws(&signing_key, &payload)
         .map_err(|error| ArkretRouteError::Internal(Box::new(error)))?;
-    let signature: Box<[u8]> = signature.into();
-    receipt.proof.jws = format!(
-        "{protected}..{}",
-        Base64UrlUnpadded::encode_string(&signature)
-    );
     Ok(receipt.validate_shape()?)
 }
 
@@ -952,4 +935,65 @@ fn duplicate_conflict(message: impl Into<String>) -> ArkretRouteError {
         arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
         message,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use coauth_keyring::{JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng as _;
+
+    use super::*;
+
+    fn account_authority_keyring() -> Keyring {
+        let mut rng = ChaChaRng::seed_from_u64(43);
+        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
+            .with_kid(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID);
+        Keyring::new(JsonWebKeySet::new(vec![key]))
+    }
+
+    #[test]
+    fn account_binding_receipt_uses_the_sdk_canonical_detached_jws_carrier() {
+        let mut receipt = coauth_storage_postgres::test_utils::account_binding_receipt(
+            "did:webvh:zaccountauthority:account.example",
+            arkret_identifiers::Did::new("did:webvh:zfixturereceipt:principal.example").unwrap(),
+            "1-fixture",
+            arkret_identifiers::Hash::new(format!("sha256:{}", "a".repeat(64))).unwrap(),
+        );
+        let keyring = account_authority_keyring();
+        sign_account_binding_receipt(&mut receipt, &keyring).unwrap();
+
+        let parts = receipt.proof.jws.split('.').collect::<Vec<_>>();
+        assert_eq!(parts.len(), 3);
+        assert!(parts[1].is_empty());
+        assert_eq!(
+            arkret_canonical::base64url_decode(parts[0]).unwrap(),
+            br#"{"alg":"Ed25519"}"#
+        );
+
+        let signing_seed = keyring.account_authority_seed().unwrap();
+        let signing_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&signing_seed);
+        let material = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+            bytes: signing_key.verifying_key().to_bytes().to_vec(),
+        };
+        let transcript = receipt.canonical_proof_binding_bytes().unwrap();
+        let verifier = arkret_signatures::Ed25519DetachedJwsVerifier::new();
+        verifier
+            .verify_detached_jws(&receipt.proof.jws, &transcript, &material)
+            .unwrap();
+
+        let attached = receipt.proof.jws.replacen("..", ".YXR0YWNoZWQ.", 1);
+        assert!(
+            verifier
+                .verify_detached_jws(&attached, &transcript, &material)
+                .is_err()
+        );
+        let mut tampered = transcript;
+        tampered[0] ^= 1;
+        assert!(
+            verifier
+                .verify_detached_jws(&receipt.proof.jws, &tampered, &material)
+                .is_err()
+        );
+    }
 }
