@@ -8,10 +8,31 @@ Station (`sync/authority-commit-log.md`), and recovery completes as two
 consecutive `CommittedEventRef`s in one PCR Realm stream
 (`identity/security-transactions.md` section 2.3).
 
-Every product capability coauth owns — accounts, principal DID binding,
-OAuth/OIDC, session grants, agents, admin and authentication support — is
-preserved. This file records, per entry point, where the capability lives now
-and which test covers it.
+This file records the checked migration paths and their tests. The direct
+deletion audit below also identifies old key-import behaviour for which a
+replacement or an approved retirement has not yet been established.
+
+## Direct deletion audit (2026-09-23)
+
+`git log --all --since=2026-09-14 --diff-filter=D --name-status -- crates`
+finds one deletion commit, `7df75d5d`, with exactly two deleted source files:
+`crates/config/src/sections/secrets/encryption.rs` and
+`crates/config/src/sections/secrets/key_config.rs`. The baseline is the parent
+of that commit (`git show 7df75d5d^:<path>`), not a reconstruction of the old
+API. The former `crates/keystore` was renamed to `crates/keyring` in the same
+commit; it was not deleted.
+
+| Before `7df75d5d` | Current reachable path / disposition |
+| --- | --- |
+| `EncryptionKey::{Value,File}` supplied the 32-byte application encryption key to `SecretsConfig::encrypter()` and `encryption()`; a file contained 64 hex digits. | The encryption capability survives: `crates/config/src/sections/secrets.rs` stores one `StoredKeyBundle` under `KEY_BUNDLE_ID`, builds `Encrypter` from its `encryption_key`, and exposes the same bytes through `RuntimeSecrets::encryption_key()`. `crates/cli/src/commands/server.rs` loads it with `config.secrets.runtime(first_provisioning)` and passes it to `CookieManager::derive_from`; the worker loads the bundle with `runtime(false)`. The old inline/hex-file input shape is rejected by `KeyStoreConfig` and has **no demonstrated import path** for an existing deployment. That continuity question remains open. |
+| `KeyConfig` loaded inline or file PEM/DER private keys, optionally with an inline/file password and caller-supplied `kid`; `enumerate_keys_in_directory` added all regular files from `keys_dir`. `SecretsConfig::key_store()` assembled the resulting JWK set. | Signing remains reachable: `crates/config/src/sections/secrets.rs` decodes the durable bundle into `coauth_keyring::Keyring`; `crates/cli/src/commands/server.rs` passes that keyring into the runtime and `crates/cli/src/commands/worker.rs` loads it too. The bundle is generated on explicit first provisioning and reloaded on restart. There is **no current equivalent for importing arbitrary old key files, encrypted PEM/password files, a key directory, or a chosen `kid`**. No formal retirement reason was found in this repository; do not mark those inputs as recovered. |
+| `coauth_keystore::{Keystore,Encrypter,PrivateKey}` provided process-local JOSE signing and application encryption. | The rename in `7df75d5d` maps this code to `crates/keyring/src/lib.rs` and `crates/keyring/src/encrypter.rs`; `crates/config/src/sections/secrets.rs::build_runtime` checks required signing algorithms and builds both `Keyring` and `Encrypter`. This is a code move, not a deleted product capability. |
+
+The seven existing `sections::secrets::tests` cover bundle persistence and
+restart, missing-bundle refusal, encrypted-file configuration, secret redaction,
+and rejection of legacy inline fields. They do **not** test an old-installation
+key import. The missing import/continuity decision keeps this Coauth inventory
+partial and the cross-repository 1250 task active.
 
 ## Migrated
 
@@ -36,7 +57,8 @@ resolution and freshness, OAuth 2.1 / OIDC, upstream providers and links,
 session grants (issue / refresh / revoke / introspect), account handoff, agent
 provisioning and pairing, keyring and KeyStore, notifications, admin API,
 invites, erasure lifecycle, telemetry and the queue all keep their routes,
-storage and tests. No product module was deleted.
+storage and tests in the audited route tree. The two deleted configuration
+source files and their unresolved import behaviour are recorded above.
 
 `exporter` throughout `crates/backend/src/telemetry.rs` and
 `crates/config/src/sections/telemetry.rs` is the OpenTelemetry term, not the
@@ -78,6 +100,13 @@ Pure re-pointings at the SDK's current layout, applied across the workspace:
 | `CommitStreamRef` match without a wildcard | wildcard arm added; the enum is `#[non_exhaustive]` and non-Realm streams stay refused |
 
 ## Verification
+
+The table below is the original 2026-09-16 snapshot, retained as migration
+history; it is not a statement about the current build. On 2026-09-23,
+`cargo test -p coauth-config --lib --locked sections::secrets::tests -- --nocapture`
+completed with **7 passed, 0 failed, 40 filtered out**. The test command
+covered the current durable key path, not legacy key import. `Cargo.lock` was
+already modified before this audit and was not edited or staged.
 
 | Command | Result |
 | --- | --- |
