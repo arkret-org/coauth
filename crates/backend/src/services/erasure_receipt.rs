@@ -1,5 +1,8 @@
 use arkret_models_collaboration::events_payloads::event_wire::VerificationStub;
-use arkret_models_collaboration::governance::erasure::{ErasureReceipt, ErasureReceiptPackage};
+use arkret_models_collaboration::governance::erasure::{
+    ErasureReceipt, ErasureReceiptPackage, ErasureReceiptProof,
+};
+use arkret_wire::{DidCoreId, Hash};
 use coauth_config::ArkretConfig;
 use coauth_data::{BoxRepository, UrlBuilder};
 use coauth_keyring::Keyring;
@@ -24,13 +27,22 @@ pub enum ErasureReceiptVerificationError {
     NoValidIssuerProof,
 }
 
-fn verification_method_did(verification_method: &str) -> &str {
-    let without_fragment = verification_method
-        .split_once('#')
-        .map_or(verification_method, |(did, _)| did);
-    without_fragment
-        .split_once('?')
-        .map_or(without_fragment, |(did, _)| did)
+fn is_issuer_proof_candidate(
+    proof: &ErasureReceiptProof,
+    expected_digest: &Hash,
+    issuer_id: &DidCoreId,
+) -> bool {
+    if &proof.payload_digest != expected_digest {
+        return false;
+    }
+
+    let Ok(controller_did) =
+        arkret_identity::verification_method_did(proof.verification_method.as_str())
+    else {
+        return false;
+    };
+    arkret_identifiers::project_did_to_core_id(&controller_did)
+        .is_ok_and(|controller_id| controller_id == *issuer_id)
 }
 
 fn validate_retained_stub(
@@ -68,6 +80,17 @@ pub async fn verify_erasure_receipt(
     let expected_digest = receipt.canonical_payload_digest()?;
     let proof_payload = receipt.canonical_proof_input()?;
 
+    // Reject proofs whose verification method cannot name this exact issuer
+    // before authority resolution. Besides avoiding needless resolution, this
+    // keeps foreign or unsupported DID-method proofs on a zero-effect path.
+    if !receipt
+        .proofs
+        .iter()
+        .any(|proof| is_issuer_proof_candidate(proof, &expected_digest, &receipt.issuer_id))
+    {
+        return Err(ErasureReceiptVerificationError::NoValidIssuerProof);
+    }
+
     // §4 last row — "verifying a third-party claim / receipt / attestation
     // when this deployment holds no accepted binding for its issuer key". The
     // DID resolved here is literally `receipt.issuer`, so the closed purpose is
@@ -98,12 +121,8 @@ pub async fn verify_erasure_receipt(
         return Err(ErasureReceiptVerificationError::NoVerificationMethod);
     }
 
-    let issuer = receipt.issuer_id.as_str();
     for proof in &receipt.proofs {
-        if proof.payload_digest != expected_digest {
-            continue;
-        }
-        if verification_method_did(&proof.verification_method) != issuer {
+        if !is_issuer_proof_candidate(proof, &expected_digest, &receipt.issuer_id) {
             continue;
         }
         let verified_method = verify_detached_jws_with_sdk(
@@ -149,4 +168,84 @@ pub async fn verify_erasure_receipt_package(
         now,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use arkret_models_collaboration::governance::erasure::ErasureReceiptProof;
+    use arkret_wire::{Did, DidUrl, Hash};
+
+    use super::is_issuer_proof_candidate;
+
+    fn digest(byte: u8) -> Hash {
+        Hash::new(format!("sha256:{}", format!("{byte:02x}").repeat(32))).expect("test digest")
+    }
+
+    fn proof(verification_method: &str, payload_digest: Hash) -> ErasureReceiptProof {
+        ErasureReceiptProof {
+            verification_method: DidUrl::new(verification_method).expect("test DID URL"),
+            payload_digest,
+            signature: "test-signature".to_owned(),
+            extra: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn issuer_candidate_uses_canonical_controller_projection() {
+        let issuer_did = Did::new("did:web:issuer.example").expect("test issuer DID");
+        let issuer_id =
+            arkret_identifiers::project_did_to_core_id(&issuer_did).expect("test issuer core ID");
+        let expected_digest = digest(7);
+        let proof = proof(
+            "did:web:issuer.example#receipt-key",
+            expected_digest.clone(),
+        );
+
+        assert!(is_issuer_proof_candidate(
+            &proof,
+            &expected_digest,
+            &issuer_id
+        ));
+    }
+
+    #[test]
+    fn foreign_controller_is_rejected() {
+        let issuer_did = Did::new("did:web:issuer.example").expect("test issuer DID");
+        let issuer_id =
+            arkret_identifiers::project_did_to_core_id(&issuer_did).expect("test issuer core ID");
+        let expected_digest = digest(7);
+        let proof = proof(
+            "did:web:foreign.example#receipt-key",
+            expected_digest.clone(),
+        );
+
+        assert!(!is_issuer_proof_candidate(
+            &proof,
+            &expected_digest,
+            &issuer_id
+        ));
+    }
+
+    #[test]
+    fn unsupported_controller_and_wrong_digest_are_zero_effect_candidates() {
+        let issuer_did = Did::new("did:web:issuer.example").expect("test issuer DID");
+        let issuer_id =
+            arkret_identifiers::project_did_to_core_id(&issuer_did).expect("test issuer core ID");
+        let expected_digest = digest(7);
+        let unsupported = proof("did:example:issuer#receipt-key", expected_digest.clone());
+        let wrong_digest = proof("did:web:issuer.example#receipt-key", digest(8));
+
+        assert!(!is_issuer_proof_candidate(
+            &unsupported,
+            &expected_digest,
+            &issuer_id
+        ));
+        assert!(!is_issuer_proof_candidate(
+            &wrong_digest,
+            &expected_digest,
+            &issuer_id
+        ));
+    }
 }
