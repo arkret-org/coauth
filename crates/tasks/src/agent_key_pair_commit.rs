@@ -25,13 +25,14 @@ impl RunnableJob for AgentKeyPairCommitJob {
                 computed_digest
             )));
         }
-        if self.body().authorize_event.event_id.as_str() != self.authorized_event_id() {
+        if self.body().authorize_event.event.event_id.as_str() != self.authorized_event_id() {
             return Err(JobError::fail(anyhow::anyhow!(
                 "Agent key-pair Event id does not match the queued job"
             )));
         }
         self.body()
             .authorize_event
+            .event
             .verify_event_id_matches_content_with_digest_suite(
                 arkret_canonical::DigestSuite::Sha256,
             )
@@ -68,19 +69,25 @@ impl RunnableJob for AgentKeyPairCommitJob {
             .await
             .map_err(JobError::retry)?;
 
-        // The outcome exists only once the governing Station committed the
-        // authorize Event, so there is no "awaiting acceptance" state to retry
-        // on. A paused Agent still completes re-pairing and supersedes its old
-        // key (`key-management.md` section 3.6.1); a deactivated Agent is a
-        // terminal outcome with nothing left to fan out.
-        match outcome.status {
-            arkret_models_collaboration::agent_operations::AgentLifecycleState::Deactivated => {
+        if outcome.authorize_event_ref.as_str() != self.authorized_event_id() {
+            return Err(JobError::fail(anyhow::anyhow!(
+                "Agent key-pair outcome bound a different authorization Event"
+            )));
+        }
+        // Only an active accepted authorization can trigger durable fanout.
+        match outcome.activation_state {
+            arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Cancelled => {
                 return Ok(());
             }
-            arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
-            | arkret_models_collaboration::agent_operations::AgentLifecycleState::Paused => {}
+            arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::AwaitingSourceCommit => {
+                return Err(JobError::retry(anyhow::anyhow!(
+                    "Agent key-pair authorization awaits source Commit"
+                )));
+            }
+            arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active => {}
         }
-        let superseded_event_ids = match self.body().authorize_event.payload.get("supersedes") {
+        let superseded_event_ids = match self.body().authorize_event.event.payload.get("supersedes")
+        {
             None => Vec::new(),
             Some(serde_json::Value::Array(values)) => values
                 .iter()

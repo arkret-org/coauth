@@ -813,7 +813,7 @@ mod tests {
         // The proposal endpoint already resolves the acting admin's principal
         // DID, so the admin binding has to exist before the first request.
         let admin_did = admin_did_for_token(&state, &token, "riskexec").await;
-        seed_admin_authority_acceptance(&state, &admin_did).await;
+        let admin_authority_did = seed_admin_authority_acceptance(&state, &admin_did).await;
 
         let response = state
             .request(
@@ -839,6 +839,7 @@ mod tests {
             Some("INC-2.1"),
             approval_note,
             &admin_did,
+            &admin_authority_did,
         );
 
         let proposals =
@@ -976,7 +977,7 @@ mod tests {
             .seed_principal_binding(&user, "riskapprovetarget")
             .await;
         let admin_did = admin_did_for_token(&state, &token, "riskapprove").await;
-        seed_admin_authority_acceptance(&state, &admin_did).await;
+        let admin_authority_did = seed_admin_authority_acceptance(&state, &admin_did).await;
 
         let response = state
             .request(
@@ -1004,6 +1005,7 @@ mod tests {
             Some("INC-SEC-COA-1"),
             approval_note,
             &admin_did,
+            &admin_authority_did,
         );
 
         let response = state
@@ -1174,7 +1176,7 @@ mod tests {
     /// delegated resolver, so the acceptance must already be durable — the §4
     /// "binding hit, zero resolver calls" path — or the high-risk freshness
     /// gate fails closed.
-    async fn seed_admin_authority_acceptance(state: &TestState, admin_did: &str) {
+    async fn seed_admin_authority_acceptance(state: &TestState, admin_did: &str) -> String {
         use coauth_data::user::PrincipalDidRepository as _;
 
         let mut repo = state.repository().await.unwrap();
@@ -1187,7 +1189,7 @@ mod tests {
         let did = binding.verified_did.to_string();
 
         // The approval proof is signed by the test keyring's Ed25519 key
-        // under `kid = {admin core id}#key-1`, so the pinned document must
+        // under `kid = {resolvable admin DID}#key-1`, so the pinned document must
         // advertise that method with the same public key.
         let public_jwk = state
             .keyring
@@ -1201,7 +1203,7 @@ mod tests {
                 id: did.clone(),
                 also_known_as: Vec::new(),
                 verification_method: vec![crate::handlers::arkret::VerificationMethod {
-                    id: format!("{admin_did}#key-1"),
+                    id: format!("{did}#key-1"),
                     kind: "JsonWebKey2020".to_owned(),
                     controller: did.clone(),
                     public_key_jwk: Some(public_jwk),
@@ -1240,6 +1242,7 @@ mod tests {
             .await
             .expect("authority acceptance should persist");
         repo.save().await.unwrap();
+        did
     }
 
     fn sign_risk_action_approval_proof(
@@ -1250,6 +1253,7 @@ mod tests {
         ticket: Option<&str>,
         approval_note: &str,
         approved_by: &str,
+        authority_did: &str,
     ) -> String {
         let alg = JsonWebSignatureAlg::Ed25519;
         // Select by `kid`, not by algorithm: `seed_admin_authority_acceptance`
@@ -1259,7 +1263,7 @@ mod tests {
         let signer = crate::handlers::test_utils::test_ed25519_private_key()
             .signing_key_for_alg(&alg)
             .expect("the fixture Ed25519 key signs Ed25519");
-        let header = JsonWebSignatureHeader::new(alg).with_kid(format!("{approved_by}#key-1"));
+        let header = JsonWebSignatureHeader::new(alg).with_kid(format!("{authority_did}#key-1"));
         let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
         let payload = super::risk_action::risk_action_approval_transcript_bytes(
             proposal_id,

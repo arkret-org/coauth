@@ -65,8 +65,7 @@ fn pcr_outcome(
         )
         .unwrap();
     let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
-    let commit_id =
-        RealmCommitId::new("ak:realm_commit:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e").unwrap();
+    let commit_id = RealmCommitId::from_digest([2; 32]);
     let signature = |suffix: char| DetachedObjectSignature {
         context: DetachedSignatureContext::RealmCommit,
         signature_algorithm: DetachedSignatureAlgorithm::Ed25519,
@@ -92,10 +91,7 @@ fn pcr_outcome(
         signature: signature('a'),
     };
     let authorize_commit = RealmCommit {
-        commit_id: RealmCommitId::new(
-            "ak:realm_commit:BfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
-        )
-        .unwrap(),
+        commit_id: RealmCommitId::from_digest([3; 32]),
         realm_id: request.pcr_realm_id.clone(),
         stream_ref: create_commit.stream_ref.clone(),
         stream_position: 1,

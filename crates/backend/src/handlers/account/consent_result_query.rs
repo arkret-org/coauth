@@ -373,7 +373,7 @@ mod tests {
     }
 
     fn revoked_result(scope: &str) -> serde_json::Value {
-        consent_result(scope, "no_consent")
+        consent_result(scope, "revoked")
     }
 
     #[tokio::test]
@@ -475,7 +475,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_revoked_when_result_state_is_no_consent() {
+    async fn consent_revoked_when_result_state_is_revoked() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();

@@ -766,7 +766,6 @@ mod tests {
             &test_keyring(),
             &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
             coauth_data::LocalAccountId::new("test-account").unwrap(),
-            &DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000006").unwrap(),
             DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
             vec!["ak.self.committed_event.stream.subscribe.v1".to_owned()],
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),

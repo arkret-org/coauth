@@ -837,7 +837,7 @@ async fn resume_device_pairing_admission(
     depot: &Depot,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<ArkretCanonicalJson, ArkretRouteError> {
-    let event_submission: arkret_wire::EventCommitSubmission =
+    let event_submission: arkret_wire::EventAdmissionSubmission =
         arkret_canonical::canonical::from_canonical_json_slice(&admission.authorize_event_bytes)
             .map_err(|_| pairing_temporarily_unavailable())?;
     let event_bytes = arkret_canonical::canonical_json_bytes(&event_submission)?;
@@ -997,7 +997,7 @@ fn device_pairing_request_id_from_admission(
 
 async fn verify_recorded_pairing_commit(
     admission: &coauth_data::DevicePairingAdmissionRecord,
-    submission: &arkret_wire::EventCommitSubmission,
+    submission: &arkret_wire::EventAdmissionSubmission,
     commit: &arkret_wire::RealmCommit,
     depot: &Depot,
     now: chrono::DateTime<chrono::Utc>,

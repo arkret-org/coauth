@@ -380,7 +380,7 @@ impl SessionGrantCaller {
 pub(crate) async fn require_session_grant_caller(
     req: &Request,
     depot: &Depot,
-    internal_operation: Option<&str>,
+    allow_internal_channel: bool,
 ) -> Result<SessionGrantCaller, ArkretRouteError> {
     use coauth_data::{RepositoryAccess, TokenType};
 
@@ -396,15 +396,16 @@ pub(crate) async fn require_session_grant_caller(
         .or_else(|| auth_str.strip_prefix("bearer "))
         .ok_or_else(|| ArkretRouteError::Unauthorized("invalid authorization header".to_owned()))?;
 
-    // Shared-secret fallback: a Station may authenticate with a token configured
-    // in `arkret.stations[].internal_authority_shared_secret`. This lets a
-    // server-to-server caller
-    // skip the DB-backed PAT/OAuth-session lookup. Grants `Station`
+    // Internal-channel fallback: only the private introspection route may
+    // authenticate with `arkret.stations[].internal_authority_shared_secret`.
+    // The product-facing list/revoke routes require a live scoped token.
+    // This grants `Station`
     // authz only — never `Admin` — so it cannot revoke session grants. The
     // matching server's audience is the only one this caller may read.
     let arkret_config = depot.arkret_config()?;
-    let static_bearer_audience =
-        internal_operation.and_then(|_| station_internal_channel_caller(&arkret_config, token));
+    let static_bearer_audience = allow_internal_channel
+        .then(|| station_internal_channel_caller(&arkret_config, token))
+        .flatten();
     if let Some(static_bearer_audience) = static_bearer_audience {
         return Ok(SessionGrantCaller::station(vec![static_bearer_audience]));
     }

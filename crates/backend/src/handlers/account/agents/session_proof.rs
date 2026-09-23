@@ -26,20 +26,20 @@ const AGENT_REFRESH_PROOF_MAX_WINDOW: chrono::Duration = chrono::Duration::minut
 /// Rebuild the SDK refresh-intent digest from already-typed coordinates.
 ///
 /// The inputs stay in their protocol types the whole way: the SDK signature is
-/// `(&DidCoreId, &DeviceId, &DidCoreId, &DidUrl)`, so a caller that hands over a
+/// `(&DidCoreId, &EventId, &DidCoreId, &DidUrl)`, so a caller that hands over a
 /// DID URL where a `did_core_id` belongs is a compile error rather than a
 /// runtime `ProofInvalid`.
 fn agent_session_refresh_request_digest(
     prior_grant_jwt: &str,
     principal_id: &DidCoreId,
-    device_id: &arkret_identifiers::DeviceId,
+    authorization_ref: &arkret_identifiers::EventId,
     audience: &DidCoreId,
     verification_method: &arkret_wire::DidUrl,
 ) -> Result<arkret_identifiers::Hash, AgentAuthRejection> {
     arkret_models_collaboration::session_grant_bodies::agent_session_refresh_request_digest(
         prior_grant_jwt,
         principal_id,
-        device_id,
+        authorization_ref,
         audience,
         verification_method,
     )
@@ -83,7 +83,7 @@ pub async fn validate_agent_session_refresh_proof<R>(
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
     prior_claims: &arkret_models_identity::SignedSessionGrantClaims,
     prior_grant_jwt: &str,
-    device_id: &arkret_identifiers::DeviceId,
+    request: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRefreshRequest,
     proof: &arkret_models_collaboration::session_grant_bodies::AgentSessionRefreshProof,
 ) -> Result<coauth_data::agent_key::AgentKeyAuthorization, AgentSessionProofError>
 where
@@ -113,6 +113,18 @@ where
     {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
+    match &prior_claims.holder_binding {
+        arkret_models_identity::SessionGrantHolderBinding::AgentRuntime {
+            agent_id,
+            agent_key_authorization_ref,
+            verification_method: bound_method,
+        } if &request.principal_id == agent_id
+            && &request.agent_key_authorization_ref == agent_key_authorization_ref
+            && verification_method == bound_method
+            && prior_claims.device_binding.is_none()
+            && prior_claims.account_id.principal_id == *agent_id => {}
+        _ => return Err(AgentAuthRejection::ProofInvalid.into()),
+    }
 
     let authorization_ref = prior_claims
         .scope_details
@@ -122,6 +134,9 @@ where
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or(AgentAuthRejection::ProofInvalid)?;
+    if authorization_ref != request.agent_key_authorization_ref.as_str() {
+        return Err(AgentAuthRejection::ProofInvalid.into());
+    }
     let authorization = repo
         .agent_key_authorization()
         .lookup_by_event_id(authorization_ref)
@@ -143,8 +158,8 @@ where
 
     let expected_digest = agent_session_refresh_request_digest(
         prior_grant_jwt,
-        &prior_claims.account_id.principal_id,
-        device_id,
+        &request.principal_id,
+        &request.agent_key_authorization_ref,
         proof_audience,
         verification_method,
     )?;
@@ -599,6 +614,7 @@ fn validate_authoritative_agent_session_evidence(
             .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     let controller_account_id = paired_request
         .authorize_event
+        .event
         .executed_by
         .as_ref()
         .and_then(arkret_wire::ActorId::as_account_id)
@@ -622,12 +638,13 @@ fn validate_authoritative_agent_session_evidence(
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     let authorized_key =
         arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey::from_event(
-            &paired_request.authorize_event,
+            &paired_request.authorize_event.event,
         )
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if authorized_key.agent_id.as_str() != authorization.agent_id
         || authorized_key.verification_method.as_str() != authorization.verification_method
-        || paired_request.authorize_event.event_id.as_str() != authorization.authorized_event_id
+        || paired_request.authorize_event.event.event_id.as_str()
+            != authorization.authorized_event_id
         || disclosure.agent_id.as_str() != authorization.agent_id
         || disclosure.controller_principal_id.as_str()
             != authorization.accountable_principal_id.as_str()
@@ -2267,10 +2284,6 @@ mod tests {
         let mut body = arkret_models_collaboration::session_grants::AgentSessionGrantRequest {
             principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example")
                 .unwrap(),
-            device_id: arkret_identifiers::DeviceId::new(
-                "ak:device:01964137-0000-7000-8000-000000000001",
-            )
-            .unwrap(),
             requested_scope: vec!["ak.message.create".to_owned()],
             requested_scope_disclosure: None,
             agent_key_authorization_ref: arkret_identifiers::EventId::new(
@@ -2333,18 +2346,21 @@ mod tests {
     }
 
     #[test]
-    fn agent_refresh_digest_binds_prior_grant_device_audience_and_runtime_key() {
+    fn agent_refresh_digest_binds_prior_grant_authorization_audience_and_runtime_key() {
         fn digest(
             prior_grant_jwt: &str,
             principal_id: &str,
-            device_id: &str,
+            authorization_byte: u8,
             audience: &str,
             verification_method: &str,
         ) -> arkret_identifiers::Hash {
             agent_session_refresh_request_digest(
                 prior_grant_jwt,
                 &DidCoreId::new(principal_id.to_owned()).unwrap(),
-                &arkret_identifiers::DeviceId::new(device_id.to_owned()).unwrap(),
+                &arkret_identifiers::EventId::from_digest(
+                    arkret_canonical::DigestSuite::Sha256,
+                    [authorization_byte; 32],
+                ),
                 &DidCoreId::new(audience.to_owned()).unwrap(),
                 &arkret_wire::DidUrl::new(verification_method.to_owned()).unwrap(),
             )
@@ -2354,7 +2370,7 @@ mod tests {
         let base = digest(
             "grant.jwt.one",
             "ak:did_core:web:agent.example",
-            "ak:device:01970000-0000-7000-8000-000000000001",
+            1,
             "ak:did_core:web:service.example",
             "did:web:agent.example#runtime-key-1",
         );
@@ -2364,35 +2380,35 @@ mod tests {
             digest(
                 "grant.jwt.two",
                 "ak:did_core:web:agent.example",
-                "ak:device:01970000-0000-7000-8000-000000000001",
+                1,
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
                 "grant.jwt.one",
                 "ak:did_core:web:other-agent.example",
-                "ak:device:01970000-0000-7000-8000-000000000001",
+                1,
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
                 "grant.jwt.one",
                 "ak:did_core:web:agent.example",
-                "ak:device:01970000-0000-7000-8000-000000000002",
+                2,
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
                 "grant.jwt.one",
                 "ak:did_core:web:agent.example",
-                "ak:device:01970000-0000-7000-8000-000000000001",
+                1,
                 "ak:did_core:web:other-service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
                 "grant.jwt.one",
                 "ak:did_core:web:agent.example",
-                "ak:device:01970000-0000-7000-8000-000000000001",
+                1,
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-2",
             ),

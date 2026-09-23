@@ -240,7 +240,7 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         agent_id: &arkret_identifiers::DidCoreId,
     ) -> Result<AgentView, PeerProtocolClientError> {
-        let mut url = self.join_absolute("/_arkret/self/agents/")?;
+        let mut url = self.join_absolute("/_arkret/self/agents")?;
         url.path_segments_mut()
             .map_err(|_| {
                 PeerProtocolClientError::InvalidUrl(
