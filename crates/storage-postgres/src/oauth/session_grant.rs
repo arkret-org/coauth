@@ -592,7 +592,6 @@ fn validate_grant_material(
                 Some(device_id.as_str())
             }
             SessionGrantHolderBinding::AgentRuntime { device_id, .. } => Some(device_id.as_str()),
-            SessionGrantHolderBinding::MinimalMetadataPairwise { .. } => None,
         }
     };
     if grant.device_id != bound_device_id {

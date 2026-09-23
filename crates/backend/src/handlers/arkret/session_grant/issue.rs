@@ -1,8 +1,8 @@
 use arkret_identifiers::DidCoreId;
 use arkret_models_collaboration::session_grant_bodies::RecoverySessionGrantRequest;
 use arkret_models_collaboration::session_grants::{
-    AgentSessionGrantRequest, HumanSessionGrantRequest, PairwiseEndpointSessionGrantRequest,
-    SessionGrantOutcome, SessionGrantRequestBody,
+    AgentSessionGrantRequest, HumanSessionGrantRequest, SessionGrantOutcome,
+    SessionGrantRequestBody,
 };
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
@@ -39,14 +39,6 @@ fn redact_session_grant_intent(
                 let digest = hash_value(secret)?;
                 proof.insert(field.to_owned(), serde_json::Value::String(digest));
             }
-        }
-    }
-    if let Some(proof) = value
-        .get_mut("pairwise_endpoint_possession_proof")
-        .and_then(serde_json::Value::as_object_mut)
-    {
-        for field in ["issued_at", "expires_at", "signature"] {
-            proof.remove(field);
         }
     }
     if let Some(binding) = value
@@ -119,14 +111,6 @@ async fn reserve_issue_operation(
             }),
             Some(crate::handlers::account::agents::AGENT_SESSION_MAX_TTL),
         ),
-        SessionGrantRequestBody::PairwiseEndpoint(request) => (
-            arkret_models_identity::SessionGrantProofKind::PairwiseEndpointProof,
-            serde_json::json!({
-                "proof_kind": "pairwise_endpoint_proof",
-                "request_id": request.request_id,
-            }),
-            None,
-        ),
     };
     let identity_bytes = arkret_canonical::canonical_json_bytes(&identity_material)?;
     let request_identity = arkret_canonical::sha256_digest(identity_bytes);
@@ -181,9 +165,6 @@ async fn reserve_issue_operation(
             match body {
                 SessionGrantRequestBody::Agent(agent) => {
                     validate_agent_before_reservation(depot, &mut repo, agent, holder_jkt).await?;
-                }
-                SessionGrantRequestBody::PairwiseEndpoint(pairwise) => {
-                    validate_pairwise_issue_proof(pairwise, holder_jkt)?;
                 }
                 _ => {}
             }
@@ -338,28 +319,7 @@ pub async fn issue_session_grant_endpoint(
                 Ok(operation) => operation,
                 Err(outcome) => return Ok(ArkretCanonicalJson(outcome)),
             };
-            issue_account_handoff_session_grant(depot, &human, None, handoff_token, dpop, operation)
-                .await
-        }
-        SessionGrantRequestBody::PairwiseEndpoint(pairwise) => {
-            let (handoff_token, dpop) =
-                super::super::account_handoff::verify_account_handoff_holder_without_lookup(
-                    req, depot,
-                )?;
-            validate_pairwise_issue_proof(&pairwise, &dpop.jkt)?;
-            let request = SessionGrantRequestBody::PairwiseEndpoint(pairwise.clone());
-            let operation = match reserve_issue_operation(depot, &request, &dpop.jkt, None).await? {
-                Ok(operation) => operation,
-                Err(outcome) => return Ok(ArkretCanonicalJson(outcome)),
-            };
-            issue_pairwise_account_handoff_session_grant(
-                depot,
-                &pairwise,
-                handoff_token,
-                dpop,
-                operation,
-            )
-            .await
+            issue_account_handoff_session_grant(depot, &human, handoff_token, dpop, operation).await
         }
         SessionGrantRequestBody::Recovery(recovery) => {
             let (handoff_token, dpop) =
@@ -529,98 +489,9 @@ fn validate_human_issue_proof_before_reservation(
     Ok(())
 }
 
-fn validate_pairwise_issue_proof(
-    body: &PairwiseEndpointSessionGrantRequest,
-    holder_jkt: &str,
-) -> Result<(), ArkretRouteError> {
-    let proof = &body.pairwise_endpoint_possession_proof;
-    let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
-    if proof.issued_at > now + chrono::Duration::minutes(5) || proof.expires_at <= now {
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ReasonCode::PROOF_INVALID,
-            "reason_code=proof_invalid; pairwise endpoint proof is outside its validity window",
-        ));
-    }
-    if proof.holder_jkt != holder_jkt {
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ReasonCode::PROOF_INVALID,
-            "reason_code=proof_invalid; pairwise endpoint proof holder key does not match DPoP",
-        ));
-    }
-    let fragment = proof
-        .verification_method
-        .as_str()
-        .split_once('#')
-        .map(|(_, fragment)| fragment)
-        .ok_or_else(|| {
-            ArkretRouteError::coded(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                arkret_wire::ReasonCode::VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-                "pairwise verification method has no did:key fragment",
-            )
-        })?;
-    let key = arkret_canonical::decode_ed25519_multibase(fragment).map_err(|_| {
-        ArkretRouteError::coded(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            arkret_wire::ReasonCode::VERIFICATION_METHOD_PRINCIPAL_MISMATCH,
-            "pairwise verification method is not a canonical Ed25519 did:key",
-        )
-    })?;
-    let signing_bytes = proof.canonical_signing_bytes().map_err(|_| {
-        ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ReasonCode::PROOF_INVALID,
-            "reason_code=proof_invalid; pairwise endpoint proof transcript is invalid",
-        )
-    })?;
-    let material = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
-        bytes: key.to_vec(),
-    };
-    if !arkret_signatures::proof::verify_detached_ed25519_signature(
-        &material,
-        &signing_bytes,
-        proof.signature.as_str(),
-    ) {
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ReasonCode::PROOF_INVALID,
-            "reason_code=proof_invalid; pairwise endpoint signature is invalid",
-        ));
-    }
-    Ok(())
-}
-
-async fn issue_pairwise_account_handoff_session_grant(
-    depot: &Depot,
-    body: &PairwiseEndpointSessionGrantRequest,
-    handoff_token: String,
-    dpop: arkret_signatures::dpop::VerifiedDpopProof,
-    operation: SessionGrantOperation,
-) -> Result<ArkretCanonicalJson, ArkretRouteError> {
-    let human = HumanSessionGrantRequest {
-        request_id: body.request_id.clone(),
-        principal_id: body.principal_id.clone(),
-        device_id: body.device_id.clone(),
-        audience_id: body.audience_id.clone(),
-        accepted_device_possession_proof: body.accepted_device_possession_proof.clone(),
-    };
-    issue_account_handoff_session_grant(
-        depot,
-        &human,
-        Some(body.expected_holder_binding()),
-        handoff_token,
-        dpop,
-        operation,
-    )
-    .await
-}
-
 async fn issue_account_handoff_session_grant(
     depot: &Depot,
     body: &HumanSessionGrantRequest,
-    pairwise_holder: Option<arkret_models_identity::SessionGrantHolderBinding>,
     handoff_token: String,
     dpop: arkret_signatures::dpop::VerifiedDpopProof,
     operation: SessionGrantOperation,
@@ -742,42 +613,26 @@ async fn issue_account_handoff_session_grant(
     let granted_scope = arkret_models_identity::STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
         .map(|operation| operation.as_str().to_owned())
         .to_vec();
-    let is_pairwise = pairwise_holder.is_some();
-    let material = if let Some(holder_binding) = pairwise_holder {
-        issue_pairwise_session_grant_for_audience(
-            &issuance_seed,
-            &depot.arkret_config()?,
-            &depot.keyring()?,
-            &browser_session,
-            crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
-            DidCoreId::new(handoff_audience.clone())?,
-            &binding.account_id,
-            dpop.jkt.clone(),
-            holder_binding,
-            granted_scope,
-        )
-    } else {
-        issue_session_grant_for_audience(
-            &issuance_seed,
-            &*clock,
-            &depot.arkret_config()?,
-            &depot.keyring()?,
-            &browser_session,
-            crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
-            DidCoreId::new(handoff_audience.clone())?,
-            device_id.clone(),
-            granted_scope,
-            Some(&binding.principal_id),
-            &binding.account_id,
-            dpop.jkt.clone(),
-            device_binding,
-            SessionGrantProofKind::AccountHandoff,
-        )
-    }
+    let material = issue_session_grant_for_audience(
+        &issuance_seed,
+        &*clock,
+        &depot.arkret_config()?,
+        &depot.keyring()?,
+        &browser_session,
+        crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
+        DidCoreId::new(handoff_audience.clone())?,
+        device_id.clone(),
+        granted_scope,
+        Some(&binding.principal_id),
+        &binding.account_id,
+        dpop.jkt.clone(),
+        device_binding,
+        SessionGrantProofKind::AccountHandoff,
+    )
     .map_err(map_session_grant_material_error)?;
     let wire_outcome = SessionGrantOutcome {
         account_id: material.account_id.clone(),
-        device_id: (!is_pairwise).then_some(device_id),
+        device_id: Some(device_id),
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
         session_grant_id: material.grant_id.clone(),
@@ -815,7 +670,7 @@ async fn issue_account_handoff_session_grant(
             )
         })?;
     let checkpoint = serde_json::json!({
-        "kind": if is_pairwise { "account_handoff_pairwise_endpoint" } else { "account_handoff" },
+        "kind": "account_handoff",
         "handoff_grant_id": handoff_id.to_string(),
         "dpop_jti_digest": crate::services::dpop::dpop_jti_digest(&dpop.claims.jti),
     });
