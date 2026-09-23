@@ -763,17 +763,18 @@ mod tests {
             );
         }
 
-        // Canonical Event token, wrong digest suite: a BLAKE3 Event can never
-        // sit on a v1 PCR control stream, and reaching `RealmId::from_event_id`
-        // with it would abort instead of returning 400.
-        let blake3_event = arkret_identifiers::EventId::from_identity(
-            arkret_identifiers::EventIdentityKey::new(DigestSuiteCode::Blake3, [6_u8; 32]),
-        );
+        // A 33-byte token with the retired BLAKE3 suite byte is not a v1
+        // EventId. Build malformed input as raw bytes, not through the typed
+        // constructor, which correctly refuses to create this identity.
+        use base64ct::{Base64UrlUnpadded, Encoding as _};
+        let mut token = [6_u8; 33];
+        token[0] = DigestSuiteCode::Blake3.as_u8();
+        let blake3_event = format!("ak:event:{}", Base64UrlUnpadded::encode_string(&token));
         assert!(
-            arkret_identifiers::EventId::new(blake3_event.to_string()).is_ok(),
-            "the rejection under test must be the suite, not the token shape"
+            arkret_identifiers::EventId::new(blake3_event.clone()).is_err(),
+            "v1 EventId must reject the retired BLAKE3 suite"
         );
-        assert!(parse_control_stream_ref(blake3_event.as_str()).is_err());
+        assert!(parse_control_stream_ref(&blake3_event).is_err());
     }
 
     #[test]
