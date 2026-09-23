@@ -763,17 +763,11 @@ mod tests {
             );
         }
 
-        // Canonical Event token, wrong digest suite: a BLAKE3 Event can never
-        // sit on a v1 PCR control stream, and reaching `RealmId::from_event_id`
-        // with it would abort instead of returning 400.
-        let blake3_event = arkret_identifiers::EventId::from_identity(
-            arkret_identifiers::EventIdentityKey::new(DigestSuiteCode::Blake3, [6_u8; 32]),
-        );
-        assert!(
-            arkret_identifiers::EventId::new(blake3_event.to_string()).is_ok(),
-            "the rejection under test must be the suite, not the token shape"
-        );
-        assert!(parse_control_stream_ref(blake3_event.as_str()).is_err());
+        // The token is structurally canonical, but its suite byte identifies
+        // BLAKE3. A v1 Event identity must be rejected at the parser boundary.
+        let blake3_event = "ak:event:AgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYG";
+        assert!(arkret_identifiers::EventId::new(blake3_event).is_err());
+        assert!(parse_control_stream_ref(blake3_event).is_err());
     }
 
     #[test]

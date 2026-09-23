@@ -1082,13 +1082,24 @@ async fn session_grant_http_list_and_filter_work() {
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let (browser_session, grant, _material, _session_key) =
         seed_persisted_session_grant(&mut state).await;
+    let station_token = state.token_with_scope(STATION_SESSION_BIND_SCOPE).await;
 
-    // Session-grant listing is a server-to-server read pinned to the calling
-    // Station's own audience.
-    let response = state
+    // The deployment-internal shared secret does not authorize the product
+    // listing route; a live Station-scoped token does.
+    let internal_secret = state
         .request(
             Request::get("/_coauth/account/session-grants")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
+                .empty(),
+        )
+        .await;
+    internal_secret.assert_status(StatusCode::UNAUTHORIZED);
+
+    // Session-grant listing is pinned to the calling Station's own audience.
+    let response = state
+        .request(
+            Request::get("/_coauth/account/session-grants")
+                .bearer(&station_token)
                 .empty(),
         )
         .await;
@@ -1111,7 +1122,7 @@ async fn session_grant_http_list_and_filter_work() {
                 "/_coauth/account/session-grants?browser_session_id={}&active_only=true",
                 browser_session.id
             ))
-            .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
+            .bearer(&station_token)
             .empty(),
         )
         .await;
@@ -1122,7 +1133,7 @@ async fn session_grant_http_list_and_filter_work() {
     let response = state
         .request(
             Request::get("/_coauth/account/session-grants?browser_session_id=not-a-ulid")
-                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
+                .bearer(&station_token)
                 .empty(),
         )
         .await;
@@ -1407,7 +1418,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     // authoritative AgentView from the configured Station; stub it
     // with wiremock so the lifecycle reads `active` (loopback egress is
     // permitted by the test HTTP client).
-    use wiremock::matchers::{header, method, path};
+    use wiremock::matchers::{method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     let station = MockServer::start().await;
@@ -1415,7 +1426,6 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         .and(path(
             "/_arkret/self/agents/ak:did_core:web:agent.example",
         ))
-        .and(header("authorization", format!("Bearer {bearer}")))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "agent": {
                 "agent_id": "ak:did_core:web:agent.example",
@@ -1451,6 +1461,10 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         .mount(&station)
         .await;
     state.arkret_config.stations[0].endpoint = station.uri().parse().unwrap();
+    crate::services::station_trust::shared().insert_for_test(
+        &state.arkret_config.stations[0].endpoint,
+        "ak:did_core:web:session-grant-static.test",
+    );
 
     let mut rng = ChaChaRng::seed_from_u64(0xa9e17);
     let session_key = PrivateKey::generate_ed25519(&mut rng);
@@ -1496,8 +1510,6 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &state.keyring,
         &arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
         coauth_data::LocalAccountId::new("test-account").unwrap(),
-        &arkret_identifiers::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000005")
-            .unwrap(),
         audience.clone(),
         vec!["ak.agent.action:message.send".to_owned()],
         "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(),
@@ -1605,7 +1617,6 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                 })),
         )
         .await;
-
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true, "{body}");

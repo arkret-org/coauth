@@ -3,7 +3,9 @@ use arkret_models_collaboration::session_grant_bodies::session_grant_refresh_req
 use arkret_models_collaboration::session_grants::{
     HumanSessionGrantRefreshRequest, SessionGrantOutcome, SessionGrantRefreshRequestBody,
 };
-use arkret_models_identity::{SessionGrantCredentialClass, SessionGrantProofKind};
+use arkret_models_identity::{
+    SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantProofKind,
+};
 use chrono::{DateTime, Utc};
 use coauth_data::{
     LocalAccountId, NewSessionGrantOperation, SessionGrantExactOutcome,
@@ -168,11 +170,10 @@ pub async fn refresh_session_grant(
             error.to_string(),
         )
     })?;
-    let (grant_jwt, requested_audience, presented_device_id, request_digest) = match &body {
+    let (grant_jwt, requested_audience, request_digest) = match &body {
         SessionGrantRefreshRequestBody::Human(request) => (
             request.grant_jwt.as_str(),
             request.audience_id.as_ref(),
-            &request.device_id,
             &request
                 .accepted_device_possession_proof
                 .session_intent_digest,
@@ -180,7 +181,6 @@ pub async fn refresh_session_grant(
         SessionGrantRefreshRequestBody::Agent(request) => (
             request.grant_jwt.as_str(),
             request.audience_id.as_ref(),
-            &request.device_id,
             &request.agent_session_refresh_proof.request_canonical_digest,
         ),
     };
@@ -286,10 +286,35 @@ pub async fn refresh_session_grant(
             "session-grant rotation MUST NOT change the bound audience_id",
         ));
     }
-    let device_id = require_bound_device_id(
-        Some(presented_device_id.as_str()),
-        prior_grant.device_id.as_deref(),
-    )?;
+    let device_id = match (&body, &prior_payload.holder_binding) {
+        (
+            SessionGrantRefreshRequestBody::Human(request),
+            SessionGrantHolderBinding::HumanDevice { .. },
+        ) => Some(require_bound_device_id(
+            Some(request.device_id.as_str()),
+            prior_grant.device_id.as_deref(),
+        )?),
+        (
+            SessionGrantRefreshRequestBody::Agent(request),
+            SessionGrantHolderBinding::AgentRuntime {
+                agent_id,
+                agent_key_authorization_ref,
+                verification_method,
+            },
+        ) if prior_grant.device_id.is_none()
+            && &request.principal_id == agent_id
+            && &request.agent_key_authorization_ref == agent_key_authorization_ref
+            && &request.agent_session_refresh_proof.verification_method == verification_method
+            && prior_payload.account_id.principal_id == *agent_id =>
+        {
+            None
+        }
+        _ => {
+            return Err(refresh_proof_invalid(
+                "refresh holder does not match the predecessor grant",
+            ));
+        }
+    };
 
     let request_identity = format!(
         "refresh:{}:{}",
@@ -477,13 +502,6 @@ pub async fn refresh_session_grant(
             }
         };
         let proof = &agent_request.agent_session_refresh_proof;
-        let device_id = DeviceId::new(device_id.to_owned()).map_err(|error| {
-            ArkretRouteError::coded(
-                StatusCode::BAD_REQUEST,
-                arkret_wire::ErrorCode::PARAM_INVALID,
-                format!("device_id is not a protocol device identifier: {error}"),
-            )
-        })?;
         let authorization = match validate_agent_session_refresh_proof(
             &mut repo,
             &mut rng,
@@ -491,7 +509,7 @@ pub async fn refresh_session_grant(
             &authoritative_agent,
             &prior_payload,
             &agent_request.grant_jwt,
-            &device_id,
+            agent_request,
             proof,
         )
         .await
@@ -560,7 +578,6 @@ pub async fn refresh_session_grant(
             &keyring,
             &prior_payload.account_id.principal_id,
             LocalAccountId::new(controller_user_id.to_string())?,
-            &device_id,
             prior_grant.audience_id.clone(),
             scopes,
             verification.jkt.clone(),
@@ -581,7 +598,7 @@ pub async fn refresh_session_grant(
         let outcome = SessionGrantOutcome {
             session_grant_id: new_material.grant_id.clone(),
             account_id: new_material.account_id.clone(),
-            device_id: Some(device_id.clone()),
+            device_id: None,
             session_grant: new_material.grant_jwt.clone(),
             session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                 &new_material.session_public_key,
@@ -674,6 +691,9 @@ pub async fn refresh_session_grant(
             )),
         };
     }
+
+    let device_id =
+        device_id.ok_or_else(|| refresh_proof_invalid("human refresh has no device binding"))?;
 
     // 4. Resolve the underlying browser session so the new grant lives under the same
     //    authentication context.

@@ -1401,7 +1401,6 @@ async fn issue_agent_key_proof_session_grant(
         &keyring,
         &authorization.agent_id,
         LocalAccountId::new(controller_user_id.to_string())?,
-        &body.device_id,
         audience_id,
         authorization.granted_scope.clone(),
         dpop_binding.jkt.clone(),
@@ -1422,7 +1421,7 @@ async fn issue_agent_key_proof_session_grant(
 
     let wire_outcome = SessionGrantOutcome {
         account_id: material.account_id.clone(),
-        device_id: Some(body.device_id.clone()),
+        device_id: None,
         session_grant: material.grant_jwt.clone(),
         expires_at: material.expires_at_timestamp,
         session_grant_id: grant_id,

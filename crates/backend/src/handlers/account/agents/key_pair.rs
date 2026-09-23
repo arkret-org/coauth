@@ -73,14 +73,17 @@ pub async fn post_agent_key_pair(
     // The carried Event id is untrusted input. Verify its complete
     // suite-tagged digest binding before it is used for idempotency or any
     // repository lookup.
-    verify_authorize_event_identity(&body.authorize_event)?;
+    body.authorize_event
+        .validate()
+        .map_err(|error| AppError::bad_request(error.to_string()))?;
+    verify_authorize_event_identity(&body.authorize_event.event)?;
     let idempotency_key = req
         .headers()
         .get("idempotency-key")
         .and_then(|value| value.to_str().ok())
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::bad_request("Idempotency-Key is required"))?;
-    if idempotency_key != body.authorize_event.event_id.as_str() {
+    if idempotency_key != body.authorize_event.event.event_id.as_str() {
         return Err(
             AppError::bad_request("Idempotency-Key must equal authorize_event.event_id").into(),
         );
@@ -89,7 +92,7 @@ pub async fn post_agent_key_pair(
     // `agent_id` is already a closed `DidCoreId` on the wire model. Do not
     // feed it through the full-DID normalizer: that parser deliberately
     // rejects `ak:did_core:*` identifiers.
-    let submitted_payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event)
+    let submitted_payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event.event)
         .map_err(|error| AppError::bad_request(error.to_string()))?;
     let agent_id = submitted_payload.agent_id.to_string();
     ensure_body_pairing_request_id_present(&body.pairing_request_id)?;
@@ -110,7 +113,7 @@ pub async fn post_agent_key_pair(
     // current-handle/recovery gates: a successful first commit consumes the
     // handle and advances the Agent PCR Realm stream head, but the identical
     // request must still return the original outcome after a lost response.
-    let authorized_event_id = body.authorize_event.event_id.to_string();
+    let authorized_event_id = body.authorize_event.event.event_id.to_string();
     let request_digest = canonical_digest(&body)?;
     let mut idempotency_repo = depot.repo().await?;
     let existing_authorization = idempotency_repo
@@ -129,14 +132,14 @@ pub async fn post_agent_key_pair(
                     format!("stored Agent key-pair request is invalid: {error}"),
                 )
             })?;
-        verify_authorize_event_identity(&stored_body.authorize_event).map_err(|_| {
+        verify_authorize_event_identity(&stored_body.authorize_event.event).map_err(|_| {
             AppError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "stored Agent authorization has an invalid Event identity",
             )
         })?;
-        let stored_preimage = authorize_event_preimage_bytes(&stored_body.authorize_event)?;
-        let incoming_preimage = authorize_event_preimage_bytes(&body.authorize_event)?;
+        let stored_preimage = authorize_event_preimage_bytes(&stored_body.authorize_event.event)?;
+        let incoming_preimage = authorize_event_preimage_bytes(&body.authorize_event.event)?;
         if stored_preimage != incoming_preimage {
             let variants = [
                 coauth_data::agent_key::AgentEventCollisionVariant {
@@ -270,7 +273,7 @@ pub async fn post_agent_key_pair(
         })?;
 
     let authorize_event = validate_controller_authorize_event(
-        &body.authorize_event,
+        &body.authorize_event.event,
         agent_id.as_str(),
         &submitted_payload.verification_method,
         &submitted_payload.public_key,
@@ -324,6 +327,7 @@ pub async fn post_agent_key_pair(
     // verify against key material this service resolved for itself.
     let controller_verification_methods = body
         .authorize_event
+        .event
         .producer_proof
         .iter()
         .map(|proof| proof.verification_method.as_str())
@@ -341,7 +345,7 @@ pub async fn post_agent_key_pair(
         now,
     )
     .await?;
-    verify_controller_authorize_event_proof(&body.authorize_event, &controller_keys)?;
+    verify_controller_authorize_event_proof(&body.authorize_event.event, &controller_keys)?;
     for proof in &disclosure.proofs {
         if proof.created_at < disclosure.issued_at || proof.created_at > disclosure.expires_at {
             return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
@@ -1120,7 +1124,8 @@ async fn commit_and_mark_agent_key_authorization(
         )
     })?;
 
-    if outcome.status != arkret_models_collaboration::agent_operations::AgentLifecycleState::Active
+    if outcome.activation_state
+        != arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
     {
         return Ok(outcome);
     }
@@ -1148,7 +1153,7 @@ async fn commit_and_mark_agent_key_authorization(
 fn pairing_superseded_event_refs(
     body: &arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
 ) -> Result<Vec<String>, AppError> {
-    let payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event)
+    let payload = AgentKeyAuthorizePayload::try_from(&body.authorize_event.event)
         .map_err(|error| AppError::bad_request(format!("authorize_event {error}")))?;
     Ok(payload
         .supersedes
