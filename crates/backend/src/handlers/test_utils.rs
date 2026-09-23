@@ -144,6 +144,8 @@ pub(crate) struct TestState {
     pub clock: Arc<MockClock>,
     pub rng: Arc<Mutex<ChaChaRng>>,
     pub http_client: reqwest::Client,
+    pub did_resolver_service_override:
+        Option<crate::services::did_resolver::DidResolverServiceHandle>,
     // Keep-alive handles: never read, held so the spawned worker/tasks they
     // own outlive the `TestState` that started them.
     #[allow(dead_code)]
@@ -373,7 +375,10 @@ impl Handler for InjectTestState {
         depot.insert("upstream_oidc_service", default_upstream_oidc_service());
         depot.insert(
             "did_resolver_service",
-            default_did_resolver_service(&state.arkret_config),
+            state
+                .did_resolver_service_override
+                .clone()
+                .unwrap_or_else(|| default_did_resolver_service(&state.arkret_config)),
         );
         depot.insert("frontend_script_src", String::new());
         depot.insert("development_mode", false);
@@ -590,6 +595,7 @@ impl TestState {
             clock,
             rng,
             http_client,
+            did_resolver_service_override: None,
             task_tracker,
             queue_worker,
             cancellation_drop_guard: Arc::new(shutdown_token.drop_guard()),

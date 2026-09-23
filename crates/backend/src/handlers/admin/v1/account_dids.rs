@@ -32,6 +32,9 @@ use crate::{AppError, CreatedJsonResult, JsonResult};
 const DID_BINDING_ADDED_OPERATION: &str = "account_did_binding_added";
 const DID_BINDING_REVOKED_OPERATION: &str = "account_did_binding_revoked";
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Deserialize, ToSchema)]
 #[serde(rename = "AddAccountDidBindingRequestBody", deny_unknown_fields)]
 pub struct AddAccountDidBindingRequestBody {
