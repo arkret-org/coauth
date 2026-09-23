@@ -12,8 +12,8 @@
 //! 2. durably records the erasure intent (`user_erasure_requests`), which is also the idempotency
 //!    carrier for the three-state `request_id` contract;
 //! 3. continues the existing `erasure_pending` AccountStatusRecord issuance flow: issuer-ledger
-//!    append + signature via [`author_and_enqueue_transition`], durable publication job, and the shared
-//!    deactivation/projection-rewrite fanout jobs that already implement §8.
+//!    append + signature via [`author_and_enqueue_transition`], durable publication job, and the
+//!    shared deactivation/projection-rewrite fanout jobs that already implement §8.
 //!
 //! This deployment grants **no withdrawal window** (§8.1 explicitly allows a
 //! zero-length window as deployment governance), so acceptance and record

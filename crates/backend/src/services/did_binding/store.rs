@@ -52,12 +52,11 @@ use arkret_identity::{
     VerifiedDidBindingKey, VerifiedDidBindingStore,
 };
 use chrono::{DateTime, Utc};
-use coauth_data::BoxRepository;
-use coauth_data::RepositoryError;
 use coauth_data::did_binding::{
     VerifiedDidBindingInvalidation, VerifiedDidBindingKeyColumns, VerifiedDidBindingRepository,
     VerifiedDidBindingRow,
 };
+use coauth_data::{BoxRepository, RepositoryError};
 
 use super::DidBindingError;
 
