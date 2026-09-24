@@ -1626,14 +1626,20 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         body["grant"]["account_id"]["principal_id"],
         "ak:did_core:web:agent.example"
     );
-    // Agent-runtime grants keep the session/DPOP device coordinate only in
-    // `holder_binding`. The closed introspection union reserves top-level
-    // `device_id`/`device_binding` for human accepted-device grants.
+    // Agent-runtime grants carry no device coordinate at all (decision 0088):
+    // the closed `agent_runtime` holder binding is exactly the Agent endpoint
+    // triple, and top-level `device_id`/`device_binding` stay reserved for
+    // human accepted-device grants.
     assert_eq!(body["grant"]["device_id"], serde_json::Value::Null);
     assert_eq!(body["grant"]["device_binding"], serde_json::Value::Null);
     assert_eq!(
-        body["grant"]["holder_binding"]["device_id"],
-        "ak:device:0196419b-0000-7000-8000-000000000005"
+        body["grant"]["holder_binding"],
+        serde_json::json!({
+            "kind": "agent_runtime",
+            "agent_id": "ak:did_core:web:agent.example",
+            "agent_key_authorization_ref": authorization_event_id,
+            "verification_method": "did:web:agent.example#runtime-key",
+        })
     );
     // `proof_kind`/`scope_details` were asserted on the signed payload above:
     // the spec introspection grant record (additionalProperties:false) omits

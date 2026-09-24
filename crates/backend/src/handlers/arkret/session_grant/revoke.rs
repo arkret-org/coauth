@@ -831,10 +831,8 @@ mod tests {
     fn agent_key_proof_grant_is_owned_by_accountable_controller_only() {
         let grant = agent_session_grant("did:web:controller.example");
 
-        assert_eq!(
-            grant.device_id.as_deref(),
-            Some("ak:device:0196419b-0000-7000-8000-000000000006")
-        );
+        // Agent SessionGrants carry no device coordinate (decision 0088).
+        assert_eq!(grant.device_id, None);
 
         assert!(grant_is_agent_delegated_to_controller(
             &grant,

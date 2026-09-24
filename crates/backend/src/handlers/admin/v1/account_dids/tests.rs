@@ -69,23 +69,32 @@ impl DidResolverService for FixedBindingResolver {
         _repo: &mut BoxRepository,
         did: &str,
     ) -> Result<DidResolution, DidResolveError> {
+        self.fixed_resolution(did)
+    }
+    // Answers from the fixed fixture directly instead of delegating to
+    // `resolve_did_document`: the crate-wide guard
+    // `resolve_did_document_is_called_in_exactly_one_place` admits only the
+    // `services::did_binding` funnel as a caller, test fakes included.
+    async fn resolve_did_binding_evidence(
+        &self,
+        _client: &reqwest::Client,
+        _url: &UrlBuilder,
+        _config: &ArkretConfig,
+        _keyring: &Keyring,
+        _repo: &mut BoxRepository,
+        did: &str,
+    ) -> Result<DidResolution, DidResolveError> {
+        self.fixed_resolution(did)
+    }
+}
+
+impl FixedBindingResolver {
+    fn fixed_resolution(&self, did: &str) -> Result<DidResolution, DidResolveError> {
         if did == self.resolution.document.id {
             Ok(self.resolution.clone())
         } else {
             Err(DidResolveError::NotFound)
         }
-    }
-    async fn resolve_did_binding_evidence(
-        &self,
-        client: &reqwest::Client,
-        url: &UrlBuilder,
-        config: &ArkretConfig,
-        keyring: &Keyring,
-        repo: &mut BoxRepository,
-        did: &str,
-    ) -> Result<DidResolution, DidResolveError> {
-        self.resolve_did_document(client, url, config, keyring, repo, did)
-            .await
     }
 }
 
