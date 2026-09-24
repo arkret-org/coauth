@@ -2607,8 +2607,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         {
             return Ok(IdentityBindingChallengeIssue::ReservationConflict);
         }
+        // Compare the reservation by its canonical identity, as every other
+        // lease fence here does. Structural equality is not stable across the
+        // JSONB round trip: the typed anchor keeps the received DID Document
+        // form in `raw_properties`, which the stored normalized projection
+        // re-reads differently while its canonical digest is unchanged.
         if let Some(existing) = lease.reserved_identity.as_ref()
-            && existing != &reserved
+            && (existing.principal_id != reserved.principal_id
+                || existing.registration_anchor_digest != reserved.registration_anchor_digest)
         {
             return Ok(IdentityBindingChallengeIssue::ReservationConflict);
         }
@@ -3035,12 +3041,15 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         if !active_session || !fresh_auth {
             return Ok(IdentityAbandonmentCommit::AuthenticationRequired);
         }
+        // The outcome is persisted as canonical (millisecond) JSON and replayed
+        // from it, so the first response must carry the same canonical instant.
+        let abandoned_at = arkret_canonical::normalize_timestamp_canonical(now);
         let outcome = arkret_models_identity::IdentityAbandonmentOutcome {
             request_id: input.request_id.clone(),
             account_subject: input.account_subject.clone(),
             principal_id: input.principal_id.clone(),
             did_version_id: input.did_version_id.clone(),
-            abandoned_at: now,
+            abandoned_at,
         };
         let inserted = diesel::sql_query(
             "INSERT INTO identity_orphan_anchor_tombstones \
@@ -3051,7 +3060,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(&input.did_version_id)
         .bind::<Text, _>(input.account_subject.as_str())
         .bind::<SqlUuid, _>(input.request_id.uuid())
-        .bind::<Timestamptz, _>(now)
+        .bind::<Timestamptz, _>(abandoned_at)
         .execute(self.conn)
         .await?;
         if inserted != 1 {
@@ -3063,8 +3072,12 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             .bind::<SqlUuid, _>(Uuid::from(input.local_account_id)).bind::<Text, _>(input.audience_id.as_str())
             .bind::<Text, _>(&input.holder_jkt).bind::<Jsonb, _>(serde_json::to_value(&outcome)?)
             .execute(self.conn).await?;
-        self.suppress_reserved_identity_checkpoints(input.local_account_id, &input.lease_id, now)
-            .await?;
+        self.suppress_reserved_identity_checkpoints(
+            input.local_account_id,
+            &input.lease_id,
+            abandoned_at,
+        )
+        .await?;
         let deleted = diesel::sql_query(
             "DELETE FROM identity_creation_leases WHERE local_account_id = $1 AND audience_id = $2 \
              AND lease_id = $3 AND fence = $4 AND holder_jkt = $5 AND state IN ('reserved','did_published')",

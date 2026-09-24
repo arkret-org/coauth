@@ -869,12 +869,16 @@ async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reu
     new.request_id = request(4);
     new.request_digest = hash('a');
     new.challenge_id = "d".repeat(24);
-    assert!(matches!(
-        issue(&mut conn, new.clone()).await,
-        IdentityBindingChallengeIssue::RateLimited {
-            retry_after_ms: 1..=60_000
-        }
-    ));
+    let limited = issue(&mut conn, new.clone()).await;
+    assert!(
+        matches!(
+            limited,
+            IdentityBindingChallengeIssue::RateLimited {
+                retry_after_ms: 1..=60_000
+            }
+        ),
+        "{limited:?}"
+    );
     assert!(
         PgAccountHandoffRepository::new(&mut conn)
             .challenge_by_request(new.request_id.uuid())
@@ -1332,8 +1336,13 @@ async fn abandonment_checks_real_authentication_and_fences_uncertain_pcr_dispatc
     };
     conn.batch_execute("COMMIT").await.unwrap();
     conn.batch_execute("BEGIN").await.unwrap();
+    let replayed = PgAccountHandoffRepository::new(&mut conn)
+        .abandon_identity_creation(input.clone())
+        .await
+        .unwrap();
     assert!(
-        matches!(PgAccountHandoffRepository::new(&mut conn).abandon_identity_creation(input.clone()).await.unwrap(), IdentityAbandonmentCommit::Replay(replay) if replay == outcome)
+        matches!(&replayed, IdentityAbandonmentCommit::Replay(replay) if *replay == outcome),
+        "{replayed:?} != Replay({outcome:?})"
     );
     conn.batch_execute("ROLLBACK").await.unwrap();
     let mut changed = input;
