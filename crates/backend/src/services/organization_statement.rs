@@ -80,9 +80,10 @@ pub struct OrganizationStatementRequest {
     /// REQUIRED for delegated issuer roles; MUST be absent otherwise. This is
     /// the same ref the [`RepositoryDelegationResolver`] resolves.
     pub delegation_ref: Option<String>,
-    /// Human admin / service principal that initiated the decision. Recorded on
-    /// the proof, never elevated to the organization principal.
-    pub executed_by: Option<DidCoreId>,
+    /// Exact ActorId of the human admin or service actor that initiated the
+    /// decision. Recorded on the proof, never elevated to the organization
+    /// principal.
+    pub executed_by: Option<arkret_wire::ActorId>,
 }
 
 /// Issue a signed `ak.realm.organization` statement.
