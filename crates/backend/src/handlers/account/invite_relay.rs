@@ -507,23 +507,63 @@ mod tests {
 
     fn invite_delivery()
     -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody {
+        let event = arkret_wire::test_support::raw_event(
+            arkret_wire::EventKind::InviteCreate.as_str(),
+            arkret_wire::ScopeRef::Realm {
+                realm_id: arkret_identifiers::RealmId::new(FIXTURE_REALM).unwrap(),
+            },
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:inviter".to_owned()).unwrap(),
+            arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
+            payload(),
+        )
+        .unwrap();
+        // The relay forwards the delivery verbatim; it never verifies the
+        // Commit, so a structurally complete one is enough here.
+        let invite_commit = arkret_wire::RealmCommit {
+            commit_id: arkret_wire::RealmCommitId::from_digest([0x02; 32]),
+            realm_id: event.realm_id.clone(),
+            stream_ref: arkret_wire::CommitStreamRef::Realm {
+                realm_id: event.realm_id.clone(),
+            },
+            stream_position: 1,
+            previous_commit_ref: Some(arkret_wire::RealmCommitId::from_digest([0x01; 32])),
+            event_ref: event.event_id.clone(),
+            governance_generation: 0,
+            authority_ref: arkret_wire::RealmCommitAuthorityRef::GenesisOrChangeEvent(
+                event.realm_id.event_id(),
+            ),
+            committed_at: chrono::DateTime::parse_from_rfc3339("2026-09-20T00:00:00.000Z")
+                .unwrap()
+                .with_timezone(&chrono::Utc),
+            signature: arkret_wire::DetachedObjectSignature {
+                context: arkret_wire::DetachedSignatureContext::RealmCommit,
+                signature_algorithm: arkret_wire::DetachedSignatureAlgorithm::Ed25519,
+                verification_method: arkret_wire::DidUrl::new(
+                    "did:web:auth.example#notary-key".to_owned(),
+                )
+                .unwrap(),
+                signed_digest: arkret_wire::Hash::new(format!("sha256:{}", "3".repeat(64)))
+                    .unwrap(),
+                created_at: chrono::DateTime::parse_from_rfc3339("2026-09-20T00:00:00.000Z")
+                    .unwrap()
+                    .with_timezone(&chrono::Utc),
+                sig: arkret_wire::Base64UrlString::new("c2lnbmF0dXJl".to_owned()).unwrap(),
+            },
+        };
         arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody::new(
-            arkret_wire::test_support::raw_event(
-                arkret_wire::EventKind::InviteCreate.as_str(),
-                arkret_wire::ScopeRef::Realm {
-                    realm_id: arkret_identifiers::RealmId::new(FIXTURE_REALM).unwrap(),
+            event,
+            invite_commit,
+            vec![
+                arkret_models_collaboration::governance::realm_join_intake::RealmJoinCandidate {
+                    service_kind: arkret_models_collaboration::governance::realm_join_intake::RealmJoinCandidateServiceKind::Station,
+                    service_id: arkret_identifiers::DidCoreId::new(
+                        "ak:did_core:web:auth.example".to_owned(),
+                    )
+                    .unwrap(),
+                    endpoint_url: None,
+                    source: arkret_models_collaboration::governance::realm_join_intake::AuthorityLocatorSource::Invite,
                 },
-                arkret_identifiers::DidCoreId::new(
-                    "ak:did_core:web:inviter".to_owned(),
-                )
-                .unwrap(),
-                arkret_identifiers::DidCoreId::new(
-                    "ak:did_core:web:auth.example".to_owned(),
-                )
-                .unwrap(),
-                payload(),
-            )
-            .unwrap(),
+            ],
             arkret_models_collaboration::governance::invite_addressing::InviteAddress::station(
                 arkret_identifiers::DidCoreId::new("ak:did_core:web:holder".to_owned()).unwrap(),
                 arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
