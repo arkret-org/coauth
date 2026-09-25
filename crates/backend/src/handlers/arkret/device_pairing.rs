@@ -751,8 +751,7 @@ async fn load_current_realm_authority(
         .await
         .map_err(map_pairing_peer_error)?;
     let keys = resolve_realm_authority_keys(depot, &bundle, None, now).await?;
-    let freshness = RealmAuthorityFreshness::new(now, nonce, Duration::minutes(5))
-        .map_err(|_| pairing_temporarily_unavailable())?;
+    let freshness = RealmAuthorityFreshness::new(now, nonce);
     let verified = verify_realm_authority_bundle(&bundle, &freshness, &keys)
         .map_err(|_| pairing_temporarily_unavailable())?;
     Ok(CurrentRealmAuthority { bundle, verified })
