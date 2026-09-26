@@ -1755,6 +1755,85 @@ async fn session_grant_http_revoke_updates_followup_introspection() {
     assert!(body["grant"]["revoked_at"].is_string());
 }
 
+#[tokio::test]
+async fn canonical_session_revoke_commits_exact_grant_to_issuer_ledger() {
+    use arkret_signatures::dpop::{DpopProofRequest, build_dpop_proof};
+
+    setup();
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let mut state = TestState::from_pool(pool.clone()).await.unwrap();
+    let (_, grant, material, session_key) = seed_persisted_session_grant(&mut state).await;
+    let coauth_keyring::PrivateKey::OkpEd25519(signing_key) = session_key else {
+        panic!("seeded session holder must be Ed25519");
+    };
+    let sdk_signing_key =
+        crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&signing_key.to_bytes());
+    let path = "/_arkret/gate/account/session-grants/revoke";
+    let htu = format!("https://example.com{path}");
+    let proof = build_dpop_proof(
+        &DpopProofRequest::new("POST", &htu).access_token(&material.grant_jwt),
+        &sdk_signing_key,
+    )
+    .unwrap();
+
+    let missing_proof = state
+        .request(
+            Request::post(path)
+                .header("authorization", format!("DPoP {}", material.grant_jwt))
+                .empty(),
+        )
+        .await;
+    assert_eq!(missing_proof.status(), StatusCode::UNAUTHORIZED);
+
+    let response = state
+        .request(
+            Request::post(path)
+                .header("authorization", format!("DPoP {}", material.grant_jwt))
+                .header("dpop", proof.header_value)
+                .empty(),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["revoked_count"], 1);
+    assert_eq!(
+        body["revoked_session_grant_ids"],
+        serde_json::json!([grant.grant_id])
+    );
+
+    let response = state
+        .request(
+            Request::post("/_coauth/internal/session-grants/introspect")
+                .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
+                .json(serde_json::json!({
+                    "grant_jwt": material.grant_jwt,
+                    "audience_id": grant.audience_id,
+                })),
+        )
+        .await;
+    response.assert_status(StatusCode::OK);
+    let body: serde_json::Value = response.json();
+    assert_eq!(body["active"], false);
+    assert_eq!(body["status"], "revoked");
+
+    let retry_proof = build_dpop_proof(
+        &DpopProofRequest::new("POST", &htu).access_token(&material.grant_jwt),
+        &sdk_signing_key,
+    )
+    .unwrap();
+    let retry = state
+        .request(
+            Request::post(path)
+                .header("authorization", format!("DPoP {}", material.grant_jwt))
+                .header("dpop", retry_proof.header_value)
+                .empty(),
+        )
+        .await;
+    assert_eq!(retry.status(), StatusCode::CONFLICT);
+}
+
 /// Field names of a JSON object response, sorted.
 ///
 /// `body["field"]` yields `Value::Null` for a field that is absent as well as
