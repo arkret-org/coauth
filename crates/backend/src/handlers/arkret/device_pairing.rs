@@ -749,11 +749,26 @@ async fn load_current_realm_authority(
     let bundle = client
         .get_realm_authority_bundle(&request)
         .await
-        .map_err(map_pairing_peer_error)?;
-    let keys = resolve_realm_authority_keys(depot, &bundle, None, now).await?;
+        .map_err(|error| {
+            if let PeerProtocolClientError::Status { status, problem } = &error {
+                tracing::warn!(status, problem_code = ?problem.as_ref().map(|p| p.code()),
+                    "device pairing authority bundle read failed");
+            } else {
+                tracing::warn!("device pairing authority bundle transport failed");
+            }
+            map_pairing_peer_error(error)
+        })?;
+    let keys = resolve_realm_authority_keys(depot, &bundle, None, now)
+        .await
+        .map_err(|error| {
+            tracing::warn!("device pairing authority verification keys are unavailable");
+            error
+        })?;
     let freshness = RealmAuthorityFreshness::new(now, nonce);
-    let verified = verify_realm_authority_bundle(&bundle, &freshness, &keys)
-        .map_err(|_| pairing_temporarily_unavailable())?;
+    let verified = verify_realm_authority_bundle(&bundle, &freshness, &keys).map_err(|error| {
+        tracing::warn!(%error, "device pairing authority bundle verification failed");
+        pairing_temporarily_unavailable()
+    })?;
     Ok(CurrentRealmAuthority { bundle, verified })
 }
 
