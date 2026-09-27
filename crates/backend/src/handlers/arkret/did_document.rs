@@ -241,6 +241,28 @@ pub fn enforce_formal_document_admission(
             }
         },
     )?;
+    // Relationship references are themselves DID URLs and therefore part of
+    // the formal identifier-admission boundary.  Check them independently of
+    // `verificationMethod`: a malformed or incomplete document must not turn
+    // a reserved test key id into a generic dangling-reference error later in
+    // document conversion.
+    for reference in document
+        .authentication
+        .iter()
+        .chain(&document.assertion_method)
+    {
+        let key_id = arkret_wire::DidUrl::new(reference.clone())
+            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+        enforce_formal_test_material_policy(None, Some(&did), Some(&key_id), Some(trust_domain))
+            .map_err(|error| match error {
+                FormalTestMaterialPolicyError::Denied(_) => {
+                    FormalKeyAdmissionError::TestSigningMaterialDenied
+                }
+                FormalTestMaterialPolicyError::InvalidPublicKey(error) => {
+                    FormalKeyAdmissionError::Invalid(error.to_string())
+                }
+            })?;
+    }
     for method in &document.verification_method {
         method.enforce_formal_key_admission(&document.id, Some(trust_domain))?;
     }
@@ -260,6 +282,9 @@ pub struct DidService {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::path::{Path, PathBuf};
+
     use serde_json::json;
 
     use super::*;
@@ -337,5 +362,144 @@ mod tests {
         .expect("wire document should parse before use-time validation");
 
         assert!(method.public_key_material().is_err());
+    }
+
+    fn spec_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../arkret-spec")
+    }
+
+    fn inventory_document(value: &str) -> DidDocument {
+        let (did, key_id) = value
+            .split_once('#')
+            .map_or((value, format!("{value}#runtime-1")), |(did, _)| {
+                (did, value.to_owned())
+            });
+        let public_key = ed25519_dalek::SigningKey::from_bytes(&[93u8; 32])
+            .verifying_key()
+            .to_bytes();
+        serde_json::from_value(json!({
+            "id": did,
+            "verificationMethod": [{
+                "id": key_id,
+                "type": "JsonWebKey2020",
+                "controller": did,
+                "publicKeyJwk": {
+                    "kty": "OKP",
+                    "crv": "Ed25519",
+                    "x": arkret_canonical::base64url_encode(public_key),
+                },
+            }],
+            "authentication": [key_id],
+            "assertionMethod": [key_id],
+        }))
+        .expect("inventory document should deserialize")
+    }
+
+    #[test]
+    fn reserved_relationship_reference_is_denied_without_a_declared_method() {
+        let did = "did:webvh:QmS1gUenXyfWpb5krKbJbiZ93L1yJ6wJFBrf8zNNste4v9:server.example";
+        let reserved = format!("{did}#device-fixture");
+        let document: DidDocument = serde_json::from_value(json!({
+            "id": did,
+            "authentication": [reserved],
+        }))
+        .expect("document should deserialize before formal admission");
+        let trust_domain =
+            arkret_wire::TrustDomainId::new("ak:trust_domain:coauth.production".to_owned())
+                .expect("trust domain should be valid");
+
+        assert!(matches!(
+            enforce_formal_document_admission(&document, &trust_domain),
+            Err(FormalKeyAdmissionError::TestSigningMaterialDenied)
+        ));
+    }
+
+    /// Consume the formal closed inventory through Coauth's production
+    /// document-admission API.  This pins the distinction between material
+    /// that must be denied and deployment-like / fixture-derived identities
+    /// that production profiles must continue to accept.
+    #[test]
+    fn formal_identity_inventory_roles_match_coauth_document_admission() {
+        const ROLES: [&str; 3] = [
+            "test_material",
+            "deployment_like_example",
+            "derived_positive",
+        ];
+        let root = spec_root();
+        let registry: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(root.join("spec/v1/artifacts/registry/test-material-registry.json"))
+                .expect("formal test-material registry should be readable"),
+        )
+        .expect("formal test-material registry should parse");
+        let rows = registry["identity_examples"]
+            .as_array()
+            .expect("identity_examples should be an array");
+        let trust_domain =
+            arkret_wire::TrustDomainId::new("ak:trust_domain:coauth.production".to_owned())
+                .expect("trust domain should be valid");
+        let mut roles = BTreeMap::<&str, usize>::new();
+        let mut values = BTreeSet::new();
+
+        for row in rows {
+            let value = row["value"]
+                .as_str()
+                .expect("inventory value should be a string");
+            let role = row["role"]
+                .as_str()
+                .expect("inventory role should be a string");
+            assert!(ROLES.contains(&role), "{value}: unknown role {role}");
+            assert!(values.insert(value), "{value}: duplicate inventory value");
+            *roles.entry(role).or_default() += 1;
+
+            let document = inventory_document(value);
+            // Inventory roles classify each concrete occurrence by its own
+            // terminal: bare values exercise document-DID admission, while a
+            // DID URL exercises key-id admission independently of the DID it
+            // hangs under.  A deployment-like key-id may intentionally be
+            // shown beneath a reserved prose DID, so feeding every URL through
+            // whole-document admission would test two inventory rows at once.
+            let result = if value.contains('#') {
+                document.verification_method[0]
+                    .enforce_formal_key_admission("did:web:coauth.production", Some(&trust_domain))
+            } else {
+                enforce_formal_document_admission(&document, &trust_domain)
+            };
+            if role == "test_material" {
+                assert!(
+                    matches!(
+                        result,
+                        Err(FormalKeyAdmissionError::TestSigningMaterialDenied)
+                    ),
+                    "{value}: registered test material must be denied"
+                );
+            } else {
+                result.unwrap_or_else(|error| {
+                    panic!("{value}: {role} must be admitted by production policy: {error}")
+                });
+            }
+
+            if role == "derived_positive" {
+                let reference = row["derivation_ref"]
+                    .as_str()
+                    .expect("derived_positive should carry derivation_ref");
+                let (file, pointer) = reference
+                    .split_once('#')
+                    .expect("derivation_ref should contain a JSON pointer");
+                let fixture: serde_json::Value = serde_json::from_slice(
+                    &std::fs::read(root.join(file)).expect("derivation fixture should be readable"),
+                )
+                .expect("derivation fixture should parse");
+                assert_eq!(
+                    fixture.pointer(pointer).and_then(serde_json::Value::as_str),
+                    Some(value),
+                    "{value}: derived identity must equal its formal fixture pointer"
+                );
+            }
+        }
+
+        assert_eq!(rows.len(), 122);
+        assert_eq!(roles.get("test_material"), Some(&28));
+        assert_eq!(roles.get("deployment_like_example"), Some(&90));
+        assert_eq!(roles.get("derived_positive"), Some(&4));
     }
 }
