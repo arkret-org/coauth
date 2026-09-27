@@ -834,12 +834,33 @@ async fn resolve_realm_authority_keys(
             now,
         )
         .await
-        .map_err(|_| pairing_temporarily_unavailable())?;
+        .map_err(|error| {
+            use did_binding::DidBindingError;
+            let reason = match &error {
+                DidBindingError::Resolve(_) => "resolution_failed",
+                DidBindingError::TrustDomain(_) => "trust_domain_invalid",
+                DidBindingError::Digest(_) => "digest_failed",
+                DidBindingError::Document(_) => "document_invalid",
+                DidBindingError::Binding(_) => "binding_invalid",
+                DidBindingError::Store(_) => "binding_store_failed",
+                DidBindingError::TestSigningMaterialDenied => "test_signing_material_denied",
+                DidBindingError::NotAuthorityGrade { reason, .. } => reason,
+                DidBindingError::NoAcceptedBinding { .. } => "accepted_binding_missing",
+            };
+            tracing::warn!(
+                reason,
+                "device pairing authority DID binding is unavailable"
+            );
+            pairing_temporarily_unavailable()
+        })?;
         let key = arkret_identity::resolve_verification_method_key_from_document(
             authority.accepted.document(),
             method.as_str(),
         )
-        .map_err(|_| pairing_temporarily_unavailable())?;
+        .map_err(|_| {
+            tracing::warn!("device pairing authority verification method is unavailable");
+            pairing_temporarily_unavailable()
+        })?;
         keys.insert(&method, key.public_key);
     }
     repo.cancel().await.ok();
