@@ -776,6 +776,10 @@ fn contains_key(value: &Value, key: &str) -> bool {
 ///   names (configured station endpoints, identity services, and the delegated resolver) that may
 ///   resolve *wholly* to loopback. IP literals, `localhost`, `.local` / `.internal` names, private
 ///   addresses, and mixed public+loopback answers stay rejected.
+/// - The existing debug-only test-endpoint and loopback-transport switches
+///   select the shared loopback-only development posture at startup. Exact
+///   configured names must still resolve wholly to loopback, and this resolver
+///   continues to require HTTPS even in that posture.
 #[derive(Clone, Debug)]
 pub struct ResolverEgressPolicy {
     guard: arkret_egress_reqwest::EgressGuard,
@@ -786,8 +790,10 @@ impl ResolverEgressPolicy {
     #[must_use]
     pub fn from_config(config: &ArkretConfig) -> Self {
         Self {
-            guard: arkret_egress_reqwest::EgressGuard::public_https()
-                .with_trusted_loopback_https_hosts(config.trusted_outbound_hosts()),
+            guard: crate::outbound_http::egress_guard(
+                crate::outbound_http::insecure_loopback_http_enabled(),
+                &config.trusted_outbound_hosts(),
+            ),
         }
     }
 
@@ -899,6 +905,47 @@ mod tests {
                 "{raw} should be rejected"
             );
         }
+    }
+
+    #[test]
+    fn explicit_development_resolver_keeps_https_and_exact_loopback_targets() {
+        let host = "soland-server1.localhost".to_owned();
+        let policy = ResolverEgressPolicy {
+            guard: crate::outbound_http::egress_guard(true, &[host]),
+        };
+        let url =
+            Url::parse("https://soland-server1.localhost/_arkret/root/identity/resolve").unwrap();
+        policy.enforce_url_policy(&url).unwrap();
+        policy
+            .guard
+            .lock_url_with(&url, "DID resolver test", |_host, _port| {
+                Ok(vec![addr("127.0.0.1:443"), addr("[::1]:443")])
+            })
+            .unwrap();
+        for addresses in [
+            vec![addr("127.0.0.1:443"), addr("8.8.8.8:443")],
+            vec![addr("10.0.0.1:443")],
+            vec![addr("169.254.169.254:443")],
+        ] {
+            assert!(
+                policy
+                    .guard
+                    .lock_url_with(&url, "DID resolver test", |_host, _port| Ok(addresses))
+                    .is_err()
+            );
+        }
+        for raw in [
+            "http://soland-server1.localhost/resolve",
+            "https://unregistered.localhost/resolve",
+            "https://resolver.example/resolve",
+        ] {
+            assert!(
+                policy
+                    .enforce_url_policy(&Url::parse(raw).unwrap())
+                    .is_err()
+            );
+        }
+        assert!(default_policy().enforce_url_policy(&url).is_err());
     }
 
     #[test]

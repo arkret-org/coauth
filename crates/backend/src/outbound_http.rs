@@ -289,7 +289,7 @@ pub(crate) const fn oidc_upstream_policy(operation: &'static str) -> OutboundReq
 ///   back to the public-HTTPS policy.
 /// * the debug client (`allow_insecure_loopback_http`) is restricted to loopback destinations only,
 ///   so enabling plain HTTP in a debug build cannot also open a path off the machine.
-fn egress_guard(
+pub(crate) fn egress_guard(
     allow_insecure_loopback_http: bool,
     trusted_loopback_https_hosts: &[String],
 ) -> EgressGuard {
@@ -419,7 +419,7 @@ fn base_client_builder() -> reqwest::ClientBuilder {
         .connect_timeout(Duration::from_secs(30))
 }
 
-fn insecure_loopback_http_enabled() -> bool {
+pub(crate) fn insecure_loopback_http_enabled() -> bool {
     cfg!(debug_assertions)
         && runtime_flag_enabled(ENABLE_TEST_ENDPOINTS_ENV)
         && runtime_flag_enabled(ALLOW_INSECURE_LOOPBACK_HTTP_ENV)
