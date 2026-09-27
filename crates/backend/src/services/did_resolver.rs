@@ -776,10 +776,9 @@ fn contains_key(value: &Value, key: &str) -> bool {
 ///   names (configured station endpoints, identity services, and the delegated resolver) that may
 ///   resolve *wholly* to loopback. IP literals, `localhost`, `.local` / `.internal` names, private
 ///   addresses, and mixed public+loopback answers stay rejected.
-/// - The existing debug-only test-endpoint and loopback-transport switches
-///   select the shared loopback-only development posture at startup. Exact
-///   configured names must still resolve wholly to loopback, and this resolver
-///   continues to require HTTPS even in that posture.
+/// - The existing debug-only test-endpoint and loopback-transport switches select the shared
+///   loopback-only development posture at startup. Exact configured names must still resolve wholly
+///   to loopback, and this resolver continues to require HTTPS even in that posture.
 #[derive(Clone, Debug)]
 pub struct ResolverEgressPolicy {
     guard: arkret_egress_reqwest::EgressGuard,
