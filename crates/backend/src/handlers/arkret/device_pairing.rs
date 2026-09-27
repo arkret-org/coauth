@@ -836,8 +836,33 @@ async fn resolve_realm_authority_keys(
         .await
         .map_err(|error| {
             use did_binding::DidBindingError;
+
+            use crate::services::did_resolver::DidResolveError;
             let reason = match &error {
-                DidBindingError::Resolve(_) => "resolution_failed",
+                DidBindingError::Resolve(error) => match error {
+                    DidResolveError::NotFound => "resolution_not_found",
+                    DidResolveError::UnsupportedMethod => "resolution_method_unsupported",
+                    DidResolveError::InvalidDid(_) => "resolution_did_invalid",
+                    DidResolveError::DocumentIdMismatch { .. } => "resolution_document_id_mismatch",
+                    DidResolveError::Http(error) if error.is_timeout() => "resolution_timeout",
+                    DidResolveError::Http(error) if error.is_connect() => {
+                        "resolution_connect_failed"
+                    }
+                    DidResolveError::Http(error) if error.is_status() => {
+                        "resolution_http_status_failed"
+                    }
+                    DidResolveError::Http(_) => "resolution_http_failed",
+                    DidResolveError::Url(_) => "resolution_url_invalid",
+                    DidResolveError::Json(_) => "resolution_json_invalid",
+                    DidResolveError::BadResolverResponse(_) => "resolution_response_invalid",
+                    DidResolveError::Repository(_) => "resolution_repository_failed",
+                    DidResolveError::LocalDocument(_) => "resolution_local_document_failed",
+                    DidResolveError::ForbiddenResolverUrl(_) => "resolution_egress_denied",
+                    DidResolveError::DocumentTooLarge { .. } => "resolution_document_too_large",
+                    DidResolveError::DidWebPrincipalNotExplicit => {
+                        "resolution_principal_profile_denied"
+                    }
+                },
                 DidBindingError::TrustDomain(_) => "trust_domain_invalid",
                 DidBindingError::Digest(_) => "digest_failed",
                 DidBindingError::Document(_) => "document_invalid",
@@ -847,6 +872,15 @@ async fn resolve_realm_authority_keys(
                 DidBindingError::NotAuthorityGrade { reason, .. } => reason,
                 DidBindingError::NoAcceptedBinding { .. } => "accepted_binding_missing",
             };
+            if let DidBindingError::Resolve(DidResolveError::Http(http)) = &error
+                && let Some(status) = http.status()
+            {
+                tracing::warn!(
+                    status = status.as_u16(),
+                    reason,
+                    "device pairing authority resolver response failed"
+                );
+            }
             tracing::warn!(
                 reason,
                 "device pairing authority DID binding is unavailable"
