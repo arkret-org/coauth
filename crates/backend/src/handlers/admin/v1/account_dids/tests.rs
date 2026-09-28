@@ -138,6 +138,7 @@ async fn exercise_handler(
     request_id: &str,
     expect_denied: bool,
     expected_did_rule: bool,
+    expected_domain_rule: bool,
 ) {
     let did = Did::new(did_text.to_owned()).unwrap();
     let principal_id = arkret_identifiers::project_did_to_core_id(&did).unwrap();
@@ -168,10 +169,10 @@ async fn exercise_handler(
         !is_published_test_key(&PublicKeyFingerprintInput::Ed25519Rfc8032(&public_key)).unwrap()
     );
     let rules = reserved_identifier_matches(Some(&did), Some(&method), Some(&trust_domain));
-    assert!(!rules.trust_domain);
+    assert_eq!(rules.trust_domain, expected_domain_rule);
     if expect_denied {
         assert_eq!(rules.did, expected_did_rule);
-        assert_eq!(rules.key_id, !expected_did_rule);
+        assert_eq!(rules.key_id, !expected_did_rule && !expected_domain_rule);
     } else {
         assert!(
             !rules.any(),
@@ -344,6 +345,7 @@ async fn reserved_did_and_key_id_roll_back_real_admin_binding_transaction() {
         "ak:request:0196419b-0000-7000-8000-000000000001",
         true,
         true,
+        false,
     )
     .await;
     exercise_handler(
@@ -356,6 +358,7 @@ async fn reserved_did_and_key_id_roll_back_real_admin_binding_transaction() {
         "ak:request:0196419b-0000-7000-8000-000000000002",
         true,
         false,
+        false,
     )
     .await;
     exercise_handler(
@@ -366,6 +369,58 @@ async fn reserved_did_and_key_id_roll_back_real_admin_binding_transaction() {
         "runtime-1",
         "Y2hhbGxlbmdlLWlkLWZpeHR1cmUtMDAwMw",
         "ak:request:0196419b-0000-7000-8000-000000000003",
+        false,
+        false,
+        false,
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn reserved_trust_domain_rolls_back_real_admin_binding_transaction() {
+    setup();
+    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let mut state = TestState::from_pool_with_station(pool.clone())
+        .await
+        .unwrap();
+    let token = state.token_with_scope("urn:coauth:admin").await;
+    let mut repo = state.repository().await.unwrap();
+    let mut rng = state.rng();
+    let account = repo
+        .user()
+        .add(&mut rng, &*state.clock, "alice".to_owned())
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    state.arkret_config.trust_domain = Some("ak:trust_domain:recovery-fixture".to_owned());
+    exercise_handler(
+        &mut state,
+        &token,
+        &account,
+        "did:webvh:z6mklive123:real.company",
+        "runtime-1",
+        "Y2hhbGxlbmdlLWlkLWRvbWFpbi0wMDAx",
+        "ak:request:0196419b-0000-7000-8000-000000000011",
+        true,
+        false,
+        true,
+    )
+    .await;
+
+    state.arkret_config.trust_domain =
+        Some("ak:trust_domain:did.webvh.acme.example.net".to_owned());
+    exercise_handler(
+        &mut state,
+        &token,
+        &account,
+        "did:webvh:z6mklive124:real.company",
+        "runtime-1",
+        "Y2hhbGxlbmdlLWlkLWRvbWFpbi0wMDAy",
+        "ak:request:0196419b-0000-7000-8000-000000000012",
+        false,
         false,
         false,
     )
