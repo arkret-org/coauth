@@ -266,6 +266,21 @@ async fn retained_issue_outcome(
 // Agent issuance is a separate scoped request variant. OIDC authorization
 // codes are consumed only by AccountHandoff creation.
 
+fn require_verified_applet_authority(
+    applet_authority: Option<
+        &arkret_models_collaboration::session_grants::SessionGrantAppletDelegation,
+    >,
+) -> Result<(), ArkretRouteError> {
+    if applet_authority.is_some() {
+        return Err(ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "applet delegated session issuance requires authoritative install and grant evidence",
+        ));
+    }
+    Ok(())
+}
+
 /// `POST /_arkret/gate/account/session-grants` — canonical session-grant
 /// issuance. Returns the SDK `SessionGrantOutcome`.
 #[handler]
@@ -295,6 +310,10 @@ pub async fn issue_session_grant_endpoint(
     })?;
     match body {
         SessionGrantRequestBody::Agent(agent) => {
+            // The signed request carries these coordinates, but this issuer does
+            // not yet verify the accepted installation and its capability grants.
+            // Reject before reserving an operation or consuming any proof.
+            require_verified_applet_authority(agent.applet_authority.as_ref())?;
             let dpop_binding = extract_kickoff_dpop(req, depot).await?;
             let binding = require_agent_key_proof_dpop_binding(dpop_binding)?;
             let request = SessionGrantRequestBody::Agent(agent.clone());
@@ -1487,6 +1506,30 @@ mod tests {
     use crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes;
     use crate::handlers::account::auth::DpopSessionBinding;
     use crate::handlers::account::auth::oidc_bridge::OidcExchangeError;
+
+    #[test]
+    fn applet_authority_is_rejected_before_agent_issue_reservation() {
+        let authority = serde_json::from_value(serde_json::json!({
+            "applet_id": "ak:applet:018f0f51-7b44-7a2e-8c2f-9b1d6e3a4c5d",
+            "effective_scope": {
+                "kind": "realm",
+                "realm_id": "ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG"
+            },
+            "registration_epoch": format!("sha256:{}", "1".repeat(64)),
+            "service_id": "ak:did_core:web:applet.example",
+            "capability_grant_refs": []
+        }))
+        .unwrap();
+        assert!(require_verified_applet_authority(None).is_ok());
+        assert!(matches!(
+            require_verified_applet_authority(Some(&authority)),
+            Err(ArkretRouteError::Coded {
+                status: StatusCode::CONFLICT,
+                code: arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                ..
+            })
+        ));
+    }
 
     #[test]
     fn recovery_handoff_expiry_is_frozen_at_signed_precision() {
