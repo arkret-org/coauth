@@ -541,10 +541,16 @@ CREATE TABLE public.oauth_applet_session_inventory_states (
     issuer_id text NOT NULL,
     selector_digest bytea NOT NULL,
     inventory_revision bigint NOT NULL DEFAULT 0,
-    fenced boolean NOT NULL DEFAULT false,
     PRIMARY KEY (issuer_id, selector_digest),
     CONSTRAINT oauth_applet_session_inventory_selector_digest_length CHECK (octet_length(selector_digest) = 32),
     CONSTRAINT oauth_applet_session_inventory_revision_nonnegative CHECK (inventory_revision >= 0)
+);
+
+CREATE TABLE public.oauth_applet_session_epoch_fences (
+    issuer_id text NOT NULL,
+    epoch_digest bytea NOT NULL,
+    PRIMARY KEY (issuer_id, epoch_digest),
+    CONSTRAINT oauth_applet_session_epoch_digest_length CHECK (octet_length(epoch_digest) = 32)
 );
 
 CREATE TABLE public.oauth_session_grant_operations (

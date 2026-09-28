@@ -26,8 +26,8 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::schema::{
-    oauth_applet_session_inventory_states, oauth_session_grant_operations, oauth_session_grants,
-    user_sessions,
+    oauth_applet_session_epoch_fences, oauth_applet_session_inventory_states,
+    oauth_session_grant_operations, oauth_session_grants, user_sessions,
 };
 use crate::session_grant_codec::session_grant_id_from_bytes;
 use crate::{DatabaseError, DatabaseInconsistencyError};
@@ -1004,6 +1004,17 @@ fn applet_selector_digest(selector: AppletSessionSelector<'_>) -> Result<[u8; 32
     ))
 }
 
+fn applet_epoch_digest(selector: AppletSessionSelector<'_>) -> Result<[u8; 32], DatabaseError> {
+    let epoch_value = serde_json::json!({
+        "applet_id": selector.applet_id,
+        "effective_scope": selector.effective_scope,
+        "registration_epoch": selector.registration_epoch,
+    });
+    Ok(arkret_canonical::sha256_bytes(
+        arkret_canonical::canonical_json_bytes(&epoch_value)?,
+    ))
+}
+
 fn applet_inventory_digest(
     selector: AppletSessionSelector<'_>,
     inventory: &AppletSessionInventory,
@@ -1083,6 +1094,37 @@ mod applet_inventory_digest_tests {
             outcome.validate_against(&request).unwrap();
         }
     }
+
+    #[test]
+    fn epoch_fence_key_ignores_service_and_grant_ref_changes() {
+        let issuer = DidCoreId::new("ak:did_core:web:issuer.example").unwrap();
+        let service_a = DidCoreId::new("ak:did_core:web:applet-a.example").unwrap();
+        let service_b = DidCoreId::new("ak:did_core:web:applet-b.example").unwrap();
+        let scope = serde_json::json!({"kind":"realm","realm_id":"ak:realm:Aa0HGvOq8Bsl1PLw19X-9sJ3Zdu6M7N-HDm-MebQoQcG"});
+        let refs_a = vec!["grant:a".to_owned()];
+        let refs_b = vec!["grant:b".to_owned()];
+        let first = AppletSessionSelector {
+            issuer_id: &issuer,
+            applet_id: "ak:applet:018f0f51-7b44-7a2e-8c2f-9b1d6e3a4c5d",
+            effective_scope: &scope,
+            registration_epoch: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            service_id: Some(&service_a),
+            capability_grant_refs: &refs_a,
+        };
+        let second = AppletSessionSelector {
+            service_id: Some(&service_b),
+            capability_grant_refs: &refs_b,
+            ..first
+        };
+        assert_eq!(
+            applet_epoch_digest(first).unwrap(),
+            applet_epoch_digest(second).unwrap()
+        );
+        assert_ne!(
+            applet_selector_digest(first).unwrap(),
+            applet_selector_digest(second).unwrap()
+        );
+    }
 }
 
 async fn lock_applet_inventory(
@@ -1116,43 +1158,66 @@ async fn inventory_state(
     conn: &mut diesel_async::AsyncPgConnection,
     issuer_id: &DidCoreId,
     selector_digest: &[u8; 32],
-) -> Result<(u64, bool), DatabaseError> {
+) -> Result<u64, DatabaseError> {
     let row = oauth_applet_session_inventory_states::table
         .filter(oauth_applet_session_inventory_states::issuer_id.eq(issuer_id))
         .filter(oauth_applet_session_inventory_states::selector_digest.eq(selector_digest.to_vec()))
-        .select((
-            oauth_applet_session_inventory_states::inventory_revision,
-            oauth_applet_session_inventory_states::fenced,
-        ))
-        .first::<(i64, bool)>(conn)
+        .select(oauth_applet_session_inventory_states::inventory_revision)
+        .first::<i64>(conn)
         .await
         .optional()?;
     match row {
-        Some((revision, fenced)) => Ok((
-            u64::try_from(revision).map_err(|_| DatabaseError::invalid_operation())?,
-            fenced,
-        )),
-        None => Ok((0, false)),
+        Some(revision) => u64::try_from(revision).map_err(|_| DatabaseError::invalid_operation()),
+        None => Ok(0),
     }
+}
+
+async fn epoch_fenced(
+    conn: &mut diesel_async::AsyncPgConnection,
+    selector: AppletSessionSelector<'_>,
+) -> Result<bool, DatabaseError> {
+    Ok(oauth_applet_session_epoch_fences::table
+        .filter(oauth_applet_session_epoch_fences::issuer_id.eq(selector.issuer_id))
+        .filter(
+            oauth_applet_session_epoch_fences::epoch_digest
+                .eq(applet_epoch_digest(selector)?.to_vec()),
+        )
+        .select(oauth_applet_session_epoch_fences::epoch_digest)
+        .first::<Vec<u8>>(conn)
+        .await
+        .optional()?
+        .is_some())
+}
+
+async fn fence_applet_epoch(
+    conn: &mut diesel_async::AsyncPgConnection,
+    selector: AppletSessionSelector<'_>,
+) -> Result<(), DatabaseError> {
+    diesel::insert_into(oauth_applet_session_epoch_fences::table)
+        .values((
+            oauth_applet_session_epoch_fences::issuer_id.eq(selector.issuer_id.as_str()),
+            oauth_applet_session_epoch_fences::epoch_digest
+                .eq(applet_epoch_digest(selector)?.to_vec()),
+        ))
+        .execute(conn)
+        .await?;
+    Ok(())
 }
 
 async fn advance_inventory_state(
     conn: &mut diesel_async::AsyncPgConnection,
     issuer_id: &DidCoreId,
     selector_digest: &[u8; 32],
-    fence: bool,
 ) -> Result<(), DatabaseError> {
     diesel::sql_query(
         "INSERT INTO oauth_applet_session_inventory_states \
-         (issuer_id, selector_digest, inventory_revision, fenced) \
-         VALUES ($1, $2, 1, $3) \
+         (issuer_id, selector_digest, inventory_revision) \
+         VALUES ($1, $2, 1) \
          ON CONFLICT (issuer_id, selector_digest) DO UPDATE SET \
-         inventory_revision = oauth_applet_session_inventory_states.inventory_revision + 1, \
-         fenced = oauth_applet_session_inventory_states.fenced OR EXCLUDED.fenced",
+         inventory_revision = oauth_applet_session_inventory_states.inventory_revision + 1",
     )
     .bind::<diesel::sql_types::Text, _>(issuer_id.as_str())
     .bind::<diesel::sql_types::Binary, _>(selector_digest.to_vec())
-    .bind::<diesel::sql_types::Bool, _>(fence)
     .execute(conn)
     .await?;
     Ok(())
@@ -1164,8 +1229,7 @@ async fn load_applet_inventory(
     now: DateTime<Utc>,
     selector_digest: &[u8; 32],
 ) -> Result<AppletSessionInventory, DatabaseError> {
-    let (inventory_revision, _) =
-        inventory_state(conn, selector.issuer_id, selector_digest).await?;
+    let inventory_revision = inventory_state(conn, selector.issuer_id, selector_digest).await?;
     let rows = oauth_session_grants::table
         .filter(oauth_session_grants::issuer_id.eq(selector.issuer_id))
         .filter(oauth_session_grants::applet_id.eq(Some(selector.applet_id)))
@@ -1182,6 +1246,21 @@ async fn load_applet_inventory(
         .select(oauth_session_grants::grant_id)
         .load::<Vec<u8>>(conn)
         .await?;
+    // An epoch is one immutable installation. A different service or grant-ref
+    // tuple under these coordinates would make the five-field view incomplete.
+    let epoch_active_count = oauth_session_grants::table
+        .filter(oauth_session_grants::issuer_id.eq(selector.issuer_id))
+        .filter(oauth_session_grants::applet_id.eq(Some(selector.applet_id)))
+        .filter(oauth_session_grants::effective_scope.eq(Some(selector.effective_scope.clone())))
+        .filter(oauth_session_grants::registration_epoch.eq(Some(selector.registration_epoch)))
+        .filter(oauth_session_grants::lifecycle_state.eq("active"))
+        .filter(oauth_session_grants::expires_at.gt(now))
+        .count()
+        .get_result::<i64>(conn)
+        .await?;
+    if epoch_active_count != i64::try_from(rows.len())? {
+        return Err(DatabaseError::invalid_operation());
+    }
     if rows.len() > MAX_APPLET_INVENTORY_IDS {
         return Err(DatabaseError::invalid_operation());
     }
@@ -1606,7 +1685,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 let applet_digest = if let Some(selector) = new_grant_applet_selector(&grant)? {
                     let digest = applet_selector_digest(selector)?;
                     lock_applet_inventory(conn, selector.issuer_id, &digest).await?;
-                    if inventory_state(conn, selector.issuer_id, &digest).await?.1 {
+                    if epoch_fenced(conn, selector).await? {
                         return Err(DatabaseError::invalid_operation());
                     }
                     Some(digest)
@@ -1621,7 +1700,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     .execute(conn)
                     .await?;
                 if let Some(digest) = applet_digest {
-                    advance_inventory_state(conn, grant.issuer_id, &digest, false).await?;
+                    advance_inventory_state(conn, grant.issuer_id, &digest).await?;
                 }
                 commit_operation_outcome(
                     conn,
@@ -1710,7 +1789,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     {
                         let digest = applet_selector_digest(after)?;
                         lock_applet_inventory(conn, after.issuer_id, &digest).await?;
-                        if inventory_state(conn, after.issuer_id, &digest).await?.1 {
+                        if epoch_fenced(conn, after).await? {
                             return Err(DatabaseError::invalid_operation());
                         }
                         Some(digest)
@@ -1738,7 +1817,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     .execute(conn)
                     .await?;
                 if let Some(digest) = applet_digest {
-                    advance_inventory_state(conn, successor.issuer_id, &digest, false).await?;
+                    advance_inventory_state(conn, successor.issuer_id, &digest).await?;
                 }
                 let changed = diesel::update(
                     oauth_session_grants::table
@@ -1890,7 +1969,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 {
                     let digest = applet_selector_digest(selector)?;
                     lock_applet_inventory(conn, selector.issuer_id, &digest).await?;
-                    if inventory_state(conn, selector.issuer_id, &digest).await?.1 {
+                    if epoch_fenced(conn, selector).await? {
                         return Ok(SessionGrantRevokeOutcome::AppletAlreadyFenced);
                     }
                     let current = load_applet_inventory(conn, selector, now, &digest).await?;
@@ -1956,9 +2035,6 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     }
                     for digest in &other_applet_digests {
                         lock_applet_inventory(conn, &operation.issuer_id, digest).await?;
-                        if inventory_state(conn, &operation.issuer_id, digest).await?.1 {
-                            return Err(DatabaseError::invalid_operation());
-                        }
                     }
                 }
                 let mut matched = Vec::with_capacity(candidates.len());
@@ -2002,10 +2078,14 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                     DatabaseError::ensure_affected_rows_usize(changed, active_ids.len())?;
                 }
                 if let Some(digest) = applet_digest {
-                    advance_inventory_state(conn, &operation.issuer_id, &digest, true).await?;
+                    let SessionGrantRevokeSelector::Applet { selector, .. } = selector else {
+                        unreachable!("applet digest belongs to Applet selector")
+                    };
+                    fence_applet_epoch(conn, selector).await?;
+                    advance_inventory_state(conn, &operation.issuer_id, &digest).await?;
                 }
                 for digest in &other_applet_digests {
-                    advance_inventory_state(conn, &operation.issuer_id, digest, false).await?;
+                    advance_inventory_state(conn, &operation.issuer_id, digest).await?;
                 }
                 let retained_until = operation.retained_until.max(authorization.proof_expires_at);
                 let wire_outcome = WireSessionRevokeOutcome {
@@ -2158,7 +2238,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 .await?;
                 DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
                 if let Some(digest) = applet_digest.as_ref() {
-                    advance_inventory_state(conn, &grant.issuer_id, digest, false).await?;
+                    advance_inventory_state(conn, &grant.issuer_id, digest).await?;
                 }
                 grant
                     .revoke(revoked_at)
@@ -2206,7 +2286,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 if rows_affected == 1
                     && let (Some(grant), Some(digest)) = (grant.as_ref(), applet_digest.as_ref())
                 {
-                    advance_inventory_state(conn, &grant.issuer_id, digest, false).await?;
+                    advance_inventory_state(conn, &grant.issuer_id, digest).await?;
                 }
                 Ok(rows_affected == 1)
             })
@@ -2258,7 +2338,7 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
                 .execute(conn)
                 .await?;
                 for (issuer_id, digest) in &selectors {
-                    advance_inventory_state(conn, issuer_id, digest, false).await?;
+                    advance_inventory_state(conn, issuer_id, digest).await?;
                 }
                 Ok(rows_affected)
             })
