@@ -690,6 +690,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    oauth_applet_session_inventory_states (issuer_id, selector_digest) {
+        issuer_id -> Text,
+        selector_digest -> Binary,
+        inventory_revision -> Int8,
+        fenced -> Bool,
+    }
+}
+
+diesel::table! {
     oauth_session_grant_operations (id) {
         id -> Uuid,
         issuer_id -> Text,
@@ -1124,6 +1133,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     oauth_authorization_grants,
     oauth_device_code_grant,
     oauth_session_grants,
+    oauth_applet_session_inventory_states,
     oauth_session_grant_operations,
     recovery_completion_grant_issuances,
     user_erasure_requests,

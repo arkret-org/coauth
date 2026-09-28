@@ -537,6 +537,16 @@ CREATE TABLE public.oauth_refresh_tokens (
     created_at timestamp with time zone NOT NULL
 );
 
+CREATE TABLE public.oauth_applet_session_inventory_states (
+    issuer_id text NOT NULL,
+    selector_digest bytea NOT NULL,
+    inventory_revision bigint NOT NULL DEFAULT 0,
+    fenced boolean NOT NULL DEFAULT false,
+    PRIMARY KEY (issuer_id, selector_digest),
+    CONSTRAINT oauth_applet_session_inventory_selector_digest_length CHECK (octet_length(selector_digest) = 32),
+    CONSTRAINT oauth_applet_session_inventory_revision_nonnegative CHECK (inventory_revision >= 0)
+);
+
 CREATE TABLE public.oauth_session_grant_operations (
     id uuid NOT NULL,
     issuer_id text NOT NULL,

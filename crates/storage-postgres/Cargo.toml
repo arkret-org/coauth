@@ -20,6 +20,7 @@ test-support = ["dep:arkret-signatures"]
 [dependencies]
 anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
+hex = { workspace = true }
 arkret-identifiers = { workspace = true, features = ["diesel"] }
 arkret-identity = { workspace = true }
 arkret-locale = { workspace = true }

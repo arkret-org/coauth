@@ -144,6 +144,15 @@ pub enum SessionGrantRevokeTarget {
     AllForSubject {
         subject_id: DidCoreId,
     },
+    Applet {
+        issuer_id: DidCoreId,
+        applet_id: String,
+        effective_scope: Value,
+        registration_epoch: String,
+        service_id: Option<DidCoreId>,
+        capability_grant_refs: Vec<String>,
+        expected_inventory_digest: arkret_identifiers::Hash,
+    },
 }
 
 impl SessionGrantOperationKind {

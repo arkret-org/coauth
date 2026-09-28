@@ -147,7 +147,7 @@ pub async fn resolve_account_status(
     Ok(Json(outcome))
 }
 
-fn verify_request(
+pub(super) fn verify_request(
     req: &Request,
     depot: &Depot,
     canonical_body: &[u8],
@@ -196,6 +196,76 @@ fn verify_request(
     )
     .map_err(|_| not_found())?;
     Ok(())
+}
+
+/// Authenticate a canonical JSON service request from a configured Station.
+/// The caller identity comes only from a fresh Service DID signer and the
+/// configured Station allowlist, never from an internal shared bearer secret.
+pub(super) async fn verify_station_signed_request(
+    req: &Request,
+    depot: &Depot,
+    canonical_body: &[u8],
+) -> Result<arkret_identifiers::DidCoreId, ArkretRouteError> {
+    let config = depot.arkret_config()?;
+    let source_id = required_header(req, "source-service-id")?;
+    let destination_id = required_header(req, "destination-service-id")?;
+    if destination_id != owning_station_id_for(&config).as_str()
+        || !config.stations.iter().any(|server| {
+            crate::services::station_trust::effective_audience_shared(server)
+                .is_some_and(|audience| audience.as_str() == source_id)
+        })
+    {
+        return Err(not_found());
+    }
+    let signature_input = req
+        .headers()
+        .get("signature-input")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| parse_signature_input(value).ok())
+        .ok_or_else(not_found)?;
+    let key_id = DidUrl::new(signature_input.key_id.clone()).map_err(|_| not_found())?;
+    let source_did = key_id
+        .as_str()
+        .rsplit_once('#')
+        .map(|(controller, _)| controller)
+        .ok_or_else(not_found)?;
+    let projected = arkret_wire::project_did_to_core_id(
+        &arkret_wire::Did::new(source_did.to_owned()).map_err(|_| not_found())?,
+    )
+    .map_err(|_| not_found())?;
+    if projected.as_str() != source_id {
+        return Err(not_found());
+    }
+    let mut repo = depot.repo().await?;
+    let authority = did_binding::authority_document(
+        &depot.http_client()?,
+        &depot.url_builder()?,
+        &config,
+        &depot.keyring()?,
+        &mut repo,
+        depot.did_resolver_service()?.as_ref(),
+        depot.verified_did_binding_store()?.as_ref(),
+        source_did,
+        DidBindingPurpose::Service,
+        did_binding::high_risk_freshness(),
+        crate::handlers::make_clock().now(),
+    )
+    .await
+    .map_err(|_| not_found())?;
+    let resolved_key = arkret_identity::resolve_verification_method_key_from_document(
+        authority.accepted.document(),
+        key_id.as_str(),
+    )
+    .map_err(|_| not_found())?;
+    let public_key = ed25519_dalek::VerifyingKey::from_bytes(
+        &resolved_key
+            .public_key
+            .ed25519_bytes()
+            .map_err(|_| not_found())?,
+    )
+    .map_err(|_| not_found())?;
+    verify_request(req, depot, canonical_body, &public_key)?;
+    Ok(projected)
 }
 
 /// Trimmed, non-empty value of a required request header.

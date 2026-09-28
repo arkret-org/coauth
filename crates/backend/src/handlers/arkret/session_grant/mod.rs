@@ -1,3 +1,4 @@
+mod applet_inventory;
 mod device_revocation_gate;
 mod introspection;
 mod issuance;
@@ -7,6 +8,7 @@ mod revoke;
 mod session_logout;
 mod types;
 
+pub use applet_inventory::applet_delegated_session_inventory;
 pub(crate) use arkret_models_identity::SignedSessionGrantClaims;
 pub(crate) use device_revocation_gate::acquire_private_current_device_binding;
 pub use introspection::introspect_session_grant;

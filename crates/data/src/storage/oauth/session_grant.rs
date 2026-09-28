@@ -1,4 +1,4 @@
-use arkret_identifiers::{DidCoreId, SessionGrantId};
+use arkret_identifiers::{DidCoreId, Hash, SessionGrantId};
 use arkret_models_identity::SessionGrantProofKind;
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
@@ -259,6 +259,39 @@ pub enum SessionGrantRevokeSelector<'a> {
         /// Subject DID.
         subject_id: &'a DidCoreId,
     },
+    /// Revoke exactly one Applet install after comparing its authoritative inventory.
+    Applet {
+        /// Exact issuer-ledger install selector.
+        selector: AppletSessionSelector<'a>,
+        /// Digest returned by the authoritative inventory read.
+        expected_inventory_digest: &'a Hash,
+    },
+}
+
+/// Exact Applet install coordinates persisted on delegated session grants.
+#[derive(Debug, Clone, Copy)]
+pub struct AppletSessionSelector<'a> {
+    /// Issuer ledger partition.
+    pub issuer_id: &'a DidCoreId,
+    /// Applet registration identity.
+    pub applet_id: &'a str,
+    /// Canonical Realm or Circle scope.
+    pub effective_scope: &'a Value,
+    /// Immutable registration epoch.
+    pub registration_epoch: &'a str,
+    /// Registered Applet service identity.
+    pub service_id: Option<&'a DidCoreId>,
+    /// Exact grant references behind the install.
+    pub capability_grant_refs: &'a [String],
+}
+
+/// One complete, bounded issuer-ledger inventory snapshot.
+#[derive(Debug, Clone)]
+pub struct AppletSessionInventory {
+    /// Monotonic ledger revision for this selector.
+    pub inventory_revision: u64,
+    /// Complete sorted active grant IDs.
+    pub active_session_grant_ids: Vec<SessionGrantId>,
 }
 
 /// Result of reserving a request identity in the durable operation ledger.
@@ -308,6 +341,10 @@ pub enum SessionGrantRefreshOutcome {
 /// Idempotent revoke result.
 #[derive(Debug)]
 pub enum SessionGrantRevokeOutcome {
+    /// The exact Applet inventory changed since the caller's preview.
+    AppletInventoryChanged,
+    /// The exact Applet epoch was already fenced by another operation.
+    AppletAlreadyFenced,
     /// This call committed the first selector mutation.
     Revoked {
         /// Complete locked set changed by this transaction.
@@ -335,6 +372,13 @@ repository_impl! {
     pub trait SessionGrantRepository {
         /// Repository-specific error type.
         type Error;
+
+        /// Return the complete active set for an exact Applet install, or fail closed.
+        async fn applet_inventory(
+            &mut self,
+            selector: AppletSessionSelector<'_>,
+            now: DateTime<Utc>,
+        ) -> Result<AppletSessionInventory, Self::Error>;
 
         /// Reserve a stable request identity before consuming its authorization proof.
         async fn reserve_operation(

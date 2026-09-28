@@ -205,6 +205,7 @@ pub use self::recovery_authority::{
 pub use self::site_config::{
     CaptchaConfig, CaptchaService, SessionExpirationConfig, SessionLimitConfig, SiteConfig,
 };
+pub use self::storage::oauth::{AppletSessionInventory, AppletSessionSelector};
 pub use self::tokens::{
     AccessToken, AccessTokenState, RefreshToken, RefreshTokenChainRevokeOutcome, RefreshTokenState,
     TokenFormatError, TokenType,

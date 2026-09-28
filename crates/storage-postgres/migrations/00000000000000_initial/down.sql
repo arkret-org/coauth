@@ -41,6 +41,7 @@ DROP TABLE IF EXISTS oauth_clients CASCADE;
 DROP TABLE IF EXISTS oauth_device_code_grant CASCADE;
 DROP TABLE IF EXISTS oauth_refresh_tokens CASCADE;
   DROP TABLE IF EXISTS oauth_session_grants CASCADE;
+  DROP TABLE IF EXISTS oauth_applet_session_inventory_states CASCADE;
   DROP TABLE IF EXISTS oauth_session_grant_operations CASCADE;
 DROP TABLE IF EXISTS oauth_sessions CASCADE;
 DROP TABLE IF EXISTS personal_access_tokens CASCADE;
