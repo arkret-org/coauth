@@ -405,7 +405,9 @@ fn base_client_builder() -> reqwest::ClientBuilder {
         });
         let certificates = reqwest::Certificate::from_pem_bundle(&pem)
             .expect("SSL_CERT_FILE must contain at least one valid PEM certificate");
-        reqwest::Client::builder().tls_certs_merge(certificates)
+        reqwest::Client::builder()
+            .tls_backend_rustls()
+            .tls_certs_only(certificates)
     } else {
         let tls_config: rustls::ClientConfig =
             rustls::ClientConfig::with_platform_verifier().expect("failed to create TLS config");
