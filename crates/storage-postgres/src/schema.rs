@@ -690,21 +690,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    oauth_applet_session_inventory_states (issuer_id, selector_digest) {
-        issuer_id -> Text,
-        selector_digest -> Binary,
-        inventory_revision -> Int8,
-    }
-}
-
-diesel::table! {
-    oauth_applet_session_epoch_fences (issuer_id, epoch_digest) {
-        issuer_id -> Text,
-        epoch_digest -> Binary,
-    }
-}
-
-diesel::table! {
     oauth_session_grant_operations (id) {
         id -> Uuid,
         issuer_id -> Text,
@@ -744,11 +729,6 @@ diesel::table! {
         subject_id -> Text,
         local_account_id -> Text,
         device_id -> Nullable<Text>,
-        applet_id -> Nullable<Text>,
-        effective_scope -> Nullable<Jsonb>,
-        registration_epoch -> Nullable<Text>,
-        service_id -> Nullable<Text>,
-        capability_grant_refs -> Array<Text>,
         audience_id -> Text,
         scope_list -> Array<Text>,
         grant_jwt -> Text,
@@ -1139,8 +1119,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     oauth_authorization_grants,
     oauth_device_code_grant,
     oauth_session_grants,
-    oauth_applet_session_inventory_states,
-    oauth_applet_session_epoch_fences,
     oauth_session_grant_operations,
     recovery_completion_grant_issuances,
     user_erasure_requests,

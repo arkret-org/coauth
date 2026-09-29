@@ -2305,7 +2305,6 @@ mod tests {
                 arkret_models_collaboration::session_grants::SessionGrantDpopBindingProof {
                     proof_jwt: "dpop.jwt".to_owned(),
                 },
-            applet_authority: None,
             proof: arkret_models_collaboration::session_grants::AgentSessionGrantProof {
                 proof_kind: arkret_models_collaboration::session_grants::AgentSessionGrantProofKind::AgentKeyProof,
                 challenge: "AAECAwQFBgcICQoLDA0ODw".to_owned(),

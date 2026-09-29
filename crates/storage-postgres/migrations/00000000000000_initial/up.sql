@@ -537,22 +537,6 @@ CREATE TABLE public.oauth_refresh_tokens (
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.oauth_applet_session_inventory_states (
-    issuer_id text NOT NULL,
-    selector_digest bytea NOT NULL,
-    inventory_revision bigint NOT NULL DEFAULT 0,
-    PRIMARY KEY (issuer_id, selector_digest),
-    CONSTRAINT oauth_applet_session_inventory_selector_digest_length CHECK (octet_length(selector_digest) = 32),
-    CONSTRAINT oauth_applet_session_inventory_revision_nonnegative CHECK (inventory_revision >= 0)
-);
-
-CREATE TABLE public.oauth_applet_session_epoch_fences (
-    issuer_id text NOT NULL,
-    epoch_digest bytea NOT NULL,
-    PRIMARY KEY (issuer_id, epoch_digest),
-    CONSTRAINT oauth_applet_session_epoch_digest_length CHECK (octet_length(epoch_digest) = 32)
-);
-
 CREATE TABLE public.oauth_session_grant_operations (
     id uuid NOT NULL,
     issuer_id text NOT NULL,
@@ -602,11 +586,6 @@ CREATE TABLE public.oauth_session_grants (
     subject_id text NOT NULL,
     local_account_id text NOT NULL,
     device_id text,
-    applet_id text,
-    effective_scope jsonb,
-    registration_epoch text,
-    service_id text,
-    capability_grant_refs text[] DEFAULT '{}'::text[] NOT NULL,
     audience_id text NOT NULL,
     scope_list text[] NOT NULL,
     grant_jwt text NOT NULL,
@@ -1846,10 +1825,6 @@ CREATE UNIQUE INDEX oauth_session_grant_operations_identity_idx ON public.oauth_
 CREATE INDEX oauth_session_grant_operations_retention_idx ON public.oauth_session_grant_operations USING btree (retained_until) WHERE (state <> 'evicted'::text);
 
 CREATE INDEX oauth_session_grants_device_id_idx ON public.oauth_session_grants USING btree (device_id) WHERE (device_id IS NOT NULL);
-
-CREATE INDEX oauth_session_grants_applet_delegation_active_idx ON public.oauth_session_grants USING btree (applet_id, registration_epoch, service_id, expires_at) WHERE ((lifecycle_state = 'active'::text) AND (applet_id IS NOT NULL));
-
-CREATE INDEX oauth_session_grants_applet_effective_scope_idx ON public.oauth_session_grants USING gin (effective_scope) WHERE (effective_scope IS NOT NULL);
 
 -- Session grants are compact JWS values and can exceed PostgreSQL's B-tree
 -- per-index-row limit. `grant_id` and `issuance_operation_id` already provide

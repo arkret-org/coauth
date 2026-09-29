@@ -682,11 +682,6 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         .unwrap(),
         local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
         device_id: Some("device-1".to_owned()),
-        applet_id: None,
-        effective_scope: None,
-        registration_epoch: None,
-        service_id: None,
-        capability_grant_refs: Vec::new(),
         audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
             .unwrap(),
         scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
@@ -742,11 +737,6 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         .unwrap(),
         local_account_id: coauth_data::LocalAccountId::new(user.id.to_string()).unwrap(),
         device_id: Some("device-1".to_owned()),
-        applet_id: None,
-        effective_scope: None,
-        registration_epoch: None,
-        service_id: None,
-        capability_grant_refs: Vec::new(),
         audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
             .unwrap(),
         scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),

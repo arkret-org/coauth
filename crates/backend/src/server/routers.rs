@@ -225,10 +225,6 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::refresh_session_grant),
         )
         .push(
-            Router::with_path("gate/account/session-grants/applet-inventory")
-                .post(arkret::applet_delegated_session_inventory),
-        )
-        .push(
             Router::with_path("gate/account/session-grants/revoke")
                 .options(oidc_preflight_handler)
                 .post(arkret::revoke_session_grant_endpoint),
@@ -591,7 +587,6 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/gate/account/agent-key-pair"
         | "/_arkret/gate/account/erasure-requests"
         | "/_arkret/gate/account/recovery-session-grants/issue" => Some("POST, OPTIONS"),
-        "/_arkret/gate/account/session-grants/applet-inventory" => Some("POST"),
         _ => None,
     }
 }
@@ -612,6 +607,7 @@ mod private_tcb_surface_tests {
             "gate/account/controller-gate-attestations",
             "gate/account/auth-sessions/logout",
             "gate/account/session-grants/introspect",
+            "gate/account/session-grants/applet-inventory",
         ] {
             assert!(
                 !production.contains(removed),

@@ -15,9 +15,9 @@ pub use self::device_code_grant::{OAuthDeviceCodeGrantParams, OAuthDeviceCodeGra
 pub use self::refresh_token::OAuthRefreshTokenRepository;
 pub use self::session::{OAuthSessionFilter, OAuthSessionRepository};
 pub use self::session_grant::{
-    AppletSessionInventory, AppletSessionSelector, MIN_SESSION_GRANT_OPERATION_RETENTION_SECONDS,
-    NewSessionGrant, NewSessionGrantOperation, SessionGrantCommitOutcome, SessionGrantExactOutcome,
-    SessionGrantFilter, SessionGrantProofAuthorization, SessionGrantRefreshCommit,
-    SessionGrantRefreshOutcome, SessionGrantRepository, SessionGrantReserveOutcome,
-    SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
+    MIN_SESSION_GRANT_OPERATION_RETENTION_SECONDS, NewSessionGrant, NewSessionGrantOperation,
+    SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantFilter,
+    SessionGrantProofAuthorization, SessionGrantRefreshCommit, SessionGrantRefreshOutcome,
+    SessionGrantRepository, SessionGrantReserveOutcome, SessionGrantRevokeOutcome,
+    SessionGrantRevokeSelector,
 };

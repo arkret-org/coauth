@@ -22,13 +22,6 @@ fn empty_session_revoke_body() -> SessionRevokeRequestBody {
         target_session_grant_id: None,
         target_device_id: None,
         all_sessions: None,
-        applet_id: None,
-        effective_scope: None,
-        registration_epoch: None,
-        service_id: None,
-        capability_grant_refs: None,
-        expected_inventory_digest: None,
-        authorizing_session_grant_id: None,
         proof: None,
     }
 }
@@ -106,7 +99,6 @@ enum RevokeSelector {
     Grant(SessionGrantId),
     Device(DeviceId),
     All,
-    Applet(arkret_models_identity::SessionGrantAppletSelector),
 }
 
 fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, ArkretRouteError> {
@@ -126,37 +118,13 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Ar
     if body.all_sessions == Some(true) {
         selector_count += 1;
     }
-    if session_revoke_has_applet_selector(body) {
-        selector_count += 1;
-    }
     if selector_count > 1 {
         return Err(selector_conflict(
-            "target_session_grant_id, target_device_id, all_sessions and applet selector are mutually exclusive",
+            "target_session_grant_id, target_device_id and all_sessions are mutually exclusive",
         ));
     }
     body.validate_shape()
         .map_err(|error| selector_conflict(error.to_string()))?;
-    if session_revoke_has_applet_selector(body) {
-        let applet = body
-            .applet_selector()
-            .ok_or_else(|| selector_conflict("incomplete applet selector"))?;
-        if !matches!(
-            &applet.effective_scope,
-            arkret_wire::ScopeRef::Realm { .. } | arkret_wire::ScopeRef::Circle { .. }
-        ) || applet
-            .capability_grant_refs
-            .iter()
-            .collect::<std::collections::HashSet<_>>()
-            .len()
-            != applet.capability_grant_refs.len()
-        {
-            return Err(selector_conflict(
-                "applet selector requires a Realm/Circle scope and unique grant refs",
-            ));
-        }
-        return Ok(RevokeSelector::Applet(applet));
-    }
-
     if let Some(target_session_grant_id) = body.target_session_grant_id.clone() {
         Ok(RevokeSelector::Grant(target_session_grant_id))
     } else if let Some(target_device_id) = body.target_device_id.clone() {
@@ -166,16 +134,6 @@ fn revoke_selector(body: &SessionRevokeRequestBody) -> Result<RevokeSelector, Ar
     } else {
         Ok(RevokeSelector::Current)
     }
-}
-
-fn session_revoke_has_applet_selector(body: &SessionRevokeRequestBody) -> bool {
-    body.applet_id.is_some()
-        || body.effective_scope.is_some()
-        || body.registration_epoch.is_some()
-        || body.service_id.is_some()
-        || body.capability_grant_refs.is_some()
-        || body.expected_inventory_digest.is_some()
-        || body.authorizing_session_grant_id.is_some()
 }
 
 fn canonical_revoke_intent(
@@ -322,7 +280,6 @@ async fn verify_cross_session_lifecycle_proof(
         body.target_session_grant_id.as_ref(),
         body.target_device_id.as_ref(),
         body.all_sessions.unwrap_or(false),
-        body.applet_selector().as_ref(),
     )
     .map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
@@ -427,164 +384,50 @@ pub async fn revoke_session_grant_endpoint(
     let service_id = owning_station_id_for(&arkret_config);
     let now = clock.now();
     let mut repo = depot.repo().await?;
-    let (current_grant, holder_binding, dpop_jti) =
-        if matches!(&selector, RevokeSelector::Applet(_)) {
-            if super::super::account_status::required_header(req, "arkret-operation")?
-                != "ak.gate.account.command.revoke_session.v1"
-            {
-                return Err(ArkretRouteError::NotFound);
-            }
-            let canonical_body = arkret_canonical::canonical_json_bytes(&body)?;
-            let source_station = super::super::account_status::verify_station_signed_request(
-                req,
-                depot,
-                &canonical_body,
-            )
-            .await?;
-            let grant_id = body
-                .authorizing_session_grant_id
-                .as_ref()
-                .ok_or_else(|| selector_conflict("authorizing_session_grant_id is required"))?;
-            let proof = body.proof.as_ref().ok_or_else(|| {
-                lifecycle_proof_required("applet revoke requires lifecycle proof")
-            })?;
-            let RevokeSelector::Applet(applet) = &selector else {
-                unreachable!("branch is Applet")
-            };
-            let early_selector = coauth_data::SessionGrantRevokeTarget::Applet {
-                issuer_id: service_id.clone(),
-                applet_id: applet.applet_id.to_string(),
-                effective_scope: serde_json::to_value(&applet.effective_scope)?,
-                registration_epoch: applet.registration_epoch.to_string(),
-                service_id: Some(applet.service_id.clone()),
-                capability_grant_refs: applet.capability_grant_refs.clone(),
-                expected_inventory_digest: applet.expected_inventory_digest.clone(),
-            };
-            let holder_binding = format!("station:{source_station}");
-            let canonical_intent =
-                canonical_revoke_intent(&body, grant_id, &holder_binding, &early_selector)?;
-            let identity = format!(
-                "revoke:{}",
-                hex::encode(sha2::Sha256::digest(proof.challenge.as_bytes()))
-            );
-            let early = repo
-                .oauth_session_grant()
-                .reserve_operation(
-                    &mut rng,
-                    &*clock,
-                    NewSessionGrantOperation {
-                        issuer_id: service_id.clone(),
-                        operation: coauth_data::SessionGrantOperationDescriptor::Revoke {
-                            selector: early_selector,
-                        },
-                        proof_kind: None,
-                        request_identity: &identity,
-                        canonical_intent_digest: sha2::Sha256::digest(&canonical_intent).into(),
-                        canonical_intent: &canonical_intent,
-                        target_session_grant_id: None,
-                        issuance_nonce: None,
-                        session_id: None,
-                        grant_not_before: None,
-                        grant_expires_at: None,
-                        signing_key_id: None,
-                        retained_until: proof.expires_at + Duration::days(7),
-                    },
-                )
-                .await?;
-            match early {
-                SessionGrantReserveOutcome::Replay(operation) => {
-                    let bytes = operation.canonical_outcome.ok_or_else(|| {
-                        ArkretRouteError::coded(
-                            StatusCode::SERVICE_UNAVAILABLE,
-                            arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                            "revoke replay has no canonical outcome",
-                        )
-                    })?;
-                    repo.cancel().await.ok();
-                    return Ok(ArkretCanonicalJson(bytes));
-                }
-                SessionGrantReserveOutcome::Conflict(_) => {
-                    repo.cancel().await.ok();
-                    return Err(ArkretRouteError::coded(
-                        StatusCode::CONFLICT,
-                        arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
-                        "revoke proof identity conflicts with a different canonical intent",
-                    ));
-                }
-                SessionGrantReserveOutcome::Indeterminate(_)
-                | SessionGrantReserveOutcome::Pending(coauth_data::SessionGrantOperation {
-                    state: coauth_data::SessionGrantOperationState::Authorized,
-                    ..
-                }) => {
-                    repo.cancel().await.ok();
-                    return Err(ArkretRouteError::coded(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                        "revoke replay state is unavailable",
-                    ));
-                }
-                SessionGrantReserveOutcome::Reserved(_)
-                | SessionGrantReserveOutcome::Pending(_) => {}
-            }
-            let current_grant = repo
-                .oauth_session_grant()
-                .lookup_by_grant_id(grant_id)
-                .await?
-                .ok_or_else(session_grant_not_found)?;
-            (current_grant, holder_binding, None)
-        } else {
-            let presented_grant_jwt = dpop_session_grant(req)?.to_owned();
-            let dpop_header = dpop_header_from_request(req).ok_or_else(|| {
-                lifecycle_proof_required("session revoke requires holder DPoP proof")
-            })?;
-            let presented_claims =
-                Jwt::<SignedSessionGrantClaims>::try_from(presented_grant_jwt.as_str())
-                    .map_err(|_| {
-                        ArkretRouteError::Unauthorized("session grant is not parseable".to_owned())
-                    })?
-                    .payload()
-                    .clone();
-            presented_claims.validate().map_err(|error| {
-                ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
-            })?;
-            let current_grant = repo
-                .oauth_session_grant()
-                .lookup_by_grant_jwt(&presented_grant_jwt)
-                .await?
-                .ok_or_else(session_grant_not_found)?;
-            if presented_claims.grant_id != current_grant.grant_id
-                || presented_claims.issuer_id != current_grant.issuer_id
-                || presented_claims.account_id.principal_id != current_grant.subject_id
-            {
-                return Err(lifecycle_proof_invalid(
-                    "presented session grant does not match the issuer_id ledger",
-                ));
-            }
-            let htm = req.method().as_str().to_ascii_uppercase();
-            let htu = dpop_htu(&url_builder.http_base(), req);
-            let dpop = DpopVerifier::verify_without_replay(
-                &dpop_header,
-                &htm,
-                &htu,
-                now,
-                Some(&presented_grant_jwt),
-            )
-            .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
-            let expected_jkt = presented_claims
-                .session_public_key
-                .thumbprint_sha256()
-                .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
-            DpopVerifier::require_matching_jkt(&dpop.jkt, &expected_jkt)
-                .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
-            (current_grant, dpop.jkt, Some(dpop.claims.jti))
-        };
+    let presented_grant_jwt = dpop_session_grant(req)?.to_owned();
+    let dpop_header = dpop_header_from_request(req)
+        .ok_or_else(|| lifecycle_proof_required("session revoke requires holder DPoP proof"))?;
+    let presented_claims = Jwt::<SignedSessionGrantClaims>::try_from(presented_grant_jwt.as_str())
+        .map_err(|_| ArkretRouteError::Unauthorized("session grant is not parseable".to_owned()))?
+        .payload()
+        .clone();
+    presented_claims.validate().map_err(|error| {
+        ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
+    })?;
+    let current_grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_jwt(&presented_grant_jwt)
+        .await?
+        .ok_or_else(session_grant_not_found)?;
+    if presented_claims.grant_id != current_grant.grant_id
+        || presented_claims.issuer_id != current_grant.issuer_id
+        || presented_claims.account_id.principal_id != current_grant.subject_id
+    {
+        return Err(lifecycle_proof_invalid(
+            "presented session grant does not match the issuer_id ledger",
+        ));
+    }
+    let htm = req.method().as_str().to_ascii_uppercase();
+    let htu = dpop_htu(&url_builder.http_base(), req);
+    let dpop = DpopVerifier::verify_without_replay(
+        &dpop_header,
+        &htm,
+        &htu,
+        now,
+        Some(&presented_grant_jwt),
+    )
+    .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
+    let expected_jkt = presented_claims
+        .session_public_key
+        .thumbprint_sha256()
+        .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
+    DpopVerifier::require_matching_jkt(&dpop.jkt, &expected_jkt)
+        .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
+    let holder_binding = dpop.jkt;
+    let dpop_jti = dpop.claims.jti;
     if current_grant.issuer_id != service_id
-        || (matches!(&selector, RevokeSelector::Applet(_))
-            && (current_grant.applet_id.is_some() || current_grant.credential_class != "standard"))
         || grant_payload(&current_grant).is_none_or(|claims| {
             claims.validate().is_err()
-                || (matches!(&selector, RevokeSelector::Applet(_))
-                    && claims.account_id.station_id != service_id)
                 || claims.grant_id != current_grant.grant_id
                 || claims.issuer_id != current_grant.issuer_id
                 || claims.account_id.principal_id != current_grant.subject_id
@@ -613,7 +456,7 @@ pub async fn revoke_session_grant_endpoint(
         RevokeSelector::Grant(target_session_grant_id) => {
             target_session_grant_id != &current_grant.grant_id
         }
-        RevokeSelector::Device(_) | RevokeSelector::All | RevokeSelector::Applet(_) => true,
+        RevokeSelector::Device(_) | RevokeSelector::All => true,
     };
     let current_principal_id = current_grant.subject_id.clone();
     let target_session_grant_id = match &selector {
@@ -629,7 +472,7 @@ pub async fn revoke_session_grant_endpoint(
                 .ok_or_else(session_grant_not_found)?;
             Some(target.grant_id)
         }
-        RevokeSelector::Device(_) | RevokeSelector::All | RevokeSelector::Applet(_) => None,
+        RevokeSelector::Device(_) | RevokeSelector::All => None,
     };
     let operation_selector = match &selector {
         RevokeSelector::Current | RevokeSelector::Grant(_) => {
@@ -647,15 +490,6 @@ pub async fn revoke_session_grant_endpoint(
         RevokeSelector::All => coauth_data::SessionGrantRevokeTarget::AllForSubject {
             subject_id: current_principal_id.clone(),
         },
-        RevokeSelector::Applet(applet) => coauth_data::SessionGrantRevokeTarget::Applet {
-            issuer_id: current_grant.issuer_id.clone(),
-            applet_id: applet.applet_id.to_string(),
-            effective_scope: serde_json::to_value(&applet.effective_scope)?,
-            registration_epoch: applet.registration_epoch.to_string(),
-            service_id: Some(applet.service_id.clone()),
-            capability_grant_refs: applet.capability_grant_refs.clone(),
-            expected_inventory_digest: applet.expected_inventory_digest.clone(),
-        },
     };
     let canonical_intent = canonical_revoke_intent(
         &body,
@@ -667,9 +501,7 @@ pub async fn revoke_session_grant_endpoint(
     let proof_identity = body
         .proof
         .as_ref()
-        .map_or(dpop_jti.as_deref().unwrap_or(""), |proof| {
-            proof.challenge.as_str()
-        });
+        .map_or(dpop_jti.as_str(), |proof| proof.challenge.as_str());
     let request_identity = format!(
         "revoke:{}",
         hex::encode(sha2::Sha256::digest(proof_identity.as_bytes()))
@@ -792,71 +624,23 @@ pub async fn revoke_session_grant_endpoint(
             return Err(error);
         }
     }
-    if matches!(&selector, RevokeSelector::Applet(_)) {
-        let claims = grant_payload(&current_grant)
-            .ok_or_else(|| lifecycle_proof_invalid("authorizing grant claims are unavailable"))?;
-        let expected_binding = claims.device_binding.as_ref().ok_or_else(|| {
-            lifecycle_proof_invalid("authorizing grant has no accepted-device binding")
-        })?;
-        let current_device_id = current_device_id
-            .as_ref()
-            .ok_or_else(|| lifecycle_proof_invalid("authorizing grant has no current device"))?;
-        if &expected_binding.device_id != current_device_id {
-            repo.cancel().await.ok();
-            return Err(lifecycle_proof_invalid(
-                "authorizing grant device binding does not match the issuer ledger",
-            ));
-        }
-        let intent_digest = body
-            .proof
-            .as_ref()
-            .ok_or_else(|| lifecycle_proof_required("applet revoke requires lifecycle proof"))?
-            .request_canonical_digest
-            .clone();
-        let device_binding = super::acquire_private_current_device_binding(
-            depot,
-            &claims.account_id,
-            current_device_id.clone(),
-            arkret_wire::DeviceRevocationAdmissionAction::SessionGrantRevoke,
-            Some(expected_binding),
-            None,
-            intent_digest,
-            now,
-        )
+    let inserted = repo
+        .dpop_replay()
+        .consume_jti(crate::services::dpop::dpop_replay_record(&dpop_jti, now))
         .await?;
-        if &device_binding != expected_binding {
-            repo.cancel().await.ok();
-            return Err(ArkretRouteError::coded(
-                StatusCode::CONFLICT,
-                arkret_wire::ErrorCode::DEVICE_REVOKED,
-                "authorizing device binding changed",
-            ));
-        }
-    }
-
-    if let Some(dpop_jti) = dpop_jti.as_deref() {
-        let inserted = repo
-            .dpop_replay()
-            .consume_jti(crate::services::dpop::dpop_replay_record(dpop_jti, now))
-            .await?;
-        if !inserted {
-            repo.cancel().await.ok();
-            return Err(lifecycle_proof_invalid(
-                "session revoke DPoP JTI was already consumed",
-            ));
-        }
+    if !inserted {
+        repo.cancel().await.ok();
+        return Err(lifecycle_proof_invalid(
+            "session revoke DPoP JTI was already consumed",
+        ));
     }
     let authorization_ref = format!("revoke-proof:{request_identity}");
     let checkpoint = serde_json::json!({
         "kind": "session_revoke",
         "request_identity": request_identity,
-        "dpop_jti_digest": dpop_jti.as_deref().map(crate::services::dpop::dpop_jti_digest),
+        "dpop_jti_digest": crate::services::dpop::dpop_jti_digest(&dpop_jti),
         "request_canonical_digest": body.proof.as_ref().map(|proof| &proof.request_canonical_digest),
     });
-    let applet_scope = match &selector {
-        RevokeSelector::Applet(applet) => Some(serde_json::to_value(&applet.effective_scope)?),
-        _ => None,
-    };
     let durable_selector = match &selector {
         RevokeSelector::Current | RevokeSelector::Grant(_) => SessionGrantRevokeSelector::Grant(
             target_session_grant_id
@@ -869,17 +653,6 @@ pub async fn revoke_session_grant_endpoint(
         },
         RevokeSelector::All => SessionGrantRevokeSelector::AllForSubject {
             subject_id: &current_principal_id,
-        },
-        RevokeSelector::Applet(applet) => SessionGrantRevokeSelector::Applet {
-            selector: coauth_data::AppletSessionSelector {
-                issuer_id: &current_grant.issuer_id,
-                applet_id: applet.applet_id.as_str(),
-                effective_scope: applet_scope.as_ref().expect("applet scope is present"),
-                registration_epoch: applet.registration_epoch.as_str(),
-                service_id: Some(&applet.service_id),
-                capability_grant_refs: &applet.capability_grant_refs,
-            },
-            expected_inventory_digest: &applet.expected_inventory_digest,
         },
     };
     let committed = repo
@@ -897,26 +670,6 @@ pub async fn revoke_session_grant_endpoint(
         .await?;
     let chaos_committed = matches!(&committed, SessionGrantRevokeOutcome::Revoked { .. });
     let response = match committed {
-        SessionGrantRevokeOutcome::AppletInventoryChanged => {
-            repo.cancel().await.ok();
-            return Err(ArkretRouteError::CodedDetailed {
-                status: StatusCode::CONFLICT,
-                code: arkret_wire::ErrorCode::FAILED_PRECONDITION,
-                message: "applet delegated-session inventory changed".to_owned(),
-                details: vec![(
-                    "reason_code",
-                    serde_json::json!("applet_delegated_session_inventory_changed"),
-                )],
-            });
-        }
-        SessionGrantRevokeOutcome::AppletAlreadyFenced => {
-            repo.cancel().await.ok();
-            return Err(ArkretRouteError::coded(
-                StatusCode::FORBIDDEN,
-                arkret_wire::ErrorCode::APPLET_REVOKED,
-                "applet delegated-session epoch is fenced",
-            ));
-        }
         SessionGrantRevokeOutcome::Revoked { operation, .. } => {
             operation.canonical_outcome.ok_or_else(|| {
                 ArkretRouteError::coded(
@@ -1055,11 +808,6 @@ mod tests {
             subject_id: material.subject_id,
             local_account_id: material.local_account_id,
             device_id: material.device_id,
-            applet_id: None,
-            effective_scope: None,
-            registration_epoch: None,
-            service_id: None,
-            capability_grant_refs: Vec::new(),
             audience_id: material.audience_id,
             scope: Scope::from_iter(["ak.self.committed_event.stream.subscribe.v1"
                 .parse()
