@@ -619,7 +619,7 @@ async fn issue_account_handoff_session_grant(
         depot,
         &binding.account_id,
         device_id.clone(),
-        arkret_wire::DeviceRevocationAdmissionAction::ReturningSessionGrantIssue,
+        arkret_wire::DeviceRevocationAdmissionAction::SessionGrantIssueOrRefresh,
         None,
         Some(arkret_wire::AcceptedDevicePossessionProof::Issue(
             proof.clone(),

@@ -816,7 +816,7 @@ pub async fn refresh_session_grant(
         depot,
         &principal_binding.account_id,
         arkret_identifiers::DeviceId::new(device_id.to_owned())?,
-        arkret_wire::DeviceRevocationAdmissionAction::SessionGrantRefresh,
+        arkret_wire::DeviceRevocationAdmissionAction::SessionGrantIssueOrRefresh,
         Some(expected_device_binding),
         Some(arkret_wire::AcceptedDevicePossessionProof::Refresh(
             proof.clone(),

@@ -1,8 +1,8 @@
 use arkret_identifiers::Hash;
 use arkret_models_identity::SessionGrantDeviceBinding;
 use arkret_wire::{
-    AcceptedDevicePossessionProof, AccountId, DeviceId, DeviceRevocationAdmissionAction, EventId,
-    RealmCommitId,
+    AcceptedDevicePossessionProof, AccountId, DeviceId, DeviceRevocationAdmissionAction,
+    DeviceRevocationAdmissionInput, EventId, RealmCommitId,
 };
 use chrono::{DateTime, Utc};
 use salvo::prelude::{Depot, StatusCode};
@@ -208,43 +208,18 @@ fn map_peer_gate_error(error: PeerProtocolClientError) -> ArkretRouteError {
 }
 
 fn validate_private_request(request: &PrivateCurrentDeviceRequest) -> Result<(), String> {
-    request
-        .account_id
-        .validate()
-        .map_err(|error| error.to_string())?;
-    let needs_proof = matches!(
-        request.action_class,
-        DeviceRevocationAdmissionAction::ReturningSessionGrantIssue
-            | DeviceRevocationAdmissionAction::SessionGrantRefresh
-    );
-    if needs_proof != request.accepted_device_possession_proof.is_some() {
-        return Err("current-device proof presence does not match the action".to_owned());
+    DeviceRevocationAdmissionInput {
+        account_id: request.account_id.clone(),
+        device_id: request.device_id.clone(),
+        expected_device_authorize_event_id: request.expected_device_authorize_event_id.clone(),
+        expected_device_generation_ref: request.expected_device_generation_ref,
+        action_class: request.action_class,
+        intent_digest: request.intent_digest.clone(),
+        accepted_device_possession_proof: request.accepted_device_possession_proof.clone(),
+        requested_at: request.requested_at,
     }
-    if let Some(proof) = &request.accepted_device_possession_proof {
-        proof.validate().map_err(|error| error.to_string())?;
-        if proof.account_id() != &request.account_id
-            || proof.device_id() != &request.device_id
-            || proof.session_intent_digest() != &request.intent_digest
-        {
-            return Err("current-device proof does not bind the request".to_owned());
-        }
-    }
-    match (
-        &request.expected_device_authorize_event_id,
-        request.expected_device_generation_ref,
-    ) {
-        (Some(_), Some(generation)) if generation > 0 => Ok(()),
-        (None, None)
-            if matches!(
-                request.action_class,
-                DeviceRevocationAdmissionAction::SessionGrantIssue
-                    | DeviceRevocationAdmissionAction::ReturningSessionGrantIssue
-            ) =>
-        {
-            Ok(())
-        }
-        _ => Err("current-device expected binding is incomplete or forbidden".to_owned()),
-    }
+    .validate()
+    .map_err(|error| error.to_string())
 }
 
 fn validate_private_response(
@@ -349,7 +324,7 @@ mod tests {
                     .expect("test event id"),
             ),
             device_generation_ref: Some(1),
-            action_class: DeviceRevocationAdmissionAction::SessionGrantIssue,
+            action_class: DeviceRevocationAdmissionAction::SessionGrantIssueOrRefresh,
             intent_digest: Hash::new(format!("sha256:{}", "a".repeat(64)))
                 .expect("test intent digest"),
             accepted_device_possession_proof_digest: None,
