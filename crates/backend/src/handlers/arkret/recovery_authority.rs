@@ -278,7 +278,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         depot,
         &account_id,
         initial.device_id.clone(),
-        arkret_wire::DeviceRevocationAdmissionAction::SessionGrantIssueOrRefresh,
+        arkret_wire::DeviceRevocationDeniedAction::SessionGrantIssueOrRefresh,
         Some(&expected_device_binding),
         None,
         request.canonical_request_digest.clone(),

@@ -1,8 +1,8 @@
 use arkret_identifiers::Hash;
 use arkret_models_identity::SessionGrantDeviceBinding;
 use arkret_wire::{
-    AcceptedDevicePossessionProof, AccountId, DeviceId, DeviceRevocationAdmissionAction,
-    DeviceRevocationAdmissionInput, EventId, RealmCommitId,
+    AcceptedDevicePossessionProof, AccountId, DeviceId, DeviceRevocationAdmissionInput,
+    DeviceRevocationDeniedAction, EventId, RealmCommitId,
 };
 use chrono::{DateTime, Utc};
 use salvo::prelude::{Depot, StatusCode};
@@ -22,7 +22,7 @@ struct PrivateCurrentDeviceRequest {
     expected_device_authorize_event_id: Option<EventId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     expected_device_generation_ref: Option<u64>,
-    action_class: DeviceRevocationAdmissionAction,
+    action_class: DeviceRevocationDeniedAction,
     intent_digest: Hash,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     accepted_device_possession_proof: Option<AcceptedDevicePossessionProof>,
@@ -48,7 +48,7 @@ struct PrivateCurrentDeviceResponse {
     authorization_event_id: Option<EventId>,
     #[serde(default)]
     device_generation_ref: Option<u64>,
-    action_class: DeviceRevocationAdmissionAction,
+    action_class: DeviceRevocationDeniedAction,
     intent_digest: Hash,
     #[serde(default)]
     accepted_device_possession_proof_digest: Option<Hash>,
@@ -67,7 +67,7 @@ pub(crate) async fn acquire_private_current_device_binding(
     depot: &Depot,
     account_id: &AccountId,
     device_id: DeviceId,
-    action_class: DeviceRevocationAdmissionAction,
+    action_class: DeviceRevocationDeniedAction,
     expected_binding: Option<&SessionGrantDeviceBinding>,
     accepted_device_possession_proof: Option<arkret_wire::AcceptedDevicePossessionProof>,
     intent_digest: Hash,
@@ -324,7 +324,7 @@ mod tests {
                     .expect("test event id"),
             ),
             device_generation_ref: Some(1),
-            action_class: DeviceRevocationAdmissionAction::SessionGrantIssueOrRefresh,
+            action_class: DeviceRevocationDeniedAction::SessionGrantIssueOrRefresh,
             intent_digest: Hash::new(format!("sha256:{}", "a".repeat(64)))
                 .expect("test intent digest"),
             accepted_device_possession_proof_digest: None,

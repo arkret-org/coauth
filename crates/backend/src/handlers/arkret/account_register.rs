@@ -663,7 +663,7 @@ pub async fn account_register_endpoint(
         depot,
         &account_id,
         initial.device_id.clone(),
-        arkret_wire::DeviceRevocationAdmissionAction::SessionGrantIssueOrRefresh,
+        arkret_wire::DeviceRevocationDeniedAction::SessionGrantIssueOrRefresh,
         None,
         None,
         request_digest.clone(),
