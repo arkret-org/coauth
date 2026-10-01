@@ -19,8 +19,10 @@ use coauth_templates::{SiteConfigExt, Templates};
 use diesel_async::pooled_connection::deadpool::{
     Hook as DieselPoolHook, HookError as DieselPoolHookError, Pool as DieselPool,
 };
-use diesel_async::pooled_connection::{AsyncDieselConnectionManager, PoolError as AsyncPoolError};
-use diesel_async::{AsyncPgConnection, SimpleAsyncConnection};
+use diesel_async::pooled_connection::{
+    AsyncDieselConnectionManager, ManagerConfig, PoolError as AsyncPoolError,
+};
+use diesel_async::{AsyncConnection, AsyncPgConnection, SimpleAsyncConnection};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use tokio_util::sync::CancellationToken;
@@ -513,7 +515,14 @@ pub async fn diesel_pool_from_config(
     config: &DatabaseConfig,
 ) -> Result<DieselPool<AsyncPgConnection>, anyhow::Error> {
     let url = database_url_from_config(config)?;
-    let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(url);
+    let mut manager_config = ManagerConfig::<AsyncPgConnection>::default();
+    manager_config.custom_setup = Box::new(|url| {
+        Box::pin(
+            async move { retry_transport_connection(|| AsyncPgConnection::establish(url)).await },
+        )
+    });
+    let manager =
+        AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_config(url, manager_config);
     let pool = DieselPool::builder(manager)
         .max_size(config.max_connections.get() as usize)
         .wait_timeout(Some(config.connect_timeout))
@@ -524,6 +533,31 @@ pub async fn diesel_pool_from_config(
         .build()
         .context("could not build diesel connection pool")?;
     Ok(pool)
+}
+
+/// Retry only a transport failure while establishing a new connection. No
+/// application SQL has run, and the pool's existing create deadline bounds
+/// the complete attempt. Authentication and configuration errors propagate.
+async fn retry_transport_connection<T, F, Fut>(mut connect: F) -> diesel::ConnectionResult<T>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = diesel::ConnectionResult<T>>,
+{
+    for attempt in 0..3 {
+        match connect().await {
+            Err(diesel::ConnectionError::BadConnection(ref reason))
+                if reason == "error connecting to server" && attempt < 2 =>
+            {
+                tracing::warn!(
+                    attempt = attempt + 1,
+                    "Database transport connection failed before SQL; retrying"
+                );
+                tokio::time::sleep(Duration::from_millis(200 * (attempt + 1))).await;
+            }
+            result => return result,
+        }
+    }
+    unreachable!("the last connection attempt always returns")
 }
 
 /// Update the policy factory dynamic data from the database and spawn a
@@ -648,6 +682,45 @@ mod tests {
     use zeroize::Zeroizing;
 
     use super::*;
+
+    #[tokio::test]
+    async fn database_transport_connection_retries_only_before_sql_and_is_bounded() {
+        let mut attempts = 0;
+        let result = retry_transport_connection(|| {
+            attempts += 1;
+            std::future::ready(if attempts == 2 {
+                Ok(7_u8)
+            } else {
+                Err(diesel::ConnectionError::BadConnection(
+                    "error connecting to server".to_owned(),
+                ))
+            })
+        })
+        .await
+        .unwrap();
+        assert_eq!(result, 7);
+        assert_eq!(attempts, 2);
+        let mut attempts = 0;
+        let result: diesel::ConnectionResult<()> = retry_transport_connection(|| {
+            attempts += 1;
+            std::future::ready(Err(diesel::ConnectionError::BadConnection(
+                "authentication failed".to_owned(),
+            )))
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(attempts, 1);
+        let mut attempts = 0;
+        let result: diesel::ConnectionResult<()> = retry_transport_connection(|| {
+            attempts += 1;
+            std::future::ready(Err(diesel::ConnectionError::BadConnection(
+                "error connecting to server".to_owned(),
+            )))
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(attempts, 3);
+    }
 
     #[tokio::test]
     async fn test_password_manager_from_config() {
