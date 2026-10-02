@@ -154,7 +154,7 @@ pub fn Login() -> Element {
         },
         None => rsx! {
             Layout {
-                LoginFormBasic { error_msg: None }
+                LoadingSpinner {}
             }
         },
     }
