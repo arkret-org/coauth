@@ -957,8 +957,11 @@ fn intersect_requested_scope_with_agent_key_scope(
 
     let authorized_actions = parse_agent_key_scope_actions(agent_key_scope)?;
     for token in &normalized {
-        if !authorized_actions.contains(token) || !registered_agent_session_scope_token(token)? {
+        if !registered_agent_session_scope_token(token)? {
             return Err(AgentAuthRejection::ProofInvalid);
+        }
+        if !authorized_actions.contains(token) {
+            return Err(AgentAuthRejection::CapabilityDenied);
         }
     }
 
@@ -1905,7 +1908,7 @@ mod tests {
             &["ak.self.events.command.submit.v1".to_owned()],
         )
         .expect_err("actions outside the signed agent_key_scope must reject");
-        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+        assert_eq!(err, AgentAuthRejection::CapabilityDenied);
     }
 
     #[test]
@@ -1916,7 +1919,7 @@ mod tests {
         )
         .expect_err("key scope must not mint an unlisted control-plane action");
 
-        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+        assert_eq!(err, AgentAuthRejection::CapabilityDenied);
     }
 
     #[test]
@@ -1927,7 +1930,7 @@ mod tests {
         )
         .expect_err("key scope must not mint an unlisted account-surface action");
 
-        assert_eq!(err, AgentAuthRejection::ProofInvalid);
+        assert_eq!(err, AgentAuthRejection::CapabilityDenied);
     }
 
     #[test]
