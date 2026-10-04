@@ -6,6 +6,7 @@ mod controller_gate;
 mod device_pairing;
 mod did_document;
 mod erasure_request;
+#[cfg(test)]
 mod handle_claim;
 mod identity;
 mod recovery_authority;
@@ -20,6 +21,7 @@ pub use controller_gate::*;
 pub use device_pairing::*;
 pub use did_document::*;
 pub use erasure_request::*;
+#[cfg(test)]
 pub use handle_claim::*;
 pub use identity::*;
 pub use recovery_authority::*;
@@ -769,10 +771,8 @@ pub(crate) fn oidc_subject_for_user(_arkret_config: &ArkretConfig, user: &User) 
 
 #[derive(Debug, Clone)]
 pub(crate) struct PrincipalDidBinding {
-    pub account_id: arkret_wire::AccountId,
     pub principal_id: arkret_identifiers::DidCoreId,
     pub did: arkret_identifiers::Did,
-    pub audience_id: String,
 }
 
 pub(crate) async fn principal_did_binding_for_user<R>(
@@ -793,10 +793,8 @@ where
             .await?
         {
             return Ok(Some(PrincipalDidBinding {
-                account_id: row.account_id,
                 principal_id: row.principal_id,
                 did: row.verified_did,
-                audience_id: audience.to_string(),
             }));
         }
     }
