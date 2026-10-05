@@ -38,6 +38,15 @@ repository_impl! {
             local_account_id: &str,
         ) -> Result<Option<AccountStatusRecord>, Self::Error>;
 
+        /// Lock the stable ledger head (including an empty ledger) and read it.
+        /// The lock is held by the enclosing transaction, sharing append's
+        /// serialization point. A missing record here is a protected absence.
+        async fn current_for_gate(
+            &mut self,
+            account_authority_id: &str,
+            local_account_id: &str,
+        ) -> Result<Option<AccountStatusRecord>, Self::Error>;
+
         /// Return a bounded ascending contiguous range.
         async fn resolve(
             &mut self,

@@ -152,6 +152,10 @@ repository_impl! {
         /// Returns [`Self::Error`] if the underlying repository fails
         async fn lookup(&mut self, id: Ulid) -> Result<Option<User>, Self::Error>;
 
+        /// Read the user while holding a row lock until the transaction ends.
+        /// Gate issuance must not publish a status read before a concurrent update.
+        async fn lookup_for_gate(&mut self, id: Ulid) -> Result<Option<User>, Self::Error>;
+
         /// Find a [`User`] by a handle localpart after applying the Arkret handle
         /// preparation profile.
         ///

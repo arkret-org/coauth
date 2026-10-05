@@ -74,7 +74,7 @@ fn pcr_outcome(
         created_at: now,
         sig: Base64UrlString::new(suffix.to_string()).unwrap(),
     };
-    let create_commit = RealmCommit {
+    let mut create_commit = RealmCommit {
         commit_id: commit_id.clone(),
         realm_id: request.pcr_realm_id.clone(),
         stream_ref: CommitStreamRef::Realm {
@@ -84,24 +84,59 @@ fn pcr_outcome(
         previous_commit_ref: None,
         event_ref: request.genesis_unit.create().event_id.clone(),
         governance_generation: 0,
+        producer_signer_fact_digest: None,
         authority_ref: RealmCommitAuthorityRef::GenesisOrChangeEvent(
             request.genesis_unit.create().event_id.clone(),
         ),
         committed_at: now,
         signature: signature('a'),
     };
-    let authorize_commit = RealmCommit {
+    // Native PCR registration has no ordinary Human fact; seal its exact original bytes.
+    let seal = |mut commit: RealmCommit| {
+        let identity =
+            arkret_canonical::canonical::unsigned_value(&commit, &["commit_id", "signature"])
+                .unwrap();
+        commit.commit_id = RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
+            &arkret_canonical::canonical_json_bytes(&identity).unwrap(),
+        ));
+        let unsigned =
+            arkret_canonical::canonical::unsigned_value(&commit, &["signature"]).unwrap();
+        let key = ed25519_dalek_3::SigningKey::from_bytes(&[23; 32]);
+        commit.signature = arkret_signatures::detached_object::sign_detached_object(
+            &unsigned,
+            DetachedSignatureContext::RealmCommit,
+            commit.signature.verification_method.clone(),
+            now,
+            &key,
+        )
+        .unwrap();
+        commit.validate_content_address().unwrap();
+        arkret_signatures::detached_object::verify_detached_object_signature(
+            &commit.signature,
+            &unsigned,
+            DetachedSignatureContext::RealmCommit,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: key.verifying_key().to_bytes().to_vec(),
+            },
+        )
+        .unwrap();
+        commit
+    };
+    create_commit = seal(create_commit);
+    let mut authorize_commit = RealmCommit {
         commit_id: RealmCommitId::from_digest([3; 32]),
         realm_id: request.pcr_realm_id.clone(),
         stream_ref: create_commit.stream_ref.clone(),
         stream_position: 1,
-        previous_commit_ref: Some(commit_id),
+        previous_commit_ref: Some(create_commit.commit_id.clone()),
         event_ref: request.genesis_unit.founding_authorize().event_id.clone(),
         governance_generation: 0,
+        producer_signer_fact_digest: None,
         authority_ref: create_commit.authority_ref.clone(),
         committed_at: now,
         signature: signature('b'),
     };
+    authorize_commit = seal(authorize_commit);
     let outcome = arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult {
         principal_id: request.principal_id.clone(),
         pcr_realm_id: request.pcr_realm_id.clone(),

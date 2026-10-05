@@ -210,6 +210,18 @@ impl UserRepository for PgUserRepository<'_> {
         Ok(res)
     }
 
+    async fn lookup_for_gate(&mut self, id: Ulid) -> Result<Option<User>, Self::Error> {
+        users::table
+            .find(Uuid::from(id))
+            .select(select_user_columns!())
+            .for_update()
+            .first::<UserRow>(self.conn)
+            .await
+            .optional()?
+            .map(TryInto::try_into)
+            .transpose()
+    }
+
     #[tracing::instrument(
         name = "db.user.find_by_handle",
         skip_all,

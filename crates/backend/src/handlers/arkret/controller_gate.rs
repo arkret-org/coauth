@@ -13,7 +13,9 @@ use coauth_data::account_handoff::{
     NewControllerGateAttestationIssuance,
 };
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
-use coauth_data::{Clock as _, RepositoryAccess as _};
+use coauth_data::{
+    AccountStatusLedgerRepository as _, Clock as _, LocalAccountId, RepositoryAccess as _,
+};
 use salvo::prelude::*;
 
 use super::{ArkretRouteError, owning_station_id_for};
@@ -64,24 +66,6 @@ pub async fn issue_controller_gate_attestation(
     let mut repo = depot.repo().await?;
     authenticate_internal_channel_caller(req, depot, &request)
         .inspect_err(|_| tracing::warn!("controller gate Agent Authority authentication failed"))?;
-    let binding = repo
-        .principal_did()
-        .get_by_principal_id_and_audience(
-            request.principal_id.as_str(),
-            request.agent_authority_id.as_str(),
-        )
-        .await?
-        .filter(|binding| binding.accepted_id == request.agent_authority_id)
-        .ok_or_else(|| {
-            tracing::warn!("controller gate principal binding unavailable for Agent Authority");
-            not_found()
-        })?;
-    let user = repo
-        .user()
-        .lookup(binding.user_id)
-        .await?
-        .ok_or_else(not_found)?;
-
     let reserve = repo
         .account_handoff()
         .reserve_controller_gate_attestation(NewControllerGateAttestationIssuance {
@@ -110,9 +94,61 @@ pub async fn issue_controller_gate_attestation(
         ControllerGateAttestationReserve::Reserved(_) => {}
     }
 
+    // Exact replay above is independent of today's user, binding and ledger.
+    // New issuance holds the actual user, binding and stable ledger head cut.
+    let candidate = repo
+        .principal_did()
+        .get_by_principal_id_and_audience(
+            request.principal_id.as_str(),
+            request.agent_authority_id.as_str(),
+        )
+        .await?
+        .ok_or_else(not_found)?;
+    let authority_id = owning_station_id_for(&depot.arkret_config()?);
+    let local_account = LocalAccountId::new(candidate.user_id.to_string())
+        .map_err(|_| schema_violation("invalid private account coordinate"))?;
+    // Publication appends under this head lock before mutating the account.
+    // Use the same order, including the no-record serialization point.
+    let current = repo
+        .account_status_ledger()
+        .current_for_gate(authority_id.as_str(), local_account.as_str())
+        .await?;
+    let user = repo
+        .user()
+        .lookup_for_gate(candidate.user_id)
+        .await?
+        .ok_or_else(not_found)?;
+    let binding = repo
+        .principal_did()
+        .get_by_principal_id_and_audience_for_gate(
+            request.principal_id.as_str(),
+            request.agent_authority_id.as_str(),
+        )
+        .await?
+        .ok_or_else(not_found)?;
+    if binding != candidate
+        || binding.user_id != user.id
+        || binding.accepted_id != request.agent_authority_id
+        || binding.audience_id != request.agent_authority_id
+        || binding.principal_id != request.principal_id
+        || binding.account_id.principal_id != request.principal_id
+        || binding.account_id.station_id != authority_id
+        || binding.binding_receipt.account_authority_id != authority_id
+    {
+        return Err(not_found());
+    }
+    let basis = default_basis_for_locked_head(
+        binding.binding_version,
+        binding.binding_receipt_digest.clone(),
+        &binding.account_id,
+        &binding.principal_control_realm_id,
+        &authority_id,
+        user.status,
+        current.as_ref(),
+    )?;
+
     let (status, eligibility) = controller_status(user.status);
     let authority_did = super::owning_station_did_for(&depot.arkret_config()?);
-    let authority_id = owning_station_id_for(&depot.arkret_config()?);
     let keyring = depot.keyring()?;
     // The attestation is signed as the owning Station, and soland verifies it
     // by resolving `verification_method` out of the Station's DID document.
@@ -127,12 +163,6 @@ pub async fn issue_controller_gate_attestation(
     let signing_key_id =
         crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT;
     let expires_at = now + GATE_TTL;
-    let basis = ControllerAccountGateBasis::AccountBindingDefault {
-        binding_version: binding.binding_version,
-        // Local column and SDK wire member now agree: the value is the digest
-        // of the stored AccountBindingReceipt.
-        binding_receipt_digest: binding.binding_receipt_digest,
-    };
     let basis_digest =
         arkret_identifiers::Hash::new(arkret_canonical::canonical_sha256(&serde_json::json!({
             "principal_id": &request.principal_id,
@@ -192,6 +222,42 @@ pub async fn issue_controller_gate_attestation(
     };
     repo.save().await?;
     Ok(ControllerGateCanonicalJson(response))
+}
+
+/// Lifecycle §3.1 installs the initial active record in the binding's own
+/// transaction. That genesis is the baseline, not a stricter successor.
+/// Successors (including a later return to active) cannot be relabelled as it.
+/// No registered Event/checkpoint source is available for the strict branch;
+/// record identity and digest must never be cast into those wire members.
+fn default_basis_for_locked_head(
+    binding_version: u64,
+    binding_receipt_digest: arkret_identifiers::Hash,
+    account: &arkret_wire::AccountId,
+    pcr: &arkret_identifiers::RealmId,
+    authority: &arkret_identifiers::DidCoreId,
+    user_status: AccountStatus,
+    current: Option<&arkret_models_collaboration::account_status::AccountStatusRecord>,
+) -> Result<ControllerAccountGateBasis, ArkretRouteError> {
+    let is_initial = current.is_none_or(|head| {
+        head.status_seq == 1
+            && head.previous_account_status_record_id.is_none()
+            && head.status == AccountStatus::Active
+            && head.account_id == *account
+            && head.principal_control_realm_id == *pcr
+            && head.account_authority_id == *authority
+            && head.binding_version == binding_version
+    });
+    if !is_initial || user_status != AccountStatus::Active {
+        return Err(ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::FAILED_PRECONDITION,
+            "controller gate accepted status checkpoint unavailable",
+        ));
+    }
+    Ok(ControllerAccountGateBasis::AccountBindingDefault {
+        binding_version,
+        binding_receipt_digest,
+    })
 }
 
 fn sign_controller_gate_with_sdk(
@@ -358,6 +424,88 @@ mod tests {
     }
 
     #[test]
+    fn gate_default_requires_exact_initial_binding_and_never_masks_a_successor() {
+        use arkret_models_collaboration::account_status::{
+            AccountStatusRecord, UnsignedAccountStatusRecord,
+        };
+        let now = "2026-09-16T00:00:00.000Z".parse().unwrap();
+        let account = arkret_wire::AccountId::new(
+            DidCoreId::new("ak:did_core:web:controller.example").unwrap(),
+            DidCoreId::new("ak:did_core:web:authority.example").unwrap(),
+        );
+        let pcr = arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
+            arkret_canonical::DigestSuite::Sha256,
+            [0x61; 32],
+        ));
+        let sign = |status, seq, previous| -> AccountStatusRecord {
+            arkret_signatures::account_status::sign_account_status_record(
+                UnsignedAccountStatusRecord {
+                    schema: arkret_wire::SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
+                    account_authority_id: account.station_id.clone(),
+                    account_id: account.clone(),
+                    principal_control_realm_id: pcr.clone(),
+                    binding_version: 7,
+                    status_seq: seq,
+                    previous_account_status_record_id: previous,
+                    status,
+                    reason_code: None,
+                    reason: None,
+                    issued_at: now,
+                    effective_at: now,
+                    expires_at: None,
+                },
+                DidUrl::new("did:web:authority.example#account-status").unwrap(),
+                &sdk_signing_key_from_seed_bytes(&[41; 32]),
+            )
+            .unwrap()
+        };
+        let basis = |current, status| {
+            default_basis_for_locked_head(
+                7,
+                digest(0x11),
+                &account,
+                &pcr,
+                &account.station_id,
+                status,
+                current,
+            )
+        };
+        assert!(basis(None, AccountStatus::Active).is_ok());
+        let initial = sign(AccountStatus::Active, 1, None);
+        assert_eq!(
+            basis(Some(&initial), AccountStatus::Active).unwrap(),
+            ControllerAccountGateBasis::AccountBindingDefault {
+                binding_version: 7,
+                binding_receipt_digest: digest(0x11)
+            }
+        );
+        let inactive = sign(
+            AccountStatus::Suspended,
+            2,
+            Some(initial.account_status_record_id.clone()),
+        );
+        assert!(basis(Some(&inactive), AccountStatus::Suspended).is_err());
+        let resumed = sign(
+            AccountStatus::Active,
+            3,
+            Some(inactive.account_status_record_id.clone()),
+        );
+        assert!(basis(Some(&resumed), AccountStatus::Active).is_err());
+        let mut foreign = initial.clone();
+        foreign.account_id.station_id = DidCoreId::new("ak:did_core:web:other.example").unwrap();
+        assert!(basis(Some(&foreign), AccountStatus::Active).is_err());
+        let mut wrong_version = initial.clone();
+        wrong_version.binding_version += 1;
+        assert!(basis(Some(&wrong_version), AccountStatus::Active).is_err());
+        let mut wrong_pcr = initial.clone();
+        wrong_pcr.principal_control_realm_id = arkret_wire::RealmId::from_event_id(
+            &arkret_wire::EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [0x62; 32]),
+        );
+        assert!(basis(Some(&wrong_pcr), AccountStatus::Active).is_err());
+        assert!(basis(None, AccountStatus::Locked).is_err());
+    }
+
+    #[test]
     fn production_controller_gate_signer_uses_sdk_carrier_and_binds_basis_digest() {
         let signing_key = sdk_signing_key_from_seed_bytes(&[41; 32]);
         let mut gate = attestation();
@@ -388,5 +536,171 @@ mod tests {
             )
             .is_err()
         );
+    }
+}
+
+// Exercise the registered issuer route against the PostgreSQL authority ledger.
+#[cfg(test)]
+mod controller_gate_http_regression {
+    use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
+    use coauth_data::{RepositoryAccess as _, UserPatch};
+    use hyper::{Request, StatusCode};
+
+    use super::*;
+    use crate::handlers::test_utils::{TEST_STATION_AUDIENCE, TestState, setup, unique_test_nonce};
+
+    #[tokio::test]
+    async fn internal_gate_initial_binding_succeeds_strict_successor_refuses_and_original_replays()
+    {
+        setup();
+        // For Root acceptance DATABASE_URL must be explicitly configured and
+        // COAUTH_SKIP_POSTGRES_TESTS must be absent. This fixture must fail if
+        // the existing opt-out is enabled instead of silently returning early.
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for this HTTP regression");
+        let mut state = TestState::from_pool_with_station(pool.clone())
+            .await
+            .unwrap();
+        // TestState's existing registered Station pin is zTestStation. Give
+        // the owning AA that same real DID identity, not another Station.
+        state.arkret_config.runtime_owning_station_identity =
+            coauth_config::RuntimeOwningStationIdentity::fixture(
+                "did:webvh:zTestStation:principal.example",
+            );
+        const TOKEN: &str = "public-controller-gate-http-fixture-token";
+        state.arkret_config.stations[0].internal_authority_shared_secret =
+            Some(TOKEN.to_owned().into());
+        assert_eq!(
+            crate::handlers::arkret::station_internal_channel_caller(&state.arkret_config, TOKEN)
+                .as_deref(),
+            Some(TEST_STATION_AUDIENCE)
+        );
+        assert_eq!(
+            crate::handlers::arkret::owning_station_id_for(&state.arkret_config).as_str(),
+            TEST_STATION_AUDIENCE
+        );
+        let mut rng = state.rng();
+        let mut setup_repo = state.repository().await.unwrap();
+        let user = setup_repo
+            .user()
+            .add(
+                &mut rng,
+                state.clock.as_ref(),
+                format!("controller-gate-{}", unique_test_nonce()),
+            )
+            .await
+            .unwrap();
+        setup_repo.save().await.unwrap();
+        let principal = state
+            .seed_principal_binding(&user, &format!("gate-{}", unique_test_nonce()))
+            .await;
+        let original_request = ControllerAccountGateIssuanceInput {
+            request_id: arkret_wire::RequestId::new_v7_at(
+                chrono::Utc::now().timestamp_millis() as u64
+            ),
+            principal_id: arkret_wire::DidCoreId::new(principal.clone()).unwrap(),
+            agent_authority_id: arkret_wire::DidCoreId::new(TEST_STATION_AUDIENCE).unwrap(),
+        };
+        let request = |body: &ControllerAccountGateIssuanceInput, credential: &str| {
+            Request::post("/_coauth/internal/controller-gate-attestations")
+                .header("Authorization", format!("Bearer {credential}"))
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(body).unwrap())
+                .unwrap()
+        };
+        let unauthenticated = state
+            .request(request(&original_request, "wrong-public-fixture-token"))
+            .await;
+        assert_eq!(unauthenticated.status(), StatusCode::NOT_FOUND);
+        let first = state.request(request(&original_request, TOKEN)).await;
+        assert_eq!(first.status(), StatusCode::OK);
+        let original_bytes = first.body().clone();
+        let accepted: ControllerAccountGateIssuanceResult =
+            serde_json::from_str(&original_bytes).unwrap();
+        assert_eq!(accepted.request_id, original_request.request_id);
+        assert!(matches!(
+            &accepted.controller_account_gate_attestation.basis,
+            ControllerAccountGateBasis::AccountBindingDefault { .. }
+        ));
+        let aa_signer =
+            sdk_signing_key_from_seed_bytes(&state.keyring.account_authority_seed().unwrap());
+        arkret_signatures::agent_evidence::verify_controller_account_gate_attestation(
+            &accepted.controller_account_gate_attestation,
+            &original_request.principal_id,
+            &original_request.agent_authority_id,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: aa_signer.verifying_key().to_bytes().to_vec(),
+            },
+            accepted.controller_account_gate_attestation.issued_at,
+        )
+        .unwrap();
+        // Produce a real immutable signed issuer successor with the existing
+        // lifecycle API, atomically mutate user status, then issue a new ID.
+        let mut transition = state.repository().await.unwrap();
+        let current_user = transition.user().lookup(user.id).await.unwrap().unwrap();
+        let binding = transition
+            .principal_did()
+            .get_by_principal_id_and_audience(&principal, TEST_STATION_AUDIENCE)
+            .await
+            .unwrap()
+            .unwrap();
+        crate::services::account_status_publication::author_and_enqueue_transition(
+            &mut transition,
+            &mut rng,
+            state.clock.as_ref(),
+            state.station_admin.as_ref(),
+            &state.keyring,
+            TEST_STATION_AUDIENCE,
+            &current_user,
+            &binding,
+            AccountStatus::Suspended,
+            None,
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+        transition
+            .user()
+            .patch(
+                state.clock.as_ref(),
+                current_user,
+                UserPatch {
+                    status: Some(AccountStatus::Suspended),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        transition.save().await.unwrap();
+        let fresh_request = ControllerAccountGateIssuanceInput {
+            request_id: arkret_wire::RequestId::new_v7_at(
+                chrono::Utc::now().timestamp_millis() as u64
+            ),
+            ..original_request.clone()
+        };
+        let denied = state.request(request(&fresh_request, TOKEN)).await;
+        assert_eq!(denied.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let problem: arkret_wire::problem_details::Problem =
+            serde_json::from_str(denied.body()).unwrap();
+        assert_eq!(problem.code(), arkret_wire::ErrorCode::FAILED_PRECONDITION);
+        use diesel_async::RunQueryDsl as _;
+        #[derive(diesel::QueryableByName)]
+        struct Rows {
+            #[diesel(sql_type=diesel::sql_types::BigInt)]
+            count: i64,
+        }
+        let mut conn = pool.get().await.unwrap();
+        let count = diesel::sql_query("SELECT count(*) AS count FROM controller_gate_attestation_issuances WHERE request_id=$1")
+            .bind::<diesel::sql_types::Uuid,_>(fresh_request.request_id.uuid())
+            .get_result::<Rows>(&mut conn).await.unwrap().count;
+        assert_eq!(
+            count, 0,
+            "rejected new issuance cannot persist a reservation or outcome"
+        );
+        drop(conn);
+        let replay = state.request(request(&original_request, TOKEN)).await;
+        assert_eq!(replay.status(), StatusCode::OK);
+        assert_eq!(replay.body(), &original_bytes);
     }
 }

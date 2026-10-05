@@ -242,6 +242,23 @@ impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
         row.map(binding_from_row).transpose()
     }
 
+    async fn get_by_principal_id_and_audience_for_gate(
+        &mut self,
+        principal_id: &str,
+        audience_id: &str,
+    ) -> Result<Option<PrincipalDidBinding>, Self::Error> {
+        let row = principal_did_bindings::table
+            .inner_join(principal_did_owners::table)
+            .filter(principal_did_owners::principal_id.eq(principal_id))
+            .filter(principal_did_bindings::audience_id.eq(audience_id))
+            .select(PrincipalDidJoinedRow::as_select())
+            .for_update()
+            .first::<PrincipalDidJoinedRow>(self.conn)
+            .await
+            .optional()?;
+        row.map(binding_from_row).transpose()
+    }
+
     async fn add_verified(
         &mut self,
         rng: &mut (dyn RngCore + Send),

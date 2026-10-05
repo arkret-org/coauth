@@ -61,6 +61,13 @@ repository_impl! {
             audience_id: &str,
         ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
 
+        /// Read this exact binding under a transaction-held row lock.
+        async fn get_by_principal_id_and_audience_for_gate(
+            &mut self,
+            principal_id: &str,
+            audience_id: &str,
+        ) -> Result<Option<PrincipalDidBinding>, Self::Error>;
+
         /// Persist a binding only after the caller has verified the client
         /// submission with the authoritative DID host.
         async fn add_verified(

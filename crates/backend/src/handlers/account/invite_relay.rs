@@ -507,19 +507,85 @@ mod tests {
 
     fn invite_delivery()
     -> arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody {
-        let event = arkret_wire::test_support::raw_event(
+        let at = chrono::DateTime::parse_from_rfc3339("2026-09-20T00:00:00.000Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let principal = arkret_wire::Did::new("did:web:inviter").unwrap();
+        let device =
+            arkret_wire::DeviceId::new("ak:device:0196419b-0000-7000-8000-000000000001").unwrap();
+        let actor = arkret_wire::ActorId::account(arkret_wire::AccountId::new(
+            arkret_wire::project_did_to_core_id(&principal).unwrap(),
+            core_id("ak:did_core:web:auth.example"),
+        ));
+        let raw = arkret_wire::test_support::raw_event_for_actor_at(
             arkret_wire::EventKind::InviteCreate.as_str(),
             arkret_wire::ScopeRef::Realm {
                 realm_id: arkret_identifiers::RealmId::new(FIXTURE_REALM).unwrap(),
             },
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:inviter".to_owned()).unwrap(),
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap(),
+            actor.clone(),
             payload(),
+            at,
         )
         .unwrap();
-        // The relay forwards the delivery verbatim; it never verifies the
-        // Commit, so a structurally complete one is enough here.
-        let invite_commit = arkret_wire::RealmCommit {
+        let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+            raw,
+            arkret_canonical::DigestSuite::Sha256,
+        )
+        .unwrap();
+        let device_seed = [77; 32];
+        let vm = arkret_wire::DidUrl::new(format!("{principal}#{device}")).unwrap();
+        arkret_signatures::sign_event(
+            &mut authored,
+            &arkret_signatures::Ed25519DetachedJwsSigner::from_seed(device_seed, vm.to_string()),
+            arkret_signatures::SignEventOptions::new().with_created_at(at),
+        )
+        .unwrap();
+        let event = authored.into_event();
+        // Public immutable source coordinates are independent of the target Invite Commit.
+        let authorization_ref = arkret_wire::CommittedEventRef {
+            event_id: arkret_wire::EventId::from_digest(
+                arkret_canonical::DigestSuite::Sha256,
+                [71; 32],
+            ),
+            commit_id: arkret_wire::RealmCommitId::from_digest([72; 32]),
+            stream_ref: arkret_wire::CommitStreamRef::Realm {
+                realm_id: arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
+                    arkret_canonical::DigestSuite::Sha256,
+                    [73; 32],
+                )),
+            },
+            stream_position: 2,
+        };
+        let fact = arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact {
+            event_id: event.event_id.clone(),
+            actor,
+            device_id: device,
+            verification_method: vm,
+            key: arkret_models_identity::ResolvedSignerKey {
+                public_key_b64u: arkret_wire::Base64UrlString::new(
+                    arkret_canonical::base64url_encode(
+                        ed25519_dalek_3::SigningKey::from_bytes(&device_seed)
+                            .verifying_key()
+                            .as_bytes(),
+                    ),
+                )
+                .unwrap(),
+                revision: arkret_wire::CurrentRevision {
+                    commit_id: authorization_ref.commit_id.clone(),
+                    stream_position: authorization_ref.stream_position,
+                },
+                authorization_ref,
+                governance_generation: 0,
+            },
+            accepted_at: at,
+        };
+        arkret_identity::account_device_signer_evidence::verify_historical_human_event_signature(
+            &event,
+            &fact,
+            arkret_canonical::DigestSuite::Sha256,
+        )
+        .unwrap();
+        let mut invite_commit = arkret_wire::RealmCommit {
             commit_id: arkret_wire::RealmCommitId::from_digest([0x02; 32]),
             realm_id: event.realm_id.clone(),
             stream_ref: arkret_wire::CommitStreamRef::Realm {
@@ -529,6 +595,7 @@ mod tests {
             previous_commit_ref: Some(arkret_wire::RealmCommitId::from_digest([0x01; 32])),
             event_ref: event.event_id.clone(),
             governance_generation: 0,
+            producer_signer_fact_digest: Some(fact.digest().unwrap()),
             authority_ref: arkret_wire::RealmCommitAuthorityRef::GenesisOrChangeEvent(
                 event.realm_id.event_id(),
             ),
@@ -550,9 +617,47 @@ mod tests {
                 sig: arkret_wire::Base64UrlString::new("c2lnbmF0dXJl".to_owned()).unwrap(),
             },
         };
+        let identity = arkret_canonical::canonical::unsigned_value(
+            &invite_commit,
+            &["commit_id", "signature"],
+        )
+        .unwrap();
+        invite_commit.commit_id =
+            arkret_wire::RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
+                &arkret_canonical::canonical_json_bytes(&identity).unwrap(),
+            ));
+        let unsigned =
+            arkret_canonical::canonical::unsigned_value(&invite_commit, &["signature"]).unwrap();
+        let authority_key = ed25519_dalek_3::SigningKey::from_bytes(&[23; 32]);
+        invite_commit.signature = arkret_signatures::detached_object::sign_detached_object(
+            &unsigned,
+            arkret_wire::DetachedSignatureContext::RealmCommit,
+            invite_commit.signature.verification_method.clone(),
+            at,
+            &authority_key,
+        )
+        .unwrap();
+        arkret_signatures::detached_object::verify_detached_object_signature(
+            &invite_commit.signature,
+            &unsigned,
+            arkret_wire::DetachedSignatureContext::RealmCommit,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: authority_key.verifying_key().to_bytes().to_vec(),
+            },
+        )
+        .unwrap();
+        fact.validate_commit_binding(
+            &arkret_wire::CommittedEventFullView {
+                event: event.clone(),
+                commit: invite_commit.clone(),
+            },
+            arkret_canonical::DigestSuite::Sha256,
+        )
+        .unwrap();
         arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody::new(
             event,
             invite_commit,
+            Some(fact),
             vec![
                 arkret_models_collaboration::governance::realm_join_intake::RealmJoinCandidate {
                     service_kind: arkret_models_collaboration::governance::realm_join_intake::RealmJoinCandidateServiceKind::Station,
@@ -571,7 +676,7 @@ mod tests {
             ),
             arkret_models_collaboration::governance::invite_addressing::IntroductionEvidence::ExplicitAddress,
             "idem-1",
-        )
+        ).unwrap()
     }
 
     fn relay_config() -> ArkretConfig {
@@ -602,6 +707,77 @@ mod tests {
             resolver.insert_for_test(&station.endpoint, service_id);
         }
         resolver
+    }
+
+    /// Re-author negative fixtures so target-specific rejection follows a
+    /// valid original Event/fact/Commit binding, rather than stale signatures.
+    fn reseal_delivery_original(delivery: &mut InviteDeliveryRequestBody) {
+        let raw = arkret_wire::test_support::raw_event_for_actor_at(
+            delivery.invite_event.kind.as_str(),
+            delivery.invite_event.scope_ref.clone(),
+            delivery.invite_event.actor_id.clone(),
+            serde_json::Value::Object(delivery.invite_event.payload.clone().into_iter().collect()),
+            delivery.invite_event.created_at,
+        )
+        .unwrap();
+        let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+            raw,
+            arkret_canonical::DigestSuite::Sha256,
+        )
+        .unwrap();
+        let fact = delivery.producer_signer_fact.as_mut().unwrap();
+        arkret_signatures::sign_event(
+            &mut authored,
+            &arkret_signatures::Ed25519DetachedJwsSigner::from_seed(
+                [77; 32],
+                fact.verification_method.to_string(),
+            ),
+            arkret_signatures::SignEventOptions::new()
+                .with_created_at(delivery.invite_event.created_at),
+        )
+        .unwrap();
+        delivery.invite_event = authored.into_event();
+        fact.event_id = delivery.invite_event.event_id.clone();
+        arkret_identity::account_device_signer_evidence::verify_historical_human_event_signature(
+            &delivery.invite_event,
+            fact,
+            arkret_canonical::DigestSuite::Sha256,
+        )
+        .unwrap();
+        delivery.invite_commit.event_ref = delivery.invite_event.event_id.clone();
+        delivery.invite_commit.producer_signer_fact_digest = Some(fact.digest().unwrap());
+        let identity = arkret_canonical::canonical::unsigned_value(
+            &delivery.invite_commit,
+            &["commit_id", "signature"],
+        )
+        .unwrap();
+        delivery.invite_commit.commit_id =
+            arkret_wire::RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
+                &arkret_canonical::canonical_json_bytes(&identity).unwrap(),
+            ));
+        let unsigned =
+            arkret_canonical::canonical::unsigned_value(&delivery.invite_commit, &["signature"])
+                .unwrap();
+        let key = ed25519_dalek_3::SigningKey::from_bytes(&[23; 32]);
+        delivery.invite_commit.signature =
+            arkret_signatures::detached_object::sign_detached_object(
+                &unsigned,
+                arkret_wire::DetachedSignatureContext::RealmCommit,
+                delivery.invite_commit.signature.verification_method.clone(),
+                delivery.invite_commit.committed_at,
+                &key,
+            )
+            .unwrap();
+        arkret_signatures::detached_object::verify_detached_object_signature(
+            &delivery.invite_commit.signature,
+            &unsigned,
+            arkret_wire::DetachedSignatureContext::RealmCommit,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: key.verifying_key().to_bytes().to_vec(),
+            },
+        )
+        .unwrap();
+        delivery.validate_minimal().unwrap();
     }
 
     fn assert_target_rejected(
@@ -658,6 +834,7 @@ mod tests {
                 .payload
                 .get_mut("invitee_account_id")
                 .unwrap()[field] = serde_json::json!(replacement);
+            reseal_delivery_original(&mut substituted);
             assert_target_rejected(
                 &substituted,
                 &holder,
@@ -669,6 +846,7 @@ mod tests {
 
         let mut retargeted = delivery.clone();
         retargeted.invite_address.account_id.station_id = core_id("ak:did_core:web:other.example");
+        reseal_delivery_original(&mut retargeted);
         assert_target_rejected(
             &retargeted,
             &holder,
@@ -680,6 +858,7 @@ mod tests {
             "invitee_account_id".into(),
             serde_json::to_value(&retargeted.invite_address.account_id).unwrap(),
         );
+        reseal_delivery_original(&mut retargeted);
         assert_target_rejected(
             &retargeted,
             &holder,
@@ -697,6 +876,7 @@ mod tests {
         let resolver = relay_resolver(&config);
         let mut wrong_kind = delivery.clone();
         wrong_kind.invite_event.kind = EventKind::ViewCreate;
+        reseal_delivery_original(&mut wrong_kind);
         assert_target_rejected(
             &wrong_kind,
             &holder,
@@ -710,6 +890,7 @@ mod tests {
                 .invite_event
                 .payload
                 .insert(field.into(), serde_json::json!(true));
+            reseal_delivery_original(&mut invalid);
             let error =
                 invite_delivery_target(&invalid, &holder, None, &config, &resolver).unwrap_err();
             assert!(
@@ -721,6 +902,7 @@ mod tests {
             .invite_event
             .payload
             .insert("x_vendor".into(), serde_json::json!({"enabled": true}));
+        reseal_delivery_original(&mut extended);
         assert_eq!(
             invite_delivery_target(&extended, &holder, None, &config, &resolver).unwrap(),
             config.stations[1].endpoint,
@@ -802,6 +984,7 @@ mod tests {
             .payload
             .get_mut("invitee_account_id")
             .unwrap()["station_id"] = serde_json::json!("ak:did_core:web:unconfigured.example");
+        reseal_delivery_original(&mut unknown_station);
         assert_target_rejected(
             &unknown_station,
             &holder,

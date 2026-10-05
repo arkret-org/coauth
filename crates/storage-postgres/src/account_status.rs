@@ -28,6 +28,30 @@ impl<'c> PgAccountStatusLedgerRepository<'c> {
         Ok(record)
     }
 
+    async fn lock_head(
+        &mut self,
+        authority: &str,
+        local_account_id: &str,
+    ) -> Result<(), DatabaseError> {
+        diesel::insert_into(account_status_ledger_heads::table)
+            .values((
+                account_status_ledger_heads::account_authority_id.eq(authority),
+                account_status_ledger_heads::local_account_id.eq(local_account_id),
+            ))
+            .on_conflict_do_nothing()
+            .execute(self.conn)
+            .await?;
+        account_status_ledger_heads::table
+            .filter(account_status_ledger_heads::account_authority_id.eq(authority))
+            .filter(account_status_ledger_heads::local_account_id.eq(local_account_id))
+            .select(account_status_ledger_heads::local_account_id)
+            .for_update()
+            .first::<String>(self.conn)
+            .await?;
+
+        Ok(())
+    }
+
     async fn current_locked(
         &mut self,
         authority: &str,
@@ -84,25 +108,11 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
             };
         }
 
-        diesel::insert_into(account_status_ledger_heads::table)
-            .values((
-                account_status_ledger_heads::account_authority_id
-                    .eq(record.account_authority_id.as_str()),
-                account_status_ledger_heads::local_account_id.eq(local_account_id.as_str()),
-            ))
-            .on_conflict_do_nothing()
-            .execute(self.conn)
-            .await?;
-        account_status_ledger_heads::table
-            .filter(
-                account_status_ledger_heads::account_authority_id
-                    .eq(record.account_authority_id.as_str()),
-            )
-            .filter(account_status_ledger_heads::local_account_id.eq(local_account_id.as_str()))
-            .select(account_status_ledger_heads::local_account_id)
-            .for_update()
-            .first::<String>(self.conn)
-            .await?;
+        self.lock_head(
+            record.account_authority_id.as_str(),
+            local_account_id.as_str(),
+        )
+        .await?;
 
         let current = self
             .current_locked(
@@ -167,6 +177,17 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
         account_authority_id: &str,
         local_account_id: &str,
     ) -> Result<Option<AccountStatusRecord>, Self::Error> {
+        self.current_locked(account_authority_id, local_account_id)
+            .await
+    }
+
+    async fn current_for_gate(
+        &mut self,
+        account_authority_id: &str,
+        local_account_id: &str,
+    ) -> Result<Option<AccountStatusRecord>, Self::Error> {
+        self.lock_head(account_authority_id, local_account_id)
+            .await?;
         self.current_locked(account_authority_id, local_account_id)
             .await
     }
@@ -256,6 +277,228 @@ mod tests {
             &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[0x52; 32]),
         )
         .unwrap()
+    }
+
+    // Exercises the real PostgreSQL serialization point, including the empty
+    // ledger case. A concurrent append must not invalidate a signed absence.
+    #[tokio::test]
+    async fn gate_stable_absence_blocks_first_append_until_transaction_finishes() {
+        let pool = crate::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL required; no opt-out for gate regression");
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+        let record = genesis_record(now);
+        let local =
+            coauth_data::LocalAccountId::new(format!("gate-empty-{}", uuid::Uuid::now_v7()))
+                .unwrap();
+        let mut gate = factory.create().await.unwrap();
+        assert!(
+            gate.account_status_ledger()
+                .current_for_gate(record.account_authority_id.as_str(), local.as_str(),)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let other_pool = pool.clone();
+        let other_record = record.clone();
+        let other_local = local.clone();
+        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+        let mut append = tokio::spawn(async move {
+            let factory = PgRepositoryFactory::new(other_pool);
+            let mut repo = factory.create().await.unwrap();
+            started_tx.send(()).unwrap();
+            let result = repo
+                .account_status_ledger()
+                .append(&other_local, &other_record)
+                .await
+                .unwrap();
+            repo.save().await.unwrap();
+            result
+        });
+        started_rx.await.unwrap();
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(100), &mut append)
+                .await
+                .is_err()
+        );
+        gate.save().await.unwrap();
+        assert!(matches!(
+            tokio::time::timeout(std::time::Duration::from_secs(5), append)
+                .await
+                .unwrap()
+                .unwrap(),
+            AccountStatusAppendOutcome::Appended
+        ));
+        let mut read = factory.create().await.unwrap();
+        assert_eq!(
+            read.account_status_ledger()
+                .current_for_gate(record.account_authority_id.as_str(), local.as_str(),)
+                .await
+                .unwrap(),
+            Some(record)
+        );
+        read.cancel().await.unwrap();
+    }
+
+    // Real durable reservation/commit replay after the ledger acquires a head.
+    // This proves original canonical bytes remain available, not a re-mint.
+    #[tokio::test]
+    async fn gate_exact_signed_replay_survives_new_status_head_and_changed_intent_refuses() {
+        use arkret_models_identity::agent_signer_evidence::{
+            AgentDetachedJws, ControllerAccountEligibility, ControllerAccountGateAttestation,
+            ControllerAccountGateBasis, ControllerAccountGateIssuanceResult,
+            ControllerAccountStatus,
+        };
+        use coauth_data::account_handoff::{
+            ControllerGateAttestationCommit, ControllerGateAttestationReserve,
+            NewControllerGateAttestationIssuance,
+        };
+        let pool = crate::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL required; no opt-out for gate regression");
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+        let record = genesis_record(now);
+        let request_id = arkret_wire::RequestId::new_v7_at(now.timestamp_millis() as u64);
+        let hash =
+            |byte: u8| Hash::new(format!("sha256:{}", format!("{byte:02x}").repeat(32))).unwrap();
+        let intent = NewControllerGateAttestationIssuance {
+            request_id: request_id.clone(),
+            canonical_intent_digest: hash(1),
+            principal_id: record.account_id.principal_id.clone(),
+            agent_authority_id: record.account_authority_id.clone(),
+            retained_until: now + chrono::Duration::days(7),
+            now,
+        };
+        let basis = ControllerAccountGateBasis::AccountBindingDefault {
+            binding_version: 1,
+            binding_receipt_digest: hash(2),
+        };
+        let basis_digest = Hash::new(
+            arkret_canonical::canonical_sha256(&serde_json::json!({
+                "principal_id":intent.principal_id,"accepted_id":intent.agent_authority_id,
+                "status":"active","basis":basis,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let mut gate = ControllerAccountGateAttestation {
+            schema: arkret_wire::NonEmptyString::new(
+                SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1.to_owned(),
+            )
+            .unwrap(),
+            principal_id: intent.principal_id.clone(),
+            eligibility: ControllerAccountEligibility::Active,
+            status: ControllerAccountStatus::Active,
+            basis,
+            basis_digest,
+            authority_id: intent.agent_authority_id.clone(),
+            verification_method: DidUrl::new(
+                "did:webvh:zrollbackauthority:auth.example#account-authority",
+            )
+            .unwrap(),
+            issued_at: now,
+            expires_at: now + chrono::Duration::minutes(5),
+            proof: AgentDetachedJws {
+                kind: arkret_wire::NonEmptyString::new("detached_jws".to_owned()).unwrap(),
+                jws: arkret_wire::NonEmptyString::new("pending".to_owned()).unwrap(),
+            },
+        };
+        let signer = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[0x52; 32]);
+        arkret_signatures::agent_evidence::sign_controller_account_gate_attestation(
+            &mut gate, &signer,
+        )
+        .unwrap();
+        arkret_signatures::agent_evidence::verify_controller_account_gate_attestation(
+            &gate,
+            &intent.principal_id,
+            &intent.agent_authority_id,
+            &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                bytes: signer.verifying_key().to_bytes().to_vec(),
+            },
+            now,
+        )
+        .unwrap();
+        let expires = gate.expires_at;
+        let bytes = arkret_canonical::canonical_json_bytes(&ControllerAccountGateIssuanceResult {
+            request_id,
+            controller_account_gate_attestation: gate,
+        })
+        .unwrap();
+        let digest = Hash::new(arkret_canonical::sha256_digest(&bytes)).unwrap();
+        let mut first = factory.create().await.unwrap();
+        assert!(matches!(
+            first
+                .account_handoff()
+                .reserve_controller_gate_attestation(intent.clone())
+                .await
+                .unwrap(),
+            ControllerGateAttestationReserve::Reserved(_)
+        ));
+        assert!(matches!(
+            first
+                .account_handoff()
+                .commit_controller_gate_attestation(
+                    &intent.request_id,
+                    &intent.canonical_intent_digest,
+                    &bytes,
+                    &digest,
+                    expires,
+                    now
+                )
+                .await
+                .unwrap(),
+            ControllerGateAttestationCommit::Committed(_)
+        ));
+        first.save().await.unwrap();
+        let local =
+            coauth_data::LocalAccountId::new(format!("gate-replay-{}", uuid::Uuid::now_v7()))
+                .unwrap();
+        let mut changed = factory.create().await.unwrap();
+        assert!(matches!(
+            changed
+                .account_status_ledger()
+                .append(&local, &record)
+                .await
+                .unwrap(),
+            AccountStatusAppendOutcome::Appended
+        ));
+        changed.save().await.unwrap();
+        let mut replay = factory.create().await.unwrap();
+        let ControllerGateAttestationReserve::Replay(original) = replay
+            .account_handoff()
+            .reserve_controller_gate_attestation(intent.clone())
+            .await
+            .unwrap()
+        else {
+            panic!("exact accepted intent must replay");
+        };
+        assert_eq!(
+            original.canonical_outcome.as_deref(),
+            Some(bytes.as_slice())
+        );
+        assert!(
+            replay
+                .account_status_ledger()
+                .current_for_gate(record.account_authority_id.as_str(), local.as_str())
+                .await
+                .unwrap()
+                .is_some()
+        );
+        replay.cancel().await.unwrap();
+        let mut wrong = factory.create().await.unwrap();
+        let mut other = intent;
+        other.canonical_intent_digest = hash(4);
+        assert!(matches!(
+            wrong
+                .account_handoff()
+                .reserve_controller_gate_attestation(other)
+                .await
+                .unwrap(),
+            ControllerGateAttestationReserve::Conflict(_)
+        ));
+        wrong.cancel().await.unwrap();
     }
 
     #[tokio::test]
