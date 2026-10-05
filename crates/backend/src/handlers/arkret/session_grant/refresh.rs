@@ -567,9 +567,21 @@ pub async fn refresh_session_grant(
             .iter()
             .map(|scope| scope.as_str().to_owned())
             .collect();
-        let scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
+        let mut scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
             refresh_proof_invalid("Agent session grant is missing its authorization scope binding")
         })?;
+        let controller = authorization.accountable_principal_id.clone();
+        let participation = crate::handlers::account::agents::fetch_agent_participation_overlay(
+            &http_client,
+            &arkret_config,
+            &prior_payload.account_id.principal_id,
+            &controller,
+        )
+        .await
+        .map_err(|rejection| {
+            ArkretRouteError::coded(rejection.http_status(), rejection.code(), rejection.code())
+        })?;
+        scope_details.insert("participation".to_owned(), participation);
         let session_public_key = serde_json::to_string(&verification.public_jwk)?;
         let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
         let new_material = mint_agent_session_grant(

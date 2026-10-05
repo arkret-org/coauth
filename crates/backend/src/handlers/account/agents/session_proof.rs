@@ -51,6 +51,47 @@ fn agent_session_refresh_request_digest(
 /// this regardless of the (human-oriented) `arkret.session_grant_ttl`.
 pub const AGENT_SESSION_MAX_TTL: chrono::Duration = chrono::Duration::minutes(15);
 
+/// Read the owning Station's private controller selection for a newly minted
+/// session only. These observations never authorize an action at a later cut.
+pub async fn fetch_agent_participation_overlay(
+    http_client: &reqwest::Client,
+    config: &ArkretConfig,
+    agent: &DidCoreId,
+    controller: &DidCoreId,
+) -> Result<serde_json::Value, AgentAuthRejection> {
+    use crate::services::peer_protocol_client::InternalAuthorityChannel;
+    let station = config
+        .owning_station()
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    let station_id = crate::services::station_trust::effective_audience_shared(station)
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    let channel = InternalAuthorityChannel::new(
+        &station.endpoint,
+        http_client,
+        station.internal_authority_shared_secret(),
+        station_id.clone(),
+    )
+    .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+    let accounts = (
+        arkret_wire::AccountId::new(agent.clone(), station_id.clone()),
+        arkret_wire::AccountId::new(controller.clone(), station_id),
+    );
+    let outcome: arkret_models_collaboration::governance::agent_participation::AgentParticipationOutcome = channel
+        .post_private_json("private_agent_participation_read", "/_soland/account-authority/agent-participation/read", &accounts, None)
+        .await.map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+    let mut scopes = BTreeSet::new();
+    if outcome.agent_id != agent.as_str()
+        || outcome
+            .agent_participation_entries
+            .iter()
+            .any(|e| e.validate().is_err() || !scopes.insert(e.scope.scope_key()))
+    {
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    }
+    serde_json::to_value(outcome.agent_participation_entries)
+        .map_err(|_| AgentAuthRejection::PolicyUnavailable)
+}
+
 /// Outcome of validating an `agent_key_proof` session-grant request.
 pub struct AgentSessionAuthorization {
     /// Agent principal DID the proof authenticated.
@@ -2417,5 +2458,78 @@ mod tests {
         ] {
             assert_ne!(changed, base);
         }
+    }
+}
+
+#[cfg(test)]
+mod participation_overlay_tests {
+    use wiremock::matchers::{body_json, header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn authenticated_owner_read_replaces_observation_and_rejects_wrong_agent() {
+        let server = MockServer::start().await;
+        let endpoint = server.uri().parse().unwrap();
+        let station = DidCoreId::new("ak:did_core:web:owner.example").unwrap();
+        crate::services::station_trust::shared().insert_for_test(&endpoint, station.as_str());
+        let config = ArkretConfig {
+            stations: vec![coauth_config::StationConfig {
+                name: "owner".into(),
+                endpoint,
+                internal_authority_shared_secret: Some(coauth_config::ClientSecret::Value(
+                    "owner-credential".into(),
+                )),
+                embedded_webvh_registration_bearer: None,
+                trust_domain: Some("ak:trust_domain:owner.example".into()),
+            }],
+            ..ArkretConfig::default()
+        };
+        let agent = DidCoreId::new("ak:did_core:web:agent.example").unwrap();
+        let controller = DidCoreId::new("ak:did_core:web:controller.example").unwrap();
+        let accounts = (
+            arkret_wire::AccountId::new(agent.clone(), station.clone()),
+            arkret_wire::AccountId::new(controller.clone(), station),
+        );
+        Mock::given(method("POST"))
+            .and(path("/_soland/account-authority/agent-participation/read"))
+            .and(header("authorization", "Bearer owner-credential"))
+            .and(body_json(&accounts))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(
+                    serde_json::json!({"agent_id":agent,"participation_entries":[]}),
+                ),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = reqwest::Client::new();
+        assert_eq!(
+            fetch_agent_participation_overlay(&client, &config, &agent, &controller)
+                .await
+                .unwrap(),
+            serde_json::json!([])
+        );
+        server.reset().await;
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(
+                serde_json::json!({"agent_id":controller,"participation_entries":[]}),
+            ))
+            .expect(1)
+            .mount(&server)
+            .await;
+        assert!(
+            fetch_agent_participation_overlay(&client, &config, &agent, &controller)
+                .await
+                .is_err()
+        );
+        let mut missing = config;
+        missing.stations[0].internal_authority_shared_secret = None;
+        assert!(
+            fetch_agent_participation_overlay(&client, &missing, &agent, &controller)
+                .await
+                .is_err()
+        );
     }
 }

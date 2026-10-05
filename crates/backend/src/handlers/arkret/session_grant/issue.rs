@@ -1172,7 +1172,7 @@ async fn issue_agent_key_proof_session_grant(
             ));
         }
     };
-    let authorization = match validate_agent_session_proof(
+    let mut authorization = match validate_agent_session_proof(
         &mut repo,
         &mut rng,
         &*clock,
@@ -1204,6 +1204,19 @@ async fn issue_agent_key_proof_session_grant(
     };
 
     let audience_id = body.proof.audience_id.clone();
+    let participation = crate::handlers::account::agents::fetch_agent_participation_overlay(
+        &http_client,
+        &arkret_config,
+        &authorization.agent_id,
+        &authorization.controller_principal_id,
+    )
+    .await
+    .map_err(|rejection| {
+        ArkretRouteError::coded(rejection.http_status(), rejection.code(), rejection.code())
+    })?;
+    authorization
+        .scope_details
+        .insert("participation".to_owned(), participation);
 
     // Controller lifecycle gate: a deactivated / suspended controller fails
     // closed (AKP-0008 §4.6). Resolve the controller's local user record when
