@@ -137,15 +137,43 @@ pub async fn issue_controller_gate_attestation(
     {
         return Err(not_found());
     }
-    let basis = default_basis_for_locked_head(
-        binding.binding_version,
-        binding.binding_receipt_digest.clone(),
-        &binding.account_id,
-        &binding.principal_control_realm_id,
-        &authority_id,
-        user.status,
-        current.as_ref(),
-    )?;
+    let basis = if current
+        .as_ref()
+        .is_none_or(|head| head.status_seq == 1 && head.previous_account_status_record_id.is_none())
+    {
+        default_basis_for_locked_head(
+            binding.binding_version,
+            binding.binding_receipt_digest.clone(),
+            &binding.account_id,
+            &binding.principal_control_realm_id,
+            &authority_id,
+            user.status,
+            current.as_ref(),
+        )?
+    } else {
+        let record = current.as_ref().ok_or_else(not_found)?;
+        if record.status != user.status {
+            return Err(not_found());
+        }
+        let source = repo
+            .account_status_ledger()
+            .issuer_source(
+                authority_id.as_str(),
+                local_account.as_str(),
+                record.account_status_record_id.as_str(),
+            )
+            .await?
+            .ok_or_else(indeterminate)?;
+        let digest =
+            crate::services::account_status_publication::verify_retained_account_status_source(
+                source, record, &binding,
+            )
+            .map_err(|_| indeterminate())?;
+        ControllerAccountGateBasis::AccountStatusRecord {
+            account_status_record_id: record.account_status_record_id.clone(),
+            status_record_digest: digest,
+        }
+    };
 
     let (status, eligibility) = controller_status(user.status);
     let authority_did = super::owning_station_did_for(&depot.arkret_config()?);
@@ -397,7 +425,7 @@ mod tests {
     }
 
     fn attestation() -> ControllerAccountGateAttestation {
-        ControllerAccountGateAttestation {
+        let mut gate = ControllerAccountGateAttestation {
             schema: NonEmptyString::new(
                 arkret_wire::SchemaId::CONTROLLER_ACCOUNT_GATE_ATTESTATION_V1.to_owned(),
             )
@@ -420,7 +448,9 @@ mod tests {
                     .unwrap(),
                 jws: NonEmptyString::new("pending".to_owned()).unwrap(),
             },
-        }
+        };
+        gate.basis_digest = gate.expected_basis_digest().unwrap();
+        gate
     }
 
     #[test]
@@ -562,23 +592,18 @@ mod controller_gate_http_regression {
         let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
-        // TestState's existing registered Station pin is zTestStation. Give
-        // the owning AA that same real DID identity, not another Station.
-        state.arkret_config.runtime_owning_station_identity =
-            coauth_config::RuntimeOwningStationIdentity::fixture(
-                "did:webvh:zTestStation:principal.example",
-            );
+        let authority = state.configure_status_issuer_webvh();
         const TOKEN: &str = "public-controller-gate-http-fixture-token";
         state.arkret_config.stations[0].internal_authority_shared_secret =
             Some(TOKEN.to_owned().into());
         assert_eq!(
             crate::handlers::arkret::station_internal_channel_caller(&state.arkret_config, TOKEN)
                 .as_deref(),
-            Some(TEST_STATION_AUDIENCE)
+            Some(authority.as_str())
         );
         assert_eq!(
             crate::handlers::arkret::owning_station_id_for(&state.arkret_config).as_str(),
-            TEST_STATION_AUDIENCE
+            authority.as_str()
         );
         let mut rng = state.rng();
         let mut setup_repo = state.repository().await.unwrap();
@@ -600,7 +625,7 @@ mod controller_gate_http_regression {
                 chrono::Utc::now().timestamp_millis() as u64
             ),
             principal_id: arkret_wire::DidCoreId::new(principal.clone()).unwrap(),
-            agent_authority_id: arkret_wire::DidCoreId::new(TEST_STATION_AUDIENCE).unwrap(),
+            agent_authority_id: authority.clone(),
         };
         let request = |body: &ControllerAccountGateIssuanceInput, credential: &str| {
             Request::post("/_coauth/internal/controller-gate-attestations")
@@ -641,7 +666,7 @@ mod controller_gate_http_regression {
         let current_user = transition.user().lookup(user.id).await.unwrap().unwrap();
         let binding = transition
             .principal_did()
-            .get_by_principal_id_and_audience(&principal, TEST_STATION_AUDIENCE)
+            .get_by_principal_id_and_audience(&principal, authority.as_str())
             .await
             .unwrap()
             .unwrap();
@@ -651,12 +676,13 @@ mod controller_gate_http_regression {
             state.clock.as_ref(),
             state.station_admin.as_ref(),
             &state.keyring,
-            TEST_STATION_AUDIENCE,
+            authority.as_str(),
             &current_user,
             &binding,
             AccountStatus::Suspended,
             None,
             chrono::Utc::now(),
+            &state.account_status_issuer_context(),
         )
         .await
         .unwrap();
@@ -679,12 +705,40 @@ mod controller_gate_http_regression {
             ),
             ..original_request.clone()
         };
+        let accepted_successor_request = fresh_request.clone();
+        let successor = state.request(request(&fresh_request, TOKEN)).await;
+        assert_eq!(successor.status(), StatusCode::OK);
+        let accepted_successor_bytes = successor.body().clone();
+        let successor: ControllerAccountGateIssuanceResult =
+            serde_json::from_str(successor.body()).unwrap();
+        assert!(matches!(
+            &successor.controller_account_gate_attestation.basis,
+            ControllerAccountGateBasis::AccountStatusRecord { .. }
+        ));
+        assert_eq!(
+            successor.controller_account_gate_attestation.eligibility,
+            ControllerAccountEligibility::Inactive
+        );
+        // A legacy record without its immutable original source is never
+        // upgraded by today's resolver or by possession of the signing key.
+        use diesel_async::RunQueryDsl as _;
+        let mut missing_source_conn = pool.get().await.unwrap();
+        diesel::sql_query("UPDATE account_status_records SET issuer_source=NULL WHERE account_authority_id=$1 AND local_account_id=$2 AND status_seq=2")
+            .bind::<diesel::sql_types::Text,_>(authority.as_str())
+            .bind::<diesel::sql_types::Text,_>(user.id.to_string())
+            .execute(&mut missing_source_conn).await.unwrap();
+        drop(missing_source_conn);
+        let fresh_request = ControllerAccountGateIssuanceInput {
+            request_id: arkret_wire::RequestId::new_v7_at(
+                chrono::Utc::now().timestamp_millis() as u64
+            ),
+            ..fresh_request
+        };
         let denied = state.request(request(&fresh_request, TOKEN)).await;
         assert_eq!(denied.status(), StatusCode::SERVICE_UNAVAILABLE);
         let problem: arkret_wire::problem_details::Problem =
             serde_json::from_str(denied.body()).unwrap();
         assert_eq!(problem.code(), arkret_wire::ErrorCode::FAILED_PRECONDITION);
-        use diesel_async::RunQueryDsl as _;
         #[derive(diesel::QueryableByName)]
         struct Rows {
             #[diesel(sql_type=diesel::sql_types::BigInt)]
@@ -702,5 +756,195 @@ mod controller_gate_http_regression {
         let replay = state.request(request(&original_request, TOKEN)).await;
         assert_eq!(replay.status(), StatusCode::OK);
         assert_eq!(replay.body(), &original_bytes);
+        let replay = state
+            .request(request(&accepted_successor_request, TOKEN))
+            .await;
+        assert_eq!(replay.status(), StatusCode::OK);
+        assert_eq!(replay.body(), &accepted_successor_bytes);
+        let changed_intent = ControllerAccountGateIssuanceInput {
+            principal_id: authority.clone(),
+            ..accepted_successor_request
+        };
+        let conflict = state.request(request(&changed_intent, TOKEN)).await;
+        assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn retained_original_successors_cover_six_statuses_and_resume_replays_exact_bytes() {
+        setup();
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required");
+        let mut state = TestState::from_pool_with_station(pool.clone())
+            .await
+            .unwrap();
+        let authority = state.configure_status_issuer_webvh();
+        const TOKEN: &str = "public-successor-gate-fixture-token";
+        state.arkret_config.stations[0].internal_authority_shared_secret =
+            Some(TOKEN.to_owned().into());
+        let mut rng = state.rng();
+        let mut repo = state.repository().await.unwrap();
+        let mut user = repo
+            .user()
+            .add(
+                &mut rng,
+                state.clock.as_ref(),
+                format!("successor-statuses-{}", unique_test_nonce()),
+            )
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+        let principal = state
+            .seed_principal_binding(&user, &format!("successor-six-{}", unique_test_nonce()))
+            .await;
+        let request = |body: &ControllerAccountGateIssuanceInput| {
+            Request::post("/_coauth/internal/controller-gate-attestations")
+                .header("Authorization", format!("Bearer {TOKEN}"))
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(body).unwrap())
+                .unwrap()
+        };
+        let mut original_outcomes = Vec::new();
+        for (index, status) in [
+            AccountStatus::Active,
+            AccountStatus::SoftLoggedOut,
+            AccountStatus::Locked,
+            AccountStatus::Suspended,
+            AccountStatus::Deactivated,
+            AccountStatus::Active,
+            AccountStatus::ErasurePending,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            if index > 0 {
+                let mut transaction = state.repository().await.unwrap();
+                let binding = transaction
+                    .principal_did()
+                    .get_by_principal_id_and_audience(&principal, authority.as_str())
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let publication =
+                    crate::services::account_status_publication::author_and_enqueue_transition(
+                        &mut transaction,
+                        &mut rng,
+                        state.clock.as_ref(),
+                        state.station_admin.as_ref(),
+                        &state.keyring,
+                        authority.as_str(),
+                        &user,
+                        &binding,
+                        status,
+                        None,
+                        state.clock.now(),
+                        &state.account_status_issuer_context(),
+                    )
+                    .await
+                    .unwrap();
+                let record = match &publication.body.publication {
+                    arkret_models_collaboration::account_lifecycle::AccountStatusPublication::Initial(value) => &value.record,
+                    _ => panic!("the existing publication producer must retain its signed original"),
+                };
+                let source = transaction
+                    .account_status_ledger()
+                    .issuer_source(
+                        authority.as_str(),
+                        &user.id.to_string(),
+                        record.account_status_record_id.as_str(),
+                    )
+                    .await
+                    .unwrap()
+                    .unwrap();
+                let full_digest = crate::services::account_status_publication::verify_retained_account_status_source(
+                    source.clone(), record, &binding).unwrap();
+                assert_eq!(
+                    full_digest,
+                    arkret_wire::Hash::new(arkret_canonical::canonical_sha256(record).unwrap())
+                        .unwrap()
+                );
+                // Mutating even the receipt preimage cannot become valid by
+                // retaining its former digest or by knowing the Record key.
+                let mut wrong_source = source;
+                wrong_source["binding_receipt_digest"] = serde_json::json!(
+                    arkret_wire::Hash::new(arkret_canonical::canonical_sha256(&false).unwrap())
+                        .unwrap()
+                );
+                assert!(crate::services::account_status_publication::verify_retained_account_status_source(
+                    wrong_source, record, &binding).is_err());
+                user = transaction
+                    .user()
+                    .patch(
+                        state.clock.as_ref(),
+                        user,
+                        UserPatch {
+                            status: Some(status),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+                    .unwrap();
+                transaction.save().await.unwrap();
+            }
+            let input = ControllerAccountGateIssuanceInput {
+                request_id: arkret_wire::RequestId::new_v7_at(
+                    chrono::Utc::now().timestamp_millis() as u64,
+                ),
+                principal_id: arkret_wire::DidCoreId::new(principal.clone()).unwrap(),
+                agent_authority_id: authority.clone(),
+            };
+            let response = state.request(request(&input)).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            let outcome: ControllerAccountGateIssuanceResult =
+                serde_json::from_str(response.body()).unwrap();
+            assert_eq!(
+                serde_json::to_value(outcome.controller_account_gate_attestation.status).unwrap(),
+                serde_json::to_value(status).unwrap()
+            );
+            assert_eq!(
+                outcome.controller_account_gate_attestation.eligibility,
+                if status == AccountStatus::Active {
+                    ControllerAccountEligibility::Active
+                } else {
+                    ControllerAccountEligibility::Inactive
+                }
+            );
+            assert_eq!(
+                matches!(
+                    outcome.controller_account_gate_attestation.basis,
+                    ControllerAccountGateBasis::AccountBindingDefault { .. }
+                ),
+                index == 0
+            );
+            let signer =
+                sdk_signing_key_from_seed_bytes(&state.keyring.account_authority_seed().unwrap());
+            arkret_signatures::agent_evidence::verify_controller_account_gate_attestation(
+                &outcome.controller_account_gate_attestation,
+                &input.principal_id,
+                &authority,
+                &arkret_signatures::PublicKeyMaterial::Ed25519Raw {
+                    bytes: signer.verifying_key().to_bytes().to_vec(),
+                },
+                outcome.controller_account_gate_attestation.issued_at,
+            )
+            .unwrap();
+            original_outcomes.push((input, response.body().clone()));
+        }
+        // Reopen a real repository and request every original ID after the
+        // mutable head is terminal: no original assertion is re-signed.
+        let mut reopened = state.repository().await.unwrap();
+        let last = reopened
+            .account_status_ledger()
+            .current_for_gate(authority.as_str(), &user.id.to_string())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(last.status, AccountStatus::ErasurePending);
+        reopened.cancel().await.unwrap();
+        for (input, bytes) in original_outcomes {
+            let replay = state.request(request(&input)).await;
+            assert_eq!(replay.status(), StatusCode::OK);
+            assert_eq!(replay.body(), &bytes);
+        }
     }
 }

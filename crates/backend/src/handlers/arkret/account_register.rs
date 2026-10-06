@@ -590,6 +590,10 @@ pub async fn account_register_endpoint(
         };
         let account_status_connector = depot.station()?;
         let account_authority_id = owning_station_id_for(&depot.arkret_config()?);
+        let issuer_context =
+            crate::services::account_status_publication::AccountStatusIssuerContext::from_depot(
+                depot,
+            )?;
         let initial_status_publication = author_and_enqueue_transition(
             &mut repo,
             &mut *rng,
@@ -602,6 +606,7 @@ pub async fn account_register_endpoint(
             AccountStatus::Active,
             None,
             now,
+            &issuer_context,
         )
         .await
         .map_err(|error| failed_precondition(error.to_string()))?;

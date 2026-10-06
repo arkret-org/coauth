@@ -108,6 +108,8 @@ pub async fn deactivate_user(
     let (requester, repo) =
         crate::handlers::account::authenticated_requester(req, depot, &clock).await?;
 
+    let issuer_context =
+        crate::services::account_status_publication::AccountStatusIssuerContext::from_depot(depot)?;
     let status = match deactivate_current_account(
         repo,
         &requester,
@@ -120,6 +122,7 @@ pub async fn deactivate_user(
         service_id.as_str(),
         input.password,
         input.principal_erase,
+        &issuer_context,
     )
     .await
     .map_err(map_account_profile_error)?

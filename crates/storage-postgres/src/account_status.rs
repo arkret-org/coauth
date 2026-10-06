@@ -172,6 +172,77 @@ impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
         Ok(AccountStatusAppendOutcome::Appended)
     }
 
+    async fn append_with_issuer_source(
+        &mut self,
+        local_account_id: &LocalAccountId,
+        record: &AccountStatusRecord,
+        source: &serde_json::Value,
+    ) -> Result<AccountStatusAppendOutcome, Self::Error> {
+        if source.get("record_id").and_then(serde_json::Value::as_str)
+            != Some(record.account_status_record_id.as_str())
+        {
+            return Err(DatabaseError::invalid_operation());
+        }
+        let result = self.append(local_account_id, record).await?;
+        match &result {
+            AccountStatusAppendOutcome::Appended => {
+                let affected = diesel::update(
+                    account_status_records::table
+                        .filter(
+                            account_status_records::account_authority_id
+                                .eq(record.account_authority_id.as_str()),
+                        )
+                        .filter(
+                            account_status_records::local_account_id.eq(local_account_id.as_str()),
+                        )
+                        .filter(
+                            account_status_records::record_id
+                                .eq(record.account_status_record_id.as_str()),
+                        )
+                        .filter(account_status_records::issuer_source.is_null()),
+                )
+                .set(account_status_records::issuer_source.eq(Some(source.clone())))
+                .execute(self.conn)
+                .await?;
+                if affected != 1 {
+                    return Err(DatabaseError::invalid_operation());
+                }
+            }
+            AccountStatusAppendOutcome::Duplicate => {
+                // Exact replay has to retain the ORIGINAL source, never mint a replacement.
+                let held = self
+                    .issuer_source(
+                        record.account_authority_id.as_str(),
+                        local_account_id.as_str(),
+                        record.account_status_record_id.as_str(),
+                    )
+                    .await?;
+                if held.as_ref() != Some(source) {
+                    return Err(DatabaseError::invalid_operation());
+                }
+            }
+            AccountStatusAppendOutcome::Conflict { .. } => {}
+        }
+        Ok(result)
+    }
+
+    async fn issuer_source(
+        &mut self,
+        authority: &str,
+        local_account_id: &str,
+        record_id: &str,
+    ) -> Result<Option<serde_json::Value>, Self::Error> {
+        let value = account_status_records::table
+            .filter(account_status_records::account_authority_id.eq(authority))
+            .filter(account_status_records::local_account_id.eq(local_account_id))
+            .filter(account_status_records::record_id.eq(record_id))
+            .select(account_status_records::issuer_source)
+            .first::<Option<serde_json::Value>>(self.conn)
+            .await
+            .optional()?;
+        Ok(value.flatten())
+    }
+
     async fn current(
         &mut self,
         account_authority_id: &str,

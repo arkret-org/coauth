@@ -68,7 +68,7 @@ mod preferred_language;
 mod rate_limit;
 mod session;
 #[cfg(test)]
-mod test_utils;
+pub(crate) mod test_utils;
 
 static METER: LazyLock<Meter> = LazyLock::new(|| {
     let scope = opentelemetry::InstrumentationScope::builder(env!("CARGO_PKG_NAME"))

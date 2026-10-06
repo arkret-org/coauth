@@ -15,8 +15,8 @@ use coauth_data::personal::session::PersonalSessionOwner;
 use coauth_data::personal::{PersonalAccessTokenRepository, PersonalSessionRepository};
 use coauth_data::user::UserRepository;
 use coauth_data::{
-    AppVersion, BoxRepository, RepositoryAccess, RepositoryError, RepositoryFactory, SiteConfig,
-    SystemClock, TokenType, UrlBuilder,
+    AppVersion, BoxRepository, Clock as _, RepositoryAccess, RepositoryError, RepositoryFactory,
+    SiteConfig, SystemClock, TokenType, UrlBuilder,
 };
 use coauth_keyring::{Encrypter, JsonWebKey, JsonWebKeySet, Keyring, PrivateKey};
 use coauth_messaging::NotificationCenter;
@@ -577,6 +577,8 @@ impl TestState {
 
         let queue_worker = Arc::new(tokio::sync::Mutex::new(queue_worker));
 
+        let status_issuer_fixture = crate::services::account_status_publication::issuer_source::fixtures::web_issuer_resolver(
+            &arkret_config, &keyring);
         Ok(Self {
             repository_factory: PgRepositoryFactory::new(pool),
             templates,
@@ -595,7 +597,7 @@ impl TestState {
             clock,
             rng,
             http_client,
-            did_resolver_service_override: None,
+            did_resolver_service_override: Some(status_issuer_fixture),
             task_tracker,
             queue_worker,
             cancellation_drop_guard: Arc::new(shutdown_token.drop_guard()),
@@ -855,12 +857,41 @@ impl TestState {
         // by this deployment's verified owning Station identity.
         let account_authority_did =
             crate::handlers::arkret::owning_station_did_for(&self.arkret_config).to_string();
-        let input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
+        let (_, audience) = self
+            .station_admin
+            .as_ref()
+            .account_status_destination()
+            .unwrap();
+        let mut input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
             &account_authority_did,
-            TEST_STATION_AUDIENCE,
+            audience.as_str(),
             principal_id.clone(),
             key_log_head,
         );
+        // This fixture's own designated AA key, method and original receipt
+        // must all agree with its accepted issuer document.
+        input.binding_receipt.account_subject =
+            crate::handlers::arkret::account_subject(&audience, user.id).unwrap();
+        input.binding_receipt.issued_at = self.clock.now();
+        input.binding_receipt.proof.created_at = self.clock.now();
+        input.binding_receipt.proof.verification_method =
+            arkret_wire::DidUrl::new(format!("{account_authority_did}#account-authority")).unwrap();
+        input.binding_receipt.proof.payload_digest =
+            input.binding_receipt.canonical_payload_digest().unwrap();
+        input.binding_receipt.proof.jws = arkret_signatures::sign_ed25519_detached_jws(
+            &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
+                &self.keyring.account_authority_seed().unwrap(),
+            ),
+            &input
+                .binding_receipt
+                .canonical_proof_binding_bytes()
+                .unwrap(),
+        )
+        .unwrap();
+        input.binding_receipt_digest = arkret_wire::Hash::new(
+            arkret_canonical::canonical_sha256(&input.binding_receipt).unwrap(),
+        )
+        .unwrap();
 
         let mut rng = self.rng();
         let mut repo = self.repository().await.unwrap();
@@ -885,12 +916,81 @@ impl TestState {
             arkret_models_collaboration::objects::account_status::AccountStatus::Active,
             None,
             chrono::Utc::now(),
+            &self.account_status_issuer_context(),
         )
         .await
         .unwrap();
         repo.save().await.unwrap();
 
         principal_id
+    }
+
+    /// Configure a real service inception and independently verified history.
+    /// All Account and registered peer coordinates derive from that original.
+    pub fn configure_status_issuer_webvh(&mut self) -> arkret_wire::DidCoreId {
+        self.clock = Arc::new(MockClock::new(chrono::Utc::now()));
+        let endpoint: url::Url = format!("https://status-issuer-{}.example/", unique_test_nonce())
+            .parse()
+            .unwrap();
+        use rand_core_10::SeedableRng as _;
+        let mut rng = rand_chacha_10::ChaCha20Rng::from_seed([0x47; 32]);
+        let prepared = arkret_signatures::webvh::prepare_service_inception_with_did_key_seed(
+            &mut rng,
+            &arkret_signatures::webvh::ServiceInceptionInput {
+                principal_endpoint: &endpoint,
+                local_id: "service",
+                also_known_as: &[],
+                version_time: arkret_canonical::normalize_timestamp_canonical(self.clock.now()),
+                did_key_fragment: Some("account-authority"),
+            },
+            &self.keyring.account_authority_seed().unwrap(),
+        )
+        .unwrap();
+        self.arkret_config.runtime_owning_station_identity =
+            coauth_config::RuntimeOwningStationIdentity::fixture(&prepared.did);
+        self.arkret_config.stations[0].endpoint = endpoint.clone();
+        self.arkret_config.owning_station = Some(self.arkret_config.stations[0].name.clone());
+        self.arkret_config.identity_registry = Some(coauth_config::IdentityRegistryConfig {
+            resolver: endpoint.join("resolver").unwrap(),
+            proof_required_for_pairwise: true,
+        });
+        let authority = crate::handlers::arkret::owning_station_id_for(&self.arkret_config);
+        crate::services::station_trust::shared().insert_for_test(&endpoint, authority.as_str());
+        self.did_resolver_service_override = Some(
+            crate::services::account_status_publication::issuer_source::fixtures::webvh_issuer_resolver(
+                &self.arkret_config, &serde_json::to_vec(&prepared.log_entry).unwrap(),
+            ),
+        );
+        self.station_admin = Arc::new(DbConnectorAdmin::new(
+            self.site_config.server_name.clone(),
+            self.repository_factory.clone().boxed(),
+            self.arkret_config.clone(),
+            self.http_client.clone(),
+        ));
+        assert_eq!(
+            self.station_admin
+                .as_ref()
+                .account_status_destination()
+                .unwrap(),
+            (
+                self.arkret_config.stations[0].name.clone(),
+                authority.clone()
+            )
+        );
+        authority
+    }
+
+    /// Uses the same real request dependencies as the test router injection.
+    pub fn account_status_issuer_context(
+        &self,
+    ) -> crate::services::account_status_publication::AccountStatusIssuerContext {
+        crate::services::account_status_publication::AccountStatusIssuerContext::from_components(
+            self.http_client.clone(), self.url_builder.clone(), self.arkret_config.clone(),
+            self.did_resolver_service_override.clone().unwrap_or_else(||
+                crate::services::account_status_publication::issuer_source::fixtures::web_issuer_resolver(
+                    &self.arkret_config, &self.keyring)),
+            crate::services::did_binding::shared_verified_did_binding_store(),
+        )
     }
 
     /// Returns a new random number generator.

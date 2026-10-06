@@ -31,6 +31,23 @@ repository_impl! {
             record: &AccountStatusRecord,
         ) -> Result<AccountStatusAppendOutcome, Self::Error>;
 
+        /// Append a NEW issuer record with immutable accepted signing provenance.
+        /// Duplicate originals never backfill missing sources from today's DID.
+        async fn append_with_issuer_source(
+            &mut self,
+            local_account_id: &LocalAccountId,
+            record: &AccountStatusRecord,
+            source: &serde_json::Value,
+        ) -> Result<AccountStatusAppendOutcome, Self::Error>;
+
+        /// Read the original private source retained with this exact record.
+        async fn issuer_source(
+            &mut self,
+            account_authority_id: &str,
+            local_account_id: &str,
+            record_id: &str,
+        ) -> Result<Option<serde_json::Value>, Self::Error>;
+
         /// Return the current head.
         async fn current(
             &mut self,

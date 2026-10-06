@@ -48,6 +48,7 @@ pub async fn deactivate_current_account(
     service_id: &str,
     password: Option<String>,
     principal_erase: bool,
+    issuer_context: &crate::services::account_status_publication::AccountStatusIssuerContext,
 ) -> Result<DeactivateAccountOutcome, AccountProfileError> {
     let Some(browser_session) = requester.browser_session() else {
         return Err(AccountProfileError::BrowserSessionRequired);
@@ -105,6 +106,7 @@ pub async fn deactivate_current_account(
         arkret_models_collaboration::objects::account_status::AccountStatus::Deactivated,
         None,
         clock.now(),
+        issuer_context,
     )
     .await
     .map_err(|error| AccountProfileError::AccountStatusPublication(error.to_string()))?;

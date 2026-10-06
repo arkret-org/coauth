@@ -1,5 +1,8 @@
 //! Atomic Account Authority issuer-ledger and durable publication boundary.
 
+pub(crate) mod issuer_source;
+pub use issuer_source::{AccountStatusIssuerContext, verify_retained_account_status_source};
+
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusInitialPublication, AccountStatusPublication, AccountStatusPublicationRequestBody,
 };
@@ -53,7 +56,8 @@ pub async fn author_and_enqueue_transition(
     binding: &PrincipalDidBinding,
     target_status: AccountStatus,
     reason_code: Option<String>,
-    now: chrono::DateTime<chrono::Utc>,
+    _requested_at: chrono::DateTime<chrono::Utc>,
+    issuer_context: &AccountStatusIssuerContext,
 ) -> Result<AccountStatusPublicationPlan, AccountStatusPublicationError> {
     let (destination_name, audience) = station
         .account_status_destination()
@@ -72,10 +76,39 @@ pub async fn author_and_enqueue_transition(
     }
     let local_account_id = LocalAccountId::new(user.id.to_string())
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    // Fetch/accept only a NEW author's known AA source before acquiring ledger locks.
+    let issuer_source = issuer_context
+        .prepare(repo, keyring, &account_authority_id, binding, now)
+        .await
+        .map_err(AccountStatusPublicationError::InvalidBody)?;
     let current = repo
         .account_status_ledger()
-        .current(account_authority_id.as_str(), local_account_id.as_str())
+        .current_for_gate(account_authority_id.as_str(), local_account_id.as_str())
         .await?;
+    // Match the Gate's stable head -> user -> binding order and reject a
+    // captured authoring tuple changed during accepted-source resolution.
+    let locked_user = repo.user().lookup_for_gate(user.id).await?.ok_or_else(|| {
+        AccountStatusPublicationError::InvalidBody("account_status_user_missing".into())
+    })?;
+    let locked_binding = repo
+        .principal_did()
+        .get_by_principal_id_and_audience_for_gate(
+            binding.principal_id.as_str(),
+            binding.audience_id.as_str(),
+        )
+        .await?
+        .ok_or_else(|| {
+            AccountStatusPublicationError::InvalidBody("account_status_binding_missing".into())
+        })?;
+    if locked_user.status != user.status || locked_binding != *binding {
+        return Err(AccountStatusPublicationError::InvalidBody(
+            "account_status_source_cut_changed".into(),
+        ));
+    }
+    issuer_context
+        .ensure_current_authority(&account_authority_id)
+        .map_err(AccountStatusPublicationError::InvalidBody)?;
     if let Some(head) = &current {
         if head.status != user.status {
             return Err(AccountStatusPublicationError::InvalidBody(
@@ -93,6 +126,7 @@ pub async fn author_and_enqueue_transition(
         ));
     }
 
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let unsigned = UnsignedAccountStatusRecord {
         schema: SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
         account_authority_id: account_authority_id.clone(),
@@ -123,9 +157,15 @@ pub async fn author_and_enqueue_transition(
     )
     .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
 
+    issuer_context
+        .ensure_current_authority(&account_authority_id)
+        .map_err(AccountStatusPublicationError::InvalidBody)?;
+    let retained_source = issuer_source
+        .retain_for(&record, binding)
+        .map_err(AccountStatusPublicationError::InvalidBody)?;
     match repo
         .account_status_ledger()
-        .append(&local_account_id, &record)
+        .append_with_issuer_source(&local_account_id, &record, &retained_source)
         .await?
     {
         AccountStatusAppendOutcome::Appended => {}
@@ -141,6 +181,9 @@ pub async fn author_and_enqueue_transition(
         }
     }
 
+    issuer_context
+        .ensure_current_authority(&account_authority_id)
+        .map_err(AccountStatusPublicationError::InvalidBody)?;
     let idempotency_key = format!("account-status:{}", record.account_status_record_id);
     let body = AccountStatusPublicationRequestBody {
         publication: AccountStatusPublication::Initial(AccountStatusInitialPublication { record }),
@@ -164,6 +207,9 @@ pub async fn author_and_enqueue_transition(
         plan.body.clone(),
     )
     .await?;
+    issuer_context
+        .ensure_current_authority(&account_authority_id)
+        .map_err(AccountStatusPublicationError::InvalidBody)?;
     Ok(plan)
 }
 

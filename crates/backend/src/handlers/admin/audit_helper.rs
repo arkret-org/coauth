@@ -31,6 +31,7 @@ pub use coauth_admin_types::AuditSignatureStatus;
 /// Runtime signing inputs for admin audit helpers.
 #[derive(Clone, Copy)]
 pub struct AdminAuditSigning<'a> {
+    pub issuer_context: &'a crate::services::account_status_publication::AccountStatusIssuerContext,
     pub keyring: &'a Keyring,
     pub service_id: &'a DidCoreId,
     pub service_did: &'a Did,

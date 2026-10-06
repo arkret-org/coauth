@@ -823,7 +823,10 @@ pub async fn execute(
     let keyring = depot.keyring()?;
     let service_id = owning_station_id_for(&arkret_config);
     let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
+    let issuer_context =
+        crate::services::account_status_publication::AccountStatusIssuerContext::from_depot(depot)?;
     let audit_signing = AdminAuditSigning {
+        issuer_context: &issuer_context,
         keyring: &keyring,
         service_id: &service_id,
         service_did: &service_did,

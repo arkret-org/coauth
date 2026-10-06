@@ -10,6 +10,7 @@ diesel::table! {
         status_seq -> Int8,
         record_id -> Text,
         record -> Jsonb,
+        issuer_source -> Nullable<Jsonb>,
         issued_at -> Timestamptz,
     }
 }

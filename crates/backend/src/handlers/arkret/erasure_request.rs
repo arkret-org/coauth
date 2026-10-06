@@ -127,6 +127,8 @@ pub async fn request_account_erasure(
         }
     };
 
+    let issuer_context =
+        crate::services::account_status_publication::AccountStatusIssuerContext::from_depot(depot)?;
     let accepted = accept_erasure_request(
         &mut repo,
         &mut *rng,
@@ -137,6 +139,7 @@ pub async fn request_account_erasure(
         &user,
         last_authenticated_at,
         &body,
+        &issuer_context,
     )
     .await;
     match accepted {
@@ -172,6 +175,7 @@ pub(crate) async fn accept_erasure_request(
     user: &User,
     last_authenticated_at: Option<DateTime<Utc>>,
     body: &AccountRequestErasureRequestBody,
+    issuer_context: &crate::services::account_status_publication::AccountStatusIssuerContext,
 ) -> Result<Vec<u8>, ArkretRouteError> {
     let request_digest = body
         .canonical_request_digest()
@@ -326,6 +330,7 @@ pub(crate) async fn accept_erasure_request(
         AccountStatus::ErasurePending,
         Some(SELF_ERASURE_REASON_CODE.to_owned()),
         now,
+        issuer_context,
     )
     .await
     .map_err(|error| {
@@ -486,6 +491,7 @@ mod tests {
             status,
             None,
             Utc::now(),
+            &state.account_status_issuer_context(),
         )
         .await
         .unwrap();
@@ -525,6 +531,7 @@ mod tests {
             user,
             last_authenticated_at,
             body,
+            &state.account_status_issuer_context(),
         )
         .await;
         match &result {

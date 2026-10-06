@@ -342,6 +342,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         AccountStatus::Active => {}
         AccountStatus::Deactivated => {
             let station = depot.station()?;
+            let issuer_context = crate::services::account_status_publication::AccountStatusIssuerContext::from_depot(depot)?;
             let plan = author_and_enqueue_transition(
                 &mut repo,
                 &mut rng,
@@ -354,6 +355,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 AccountStatus::Active,
                 Some("pcr_recovery_completed".to_owned()),
                 now,
+                &issuer_context,
             )
             .await
             .map_err(account_status_reactivation_failed)?;

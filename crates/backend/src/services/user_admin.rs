@@ -130,6 +130,7 @@ pub async fn patch_user(
             next_status,
             None,
             clock.now(),
+            signing.issuer_context,
         )
         .await
         .map_err(|error| {
@@ -460,5 +461,62 @@ mod tests {
         ));
         validate_admin_status_transition(AccountStatus::Deactivated, AccountStatus::ErasurePending)
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn unchanged_status_patch_without_binding_needs_no_issuer_record_or_source() {
+        use crate::handlers::test_utils::{TestState, setup, unique_test_nonce};
+        setup();
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required");
+        let state = TestState::from_pool((*pool).clone()).await.unwrap();
+        let mut rng = state.rng();
+        let mut repo = state.repository().await.unwrap();
+        let user = repo
+            .user()
+            .add(
+                &mut rng,
+                state.clock.as_ref(),
+                format!("unchanged-status-{}", unique_test_nonce()),
+            )
+            .await
+            .unwrap();
+        let updated = patch_user(
+            &mut repo,
+            &mut rng,
+            state.clock.as_ref(),
+            state.station_admin.as_ref(),
+            None,
+            user.id,
+            AdminUserPatch {
+                status: Some(AccountStatus::Active),
+                ..Default::default()
+            },
+            false,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(updated.status, AccountStatus::Active);
+        assert!(
+            repo.principal_did()
+                .get_for_user_and_audience(
+                    &updated,
+                    crate::handlers::test_utils::TEST_STATION_AUDIENCE
+                )
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let authority = crate::handlers::arkret::owning_station_id_for(&state.arkret_config);
+        assert!(
+            repo.account_status_ledger()
+                .current_for_gate(authority.as_str(), &updated.id.to_string())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        repo.cancel().await.unwrap();
     }
 }

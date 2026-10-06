@@ -181,6 +181,7 @@ CREATE TABLE public.account_status_records (
     status_seq bigint NOT NULL CHECK (status_seq >= 1),
     record_id text NOT NULL,
     record jsonb NOT NULL,
+    issuer_source jsonb,
     issued_at timestamp with time zone NOT NULL,
     PRIMARY KEY (account_authority_id, local_account_id, status_seq),
     UNIQUE (record_id)
