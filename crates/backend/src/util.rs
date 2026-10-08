@@ -535,6 +535,19 @@ pub async fn diesel_pool_from_config(
     Ok(pool)
 }
 
+fn is_transport_connection_failure(error: &diesel::ConnectionError) -> bool {
+    match error {
+        diesel::ConnectionError::BadConnection(reason) => reason == "error connecting to server",
+        diesel::ConnectionError::CouldntSetupConfiguration(
+            diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UnableToSendCommand,
+                information,
+            ),
+        ) => information.message() == "error connecting to server",
+        _ => false,
+    }
+}
+
 /// Retry only a transport failure while establishing a new connection. No
 /// application SQL has run, and the pool's existing create deadline bounds
 /// the complete attempt. Authentication and configuration errors propagate.
@@ -545,9 +558,7 @@ where
 {
     for attempt in 0..3 {
         match connect().await {
-            Err(diesel::ConnectionError::BadConnection(ref reason))
-                if reason == "error connecting to server" && attempt < 2 =>
-            {
+            Err(ref error) if is_transport_connection_failure(error) && attempt < 2 => {
                 tracing::warn!(
                     attempt = attempt + 1,
                     "Database transport connection failed before SQL; retrying"
@@ -682,6 +693,56 @@ mod tests {
     use zeroize::Zeroizing;
 
     use super::*;
+
+    #[tokio::test]
+    async fn database_transport_connection_classifies_actual_driver_connect_failure() {
+        // Reserve a port without listening, so the actual driver must fail
+        // before PostgreSQL startup or any application statement.
+        let socket = tokio::net::TcpSocket::new_v4().unwrap();
+        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+        let port = socket.local_addr().unwrap().port();
+        let url = format!("postgresql://arkret@127.0.0.1:{port}/arkret");
+        let error = match AsyncPgConnection::establish(&url).await {
+            Ok(_) => panic!("a reserved non-listening port cannot accept PostgreSQL"),
+            Err(error) => error,
+        };
+        assert!(is_transport_connection_failure(&error));
+    }
+
+    #[tokio::test]
+    async fn database_transport_connection_recovers_wrapped_connect_failure_only() {
+        let mut attempts = 0;
+        let result = retry_transport_connection(|| {
+            attempts += 1;
+            std::future::ready(if attempts == 2 {
+                Ok(7_u8)
+            } else {
+                Err(diesel::ConnectionError::CouldntSetupConfiguration(
+                    diesel::result::Error::DatabaseError(
+                        diesel::result::DatabaseErrorKind::UnableToSendCommand,
+                        Box::new("error connecting to server".to_owned()),
+                    ),
+                ))
+            })
+        })
+        .await
+        .unwrap();
+        assert_eq!(result, 7);
+        assert_eq!(attempts, 2);
+        let mut attempts = 0;
+        let result: diesel::ConnectionResult<()> = retry_transport_connection(|| {
+            attempts += 1;
+            std::future::ready(Err(diesel::ConnectionError::CouldntSetupConfiguration(
+                diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::Unknown,
+                    Box::new("error connecting to server".to_owned()),
+                ),
+            )))
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(attempts, 1);
+    }
 
     #[tokio::test]
     async fn database_transport_connection_retries_only_before_sql_and_is_bounded() {
