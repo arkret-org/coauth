@@ -1,8 +1,6 @@
 //! Atomic Account Authority issuer-ledger and durable publication boundary.
 
 pub(crate) mod issuer_source;
-pub use issuer_source::{AccountStatusIssuerContext, verify_retained_account_status_source};
-
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusInitialPublication, AccountStatusPublication, AccountStatusPublicationRequestBody,
 };
@@ -16,6 +14,7 @@ use coauth_data::{
     AccountStatusAppendOutcome, BoxRepository, Clock, LocalAccountId, PrincipalDidBinding,
     RepositoryAccess as _, RepositoryError, User,
 };
+pub use issuer_source::{AccountStatusIssuerContext, verify_retained_account_status_source};
 use rand_core::RngCore;
 use thiserror::Error;
 
@@ -144,7 +143,6 @@ pub async fn author_and_enqueue_transition(
         reason_code,
         reason: None,
         issued_at: now,
-        effective_at: now,
         expires_at: None,
     };
     let signing_seed = keyring

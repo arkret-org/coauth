@@ -339,7 +339,6 @@ mod tests {
             reason_code: None,
             reason: None,
             issued_at: now,
-            effective_at: now,
             expires_at: None,
         };
         arkret_signatures::account_status::sign_account_status_record(
