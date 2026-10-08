@@ -481,7 +481,6 @@ mod tests {
                     reason_code: None,
                     reason: None,
                     issued_at: now,
-                    effective_at: now,
                     expires_at: None,
                 },
                 DidUrl::new("did:web:authority.example#account-status").unwrap(),
