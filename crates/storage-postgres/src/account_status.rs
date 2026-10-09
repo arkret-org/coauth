@@ -417,7 +417,7 @@ mod tests {
     async fn gate_exact_signed_replay_survives_new_status_head_and_changed_intent_refuses() {
         use arkret_models_identity::agent_signer_evidence::{
             AgentDetachedJws, ControllerAccountEligibility, ControllerAccountGateAttestation,
-            ControllerAccountGateBasis, ControllerAccountGateIssuanceResult,
+            ControllerAccountGateBasis, ControllerAccountGateIssuanceOutcome,
             ControllerAccountStatus,
         };
         use coauth_data::account_handoff::{
@@ -491,7 +491,7 @@ mod tests {
         )
         .unwrap();
         let expires = gate.expires_at;
-        let bytes = arkret_canonical::canonical_json_bytes(&ControllerAccountGateIssuanceResult {
+        let bytes = arkret_canonical::canonical_json_bytes(&ControllerAccountGateIssuanceOutcome {
             request_id,
             controller_account_gate_attestation: gate,
         })

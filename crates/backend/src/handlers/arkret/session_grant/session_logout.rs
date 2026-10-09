@@ -1,5 +1,5 @@
 use arkret_models_collaboration::session_grants::{
-    AuthSessionTerminationInput, AuthSessionTerminationResult,
+    AuthSessionTerminationInput, AuthSessionTerminationOutcome,
 };
 use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
@@ -15,7 +15,7 @@ use crate::handlers::arkret::*;
 pub async fn logout_auth_session(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<AuthSessionTerminationResult>, ArkretRouteError> {
+) -> Result<Json<AuthSessionTerminationOutcome>, ArkretRouteError> {
     let caller_service_id = require_auth_session_logout_service_caller(req, depot)?;
 
     let body: AuthSessionTerminationInput = req
@@ -74,7 +74,7 @@ async fn terminate_auth_side_session_by_grant_jwt(
     depot: &Depot,
     caller_service_id: &str,
     grant_jwt: &str,
-) -> Result<AuthSessionTerminationResult, ArkretRouteError> {
+) -> Result<AuthSessionTerminationOutcome, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
@@ -215,8 +215,8 @@ async fn terminate_auth_side_session_by_grant_jwt(
     Ok(success_outcome())
 }
 
-fn success_outcome() -> AuthSessionTerminationResult {
-    AuthSessionTerminationResult {
+fn success_outcome() -> AuthSessionTerminationOutcome {
+    AuthSessionTerminationOutcome {
         grant_chain_terminated: true,
         auth_session_logged_out: true,
     }

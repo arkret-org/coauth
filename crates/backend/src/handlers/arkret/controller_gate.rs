@@ -4,7 +4,7 @@ use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::agent_signer_evidence::{
     AgentDetachedJws, ControllerAccountEligibility, ControllerAccountGateAttestation,
     ControllerAccountGateBasis, ControllerAccountGateIssuanceInput,
-    ControllerAccountGateIssuanceResult, ControllerAccountStatus,
+    ControllerAccountGateIssuanceOutcome, ControllerAccountStatus,
 };
 use arkret_wire::{DidUrl, NonEmptyString};
 use chrono::{Duration, Timelike as _};
@@ -222,7 +222,7 @@ pub async fn issue_controller_gate_attestation(
     };
     let sdk_signing_key = sdk_signing_key_from_seed_bytes(&signing_seed);
     sign_controller_gate_with_sdk(&mut attestation, &sdk_signing_key)?;
-    let outcome = ControllerAccountGateIssuanceResult {
+    let outcome = ControllerAccountGateIssuanceOutcome {
         request_id: request.request_id.clone(),
         controller_account_gate_attestation: attestation,
     };
@@ -640,7 +640,7 @@ mod controller_gate_http_regression {
         let first = state.request(request(&original_request, TOKEN)).await;
         assert_eq!(first.status(), StatusCode::OK);
         let original_bytes = first.body().clone();
-        let accepted: ControllerAccountGateIssuanceResult =
+        let accepted: ControllerAccountGateIssuanceOutcome =
             serde_json::from_str(&original_bytes).unwrap();
         assert_eq!(accepted.request_id, original_request.request_id);
         assert!(matches!(
@@ -708,7 +708,7 @@ mod controller_gate_http_regression {
         let successor = state.request(request(&fresh_request, TOKEN)).await;
         assert_eq!(successor.status(), StatusCode::OK);
         let accepted_successor_bytes = successor.body().clone();
-        let successor: ControllerAccountGateIssuanceResult =
+        let successor: ControllerAccountGateIssuanceOutcome =
             serde_json::from_str(successor.body()).unwrap();
         assert!(matches!(
             &successor.controller_account_gate_attestation.basis,
@@ -894,7 +894,7 @@ mod controller_gate_http_regression {
             };
             let response = state.request(request(&input)).await;
             assert_eq!(response.status(), StatusCode::OK);
-            let outcome: ControllerAccountGateIssuanceResult =
+            let outcome: ControllerAccountGateIssuanceOutcome =
                 serde_json::from_str(response.body()).unwrap();
             assert_eq!(
                 serde_json::to_value(outcome.controller_account_gate_attestation.status).unwrap(),

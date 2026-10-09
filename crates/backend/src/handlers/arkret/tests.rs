@@ -1,6 +1,6 @@
 use arkret_models_collaboration::session_grants::{
-    AuthSessionTerminationResult, SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND,
-    SessionGrantHolderProofClaims, SessionGrantValidationResult,
+    AuthSessionTerminationOutcome, SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND,
+    SessionGrantHolderProofClaims, SessionGrantValidationOutcome,
 };
 use arkret_models_identity::{
     SessionGrantAdminIntrospectionStatus, SessionGrantCredentialClass, SessionGrantHolderBinding,
@@ -893,7 +893,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
         )
         .await;
     response.assert_status(StatusCode::OK);
-    let outcome: AuthSessionTerminationResult = response.json();
+    let outcome: AuthSessionTerminationOutcome = response.json();
     assert!(outcome.grant_chain_terminated);
     assert!(outcome.auth_session_logged_out);
 
@@ -948,7 +948,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
         )
         .await;
     response.assert_status(StatusCode::OK);
-    let replay: AuthSessionTerminationResult = response.json();
+    let replay: AuthSessionTerminationOutcome = response.json();
     assert!(replay.grant_chain_terminated);
     assert!(replay.auth_session_logged_out);
 
@@ -1649,7 +1649,7 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         serde_json::from_str::<serde_json::Value>(&session_public_key).unwrap()
     );
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
-    serde_json::from_value::<SessionGrantValidationResult>(body)
+    serde_json::from_value::<SessionGrantValidationOutcome>(body)
         .expect("agent introspection response must satisfy the shared closed wire model");
 }
 

@@ -3455,7 +3455,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         &mut self,
         context: &IdentityCreationRegistrationContext,
         request_digest: &arkret_identifiers::Hash,
-        outcome: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult,
+        outcome: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
         let Some(lease) = self

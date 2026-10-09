@@ -427,7 +427,7 @@ pub async fn account_register_endpoint(
             ));
         }
         repo.save().await?;
-        let outcome: arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult =
+        let outcome: arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome =
             channel
                 .post_private_json(
                     "private_principal_genesis_admission",

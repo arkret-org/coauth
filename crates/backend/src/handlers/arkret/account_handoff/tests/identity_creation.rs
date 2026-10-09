@@ -46,7 +46,7 @@ fn authenticated_request(
 
 fn pcr_outcome(
     request: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionInput,
-) -> arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult {
+) -> arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome {
     use arkret_wire::{
         Base64UrlString, CommitStreamRef, DetachedObjectSignature, DetachedSignatureAlgorithm,
         DetachedSignatureContext, DidUrl, Hash, RealmCommit, RealmCommitAuthorityRef,
@@ -137,7 +137,7 @@ fn pcr_outcome(
         signature: signature('b'),
     };
     authorize_commit = seal(authorize_commit);
-    let outcome = arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResult {
+    let outcome = arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome {
         principal_id: request.principal_id.clone(),
         pcr_realm_id: request.pcr_realm_id.clone(),
         accepted_device_id: descriptor.device_id,

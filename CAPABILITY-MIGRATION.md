@@ -239,12 +239,12 @@ third-party use:
    `build_agent_signer_evidence` 为规范要求的构建入口，所以这条是真缺口而非下游自造。
    **建议由 soland 自己的能力账本承接。**
 4. **NC-TYPE-001 命名扫描（顺带）**：SDK 非生成代码里末词为 `Result` / `Item` 的类型有
-   `SignerKeyQueryResult`（`crates/models-identity/src/signer_key_operations.rs:263`）、
+   `SignerKeyQueryOutcome`（`crates/models-identity/src/signer_key_operations.rs:263`）、
    `AccountSubscribeSnapshotResult`
    （`crates/models-collaboration/src/sync_frames/account_subscribe.rs:1038`）、
    `ModerationQueueItem`（`crates/models-collaboration/src/governance/moderation_queue.rs:61`）。
    按已裁定口径，查询/同步操作的答案应为 `_Outcome`、逐条记录应为 `_Row`。
-   `AccountCurrentResult`（`sync_frames/current_results.rs:53`）与 `TypedCurrentResult`
+   `AccountCurrentView`（`sync_frames/current_results.rs:53`）与 `TypedCurrentRow`
    （`crates/wire/src/authority_commit.rs:732`）是与 `result_kind` 双射的类型化当前结果信封，
    合规。`MlsAddMemberResult` / `MlsAddMembersResult` / `MlsRemoveMemberResult`
    （`crates/mls/src/group.rs:211/218/241`）与 `SdkClauseResult`
