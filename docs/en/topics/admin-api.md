@@ -386,7 +386,7 @@ realm classes explicit. Every admin route belongs to one of them:
 | `/_coauth/admin/circles/capabilities*`                     | **Collaboration**      |
 | `/_coauth/admin/notification-*`                            | Cross-cutting (audit)  |
 | `/_coauth/admin/audit-feed`                                | Cross-cutting (audit)  |
-| `/_coauth/admin/invite-quarantine*`                        | Cross-cutting (audit)  |
+| `/_coauth/admin/invite-reviews*`                        | Cross-cutting (audit)  |
 | `/_coauth/admin/site-config`                               | Cross-cutting (config) |
 
 This classification is informational today — gating is still done by the
@@ -394,6 +394,30 @@ single `urn:coauth:admin` / `urn:arkret:admin:*` scope. The next round
 of the rollout will split these into per-class scopes so that an
 operator can be granted Collaboration-only access without being able to
 mutate identity state.
+
+## Administrator invite reviews
+
+`POST /_coauth/admin/accounts/batch-invite` saves a pending administrator review
+when optional gate metadata is inconclusive and `consent_required` is false.
+That request returns HTTP 422 with `admin_invite_review_required` and mints no
+registration tokens. Requests without this metadata retain ordinary minting;
+consent-required failures retain HTTP 422 with `consent_required`.
+
+`GET /_coauth/admin/invite-reviews` lists pending rows from the issuing Coauth
+deployment's `admin_invite_review_queue`. `POST
+/_coauth/admin/invite-reviews/{id}/resolve` accepts `decision: "approve"` or
+`"reject"` and an optional `note`. Approval mints tokens from the stored count,
+usage limit and expiry and returns them in `minted_tokens`; rejection mints none.
+Resolving an already resolved row returns HTTP 404 and creates no further tokens
+or resolution audit record. The existing partial-failure behavior remains:
+minting failure after resolution leaves the row approved with no returned tokens.
+
+These are administrator-owned management records, separate from the holder
+Station's private `ak.account.holder_quarantine` and Consent state. Administrator
+approval does not grant recipient Consent. Resolution audit operations use
+`admin_invite_review.approve` / `admin_invite_review.reject`, resource type
+`admin_invite_review_queue` and the metadata key `admin_invite_review_id`.
+The retired `/_coauth/admin/invite-quarantine` route has no alias.
 
 ## AKP-0007 `ak.circle.*` capability grants
 

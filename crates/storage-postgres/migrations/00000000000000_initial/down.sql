@@ -28,7 +28,7 @@ DROP TABLE IF EXISTS dpop_jti_replay CASCADE;
 DROP TABLE IF EXISTS user_erasure_requests CASCADE;
 DROP TABLE IF EXISTS recovery_completion_grant_issuances CASCADE;
 DROP TABLE IF EXISTS handle_audit_log CASCADE;
-DROP TABLE IF EXISTS invite_quarantine_queue CASCADE;
+DROP TABLE IF EXISTS admin_invite_review_queue CASCADE;
 DROP TABLE IF EXISTS notification_deliveries CASCADE;
 DROP TABLE IF EXISTS notification_event_logs CASCADE;
 DROP TABLE IF EXISTS notification_preferences CASCADE;

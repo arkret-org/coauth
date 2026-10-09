@@ -354,7 +354,7 @@ CREATE TABLE public.handle_audit_log (
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.invite_quarantine_queue (
+CREATE TABLE public.admin_invite_review_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     peer_principal_id text NOT NULL,
     target_holder_principal_id text NOT NULL,
@@ -366,11 +366,11 @@ CREATE TABLE public.invite_quarantine_queue (
     resolved_at timestamp with time zone,
     resolution_note text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT invite_quarantine_queue_consent_id_non_empty CHECK ((btrim(consent_id) <> ''::text)),
-    CONSTRAINT invite_quarantine_queue_peer_principal_id_shape CHECK ((peer_principal_id LIKE 'ak:did_core:%'::text)),
-    CONSTRAINT invite_quarantine_queue_scope_non_empty CHECK ((btrim(scope) <> ''::text)),
-    CONSTRAINT invite_quarantine_queue_status_known CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
-    CONSTRAINT invite_quarantine_queue_target_holder_principal_id_shape CHECK ((target_holder_principal_id LIKE 'ak:did_core:%'::text))
+    CONSTRAINT admin_invite_review_queue_consent_id_non_empty CHECK ((btrim(consent_id) <> ''::text)),
+    CONSTRAINT admin_invite_review_queue_peer_principal_id_shape CHECK ((peer_principal_id LIKE 'ak:did_core:%'::text)),
+    CONSTRAINT admin_invite_review_queue_scope_non_empty CHECK ((btrim(scope) <> ''::text)),
+    CONSTRAINT admin_invite_review_queue_status_known CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
+    CONSTRAINT admin_invite_review_queue_target_holder_principal_id_shape CHECK ((target_holder_principal_id LIKE 'ak:did_core:%'::text))
 );
 
 CREATE TABLE public.notification_deliveries (
@@ -1436,8 +1436,8 @@ ALTER TABLE ONLY public.collaboration_capability_grants
 ALTER TABLE ONLY public.handle_audit_log
     ADD CONSTRAINT handle_audit_log_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.invite_quarantine_queue
-    ADD CONSTRAINT invite_quarantine_queue_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.admin_invite_review_queue
+    ADD CONSTRAINT admin_invite_review_queue_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.notification_deliveries
     ADD CONSTRAINT notification_deliveries_pkey PRIMARY KEY (id);
@@ -1777,11 +1777,11 @@ CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_bind
 
 CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_challenges USING btree (expires_at) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL));
 
-CREATE INDEX invite_quarantine_queue_consent_id_idx ON public.invite_quarantine_queue USING btree (consent_id);
+CREATE INDEX admin_invite_review_queue_consent_id_idx ON public.admin_invite_review_queue USING btree (consent_id);
 
-CREATE INDEX invite_quarantine_queue_holder_principal_id_idx ON public.invite_quarantine_queue USING btree (target_holder_principal_id);
+CREATE INDEX admin_invite_review_queue_holder_principal_id_idx ON public.admin_invite_review_queue USING btree (target_holder_principal_id);
 
-CREATE INDEX invite_quarantine_queue_status_created_idx ON public.invite_quarantine_queue USING btree (status, created_at DESC);
+CREATE INDEX admin_invite_review_queue_status_created_idx ON public.admin_invite_review_queue USING btree (status, created_at DESC);
 
 CREATE UNIQUE INDEX queue_jobs_account_status_pending_target_event_idx
     ON public.queue_jobs USING btree (

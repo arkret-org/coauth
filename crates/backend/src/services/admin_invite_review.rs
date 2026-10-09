@@ -2,25 +2,23 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Invite-quarantine outbox queue (C10.E §6.1 default-profile path).
+//! Persistence for the initiating deployment's administrator invite review queue.
 //!
-//! When the consent gate in `batch_invite` returns `Quarantined` (and the
-//! per-recipient relay path returns `Quarantine`), spec §6.1 says the
-//! invite intent should be persisted to a holder-side queue rather than
-//! immediately rejected. Sodmin / inkson review the queue and either
-//! re-run the original invite or mark it rejected.
+//! `batch_invite` saves registration-token mint parameters here when its local
+//! gate needs administrator review. These rows belong to the issuing Coauth
+//! deployment, and administrators resolve them through the admin API.
 //!
-//! This module is the persistence layer for that queue. The admin review
-//! UI lives at `crates/backend/src/handlers/admin/v1/invite_quarantine.rs`.
+//! Holder-private invite admission and `ak.account.holder_quarantine` are owned
+//! by the holder Station; this administrative outbox does not implement them
+//! or change a holder's Consent state.
 //!
 //! Design notes:
 //!
 //! - We use raw SQL via diesel's `sql_query` to stay consistent with the `account_claims` service
 //!   style. The queue table is small and write- through; no need for the full `Repository`
 //!   abstraction.
-//! - `payload` carries an opaque JSON envelope so callers can stash the minted-but-quarantined
-//!   token bundle (or the original invite request body) without coupling the queue schema to one
-//!   caller's shape.
+//! - `payload` carries an opaque JSON envelope so callers can stash the deferred token bundle (or
+//!   the original invite request body) without coupling the queue schema to one caller's shape.
 //! - Status transitions are intentionally narrow: `pending` → `approved` or `pending` → `rejected`.
 //!   Re-opening a resolved row is a future concern (out of scope this round).
 
@@ -37,17 +35,17 @@ use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
 
-pub type InviteQuarantineServiceHandle = Arc<dyn InviteQuarantineService>;
+pub type AdminInviteReviewServiceHandle = Arc<dyn AdminInviteReviewService>;
 
 /// Lifecycle state of a queued invite.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InviteQuarantineStatus {
+pub enum AdminInviteReviewStatus {
     Pending,
     Approved,
     Rejected,
 }
 
-impl InviteQuarantineStatus {
+impl AdminInviteReviewStatus {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
@@ -70,7 +68,7 @@ impl InviteQuarantineStatus {
 
 /// Outbound DTO for a queued row.
 #[derive(Clone, Debug)]
-pub struct InviteQuarantineRecord {
+pub struct AdminInviteReviewRecord {
     pub id: Uuid,
     pub created_at: DateTime<Utc>,
     pub peer_principal_id: DidCoreId,
@@ -78,10 +76,10 @@ pub struct InviteQuarantineRecord {
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
-    /// Original quarantined invite document. Its shape is independent of the
-    /// quarantine lifecycle `status` and is never dispatched by that status.
+    /// Original invite review document. Its shape is independent of the
+    /// review lifecycle `status` and is never dispatched by that status.
     pub payload: Value,
-    pub status: InviteQuarantineStatus,
+    pub status: AdminInviteReviewStatus,
     pub resolved_at: Option<DateTime<Utc>>,
     pub resolution_note: Option<String>,
 }
@@ -90,7 +88,7 @@ pub struct InviteQuarantineRecord {
 /// caller only needs to record the gate decision (the typical case for
 /// `batch_invite`, which has not minted any tokens yet at the gate point).
 #[derive(Clone, Debug)]
-pub struct EnqueueInviteQuarantine {
+pub struct EnqueueAdminInviteReview {
     pub peer_principal_id: DidCoreId,
     pub target_holder_principal_id: DidCoreId,
     pub consent_id: String,
@@ -100,38 +98,41 @@ pub struct EnqueueInviteQuarantine {
 }
 
 #[derive(Debug, Error)]
-pub enum InviteQuarantineError {
-    #[error("invite quarantine storage failed: {0}")]
+pub enum AdminInviteReviewError {
+    #[error("admin invite review storage failed: {0}")]
     Storage(#[from] anyhow::Error),
 }
 
 #[async_trait]
-pub trait InviteQuarantineService: Send + Sync {
+pub trait AdminInviteReviewService: Send + Sync {
     async fn enqueue(
         &self,
-        input: EnqueueInviteQuarantine,
-    ) -> Result<InviteQuarantineRecord, InviteQuarantineError>;
+        input: EnqueueAdminInviteReview,
+    ) -> Result<AdminInviteReviewRecord, AdminInviteReviewError>;
 
     async fn list_pending(
         &self,
         limit: i64,
-    ) -> Result<Vec<InviteQuarantineRecord>, InviteQuarantineError>;
+    ) -> Result<Vec<AdminInviteReviewRecord>, AdminInviteReviewError>;
 
-    async fn get(&self, id: Uuid) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError>;
+    async fn get(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<AdminInviteReviewRecord>, AdminInviteReviewError>;
 
     /// Mark a row as resolved (`approved` or `rejected`). Returns `Ok(None)`
     /// when the row does not exist or is already resolved.
     async fn mark_resolved(
         &self,
         id: Uuid,
-        new_status: InviteQuarantineStatus,
+        new_status: AdminInviteReviewStatus,
         note: Option<String>,
         resolved_at: DateTime<Utc>,
-    ) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError>;
+    ) -> Result<Option<AdminInviteReviewRecord>, AdminInviteReviewError>;
 }
 
 #[derive(Debug, QueryableByName)]
-struct InviteQuarantineRow {
+struct AdminInviteReviewRow {
     #[diesel(sql_type = DieselUuid)]
     id: Uuid,
     #[diesel(sql_type = Timestamptz)]
@@ -156,11 +157,12 @@ struct InviteQuarantineRow {
     resolution_note: Option<String>,
 }
 
-impl InviteQuarantineRow {
-    fn try_into_record(self) -> anyhow::Result<InviteQuarantineRecord> {
-        let status = InviteQuarantineStatus::parse(&self.status)
-            .ok_or_else(|| anyhow::anyhow!("invalid invite quarantine status: {}", self.status))?;
-        Ok(InviteQuarantineRecord {
+impl AdminInviteReviewRow {
+    fn try_into_record(self) -> anyhow::Result<AdminInviteReviewRecord> {
+        let status = AdminInviteReviewStatus::parse(&self.status).ok_or_else(|| {
+            anyhow::anyhow!("invalid admin invite review status: {}", self.status)
+        })?;
+        Ok(AdminInviteReviewRecord {
             id: self.id,
             created_at: self.created_at,
             peer_principal_id: self.peer_principal_id,
@@ -176,24 +178,24 @@ impl InviteQuarantineRow {
     }
 }
 
-pub struct PgInviteQuarantineService {
+pub struct PgAdminInviteReviewService {
     pool: DieselPool<AsyncPgConnection>,
 }
 
-impl PgInviteQuarantineService {
+impl PgAdminInviteReviewService {
     fn new(pool: DieselPool<AsyncPgConnection>) -> Self {
         Self { pool }
     }
 
     async fn enqueue_inner(
         &self,
-        input: EnqueueInviteQuarantine,
-    ) -> anyhow::Result<InviteQuarantineRecord> {
+        input: EnqueueAdminInviteReview,
+    ) -> anyhow::Result<AdminInviteReviewRecord> {
         let id = Uuid::now_v7();
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
             r"
-            INSERT INTO invite_quarantine_queue (
+            INSERT INTO admin_invite_review_queue (
                 id,
                 peer_principal_id,
                 target_holder_principal_id,
@@ -225,17 +227,17 @@ impl PgInviteQuarantineService {
         .bind::<Text, _>(input.scope)
         .bind::<Nullable<Text>, _>(input.requesting_admin_localpart)
         .bind::<Jsonb, _>(input.payload)
-        .get_results::<InviteQuarantineRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut *conn)
         .await?;
 
         rows.into_iter()
             .next()
-            .map(InviteQuarantineRow::try_into_record)
+            .map(AdminInviteReviewRow::try_into_record)
             .transpose()?
-            .ok_or_else(|| anyhow::anyhow!("invite_quarantine_queue insert returned no row"))
+            .ok_or_else(|| anyhow::anyhow!("admin_invite_review_queue insert returned no row"))
     }
 
-    async fn list_pending_inner(&self, limit: i64) -> anyhow::Result<Vec<InviteQuarantineRecord>> {
+    async fn list_pending_inner(&self, limit: i64) -> anyhow::Result<Vec<AdminInviteReviewRecord>> {
         let limit = limit.clamp(1, 1000);
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
@@ -252,22 +254,22 @@ impl PgInviteQuarantineService {
                 status,
                 resolved_at,
                 resolution_note
-            FROM invite_quarantine_queue
+            FROM admin_invite_review_queue
             WHERE status = 'pending'
             ORDER BY created_at ASC, id ASC
             LIMIT $1
             ",
         )
         .bind::<BigInt, _>(limit)
-        .get_results::<InviteQuarantineRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut *conn)
         .await?;
 
         rows.into_iter()
-            .map(InviteQuarantineRow::try_into_record)
+            .map(AdminInviteReviewRow::try_into_record)
             .collect()
     }
 
-    async fn get_inner(&self, id: Uuid) -> anyhow::Result<Option<InviteQuarantineRecord>> {
+    async fn get_inner(&self, id: Uuid) -> anyhow::Result<Option<AdminInviteReviewRecord>> {
         let mut conn = self.pool.get().await?;
         let rows = diesel::sql_query(
             r"
@@ -283,33 +285,33 @@ impl PgInviteQuarantineService {
                 status,
                 resolved_at,
                 resolution_note
-            FROM invite_quarantine_queue
+            FROM admin_invite_review_queue
             WHERE id = $1
             ",
         )
         .bind::<DieselUuid, _>(id)
-        .get_results::<InviteQuarantineRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut *conn)
         .await?;
 
         rows.into_iter()
             .next()
-            .map(InviteQuarantineRow::try_into_record)
+            .map(AdminInviteReviewRow::try_into_record)
             .transpose()
     }
 
     async fn mark_resolved_inner(
         &self,
         id: Uuid,
-        new_status: InviteQuarantineStatus,
+        new_status: AdminInviteReviewStatus,
         note: Option<String>,
         resolved_at: DateTime<Utc>,
-    ) -> anyhow::Result<Option<InviteQuarantineRecord>> {
+    ) -> anyhow::Result<Option<AdminInviteReviewRecord>> {
         let mut conn = self.pool.get().await?;
         // Only transition `pending` rows. Already-resolved rows are
-        // returned as `None` so the caller can render a 409.
+        // returned as `None` so the caller can render the existing not-found outcome.
         let rows = diesel::sql_query(
             r"
-            UPDATE invite_quarantine_queue
+            UPDATE admin_invite_review_queue
             SET
                 status = $2,
                 resolved_at = $3,
@@ -333,60 +335,63 @@ impl PgInviteQuarantineService {
         .bind::<Text, _>(new_status.as_str().to_owned())
         .bind::<Timestamptz, _>(resolved_at)
         .bind::<Nullable<Text>, _>(note)
-        .get_results::<InviteQuarantineRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut *conn)
         .await?;
 
         rows.into_iter()
             .next()
-            .map(InviteQuarantineRow::try_into_record)
+            .map(AdminInviteReviewRow::try_into_record)
             .transpose()
     }
 }
 
 #[async_trait]
-impl InviteQuarantineService for PgInviteQuarantineService {
+impl AdminInviteReviewService for PgAdminInviteReviewService {
     async fn enqueue(
         &self,
-        input: EnqueueInviteQuarantine,
-    ) -> Result<InviteQuarantineRecord, InviteQuarantineError> {
+        input: EnqueueAdminInviteReview,
+    ) -> Result<AdminInviteReviewRecord, AdminInviteReviewError> {
         self.enqueue_inner(input)
             .await
-            .map_err(InviteQuarantineError::from)
+            .map_err(AdminInviteReviewError::from)
     }
 
     async fn list_pending(
         &self,
         limit: i64,
-    ) -> Result<Vec<InviteQuarantineRecord>, InviteQuarantineError> {
+    ) -> Result<Vec<AdminInviteReviewRecord>, AdminInviteReviewError> {
         self.list_pending_inner(limit)
             .await
-            .map_err(InviteQuarantineError::from)
+            .map_err(AdminInviteReviewError::from)
     }
 
-    async fn get(&self, id: Uuid) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError> {
+    async fn get(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<AdminInviteReviewRecord>, AdminInviteReviewError> {
         self.get_inner(id)
             .await
-            .map_err(InviteQuarantineError::from)
+            .map_err(AdminInviteReviewError::from)
     }
 
     async fn mark_resolved(
         &self,
         id: Uuid,
-        new_status: InviteQuarantineStatus,
+        new_status: AdminInviteReviewStatus,
         note: Option<String>,
         resolved_at: DateTime<Utc>,
-    ) -> Result<Option<InviteQuarantineRecord>, InviteQuarantineError> {
+    ) -> Result<Option<AdminInviteReviewRecord>, AdminInviteReviewError> {
         self.mark_resolved_inner(id, new_status, note, resolved_at)
             .await
-            .map_err(InviteQuarantineError::from)
+            .map_err(AdminInviteReviewError::from)
     }
 }
 
 #[must_use]
-pub fn invite_quarantine_service(
+pub fn admin_invite_review_service(
     pool: DieselPool<AsyncPgConnection>,
-) -> InviteQuarantineServiceHandle {
-    Arc::new(PgInviteQuarantineService::new(pool))
+) -> AdminInviteReviewServiceHandle {
+    Arc::new(PgAdminInviteReviewService::new(pool))
 }
 
 #[cfg(test)]
@@ -400,23 +405,23 @@ mod tests {
     #[test]
     fn status_round_trips() {
         for s in [
-            InviteQuarantineStatus::Pending,
-            InviteQuarantineStatus::Approved,
-            InviteQuarantineStatus::Rejected,
+            AdminInviteReviewStatus::Pending,
+            AdminInviteReviewStatus::Approved,
+            AdminInviteReviewStatus::Rejected,
         ] {
-            assert_eq!(InviteQuarantineStatus::parse(s.as_str()), Some(s));
+            assert_eq!(AdminInviteReviewStatus::parse(s.as_str()), Some(s));
         }
     }
 
     #[test]
     fn status_parse_unknown_returns_none() {
-        assert!(InviteQuarantineStatus::parse("bogus").is_none());
-        assert!(InviteQuarantineStatus::parse("").is_none());
+        assert!(AdminInviteReviewStatus::parse("bogus").is_none());
+        assert!(AdminInviteReviewStatus::parse("").is_none());
     }
 
     #[test]
     fn row_into_record_rejects_unknown_status() {
-        let row = InviteQuarantineRow {
+        let row = AdminInviteReviewRow {
             id: Uuid::now_v7(),
             created_at: Utc::now(),
             peer_principal_id: "ak:did_core:web:p".parse().unwrap(),
@@ -434,7 +439,7 @@ mod tests {
 
     #[test]
     fn enqueue_dto_carries_payload() {
-        let dto = EnqueueInviteQuarantine {
+        let dto = EnqueueAdminInviteReview {
             peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
             target_holder_principal_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
             consent_id: "c-1".into(),

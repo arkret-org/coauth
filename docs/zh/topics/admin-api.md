@@ -96,6 +96,28 @@ curl "https://auth.example.com/_coauth/admin/users?page[first]=10&page[after]=�
 last activity 等元数据。列表和详情响应不会返回已存储的 JWT、refresh token、session
 private key 或 provider secret。Personal access token 只会在创建或重新生成时返回一次。
 
+## 管理员邀请复核
+
+`POST /_coauth/admin/accounts/batch-invite` 在可选门禁元数据无法确定是否可放行、且
+`consent_required` 为 false 时，会保存一条待管理员复核的记录。请求返回 HTTP 422，
+原因为 `admin_invite_review_required`，不会签发注册令牌。不提供这类元数据的请求仍按
+普通流程签发；要求 Consent 而无法满足的请求仍返回 HTTP 422 和 `consent_required`。
+
+`GET /_coauth/admin/invite-reviews` 列出发起方 Coauth 部署的
+`admin_invite_review_queue` 中的待复核记录。`POST
+/_coauth/admin/invite-reviews/{id}/resolve` 接受 `decision: "approve"` 或 `"reject"`，
+以及可选的 `note`。批准后按保存的数量、使用次数上限和有效期签发令牌，并通过
+`minted_tokens` 返回；拒绝不会签发令牌。重复处理已完成的记录返回 HTTP 404，不会
+再次签发令牌或产生处理审计记录。已有的部分失败行为保持不变：记录已批准后若令牌
+签发失败，记录仍为已批准，响应不含新令牌。
+
+这些记录属于发起方管理员的管理队列，与 holder Station 私有的
+`ak.account.holder_quarantine` 及 Consent 状态分别归属不同对象。管理员批准不会授予
+接收方 Consent。处理审计使用 `admin_invite_review.approve` /
+`admin_invite_review.reject`，资源类型为 `admin_invite_review_queue`，记录标识放在
+元数据键 `admin_invite_review_id` 中。旧路径 `/_coauth/admin/invite-quarantine`
+不提供兼容别名。
+
 ## 常用操作
 
 ### 列出所有账号

@@ -50,8 +50,8 @@ use crate::handlers::{ActivityTracker, Limiter};
 use crate::policy::PolicyFactory;
 use crate::salvo_utils::cookies::{CookieJar, CookieManager};
 use crate::services::account_claims::account_claims_service;
+use crate::services::admin_invite_review::admin_invite_review_service;
 use crate::services::did_resolver::default_did_resolver_service;
-use crate::services::invite_quarantine::invite_quarantine_service;
 use crate::services::principal_facade::DbConnectorAdmin;
 use crate::services::risk_action_proposals::risk_action_proposals_service;
 use crate::services::risk_action_state::default_risk_action_state_service;
@@ -369,8 +369,8 @@ impl Handler for InjectTestState {
             account_claims_service(state.repository_factory.pool().clone()),
         );
         depot.insert(
-            "invite_quarantine_service",
-            invite_quarantine_service(state.repository_factory.pool().clone()),
+            "admin_invite_review_service",
+            admin_invite_review_service(state.repository_factory.pool().clone()),
         );
         depot.insert("upstream_oidc_service", default_upstream_oidc_service());
         depot.insert(

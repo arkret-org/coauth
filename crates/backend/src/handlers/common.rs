@@ -253,9 +253,9 @@ pub trait DepotExt {
     fn account_claims_service(
         &self,
     ) -> Result<crate::services::account_claims::AccountClaimsServiceHandle, RouteError>;
-    fn invite_quarantine_service(
+    fn admin_invite_review_service(
         &self,
-    ) -> Result<crate::services::invite_quarantine::InviteQuarantineServiceHandle, RouteError>;
+    ) -> Result<crate::services::admin_invite_review::AdminInviteReviewServiceHandle, RouteError>;
     fn upstream_oidc_service(
         &self,
     ) -> Result<crate::services::upstream_oidc::UpstreamOidcServiceHandle, RouteError>;
@@ -386,10 +386,11 @@ impl DepotExt for Depot {
         depot_get(self, "account_claims_service")
     }
 
-    fn invite_quarantine_service(
+    fn admin_invite_review_service(
         &self,
-    ) -> Result<crate::services::invite_quarantine::InviteQuarantineServiceHandle, RouteError> {
-        depot_get(self, "invite_quarantine_service")
+    ) -> Result<crate::services::admin_invite_review::AdminInviteReviewServiceHandle, RouteError>
+    {
+        depot_get(self, "admin_invite_review_service")
     }
 
     fn upstream_oidc_service(

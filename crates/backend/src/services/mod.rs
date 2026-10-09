@@ -1,5 +1,6 @@
 pub mod account_claims;
 pub mod account_status_publication;
+pub mod admin_invite_review;
 pub mod device_revoke;
 pub mod did_binding;
 pub mod did_binding_proof;
@@ -8,7 +9,6 @@ pub mod dpop;
 pub mod email_webhook;
 pub mod erasure_receipt;
 pub mod handle_subject_validator;
-pub mod invite_quarantine;
 pub mod organization_bootstrap;
 pub mod organization_statement;
 pub mod peer_protocol_client;

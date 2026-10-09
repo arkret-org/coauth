@@ -24,7 +24,7 @@ use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::UserRegistrationToken;
 use crate::handlers::admin::response::SingleOutcome;
 use crate::handlers::common::DepotExt;
-use crate::services::invite_quarantine::EnqueueInviteQuarantine;
+use crate::services::admin_invite_review::EnqueueAdminInviteReview;
 use crate::util::handle_valid;
 use crate::{AppError, CreatedJsonResult};
 
@@ -133,15 +133,11 @@ pub struct BatchInviteRequestBody {
     /// never expire.
     expires_in_hours: Option<u64>,
 
-    /// Optional Arkret consent-gate metadata (`identity/consent-model.md`
-    /// §6.1). When `peer_principal_id` is supplied **and** a `server_name`
-    /// URL is configured, coauth queries the holder's typed consent current
-    /// result on `soland` before minting registration tokens and rejects /
-    /// quarantines the batch when the holder has not granted the requesting
-    /// peer.
-    ///
-    /// Requests that do not address a specific holder DID omit this field;
-    /// the gate is then a no-op for local registration-token minting.
+    /// Optional metadata for the issuing deployment's local minting gate.
+    /// Without metadata, token minting proceeds normally. With metadata, an
+    /// unverifiable holder decision rejects a consent-required request or saves
+    /// an administrator review row. This does not implement holder-side invite
+    /// delivery admission or a holder-private quarantine queue.
     #[serde(default)]
     consent_gate: Option<BatchInviteConsentGate>,
 }
@@ -202,12 +198,12 @@ pub struct BatchInviteOutcome {
 /// Pure parameter struct for the underlying `mint_registration_tokens`
 /// helper. Mirrors the wire fields on `BatchInviteRequestBody` but without
 /// the consent-gate metadata — the gate is the caller's responsibility
-/// (see `batch_invite` and `invite_quarantine::resolve_invite_quarantine`).
+/// (see `batch_invite` and `admin_invite_review::resolve_admin_invite_review`).
 ///
-/// Exposed so the quarantine-approve flow can re-mint tokens with the
+/// Exposed so the admin-review approval flow can re-mint tokens with the
 /// same parameters that were originally enqueued, without re-parsing
-/// the request body or re-running the consent gate (the operator
-/// approving the quarantine has already vouched for it).
+/// the request body or re-running the local minting gate. Administrator
+/// approval does not grant or change the recipient's Consent state.
 #[derive(Debug, Clone)]
 pub struct MintRegistrationTokensParams {
     pub count: u32,
@@ -225,34 +221,25 @@ impl MintRegistrationTokensParams {
     }
 }
 
-/// Pure-function gate evaluation for `batch_invite`. Returns
-/// `Ok(GateOutcome::Allow)` when token minting should proceed, or one of
-/// the rejection variants — caller decides how to render those into HTTP
-/// (the Salvo handler maps `ConsentRequired` → 422 and `Quarantined` →
-/// 202; the existing `RouteError`/`AppError` shapes keep that
-/// stringly-typed for now).
+/// Local registration-token gate outcome. Both rejection variants map to
+/// HTTP 422; `NeedsAdminReview` additionally saves an administrator review row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BatchInviteGateOutcome {
-    /// Either the request did not include a peer DID (gate disabled) or
-    /// the cell read + scope match returned `Allow`.
+    /// The local minting gate allows registration-token creation. Requests
+    /// without gate metadata currently take this branch.
     Allow,
     /// Holder explicitly revoked or never granted; policy requires
     /// consent. Caller maps to HTTP 422 + `consent_required` body.
     ConsentRequired,
     /// Lookup was inconclusive and policy did not require consent.
-    /// Caller routes to a holder-side quarantine outbox; HTTP 202.
-    Quarantined,
+    /// Caller saves an administrator review row; HTTP 422.
+    NeedsAdminReview,
 }
 
-/// Evaluate the consent gate for `batch_invite`. Pure helper; isolates the
-/// I/O so unit tests can inject a wiremock-backed `reqwest::Client`.
-///
-/// `gate_url_override` lets the caller supply a per-request URL that wins
-/// over the primary configured Station endpoint. Both `None` →
-/// gate is skipped (returns `Allow`) — same behaviour as omitting
-/// `peer_principal_id` entirely. This keeps the no-config / no-peer paths
-/// indistinguishable, which matches the spec note that the gate is
-/// optional infrastructure.
+/// Evaluate the local minting gate. Metadata without an exact peer Actor
+/// cannot establish holder Consent. The current implementation returns an
+/// unknown lookup rather than querying a holder from a principal-only key.
+/// This function leaves holder-side invite delivery admission unchanged.
 pub async fn evaluate_batch_invite_gate(
     gate: Option<&BatchInviteConsentGate>,
     arkret_config: &ArkretConfig,
@@ -270,7 +257,7 @@ pub async fn evaluate_batch_invite_gate(
     let Some(principal_url) = principal_url else {
         // Gate metadata supplied, but no server to query. Mirror the
         // relay handler: when consent_required is on, fail closed; when
-        // off, treat as quarantine. (We never silently allow.)
+        // off, require administrator review. (We never silently allow.)
         debug!(
             consent_id = %gate.consent_id,
             "batch_invite consent gate: no server_name URL — falling back per consent_required",
@@ -278,7 +265,7 @@ pub async fn evaluate_batch_invite_gate(
         return if gate.consent_required {
             BatchInviteGateOutcome::ConsentRequired
         } else {
-            BatchInviteGateOutcome::Quarantined
+            BatchInviteGateOutcome::NeedsAdminReview
         };
     };
 
@@ -291,7 +278,7 @@ pub async fn evaluate_batch_invite_gate(
     match decision {
         InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
         InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
-        InviteGateDecision::Quarantine => BatchInviteGateOutcome::Quarantined,
+        InviteGateDecision::Quarantine => BatchInviteGateOutcome::NeedsAdminReview,
     }
 }
 
@@ -300,9 +287,9 @@ pub async fn evaluate_batch_invite_gate(
 /// about the call-site.
 ///
 /// `admin_user_id` is the Ulid of the admin who *initiated* the action
-/// (the audit log slot for "who" — for the resolve-quarantine path this
+/// (the audit log slot for "who" — for the resolve-review path this
 /// is the operator approving the queue row, *not* the original
-/// requesting admin who got quarantined). When `None`, no admin op is
+/// requesting admin whose request needed review). When `None`, no admin op is
 /// recorded (matches the pre-round-21 behaviour for unauthenticated
 /// internal call-sites).
 ///
@@ -377,19 +364,9 @@ pub async fn batch_invite(
     };
     mint_params.validate()?;
 
-    // ── C10.E consent gate ─────────────────────────────────
-    //
-    // Per `arkret-spec` `identity/consent-model.md` §6.1, when an invite
-    // addresses a specific holder DID we must query the holder's typed
-    // consent current result on their server_name (`soland`) before
-    // proceeding. The gate is opt-in via `BatchInviteConsentGate` —
-    // callers that just want bulk registration tokens omit the metadata
-    // and skip the network round-trip entirely.
-    //
-    // For per-recipient relay (the path that forwards an inviter-signed
-    // payload), see `account::invite_relay::post_invite_relay`. This
-    // handler only mints registration tokens, so we don't forward a
-    // payload — we simply gate the mint.
+    // Optional local registration-token minting gate. Per-recipient invite
+    // delivery belongs to the separate holder-side admission path; this admin
+    // handler only saves review parameters or mints registration tokens.
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let gate_outcome =
@@ -409,29 +386,20 @@ pub async fn batch_invite(
             );
             return Err(AppError::unprocessable_entity("consent_required"));
         }
-        BatchInviteGateOutcome::Quarantined => {
-            // Spec §6.1 default-profile path: no consent + no
-            // consent_required flag → route to the holder's quarantine
-            // outbox. As of round 20 we persist the intent to
-            // `invite_quarantine_queue` so admins (sodmin / inkson)
-            // can review and either re-run the invite or reject it.
-            //
-            // The outcome on the wire is still 422 + `quarantined`:
-            // the immediate batch_invite call did NOT mint tokens,
-            // and the caller should treat the gate decision as a
-            // soft-reject pending admin review. The queue id is
-            // surfaced via the `quarantine_id` slot in the audit log
-            // and admin-list endpoint at
-            // `GET /_coauth/admin/invite-quarantine`.
-            let quarantine_id = if let Some(gate) = params.consent_gate.as_ref() {
-                let queue = depot.invite_quarantine_service()?;
+        BatchInviteGateOutcome::NeedsAdminReview => {
+            // Save the issuing administrator's mint parameters for review.
+            // This queue is local management state, not holder Consent or the
+            // holder Station's private invite quarantine. No tokens are minted
+            // by this request; the admin review API exposes the queued row.
+            let admin_invite_review_id = if let Some(gate) = params.consent_gate.as_ref() {
+                let queue = depot.admin_invite_review_service()?;
                 let payload = serde_json::json!({
                     "count": params.count,
                     "usage_limit": params.usage_limit,
                     "expires_in_hours": params.expires_in_hours,
                 });
                 let enqueue_result = queue
-                    .enqueue(EnqueueInviteQuarantine {
+                    .enqueue(EnqueueAdminInviteReview {
                         peer_principal_id: gate.peer_principal_id.clone(),
                         target_holder_principal_id: gate.target_holder_principal_id.clone(),
                         consent_id: gate.consent_id.clone(),
@@ -448,22 +416,24 @@ pub async fn batch_invite(
                         warn!(
                             consent_id = %consent_id_for_log,
                             ?error,
-                            "batch_invite: consent gate quarantine enqueue failed; surfacing quarantined-without-id",
+                            "batch_invite: admin invite review enqueue failed; no review id available",
                         );
                         None
                     }
                 }
             } else {
-                // Should not happen — gate outcome is Quarantined only
+                // Should not happen — gate outcome is NeedsAdminReview only
                 // when metadata was supplied — but guard defensively.
                 None
             };
             warn!(
                 consent_id = %consent_id_for_log,
-                quarantine_id = ?quarantine_id,
-                "batch_invite: consent gate routed to quarantine outbox",
+                admin_invite_review_id = ?admin_invite_review_id,
+                "batch_invite: mint request saved for administrator review",
             );
-            return Err(AppError::unprocessable_entity("quarantined"));
+            return Err(AppError::unprocessable_entity(
+                "admin_invite_review_required",
+            ));
         }
     }
 
@@ -539,9 +509,9 @@ mod consent_gate_tests {
         assert_eq!(outcome, BatchInviteGateOutcome::ConsentRequired);
     }
 
-    /// Missing exact peer actor + `consent_required=false` → Quarantined.
+    /// Missing exact peer actor + `consent_required=false` → NeedsAdminReview.
     #[tokio::test]
-    async fn batch_invite_gate_quarantines_when_unknown_and_not_required() {
+    async fn batch_invite_gate_needs_admin_review_when_unknown_and_not_required() {
         setup();
         let client = reqwest::Client::new();
 
@@ -554,7 +524,7 @@ mod consent_gate_tests {
         gate.consent_required = false;
 
         let outcome = evaluate_batch_invite_gate(Some(&gate), &empty_config(), &client).await;
-        assert_eq!(outcome, BatchInviteGateOutcome::Quarantined);
+        assert_eq!(outcome, BatchInviteGateOutcome::NeedsAdminReview);
     }
 
     /// Gate metadata supplied but no principal URL anywhere +

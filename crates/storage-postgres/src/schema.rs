@@ -386,7 +386,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    invite_quarantine_queue (id) {
+    admin_invite_review_queue (id) {
         id -> Uuid,
         peer_principal_id -> Text,
         target_holder_principal_id -> Text,
@@ -1093,7 +1093,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     risk_action_proposals,
     webauthn_credentials,
     webauthn_ceremonies,
-    invite_quarantine_queue,
+    admin_invite_review_queue,
     user_passwords,
     principal_did_bindings,
     principal_did_owners,

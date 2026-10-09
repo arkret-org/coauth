@@ -2,32 +2,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Admin review surface for the invite-quarantine outbox queue.
+//! Administrator review of the issuing deployment's registration-token outbox.
 //!
-//! Spec context: `arkret-spec` `consent-model.md` §6.1 default-profile
-//! path. When the consent gate in `batch_invite` returns `Quarantined`,
-//! the invite intent is persisted to `invite_quarantine_queue` (see
-//! `crates/backend/src/services/invite_quarantine.rs`). Operators
-//! (sodmin / inkson) review the queue here.
+//! `batch_invite` saves a pending row in `admin_invite_review_queue` when its
+//! local minting gate needs review. This is an administrator-owned management
+//! object, separate from holder-private invite delivery and Consent state.
 //!
-//! Endpoints:
+//! - `GET /_coauth/admin/invite-reviews` lists pending rows.
+//! - `POST /_coauth/admin/invite-reviews/{id}/resolve` accepts `approve` or `reject` plus an
+//!   optional note. Approve resolves the row and mints tokens from the saved parameters; reject
+//!   resolves it without minting.
 //!
-//! - `GET  /_coauth/admin/invite-quarantine` — list pending entries.
-//! - `POST /_coauth/admin/invite-quarantine/{id}/resolve` — body `{ "decision": "approve"|"reject",
-//!   "note"?: "..." }`. Approve marks the row resolved (the actual re-run of the original invite is
-//!   the caller's responsibility — sodmin re-issues `batch-invite` once it has verified consent out
-//!   of band). Reject marks the row resolved without re-running.
-//!
-//! ## Why approve does not auto-mint
-//!
-//! The original `batch_invite` only minted registration tokens; the
-//! consent decision context (peer DID, target holder principal DID) lives in the
-//! queue row but the *registration policy* (count, `usage_limit`, expiry)
-//! is in the `payload` JSON. Re-issuing requires the admin to confirm
-//! those parameters via a fresh batch-invite call. The "approve"
-//! transition therefore unblocks future calls (the holder's consent has
-//! been resolved out of band) rather than auto-minting tokens that the
-//! caller never reviewed.
+//! Approval records an administrator decision. It does not grant holder Consent
+//! or implement the holder Station's `ak.account.holder_quarantine` contract.
+//! Existing failure behavior is retained: if minting fails after resolution,
+//! the row remains approved and the response contains no minted tokens.
 
 use arkret_wire::DidCoreId;
 use chrono::{DateTime, Utc};
@@ -47,8 +36,8 @@ use crate::handlers::admin::v1::accounts::create::{
     MintRegistrationTokensParams, mint_registration_tokens,
 };
 use crate::handlers::common::DepotExt;
-use crate::services::invite_quarantine::{
-    InviteQuarantineError, InviteQuarantineRecord, InviteQuarantineStatus,
+use crate::services::admin_invite_review::{
+    AdminInviteReviewError, AdminInviteReviewRecord, AdminInviteReviewStatus,
 };
 use crate::{AppError, JsonResult};
 
@@ -56,24 +45,24 @@ use crate::{AppError, JsonResult};
 
 #[derive(Serialize, JsonSchema, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub enum WireStatus {
+pub enum AdminInviteReviewWireStatus {
     Pending,
     Approved,
     Rejected,
 }
 
-impl From<InviteQuarantineStatus> for WireStatus {
-    fn from(s: InviteQuarantineStatus) -> Self {
+impl From<AdminInviteReviewStatus> for AdminInviteReviewWireStatus {
+    fn from(s: AdminInviteReviewStatus) -> Self {
         match s {
-            InviteQuarantineStatus::Pending => Self::Pending,
-            InviteQuarantineStatus::Approved => Self::Approved,
-            InviteQuarantineStatus::Rejected => Self::Rejected,
+            AdminInviteReviewStatus::Pending => Self::Pending,
+            AdminInviteReviewStatus::Approved => Self::Approved,
+            AdminInviteReviewStatus::Rejected => Self::Rejected,
         }
     }
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct InviteQuarantineEntry {
+pub struct AdminInviteReviewEntry {
     pub id: String,
     pub created_at: DateTime<Utc>,
     #[schemars(with = "String")]
@@ -85,16 +74,16 @@ pub struct InviteQuarantineEntry {
     pub consent_id: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
-    /// Original quarantined invite document; `status` only records the review
+    /// Original invitation review document; `status` only records the review
     /// lifecycle and does not discriminate this document.
     pub payload: serde_json::Value,
-    pub status: WireStatus,
+    pub status: AdminInviteReviewWireStatus,
     pub resolved_at: Option<DateTime<Utc>>,
     pub resolution_note: Option<String>,
 }
 
-impl From<InviteQuarantineRecord> for InviteQuarantineEntry {
-    fn from(r: InviteQuarantineRecord) -> Self {
+impl From<AdminInviteReviewRecord> for AdminInviteReviewEntry {
+    fn from(r: AdminInviteReviewRecord) -> Self {
         Self {
             id: r.id.to_string(),
             created_at: r.created_at,
@@ -112,54 +101,54 @@ impl From<InviteQuarantineRecord> for InviteQuarantineEntry {
 }
 
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct InviteQuarantineListOutcome {
-    pub data: Vec<InviteQuarantineEntry>,
+pub struct AdminInviteReviewListOutcome {
+    pub data: Vec<AdminInviteReviewEntry>,
 }
 
 #[derive(Deserialize, Default, JsonSchema)]
-pub struct InviteQuarantineListQuery {
+pub struct AdminInviteReviewListQuery {
     /// Maximum rows to return (1-1000, default 100).
     pub limit: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, JsonSchema, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum ResolveDecision {
+pub enum AdminInviteReviewDecision {
     Approve,
     Reject,
 }
 
 #[derive(Deserialize, JsonSchema, ToSchema)]
-#[serde(rename = "ResolveInviteQuarantineRequest")]
-pub struct ResolveRequestBody {
-    pub decision: ResolveDecision,
+#[serde(rename = "AdminInviteReviewResolveRequestBody")]
+pub struct AdminInviteReviewResolveRequestBody {
+    pub decision: AdminInviteReviewDecision,
 
     /// Optional operator note recorded alongside the resolution.
     #[serde(default)]
     pub note: Option<String>,
 }
 
-/// Response from `resolve_invite_quarantine`. On `approve`, the queue
+/// Response from `resolve_admin_invite_review`. On `approve`, the queue
 /// row is marked resolved *and* the original `batch_invite` is re-run
-/// (round 21) — the freshly minted registration tokens are returned in
+/// (current admin behavior) — the freshly minted registration tokens are returned in
 /// `minted_tokens`. On `reject`, only the entry is updated and
 /// `minted_tokens` is empty.
 #[derive(Serialize, JsonSchema, ToSchema)]
-pub struct ResolveOutcome {
-    pub entry: InviteQuarantineEntry,
+pub struct AdminInviteReviewResolveOutcome {
+    pub entry: AdminInviteReviewEntry,
 
     /// Empty when `decision = reject` or when the original payload had
     /// no mintable parameters. Each element matches the shape returned
-    /// by `POST /_coauth/admin/users/batch-invite`.
+    /// by `POST /_coauth/admin/accounts/batch-invite`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub minted_tokens: Vec<SingleOutcome<UserRegistrationToken>>,
 }
 
 // ── Helpers ────────────────────────────────────────────────────
 
-fn map_quarantine_error(error: InviteQuarantineError) -> AppError {
+fn map_admin_invite_review_error(error: AdminInviteReviewError) -> AppError {
     match error {
-        InviteQuarantineError::Storage(error) => {
+        AdminInviteReviewError::Storage(error) => {
             AppError::internal(std::io::Error::other(error.to_string()))
         }
     }
@@ -176,53 +165,51 @@ fn extract_uuid_param(req: &Request) -> Result<Uuid, AppError> {
 
 // ── Handlers ───────────────────────────────────────────────────
 
-/// `GET /_coauth/admin/invite-quarantine`
+/// `GET /_coauth/admin/invite-reviews`
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.invite_quarantine.list", skip_all)]
-pub async fn list_invite_quarantine(
+#[tracing::instrument(name = "handler.admin.v1.admin_invite_review.list", skip_all)]
+pub async fn list_admin_invite_review(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<InviteQuarantineListOutcome> {
+) -> JsonResult<AdminInviteReviewListOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { repo, .. } = ctx;
-    let query: InviteQuarantineListQuery = req
+    let query: AdminInviteReviewListQuery = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
-    let queue = depot.invite_quarantine_service()?;
+    let queue = depot.admin_invite_review_service()?;
     // REL-10: clamp the caller-supplied limit so an unbounded / negative
     // value cannot drive an oversized scan. Mirrors the 1-1000 range
-    // documented on `InviteQuarantineListQuery::limit`.
+    // documented on `AdminInviteReviewListQuery::limit`.
     let limit = query.limit.unwrap_or(100).clamp(1, 1000);
     repo.cancel().await?;
 
     let data = queue
         .list_pending(limit)
         .await
-        .map_err(map_quarantine_error)?
+        .map_err(map_admin_invite_review_error)?
         .into_iter()
-        .map(InviteQuarantineEntry::from)
+        .map(AdminInviteReviewEntry::from)
         .collect();
 
-    Ok(Json(InviteQuarantineListOutcome { data }))
+    Ok(Json(AdminInviteReviewListOutcome { data }))
 }
 
-/// `POST /_coauth/admin/invite-quarantine/{id}/resolve`
+/// `POST /_coauth/admin/invite-reviews/{id}/resolve`
 ///
-/// Round-21 update: `approve` now actually re-runs the original
-/// `batch_invite` using the parameters captured in `payload` at enqueue
-/// time. The minted tokens are returned in `ResolveOutcome.minted_tokens`
-/// so the caller (sodmin / inkson) doesn't need a follow-up call. The
-/// consent gate is not re-evaluated — the operator approving the queue
-/// row has explicitly vouched for the consent decision out of band.
+/// `approve` mints registration tokens from the parameters captured at enqueue
+/// time and returns them in `AdminInviteReviewResolveOutcome.minted_tokens`.
+/// The local gate is not re-evaluated: this is the administrator's minting
+/// decision, which neither grants nor changes the recipient's Consent state.
 ///
 /// `reject` is unchanged: marks the row resolved and records an audit
 /// op without minting anything.
 #[endpoint]
-#[tracing::instrument(name = "handler.admin.v1.invite_quarantine.resolve", skip_all)]
-pub async fn resolve_invite_quarantine(
+#[tracing::instrument(name = "handler.admin.v1.admin_invite_review.resolve", skip_all)]
+pub async fn resolve_admin_invite_review(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<ResolveOutcome> {
+) -> JsonResult<AdminInviteReviewResolveOutcome> {
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext {
         mut repo,
@@ -232,39 +219,40 @@ pub async fn resolve_invite_quarantine(
     } = ctx;
     let mut rng = crate::handlers::account::make_rng();
     let id = extract_uuid_param(req)?;
-    let body: ResolveRequestBody = req.parse_json().await.map_err(AppError::internal)?;
-    let queue = depot.invite_quarantine_service()?;
+    let body: AdminInviteReviewResolveRequestBody =
+        req.parse_json().await.map_err(AppError::internal)?;
+    let queue = depot.admin_invite_review_service()?;
     let now = clock.now();
 
     let new_status = match body.decision {
-        ResolveDecision::Approve => InviteQuarantineStatus::Approved,
-        ResolveDecision::Reject => InviteQuarantineStatus::Rejected,
+        AdminInviteReviewDecision::Approve => AdminInviteReviewStatus::Approved,
+        AdminInviteReviewDecision::Reject => AdminInviteReviewStatus::Rejected,
     };
 
     let record = queue
         .mark_resolved(id, new_status, body.note.clone(), now)
         .await
-        .map_err(map_quarantine_error)?
+        .map_err(map_admin_invite_review_error)?
         .ok_or_else(|| {
             AppError::not_found(format!(
-                "Invite-quarantine entry {id} not found or already resolved"
+                "Admin invite review entry {id} not found or already resolved"
             ))
         })?;
 
-    // ── Approve auto-replay (round 21) ───────────────────────────
+    // ── Approve auto-replay (current admin behavior) ───────────────────────────
     //
     // batch_invite enqueues the original mint params (count /
-    // usage_limit / expires_in_hours) into `payload` at quarantine
+    // usage_limit / expires_in_hours) into `payload` at review
     // time. On approve, re-mint the same number of tokens against
     // `repo` and return them in the response. We deliberately do NOT
     // re-run the consent gate here — the operator approving the queue
-    // row has already vouched for the consent decision.
+    // row has approved these registration-token mint parameters.
     //
     // If `payload` has no recognisable mint params (for example manual
     // queue inserts), we log a warning and fall through to the
     // flag-flip-only path. Reject always falls through.
     let mut minted_tokens: Vec<SingleOutcome<UserRegistrationToken>> = Vec::new();
-    if matches!(body.decision, ResolveDecision::Approve) {
+    if matches!(body.decision, AdminInviteReviewDecision::Approve) {
         if let Some(params) = mint_params_from_payload(&record.payload) {
             match mint_registration_tokens(
                 &mut repo,
@@ -282,23 +270,23 @@ pub async fn resolve_invite_quarantine(
                     // intent. Log loudly and surface an empty token list
                     // so they can re-issue manually if needed.
                     warn!(
-                        quarantine_id = %record.id,
+                        admin_invite_review_id = %record.id,
                         ?error,
-                        "invite_quarantine.approve: token mint failed; row resolved without tokens",
+                        "admin_invite_review.approve: token mint failed; row resolved without tokens",
                     );
                 }
             }
         } else {
             warn!(
-                quarantine_id = %record.id,
-                "invite_quarantine.approve: payload has no mint params; row resolved without minting",
+                admin_invite_review_id = %record.id,
+                "admin_invite_review.approve: payload has no mint params; row resolved without minting",
             );
         }
     }
 
     let op_label = match body.decision {
-        ResolveDecision::Approve => "invite_quarantine.approve",
-        ResolveDecision::Reject => "invite_quarantine.reject",
+        AdminInviteReviewDecision::Approve => "admin_invite_review.approve",
+        AdminInviteReviewDecision::Reject => "admin_invite_review.reject",
     };
 
     record_admin_operation(
@@ -307,13 +295,13 @@ pub async fn resolve_invite_quarantine(
         &*clock,
         admin_user.as_ref(),
         AdminOperation::Other(op_label.to_owned()),
-        "invite_quarantine_queue",
+        "admin_invite_review_queue",
         // Audit table uses Ulid; the queue id is uuid-v7. Pass None
         // for the resource_id slot and stash the uuid in the metadata
         // payload so audit-feed consumers can correlate.
         None,
         serde_json::json!({
-            "quarantine_id": record.id.to_string(),
+            "admin_invite_review_id": record.id.to_string(),
             "decision": op_label.split('.').next_back().unwrap_or(""),
             "peer_principal_id": &record.peer_principal_id,
             "target_holder_principal_id": &record.target_holder_principal_id,
@@ -327,15 +315,15 @@ pub async fn resolve_invite_quarantine(
 
     repo.save().await?;
 
-    Ok(Json(ResolveOutcome {
-        entry: InviteQuarantineEntry::from(record),
+    Ok(Json(AdminInviteReviewResolveOutcome {
+        entry: AdminInviteReviewEntry::from(record),
         minted_tokens,
     }))
 }
 
 /// Pull mint parameters out of the queue row's `payload` JSON. The
 /// shape is the one written in
-/// `handlers::admin::v1::accounts::create::batch_invite` at quarantine
+/// `handlers::admin::v1::accounts::create::batch_invite` at review
 /// time:
 ///
 /// ```json
@@ -367,22 +355,20 @@ fn mint_params_from_payload(payload: &serde_json::Value) -> Option<MintRegistrat
 
 #[cfg(test)]
 mod tests {
-    //! Pure-helper tests for wire-type mapping. End-to-end coverage of
-    //! the list/resolve handlers requires the test-db harness; the
-    //! `batch_invite` wiring tests in `accounts::tests` already exercise the
-    //! enqueue path on the same harness.
+    //! Pure DTO helpers; the sibling `pg_tests` module exercises real routes,
+    //! PostgreSQL persistence, token minting and audit records.
 
     use super::*;
 
     #[test]
     fn wire_status_round_trip() {
         let cases = [
-            (InviteQuarantineStatus::Pending, "pending"),
-            (InviteQuarantineStatus::Approved, "approved"),
-            (InviteQuarantineStatus::Rejected, "rejected"),
+            (AdminInviteReviewStatus::Pending, "pending"),
+            (AdminInviteReviewStatus::Approved, "approved"),
+            (AdminInviteReviewStatus::Rejected, "rejected"),
         ];
         for (svc, expected) in cases {
-            let wire: WireStatus = svc.into();
+            let wire: AdminInviteReviewWireStatus = svc.into();
             let v = serde_json::to_value(wire).unwrap();
             assert_eq!(v, serde_json::Value::String(expected.into()));
         }
@@ -392,7 +378,7 @@ mod tests {
     fn entry_from_record_preserves_fields() {
         let id = Uuid::now_v7();
         let now = Utc::now();
-        let rec = InviteQuarantineRecord {
+        let rec = AdminInviteReviewRecord {
             id,
             created_at: now,
             peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
@@ -401,11 +387,11 @@ mod tests {
             scope: "invite".into(),
             requesting_admin_localpart: Some("admin1".into()),
             payload: serde_json::json!({"count": 3}),
-            status: InviteQuarantineStatus::Pending,
+            status: AdminInviteReviewStatus::Pending,
             resolved_at: None,
             resolution_note: None,
         };
-        let entry = InviteQuarantineEntry::from(rec);
+        let entry = AdminInviteReviewEntry::from(rec);
         assert_eq!(entry.id, id.to_string());
         assert_eq!(entry.peer_principal_id.as_str(), "ak:did_core:web:peer");
         assert_eq!(
@@ -416,27 +402,29 @@ mod tests {
         assert_eq!(entry.scope, "invite");
         assert_eq!(entry.requesting_admin_localpart.as_deref(), Some("admin1"));
         assert_eq!(entry.payload["count"], 3);
-        assert!(matches!(entry.status, WireStatus::Pending));
+        assert!(matches!(entry.status, AdminInviteReviewWireStatus::Pending));
     }
 
     #[test]
     fn resolve_request_parses_approve() {
-        let body: ResolveRequestBody = serde_json::from_str(r#"{"decision": "approve"}"#).unwrap();
-        assert_eq!(body.decision, ResolveDecision::Approve);
+        let body: AdminInviteReviewResolveRequestBody =
+            serde_json::from_str(r#"{"decision": "approve"}"#).unwrap();
+        assert_eq!(body.decision, AdminInviteReviewDecision::Approve);
         assert!(body.note.is_none());
     }
 
     #[test]
     fn resolve_request_parses_reject_with_note() {
-        let body: ResolveRequestBody =
+        let body: AdminInviteReviewResolveRequestBody =
             serde_json::from_str(r#"{"decision": "reject", "note": "spam"}"#).unwrap();
-        assert_eq!(body.decision, ResolveDecision::Reject);
+        assert_eq!(body.decision, AdminInviteReviewDecision::Reject);
         assert_eq!(body.note.as_deref(), Some("spam"));
     }
 
     #[test]
     fn resolve_request_rejects_unknown_decision() {
-        let res: Result<ResolveRequestBody, _> = serde_json::from_str(r#"{"decision": "maybe"}"#);
+        let res: Result<AdminInviteReviewResolveRequestBody, _> =
+            serde_json::from_str(r#"{"decision": "maybe"}"#);
         assert!(res.is_err(), "unknown decision must not parse");
     }
 
@@ -477,3 +465,7 @@ mod tests {
         assert!(mint_params_from_payload(&serde_json::json!({"reason": "x"})).is_none());
     }
 }
+
+#[cfg(all(test, feature = "cedar"))]
+#[path = "admin_invite_review_tests.rs"]
+mod pg_tests;

@@ -264,10 +264,7 @@ fn account_api_subrouters() -> (Router, Router) {
                 .options(oidc_preflight_handler)
                 .post(arkret::request_account_erasure),
         )
-        .push(
-            Router::with_path("peer/account-status/resolve")
-                .post(arkret::resolve_account_status),
-        )
+        .push(Router::with_path("peer/account-status/resolve").post(arkret::resolve_account_status))
         .push(Router::with_path("{**rest}").goal(arkret_not_found));
 
     let coauth_router = Router::with_path("/_coauth")
@@ -295,10 +292,7 @@ fn account_api_subrouters() -> (Router, Router) {
             Router::with_path("internal/device-pairing/status-queries")
                 .post(arkret::private_device_pairing_status_adapter),
         )
-        .push(
-            Router::with_path("internal/auth-sessions/logout")
-                .post(arkret::logout_auth_session),
-        )
+        .push(Router::with_path("internal/auth-sessions/logout").post(arkret::logout_auth_session))
         .push(
             Router::with_path("internal/session-grants/introspect")
                 .post(arkret::introspect_session_grant),
@@ -325,7 +319,10 @@ fn account_api_subrouters() -> (Router, Router) {
             // reserved for the canonical `/_arkret` operations.
             Router::with_path("account/session-grants")
                 .get(crate::handlers::account::session_grants::list_session_grants)
-                .push(Router::with_path("{id}/revoke").post(crate::handlers::account::session_grants::revoke_session_grant)),
+                .push(
+                    Router::with_path("{id}/revoke")
+                        .post(crate::handlers::account::session_grants::revoke_session_grant),
+                ),
         )
         // Viewer
         .push(
@@ -384,9 +381,7 @@ fn account_api_subrouters() -> (Router, Router) {
         )
         // User emails
         .push(Router::with_path("self/user-emails/{id}").delete(emails::remove_email))
-        .push(
-            Router::with_path("account/integration/describe").get(auth::integration_describe),
-        )
+        .push(Router::with_path("account/integration/describe").get(auth::integration_describe))
         // Auth (login, logout, providers, registration, recovery)
         //
         // The product-private OIDC bridge endpoints (`bridge/describe`,
@@ -663,12 +658,12 @@ pub(super) fn build_admin_router(router: Router) -> Router {
 
 fn admin_subrouter() -> Router {
     use crate::handlers::admin::v1::{
-        account_dids, accounts, audit_feed, circle_capabilities, claims,
-        collaboration_capabilities, connector_health, devices, invite_quarantine,
-        notification_channels, notification_templates, oauth_clients, oauth_clients_i18n,
-        oauth_clients_register, oauth_sessions, organizations, personal_sessions, policy_data,
-        site_config, upstream_oauth_links, upstream_oauth_providers, user_emails,
-        user_registration_tokens, user_sessions, version,
+        account_dids, accounts, admin_invite_review, audit_feed, circle_capabilities, claims,
+        collaboration_capabilities, connector_health, devices, notification_channels,
+        notification_templates, oauth_clients, oauth_clients_i18n, oauth_clients_register,
+        oauth_sessions, organizations, personal_sessions, policy_data, site_config,
+        upstream_oauth_links, upstream_oauth_providers, user_emails, user_registration_tokens,
+        user_sessions, version,
     };
 
     Router::with_path("/_coauth/admin")
@@ -702,7 +697,7 @@ fn admin_subrouter() -> Router {
                 .push(
                     Router::with_path("templates")
                         .get(collaboration_capabilities::templates_handler),
-                )
+                ),
         )
         // COA-ORG: organization principal control + delegation management.
         // Wire shapes are in coauth-admin-types::organization_admin + the SDK
@@ -739,13 +734,13 @@ fn admin_subrouter() -> Router {
                         ),
                 ),
         )
-        // Invite-quarantine outbox (C10.E §6.1 default-profile path)
+        // Issuing deployment administrator invite review outbox
         .push(
-            Router::with_path("invite-quarantine")
-                .get(invite_quarantine::list_invite_quarantine)
+            Router::with_path("invite-reviews")
+                .get(admin_invite_review::list_admin_invite_review)
                 .push(
                     Router::with_path("{id}/resolve")
-                        .post(invite_quarantine::resolve_invite_quarantine),
+                        .post(admin_invite_review::resolve_admin_invite_review),
                 ),
         )
         // Arkret accounts
