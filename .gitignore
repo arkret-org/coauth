@@ -25,6 +25,8 @@ _*.*
 *.py
 !conformance/prepare-local-config.py
 !conformance/run-official-plan.py
+!conformance/publish-evidence.py
+!conformance/tests/test_public_evidence.py
 __pycache__/
 .agent*
 

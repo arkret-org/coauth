@@ -26,6 +26,7 @@ on:
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   CARGO_TERM_COLOR: always
+  COAUTH_CONFORMANCE_RESULTS: ${{ runner.temp }}/public-oidc-evidence
   COAUTH_CONFORMANCE_REF: 11999aad62ec292f36101410d9d5b761d44903ff
 
 concurrency:
@@ -101,6 +102,9 @@ jobs:
           ref: ${{ env.COAUTH_CONFORMANCE_REF }}
           path: official-oidf-suite
 
+      - name: Test the public evidence credential boundary
+        run: python3 -m unittest discover -s conformance/tests
+
       - name: Apply the literal metadata member regression fix
         run: |
           test "$(git -C official-oidf-suite rev-parse HEAD)" = "$COAUTH_CONFORMANCE_REF"
@@ -131,8 +135,6 @@ jobs:
       - name: Build Coauth
         run: |
           cargo build --locked --bin coauth
-          target_dir=$(cargo metadata --locked --format-version 1 --no-deps | jq -er .target_directory)
-          echo "COAUTH_CONFORMANCE_RESULTS=${target_dir}/conformance-results" >> "$GITHUB_ENV"
 
       - name: Run official conformance plans
         env:
@@ -141,6 +143,13 @@ jobs:
           CONFORMANCE_PLAN: ${{ github.event.inputs.plan || 'all' }}
           COAUTH_CONFORMANCE_FULL_PLANS_JSON: ${{ secrets.COAUTH_CONFORMANCE_FULL_PLANS_JSON }}
         run: bash conformance/run-local-official-suite.sh
+
+      - name: Preserve credential-free JUnit evidence
+        if: ${{ always() }}
+        run: >-
+          python3 conformance/publish-evidence.py
+          --junit official-oidf-suite/target/surefire-reports
+          --output "$COAUTH_CONFORMANCE_RESULTS"
 
       - name: Upload conformance results
         if: ${{ always() }}

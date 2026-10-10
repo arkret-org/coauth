@@ -5,20 +5,34 @@ set -euo pipefail
 : "${DATABASE_URL:?a dedicated migrated-or-empty test database is required}"
 : "${COAUTH_CONFORMANCE_SOURCE:?the pinned official suite checkout is required}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+suite_source_ref=$(git -C "$COAUTH_CONFORMANCE_SOURCE" rev-parse HEAD)
 run_dir=$(mktemp -d)
 target_dir=$(cargo metadata --locked --format-version 1 --no-deps --manifest-path "${repo_root}/Cargo.toml" | jq -er .target_directory)
 results_dir="${COAUTH_CONFORMANCE_RESULTS:-${target_dir}/conformance-results}"
-mkdir -p "$results_dir"
+private_results_dir="$run_dir/official-results"
+mkdir -p "$results_dir" "$private_results_dir"
 coauth_pid=""
 suite_pid=""
 proxy_name="coauth-oidc-proxy-${GITHUB_RUN_ID:-$$}"
 cleanup() {
+    local incoming_status=$?
+    set +e
+    python3 "${repo_root}/conformance/publish-evidence.py" \
+        --archives "$private_results_dir" \
+        --junit "${COAUTH_CONFORMANCE_SOURCE}/target/surefire-reports" \
+        --source-ref "$suite_source_ref" \
+        --output "$results_dir"
+    local evidence_status=$?
     for pid in "$coauth_pid" "$suite_pid"; do
         if [[ -n "$pid" ]]; then kill "$pid" 2>/dev/null || true; fi
     done
     docker rm -f "$proxy_name" >/dev/null 2>&1 || true
     # Configuration, wrapping keys and TLS keys never become CI artifacts.
     rm -rf "$run_dir"
+    if [[ "$incoming_status" == 0 && "$evidence_status" != 0 ]]; then
+        exit "$evidence_status"
+    fi
+    exit "$incoming_status"
 }
 trap cleanup EXIT
 binary="${COAUTH_BINARY:-${target_dir}/debug/coauth}"
@@ -64,7 +78,7 @@ docker run --detach --name "$proxy_name" --network host \
     --mount "type=bind,source=$run_dir/nginx.conf,target=/etc/nginx/nginx.conf,readonly" \
     nginx:1.28-alpine > /dev/null
 "$binary" server --first-provisioning --config "$run_dir/coauth.yaml" \
-    > "$results_dir/coauth-server.log" 2>&1 &
+    > "$private_results_dir/coauth-server.log" 2>&1 &
 coauth_pid=$!
 java -Xmx2g -Djavax.net.ssl.trustStore="$run_dir/truststore" \
     -Djavax.net.ssl.trustStorePassword=changeit \
@@ -72,7 +86,7 @@ java -Xmx2g -Djavax.net.ssl.trustStore="$run_dir/truststore" \
     --server.port=8081 --fintechlabs.devmode=true \
     --fintechlabs.base_url=https://localhost:8446 \
     --spring.mongodb.uri="${COAUTH_CONFORMANCE_MONGO_URI:-mongodb://localhost:27017/coauth_conformance}" \
-    > "$results_dir/official-server.log" 2>&1 &
+    > "$private_results_dir/official-server.log" 2>&1 &
 suite_pid=$!
 export CURL_CA_BUNDLE="$run_dir/tls.crt"
 for endpoint in https://localhost:8445/health https://localhost:8446/api/runner/available; do
@@ -85,7 +99,7 @@ for endpoint in https://localhost:8445/health https://localhost:8446/api/runner/
     done
     if [[ "$ready" != 1 ]]; then echo "::error::Service unavailable: $endpoint" >&2; exit 2; fi
 done
-export RESULTS_DIR="$results_dir"
+export RESULTS_DIR="$private_results_dir"
 export COAUTH_SKIP_BOOT=1 COAUTH_RUN_FULL_CONFORMANCE=1
 export COAUTH_CONFORMANCE_ISSUER=https://localhost:8445
 export COAUTH_CONFORMANCE_DISCOVERY_CONFIG="$run_dir/discovery.json"

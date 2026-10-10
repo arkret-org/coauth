@@ -8,8 +8,12 @@ service, and invokes its `scripts/run-test-plan.py` API runner. No prebuilt
 `run-local-official-suite.sh` prepares an isolated Coauth PostgreSQL fixture,
 two registered static clients, and HTTPS reverse proxies for Coauth and the
 suite. Java trusts the temporary issuer certificate. Private configuration,
-wrapping keys and TLS keys are deleted after the run; service logs and official
-exported result archives are uploaded.
+wrapping keys and TLS keys are deleted after the run. The original official
+signed ZIP archives and service logs remain in the private temporary directory
+and are deleted with it. Only module/condition outcome summaries and JUnit
+outcomes without configuration, HTTP payloads or diagnostic messages are
+uploaded. Archive SHA-256 digests preserve a reference to the untouched originals;
+the sanitized summaries are not signed certification archives.
 
 ## Test scope
 
