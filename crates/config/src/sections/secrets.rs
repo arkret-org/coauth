@@ -10,6 +10,7 @@ mod generation;
 
 use std::collections::BTreeSet;
 use std::fmt;
+use std::sync::Arc;
 
 use anyhow::{Context, bail, ensure};
 use arkret_keystore::KeyStore;
@@ -163,12 +164,14 @@ impl KeyStoreConfig {
     async fn open(&self) -> anyhow::Result<Box<dyn KeyStore>> {
         self.validate_backend()?;
         match self.backend {
-            KeyStoreBackend::Platform => {
+            KeyStoreBackend::Platform => tokio::task::spawn_blocking(|| {
                 arkret_keystore::durable_platform_keystore(KEYSTORE_APPLICATION_ID)
                     .map_err(|error| anyhow::anyhow!("opening platform KeyStore failed: {error}"))
-            }
+            })
+            .await
+            .context("joining platform KeyStore open task")?,
             KeyStoreBackend::EncryptedFile => {
-                let path = self.path.as_ref().expect("validated above");
+                let path = self.path.as_ref().expect("validated above").clone();
                 let raw = match (&self.master_key, &self.master_key_file) {
                     (Some(value), None) => value.clone(),
                     (None, Some(path)) => Zeroizing::new(
@@ -192,19 +195,22 @@ impl KeyStoreConfig {
                     "KeyStore master key must decode to exactly 32 bytes (got {})",
                     decoded.len()
                 );
-                let mut key = [0u8; 32];
+                let mut key = Zeroizing::new([0u8; 32]);
                 key.copy_from_slice(&decoded);
                 decoded.zeroize();
-                let store = arkret_keystore::EncryptedFileKeyStore::new(
-                    path.as_std_path(),
-                    KEYSTORE_APPLICATION_ID,
-                    key,
-                )
-                .map_err(|error| {
-                    anyhow::anyhow!("opening encrypted-file KeyStore failed: {error}")
-                });
-                key.zeroize();
-                Ok(Box::new(store?) as Box<dyn KeyStore>)
+                tokio::task::spawn_blocking(move || {
+                    let store = arkret_keystore::EncryptedFileKeyStore::new(
+                        path.as_std_path(),
+                        KEYSTORE_APPLICATION_ID,
+                        *key,
+                    )
+                    .map_err(|error| {
+                        anyhow::anyhow!("opening encrypted-file KeyStore failed: {error}")
+                    });
+                    Ok(Box::new(store?) as Box<dyn KeyStore>)
+                })
+                .await
+                .context("joining encrypted-file KeyStore open task")?
             }
         }
     }
@@ -213,7 +219,7 @@ impl KeyStoreConfig {
     /// generation when the durable store is empty.
     pub async fn runtime(&self, first_provisioning: bool) -> anyhow::Result<RuntimeSecrets> {
         let store = self.open().await?;
-        load_runtime_from_store(store.as_ref(), first_provisioning).await
+        load_runtime_from_store(Arc::from(store), first_provisioning).await
     }
 }
 
@@ -242,25 +248,34 @@ impl RuntimeSecrets {
 }
 
 async fn load_runtime_from_store(
-    store: &dyn KeyStore,
+    store: Arc<dyn KeyStore>,
     first_provisioning: bool,
 ) -> anyhow::Result<RuntimeSecrets> {
-    match store.load(KEY_BUNDLE_ID) {
+    // Native credential backends can run their own private runtime. Keep their
+    // synchronous operations outside Tokio's async executor, including reads.
+    let read_store = Arc::clone(&store);
+    let loaded = tokio::task::spawn_blocking(move || read_store.load(KEY_BUNDLE_ID))
+        .await
+        .context("joining Coauth runtime key bundle load task")?;
+    match loaded {
         Ok(bytes) => build_runtime(StoredKeyBundle::decode(bytes.as_slice())?),
         Err(error) if error.is_not_found() && first_provisioning => {
             let mut rng = rand_chacha::ChaChaRng::from_entropy();
             let generated = generate_key_bundle(&mut rng).await?;
             let encoded = generated.encode()?;
-            store
-                .store(KEY_BUNDLE_ID, &encoded)
-                .context("persisting generated Coauth runtime key bundle")?;
+            let persisted = tokio::task::spawn_blocking(move || {
+                store
+                    .store(KEY_BUNDLE_ID, &encoded)
+                    .context("persisting generated Coauth runtime key bundle")?;
 
-            // Use the backend's committed value, not the local candidate. This
-            // also detects backends that acknowledged a write without making
-            // the complete value readable.
-            let persisted = store
-                .load(KEY_BUNDLE_ID)
-                .context("reloading provisioned Coauth runtime key bundle")?;
+                // Use the backend's committed value, not the local candidate.
+                // Detect acknowledged writes whose complete value is unreadable.
+                store
+                    .load(KEY_BUNDLE_ID)
+                    .context("reloading provisioned Coauth runtime key bundle")
+            })
+            .await
+            .context("joining Coauth runtime key bundle provisioning task")??;
             build_runtime(StoredKeyBundle::decode(persisted.as_slice())?)
         }
         Err(error) if error.is_not_found() => bail!(
@@ -337,7 +352,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::sync::Mutex;
 
-    use arkret_keystore::{EncryptedFileKeyStore, KeyBytes, KeyStoreError};
+    use arkret_keystore::{KeyBytes, KeyStoreError};
     use tempfile::tempdir;
 
     use super::*;
@@ -345,10 +360,24 @@ mod tests {
     #[derive(Default)]
     struct TestKeyStore {
         keys: Mutex<BTreeMap<String, Vec<u8>>>,
+        requires_private_runtime: bool,
+    }
+
+    impl TestKeyStore {
+        fn enter_private_runtime(&self) {
+            if self.requires_private_runtime {
+                // Model synchronous native libraries that own a Tokio runtime.
+                tokio::runtime::Builder::new_current_thread()
+                    .build()
+                    .unwrap()
+                    .block_on(async {});
+            }
+        }
     }
 
     impl KeyStore for TestKeyStore {
         fn load(&self, id: &str) -> std::result::Result<KeyBytes, KeyStoreError> {
+            self.enter_private_runtime();
             self.keys
                 .lock()
                 .unwrap()
@@ -359,6 +388,7 @@ mod tests {
         }
 
         fn store(&self, id: &str, key: &[u8]) -> std::result::Result<(), KeyStoreError> {
+            self.enter_private_runtime();
             arkret_keystore::validate_id(id)?;
             self.keys
                 .lock()
@@ -380,10 +410,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_store_provisions_once_and_reloads_same_jwks() {
-        let store = TestKeyStore::default();
-        let first = load_runtime_from_store(&store, true).await.unwrap();
-        let repeated_provisioning = load_runtime_from_store(&store, true).await.unwrap();
-        let read_only = load_runtime_from_store(&store, false).await.unwrap();
+        let store: Arc<dyn KeyStore> = Arc::new(TestKeyStore::default());
+        let first = load_runtime_from_store(Arc::clone(&store), true)
+            .await
+            .unwrap();
+        let repeated_provisioning = load_runtime_from_store(Arc::clone(&store), true)
+            .await
+            .unwrap();
+        let read_only = load_runtime_from_store(store, false).await.unwrap();
 
         assert_eq!(
             serde_json::to_value(first.keyring().public_jwks()).unwrap(),
@@ -402,7 +436,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_bundle_fails_without_first_provisioning() {
-        let error = load_runtime_from_store(&TestKeyStore::default(), false)
+        let error = load_runtime_from_store(Arc::new(TestKeyStore::default()), false)
             .await
             .err()
             .expect("missing bundle must fail");
@@ -417,24 +451,25 @@ mod tests {
     async fn encrypted_file_reopens_with_same_keys_and_encryption_secret() {
         let directory = tempdir().unwrap();
         let path = directory.path().join("coauth-runtime-keys.v1");
+        let master_key_path = directory.path().join("master.key");
         let master_key = [0xA7; 32];
-
-        let first_store =
-            EncryptedFileKeyStore::new(&path, KEYSTORE_APPLICATION_ID, master_key).unwrap();
-        let first = load_runtime_from_store(&first_store, true).await.unwrap();
+        std::fs::write(
+            &master_key_path,
+            base64::engine::general_purpose::STANDARD.encode(master_key),
+        )
+        .unwrap();
+        let config = KeyStoreConfig::encrypted_file(
+            Utf8PathBuf::from_path_buf(path).unwrap(),
+            Utf8PathBuf::from_path_buf(master_key_path).unwrap(),
+        );
+        let first = config.runtime(true).await.unwrap();
         let expected_jwks = serde_json::to_value(first.keyring().public_jwks()).unwrap();
         let ciphertext = first
             .encrypter()
             .encrypt_to_string(b"after restart")
             .unwrap();
         drop(first);
-        drop(first_store);
-
-        let reopened_store =
-            EncryptedFileKeyStore::new(&path, KEYSTORE_APPLICATION_ID, master_key).unwrap();
-        let reopened = load_runtime_from_store(&reopened_store, false)
-            .await
-            .unwrap();
+        let reopened = config.runtime(false).await.unwrap();
         assert_eq!(
             serde_json::to_value(reopened.keyring().public_jwks()).unwrap(),
             expected_jwks
@@ -443,6 +478,23 @@ mod tests {
             reopened.encrypter().decrypt_string(&ciphertext).unwrap(),
             b"after restart"
         );
+    }
+
+    #[tokio::test]
+    async fn synchronous_backend_can_use_its_private_runtime_during_provisioning_and_reload() {
+        let store: Arc<dyn KeyStore> = Arc::new(TestKeyStore {
+            requires_private_runtime: true,
+            ..TestKeyStore::default()
+        });
+        let first = load_runtime_from_store(Arc::clone(&store), true)
+            .await
+            .unwrap();
+        let reloaded = load_runtime_from_store(store, false).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(first.keyring().public_jwks()).unwrap(),
+            serde_json::to_value(reloaded.keyring().public_jwks()).unwrap()
+        );
+        assert_eq!(first.encryption_key(), reloaded.encryption_key());
     }
 
     #[test]
