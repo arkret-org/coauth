@@ -222,6 +222,10 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [rustfmt, compile-test-artifacts]
 
+    env:
+      # Archive execution needs metadata and source fixtures, without compiling.
+      RUSTC_WRAPPER: ""
+
     permissions:
       contents: read
 
@@ -248,10 +252,19 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - name: Fetch formal test-material registry
+      - name: Fetch runtime test source dependencies
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
+        run: |
+          # Snapshot assertions resolve the workspace with cargo metadata at runtime.
+          bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+          bash .ci/checkout-sibling.sh soland ../soland
+          bash .ci/checkout-sibling.sh cotest ../cotest
+          bash .ci/checkout-sibling.sh garth ../garth
+          bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
+          bash .ci/checkout-sibling.sh floria ../floria
+          bash .ci/checkout-sibling.sh inkson ../inkson
+          bash .ci/checkout-sibling.sh chime ../chime
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
@@ -267,6 +280,9 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: nextest-archive
+
+      - name: Verify runtime workspace metadata
+        run: cargo metadata --locked --format-version 1 > /dev/null
 
       - name: Apply the current test database schema
         env:
