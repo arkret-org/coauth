@@ -158,10 +158,19 @@ jobs:
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
 
-      - name: Audit with cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@76cd80eb775d7bbbd2d80292136d74d39e1b4918 # v2.0.14
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
-          rust-version: stable
+          toolchain: stable
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
+        with:
+          tool: cargo-deny@0.20.2
+
+      # The Docker action cannot mount the path dependencies beside this checkout.
+      - name: Audit with cargo-deny
+        run: cargo deny --locked --all-features --config deny.toml check
 
   # -- Test execution --
 
