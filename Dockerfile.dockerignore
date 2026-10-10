@@ -16,7 +16,10 @@
 **/*.log
 
 # Locally provisioned credentials and generated integration configuration.
-**/secrets/
+# Credential mounts live at context/repository roots; nested Rust modules
+# named secrets are source inputs.
+secrets/
+*/secrets/
 **/.secrets/
 coauth/conformance/test-config.yaml
 coauth/conformance/test-config.yaml.raw
