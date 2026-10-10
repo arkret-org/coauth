@@ -1,39 +1,14 @@
 #!/usr/bin/env bash
-# OIDC conformance runner — round 28.
-#
-# Two layers:
-#
-#   1. boots a coauth instance on http://127.0.0.1:8080 from the prebuilt
-#      release binary (CI runs `cargo build --release -p coauth-cli`
-#      first; locally you can do the same), waits for /health, fetches
-#      /.well-known/openid-configuration, and pretty-prints it. The
-#      `--with-stack` / `COAUTH_SKIP_BOOT=1` env var skips this layer
-#      when CI has already brought up coauth via docker-compose.
-#
-#   2. when `COAUTH_RUN_FULL_CONFORMANCE=1` is set in the environment,
-#      pulls `openid/conformance-suite:latest` via Docker, mounts the
-#      `conformance/` directory at `/server/configs:ro`, and invokes one
-#      or more `plan-*.json` configs via `--config`. Results land in
-#      `target/conformance-results/<plan>.json`. The script exits
-#      non-zero on the first failed plan.
-#
-# Plan selection (round-28 `--plan` flag):
-#
-#   --plan basic-op           runs only conformance/plan-basic-op.json
-#   --plan fapi2-baseline     runs only conformance/plan-fapi2-baseline.json
-#   --plan mtls-baseline      runs only conformance/plan-mtls-baseline.json
-#   --plan all                runs every plan-*.json (default)
-#
-# Or via env var: `CONFORMANCE_PLAN=mtls-baseline ./scripts/oidc-conformance.sh`.
-#
-# Usage (locally):
-#   $ cargo build --release -p coauth-cli
-#   $ ./scripts/oidc-conformance.sh
-#
-# Usage (CI, against compose-managed coauth):
-#   $ COAUTH_SKIP_BOOT=1 COAUTH_RUN_FULL_CONFORMANCE=1 \
-#       COAUTH_BIND=127.0.0.1:57080 \
-#       ./scripts/oidc-conformance.sh --plan basic-op
+# OIDC conformance against the official OIDF Java/Mongo API server.
+# `discovery` runs the complete OIDCC Config profile; it is not OP/FAPI/mTLS
+# certification. `all` retains the full-profile request and fails if the
+# protected real-client/login/certificate plan fixtures are unavailable.
+# Local fixture bootstrap: conformance/run-local-official-suite.sh.
+# Existing running servers: set COAUTH_SKIP_BOOT=1, COAUTH_CONFORMANCE_SOURCE,
+# CONFORMANCE_SERVER and COAUTH_CONFORMANCE_DISCOVERY_CONFIG.
+# Full profiles additionally require COAUTH_CONFORMANCE_FULL_PLAN_DIR with
+# basic-op.json, fapi2-baseline.json and mtls-baseline.json. Each file records
+# its actual upstream plan name in _official_plan and uses real client ids.
 
 set -euo pipefail
 
@@ -68,9 +43,9 @@ while (( $# > 0 )); do
 done
 
 readonly COAUTH_BIND="${COAUTH_BIND:-127.0.0.1:8080}"
-readonly COAUTH_BINARY="${COAUTH_BINARY:-target/release/coauth-cli}"
-readonly DISCOVERY_URL="http://${COAUTH_BIND}/.well-known/openid-configuration"
-readonly HEALTH_URL="http://${COAUTH_BIND}/health"
+readonly COAUTH_BINARY="${COAUTH_BINARY:-target/release/coauth}"
+readonly DISCOVERY_URL="${COAUTH_CONFORMANCE_ISSUER:-http://${COAUTH_BIND}}/.well-known/openid-configuration"
+readonly HEALTH_URL="${COAUTH_CONFORMANCE_ISSUER:-http://${COAUTH_BIND}}/health"
 readonly COAUTH_SKIP_BOOT="${COAUTH_SKIP_BOOT:-0}"
 
 # ─────────────────────────────────────────────────────────────────────
@@ -104,7 +79,7 @@ trap cleanup EXIT
 if [[ "${COAUTH_SKIP_BOOT}" != "1" ]]; then
     if [[ ! -x "${COAUTH_BINARY}" ]]; then
         echo "[oidc-conformance] expected coauth binary at ${COAUTH_BINARY}; build it first with:" >&2
-        echo "    cargo build --release -p coauth-cli" >&2
+        echo "    cargo build --release -p coauth-cli --bin coauth" >&2
         exit 2
     fi
     if [[ -z "${COAUTH_CONFIG:-}" ]]; then
@@ -142,7 +117,7 @@ DISCOVERY_BODY="$(curl -fsS "${DISCOVERY_URL}")"
 echo "${DISCOVERY_BODY}" | (command -v jq >/dev/null && jq . || cat)
 
 # ─────────────────────────────────────────────────────────────────────
-# Layer 2: optionally invoke openid/conformance-suite via Docker
+# Layer 2: invoke the official Java/Mongo service through its Python API runner
 # ─────────────────────────────────────────────────────────────────────
 readonly CONFORMANCE_DIR="${CONFORMANCE_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/conformance}"
 readonly RESULTS_DIR="${RESULTS_DIR:-target/conformance-results}"
@@ -155,6 +130,8 @@ case "${PLAN_SELECTION}" in
             [[ -e "${cfg}" ]] || continue
             PLAN_FILES+=("${cfg}")
         done
+        ;;
+    discovery)
         ;;
     *)
         candidate="${CONFORMANCE_DIR}/plan-${PLAN_SELECTION}.json"
@@ -194,82 +171,41 @@ fi
 if [[ "${COAUTH_RUN_FULL_CONFORMANCE:-}" != "1" ]]; then
     echo
     echo "[oidc-conformance] skipping full conformance run."
-    echo "  set COAUTH_RUN_FULL_CONFORMANCE=1 to invoke openid/conformance-suite:latest."
+    echo "  set COAUTH_RUN_FULL_CONFORMANCE=1 with the official source/API/config fixtures."
     exit 0
 fi
 
-# The remainder is the opt-in path. We're tolerant of a missing docker
-# binary because the same script is run by developers without Docker
-# locally — we just log + fall back to the inventory output.
-if ! command -v docker >/dev/null 2>&1; then
-    echo "[oidc-conformance] COAUTH_RUN_FULL_CONFORMANCE=1 but docker is not on PATH; skipping" >&2
+# The OIDF suite is a persistent Java/Mongo service. Its official Python
+# runner calls the service API; it is not a docker --config CLI.
+: "${COAUTH_CONFORMANCE_SOURCE:?checkout the pinned official suite source}"
+: "${CONFORMANCE_SERVER:?start the official conformance API server}"
+: "${COAUTH_CONFORMANCE_DISCOVERY_CONFIG:?provide the local HTTPS discovery fixture}"
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+python3 "${repo_root}/conformance/run-official-plan.py" \
+    --source "${COAUTH_CONFORMANCE_SOURCE}" \
+    --config "${COAUTH_CONFORMANCE_DISCOVERY_CONFIG}" \
+    --plan oidcc-config-certification-test-plan \
+    --results "${RESULTS_DIR}/discovery"
+
+if [[ "${PLAN_SELECTION}" == "discovery" ]]; then
+    echo "[oidc-conformance] OIDCC Config discovery profile passed (not full OP/FAPI/mTLS certification)."
     exit 0
 fi
 
-mkdir -p "${RESULTS_DIR}"
-
-# Image pull. The OpenID Foundation does not publish a Docker Hub image
-# under `openid/conformance-suite:latest` — the conformance harness has
-# always shipped as a self-built Java + MongoDB stack from
-# https://gitlab.com/openid/conformance-suite. CI / local runs that want
-# the full suite should:
-#
-#   git clone https://gitlab.com/openid/conformance-suite
-#   cd conformance-suite
-#   ./builder-compose.sh
-#
-# and then point COAUTH_CONFORMANCE_IMAGE at the local tag. We honour an
-# override env var so the script keeps working in environments that have
-# a private mirror or a local build.
-CONFORMANCE_IMAGE="${COAUTH_CONFORMANCE_IMAGE:-openid/conformance-suite:latest}"
-echo "[oidc-conformance] pulling ${CONFORMANCE_IMAGE}"
-if ! docker pull "${CONFORMANCE_IMAGE}"; then
-    echo "[oidc-conformance] failed to pull ${CONFORMANCE_IMAGE}; skipping run" >&2
-    echo "[oidc-conformance] (the OIDF does NOT publish a public Docker image — see " >&2
-    echo "   https://gitlab.com/openid/conformance-suite — clone + build then set " >&2
-    echo "   COAUTH_CONFORMANCE_IMAGE=<local-tag> to wire the run.)" >&2
-    exit 0
+# Full authorization profiles additionally need registered clients and an
+# automated real-user login/consent configuration. The old committed files
+# contain placeholder client ids and are not runnable official suite plans.
+# Keep all/full requests fail-closed until these protected fixtures are supplied.
+: "${COAUTH_CONFORMANCE_FULL_PLAN_DIR:?full OP/FAPI/mTLS profiles require real registered clients, automated login/consent and matching certificate/key fixtures; set COAUTH_CONFORMANCE_FULL_PLAN_DIR}"
+profiles=("${PLAN_SELECTION}")
+if [[ "${PLAN_SELECTION}" == "all" ]]; then
+    profiles=(basic-op fapi2-baseline mtls-baseline)
 fi
-
-# When COAUTH_BIND is non-default, rewrite each plan into a temp working
-# copy with the discoveryUrl pointing at the actual bind address. The
-# canonical configs in `conformance/` always declare 127.0.0.1:8080
-# because that's the local-dev default. WORK_DIR is teardown by the
-# unified `cleanup` trap installed near the top of this script.
-WORK_DIR="$(mktemp -d)"
-declare -a PREPARED_PLANS=()
-for cfg in "${PLAN_FILES[@]}"; do
-    name="$(basename "${cfg}")"
-    if [[ "${COAUTH_BIND}" != "127.0.0.1:8080" ]]; then
-        out="${WORK_DIR}/${name}"
-        jq --arg url "${DISCOVERY_URL}" '.server.discoveryUrl = $url' \
-            "${cfg}" > "${out}"
-        PREPARED_PLANS+=("${out}")
-    else
-        PREPARED_PLANS+=("${cfg}")
-    fi
+for profile in "${profiles[@]}"; do
+    config="${COAUTH_CONFORMANCE_FULL_PLAN_DIR}/${profile}.json"
+    test -f "${config}"
+    plan=$(jq -er '._official_plan' "${config}")
+    python3 "${repo_root}/conformance/run-official-plan.py" \
+        --source "${COAUTH_CONFORMANCE_SOURCE}" --config "${config}" \
+        --plan "${plan}" --results "${RESULTS_DIR}/${profile}"
 done
-
-# Each plan-*.json is consumed by the conformance suite's `--config`
-# CLI. We invoke a one-shot per plan and fail fast on the first error
-# so the operator gets actionable output.
-for cfg in "${PREPARED_PLANS[@]}"; do
-    plan_name="$(basename "${cfg}" .json)"
-    echo
-    echo "[oidc-conformance] running plan ${plan_name}"
-    docker run --rm \
-        --network host \
-        -v "$(dirname "${cfg}"):/server/configs:ro" \
-        -v "$(pwd)/${RESULTS_DIR}:/server/results:rw" \
-        "${CONFORMANCE_IMAGE}" \
-        --config "/server/configs/$(basename "${cfg}")" \
-        --output "/server/results/${plan_name}.json" \
-        || {
-            echo "[oidc-conformance] plan ${plan_name} FAILED" >&2
-            exit 4
-        }
-    echo "[oidc-conformance] plan ${plan_name} PASS — results at ${RESULTS_DIR}/${plan_name}.json"
-done
-
-echo
-echo "[oidc-conformance] all selected plans passed; results in ${RESULTS_DIR}/"
