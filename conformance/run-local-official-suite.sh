@@ -45,6 +45,18 @@ http {
             proxy_set_header X-Forwarded-Proto https;
         }
     }
+    server {
+        listen 8446 ssl;
+        ssl_certificate /fixture/tls.crt;
+        ssl_certificate_key /fixture/tls.key;
+        location / {
+            proxy_pass http://127.0.0.1:8081;
+            proxy_set_header Host localhost:8446;
+            proxy_set_header X-Forwarded-Proto https;
+            proxy_set_header X-Forwarded-Host localhost:8446;
+            proxy_set_header X-Forwarded-Port 8446;
+        }
+    }
 }
 EOF
 docker run --detach --name "$proxy_name" --network host \
@@ -58,12 +70,12 @@ java -Xmx2g -Djavax.net.ssl.trustStore="$run_dir/truststore" \
     -Djavax.net.ssl.trustStorePassword=changeit \
     -jar "${COAUTH_CONFORMANCE_SOURCE}/target/fapi-test-suite.jar" \
     --server.port=8081 --fintechlabs.devmode=true \
-    --fintechlabs.base_url=http://localhost:8081 \
+    --fintechlabs.base_url=https://localhost:8446 \
     --spring.mongodb.uri="${COAUTH_CONFORMANCE_MONGO_URI:-mongodb://localhost:27017/coauth_conformance}" \
     > "$results_dir/official-server.log" 2>&1 &
 suite_pid=$!
 export CURL_CA_BUNDLE="$run_dir/tls.crt"
-for endpoint in https://localhost:8445/health http://localhost:8081/api/runner/available; do
+for endpoint in https://localhost:8445/health https://localhost:8446/api/runner/available; do
     ready=0
     for _ in {1..180}; do
         kill -0 "$coauth_pid"
@@ -77,5 +89,5 @@ export RESULTS_DIR="$results_dir"
 export COAUTH_SKIP_BOOT=1 COAUTH_RUN_FULL_CONFORMANCE=1
 export COAUTH_CONFORMANCE_ISSUER=https://localhost:8445
 export COAUTH_CONFORMANCE_DISCOVERY_CONFIG="$run_dir/discovery.json"
-export CONFORMANCE_SERVER=http://localhost:8081/ CONFORMANCE_DEV_MODE=1
+export CONFORMANCE_SERVER=https://localhost:8446/ CONFORMANCE_DEV_MODE=1
 bash "${repo_root}/scripts/oidc-conformance.sh" --plan "${CONFORMANCE_PLAN:-all}"

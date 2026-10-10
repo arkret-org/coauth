@@ -39,7 +39,7 @@ def main():
             "client_id": client_id, "client_name": "Local OIDCC fixture",
             "client_auth_method": "client_secret_basic",
             "client_secret": base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("="),
-            "redirect_uris": ["http://localhost:8081/test/a/coauth/callback"],
+            "redirect_uris": ["https://localhost:8446/test/a/coauth/callback"],
         })
     config["clients"] = clients
     config_path = out / "coauth.yaml"
