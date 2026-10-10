@@ -1,137 +1,54 @@
-# OIDC conformance harness configs
+# OIDC conformance harness
 
-> **Status (2026-05-26): actively used by CI.** This directory is wired
-> into `.github/workflows/oidc-conformance.yaml` (nightly schedule +
-> `workflow_dispatch`) and into `scripts/oidc-conformance.sh` /
-> `scripts/integration-up.sh`. Do not relocate or rename the plan files
-> without updating those references.
+The scheduled and manually dispatched workflow builds the OpenID Foundation
+Java suite at `11999aad62ec292f36101410d9d5b761d44903ff`, uses a real MongoDB
+service, and invokes its `scripts/run-test-plan.py` API runner. No prebuilt
+`openid/conformance-suite` image is assumed.
 
-This directory ships **plan-based YAML configs** for the
-[OpenID Foundation conformance suite][openid-cs] that target a localhost
-coauth instance brought up by `scripts/oidc-conformance.sh`. Each
-`*.json` file in this directory is a *test plan configuration* — the
-shape the conformance harness's `--config` flag accepts.
+`run-local-official-suite.sh` prepares an isolated Coauth PostgreSQL fixture,
+two registered static clients, and HTTPS reverse proxies for Coauth and the
+suite. Java trusts the temporary issuer certificate. Private configuration,
+wrapping keys and TLS keys are deleted after the run; service logs and official
+exported result archives are uploaded.
 
-## CI split
+## Test scope
 
-The full conformance harness runs as a Java + MongoDB stack
-(`openid/conformance-suite:latest`) and takes ~minutes to boot per CI
-run. PR coverage stays smoke-only: the runner boots or targets a coauth
-instance, fetches discovery, and lists the selected plan inventory
-unless `COAUTH_RUN_FULL_CONFORMANCE=1` is set. The full suite is wired
-through `.github/workflows/oidc-conformance.yaml` and runs nightly
-against the three shipped plan files.
+`discovery` executes the official `oidcc-config-certification-test-plan`,
+including the discovery endpoint validation module. Passing that selection
+proves the OIDCC Config profile only; it does not prove the full OP, FAPI or
+mTLS profiles.
 
-## Files
+`all`, `basic-op`, `fapi2-baseline` and `mtls-baseline` require
+`COAUTH_CONFORMANCE_FULL_PLANS_JSON`: a JSON object with exactly those three
+profile names, each containing a real `_official_plan`, registered client
+credentials, HTTPS discovery configuration, and `browser` automation for
+real-user login and consent. The mTLS profile also needs the corresponding
+registered certificate and key fixture. Missing fixtures fail the full gate;
+plan inventory files are not a substitute for official execution. The default
+scheduled selection remains `all`.
 
-- `plan-basic-op.json` — covers the basic OP profile: discovery,
-  authorization code, userinfo, id_token verification, refresh, and
-  RP-initiated logout. Targets `http://127.0.0.1:8080`.
-- `plan-fapi2-baseline.json` — covers the FAPI 2.0 baseline subset
-  (PAR + DPoP-bound access tokens). Targets the same coauth instance
-  but with a different client profile (private_key_jwt + ES256).
-- `plan-mtls-baseline.json` — covers
-  [RFC 8705](https://datatracker.ietf.org/doc/html/rfc8705) Mutual TLS
-  Client Authentication: PKI-bound client auth, self-signed client
-  auth, the certificate-bound access-token confirmation claim
-  (`x5t#S256`), and the cross-binding negative case from §3.
+The integration smoke entry point is `scripts/oidc-conformance.sh`. Without
+`COAUTH_RUN_FULL_CONFORMANCE=1` it checks live discovery and reports the plan
+inventory. That smoke result is separate from official conformance.
 
-## Running locally
+## Pinned suite regression repair
 
-```bash
-# 1. Build coauth.
-cargo build --release -p coauth-cli
+`official-suite-literal-metadata.patch` corrects an upstream JSON member lookup
+bug: the endpoint validator iterates literal discovery keys, but the shared
+URI reader treats dots as nested path separators. As a result, the legitimate
+`org.arkret.api_endpoint` extension is reported missing despite its HTTPS value.
+The patch prefers an existing literal member and retains nested-path fallback.
+Three JUnit regressions prove namespaced HTTPS acceptance and HTTP/null
+rejection. CI applies the patch only to the pinned commit and runs the endpoint
+validator unit tests before invoking the real suite. This is a locally repaired
+suite result, not an unmodified upstream certification result. Remove the patch
+when the upstream literal-member repair is included in the pinned release.
 
-# 2. Generate local conformance keys for plans that need client key
-#    material. This writes only under target/conformance-keys/.
-./conformance/conformance-keys.sh
+The fixture registers exactly five known metadata extensions through the
+suite's supported `server.allow_unexpected_metadata_fields` configuration:
+`account_management_uri`, `account_management_actions_supported`,
+`org.arkret.api_endpoint`, `org.arkret.did_binding_methods` and
+`org.arkret.supported_scopes`. No unexpected-failure or skipped-condition list
+is passed to the runner. The live discovery response is never rewritten.
 
-# 3. Run the smoke harness: boots coauth, fetches
-#    /.well-known/openid-configuration, and prints plan inventory.
-./scripts/oidc-conformance.sh
-```
-
-The smoke runner does not invoke the Java suite unless
-`COAUTH_RUN_FULL_CONFORMANCE=1` is set. This keeps PR and local default
-runs cheap and avoids requiring Docker for the discovery-only smoke.
-
-## Wiring the full suite
-
-The nightly GitHub Actions workflow sets `COAUTH_RUN_FULL_CONFORMANCE=1`
-and runs:
-
-```bash
-./scripts/oidc-conformance.sh --plan all
-```
-
-`--plan all` expands to:
-
-- `plan-basic-op.json`
-- `plan-fapi2-baseline.json`
-- `plan-mtls-baseline.json`
-
-Before running `plan-mtls-baseline.json`, generate the mTLS client
-fixtures:
-
-```bash
-./conformance/conformance-keys.sh
-```
-
-The script writes `target/conformance-keys/mtls-client.{crt,key}`,
-`target/conformance-keys/mtls-client-2.{crt,key}`, and a local README
-with the `x5t#S256` thumbprints. Pass `--force` to replace existing
-fixtures. These files are local test material and must not be committed.
-
-The workflow has no `pull_request` trigger; PR jobs remain smoke-only.
-It also exposes a `workflow_dispatch` input for targeted reruns of a
-single plan.
-
-To run the same full conformance path locally (e.g. before a release),
-set `COAUTH_RUN_FULL_CONFORMANCE=1` in the environment. The runner will
-then:
-
-1. `docker pull openid/conformance-suite:latest`
-2. start a Java + MongoDB sidecar with this directory mounted at
-   `/server/configs`
-3. POST a plan-create request for each `plan-*.json` file
-4. wait for `done` status
-5. dump JSON results to `target/conformance-results/` and exit non-zero
-   if any test failed
-
-### Selecting a single plan
-
-`scripts/oidc-conformance.sh` accepts a `--plan` flag (or the
-`CONFORMANCE_PLAN` env var) so CI can pick exactly one plan instead of
-fanning out across all of them:
-
-```bash
-./scripts/oidc-conformance.sh --plan basic-op
-./scripts/oidc-conformance.sh --plan fapi2-baseline
-./scripts/oidc-conformance.sh --plan mtls-baseline
-./scripts/oidc-conformance.sh --plan all          # default
-```
-
-### Running against a docker-compose coauth
-
-When CI brings up coauth via `docker-compose.integration.yaml` rather
-than `cargo build --release -p coauth-cli`, set:
-
-```bash
-COAUTH_SKIP_BOOT=1 \
-COAUTH_RUN_FULL_CONFORMANCE=1 \
-COAUTH_BIND=127.0.0.1:57080 \
-./scripts/oidc-conformance.sh --plan basic-op
-```
-
-The runner then skips the local-binary boot path, points discovery at
-the published compose port, and rewrites each plan JSON's
-`server.discoveryUrl` into a temp working copy before invoking the
-conformance suite.
-
-## TODO
-
-- `TODO(oidc-conformance-fapi2-cert)`: cross-check the FAPI 2.0 plan
-  against the `OpenID Connect for Identity Assurance` certification
-  requirements once coauth ships eIDAS-grade evidence linking.
-
-[openid-cs]: https://www.certification.openid.net/
+[Official source](https://gitlab.com/openid/conformance-suite)

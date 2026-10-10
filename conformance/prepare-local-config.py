@@ -48,7 +48,14 @@ def main():
     plan = {
         "alias": "coauth-local-discovery", "description": "OIDCC Config profile only",
         "publish": "none",
-        "server": {"discoveryUrl": "https://localhost:8445/.well-known/openid-configuration"},
+        "server": {
+            "discoveryUrl": "https://localhost:8445/.well-known/openid-configuration",
+            "allow_unexpected_metadata_fields": [
+                "account_management_uri", "account_management_actions_supported",
+                "org.arkret.api_endpoint", "org.arkret.did_binding_methods",
+                "org.arkret.supported_scopes",
+            ],
+        },
         "client": {key: clients[0][key] for key in ["client_id", "client_secret"]},
         "client2": {key: clients[1][key] for key in ["client_id", "client_secret"]},
     }

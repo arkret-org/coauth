@@ -1,0 +1,61 @@
+diff --git a/src/main/java/net/openid/conformance/condition/client/AbstractJsonUriIsValidAndHttps.java b/src/main/java/net/openid/conformance/condition/client/AbstractJsonUriIsValidAndHttps.java
+index ab9b243..c39076b 100644
+--- a/src/main/java/net/openid/conformance/condition/client/AbstractJsonUriIsValidAndHttps.java
++++ b/src/main/java/net/openid/conformance/condition/client/AbstractJsonUriIsValidAndHttps.java
+@@ -1,6 +1,7 @@
+ package net.openid.conformance.condition.client;
+ 
+ import com.google.gson.JsonElement;
++import com.google.gson.JsonObject;
+ import net.openid.conformance.condition.AbstractCondition;
+ import net.openid.conformance.testmodule.Environment;
+ import net.openid.conformance.testmodule.OIDFJSON;
+@@ -21,7 +22,12 @@ public abstract class AbstractJsonUriIsValidAndHttps extends AbstractCondition {
+ 	 */
+ 	protected JsonElement getServerValueOrDie(Environment env, String environmentVariable) {
+ 
+-		JsonElement serverValue = env.getElementFromObject("server", environmentVariable);
++		// Discovery member names are literal JSON keys, including namespaced extensions.
++		// Retain path lookup for callers that explicitly select nested metadata.
++		JsonObject metadata = env.getObject("server");
++		JsonElement serverValue = metadata != null && metadata.has(environmentVariable)
++			? metadata.get(environmentVariable)
++			: env.getElementFromObject("server", environmentVariable);
+ 		if (serverValue == null) {
+ 			throw error(environmentVariable + ": URL not found");
+ 		}
+diff --git a/src/test/java/net/openid/conformance/condition/client/CheckDiscEndpointAllEndpointsAreHttps_UnitTest.java b/src/test/java/net/openid/conformance/condition/client/CheckDiscEndpointAllEndpointsAreHttps_UnitTest.java
+index dfc7354..b818aca 100644
+--- a/src/test/java/net/openid/conformance/condition/client/CheckDiscEndpointAllEndpointsAreHttps_UnitTest.java
++++ b/src/test/java/net/openid/conformance/condition/client/CheckDiscEndpointAllEndpointsAreHttps_UnitTest.java
+@@ -56,6 +56,30 @@ public class CheckDiscEndpointAllEndpointsAreHttps_UnitTest {
+ 		cond.execute(env);
+ 	}
+ 
++	@Test
++	public void testEvaluate_namespacedHttpsEndpoint() {
++		JsonObject server = new JsonObject();
++		server.addProperty("org.arkret.api_endpoint", "https://www.example.com/_arkret");
++		env.putObject("server", server);
++		cond.execute(env);
++	}
++
++	@Test
++	public void testEvaluate_namespacedHttpEndpointRejected() {
++		JsonObject server = new JsonObject();
++		server.addProperty("org.arkret.api_endpoint", "http://www.example.com/_arkret");
++		env.putObject("server", server);
++		assertThrows(ConditionError.class, () -> cond.execute(env));
++	}
++
++	@Test
++	public void testEvaluate_namespacedNullEndpointRejected() {
++		JsonObject server = new JsonObject();
++		server.add("org.arkret.api_endpoint", com.google.gson.JsonNull.INSTANCE);
++		env.putObject("server", server);
++		assertThrows(ConditionError.class, () -> cond.execute(env));
++	}
++
+ 	@Test
+ 	public void testEvaluate_notHttps() {
+ 		assertThrows(ConditionError.class, () -> {
