@@ -53,7 +53,7 @@ pub enum UnixOrTcpListener {
     Unix {
         listener: UnixListener,
         /// Path to unlink on drop (if the socket was bound by us).
-        path: Option<std::path::PathBuf>,
+        path: Option<camino::Utf8PathBuf>,
     },
     Tcp(TcpListener),
 }

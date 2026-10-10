@@ -174,13 +174,8 @@ impl LifecycleManager {
 
         // This will be `Some` if we have the watchdog enabled, and `None` if not
         #[cfg(unix)]
-        let mut watchdog_interval = {
-            if let Some(watchdog_duration) = sd_notify::watchdog_enabled() {
-                Some(tokio::time::interval(watchdog_duration / 2))
-            } else {
-                None
-            }
-        };
+        let mut watchdog_interval = sd_notify::watchdog_enabled()
+            .map(|watchdog_duration| tokio::time::interval(watchdog_duration / 2));
 
         // Wait for a first shutdown signal and trigger the soft shutdown.
         // Each branch breaks, so this is structurally a loop with one
