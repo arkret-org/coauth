@@ -1,0 +1,27 @@
+# The Dockerfile uses the repository parent as its build context.
+# Keep sibling manifests, locks, migrations and source resources available.
+**/target/
+**/.shared-target/
+**/node_modules/
+**/.sqlx/
+**/.git/
+**/.local/
+**/.ssh/
+**/.gnupg/
+**/.codex-tmp/
+**/.claude/
+**/.devcontainer/
+**/.env
+**/.env.*
+**/*.log
+
+# Locally provisioned credentials and generated integration configuration.
+**/secrets/
+**/.secrets/
+coauth/conformance/test-config.yaml
+coauth/conformance/test-config.yaml.raw
+
+# Coauth build outputs and documentation are not image inputs.
+coauth/dist/
+coauth/docs/
+coauth/docs-zh/
