@@ -151,7 +151,7 @@ pub async fn login(req: &mut Request, depot: &Depot, res: &mut Response) -> Resu
             ));
             return Ok(());
         }
-    };
+    }
 
     let input: LoginReqBody = req
         .parse_json()

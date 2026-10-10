@@ -1736,7 +1736,12 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Text, _>(input.pairing_code.as_str())
         .bind::<Jsonb, _>(serde_json::to_value(&input.new_device_pubkey)?)
         .bind::<Text, _>(input.client_nonce.as_str())
-        .bind::<Nullable<Text>, _>(input.display_name.as_ref().map(|value| value.as_str()))
+        .bind::<Nullable<Text>, _>(
+            input
+                .display_name
+                .as_ref()
+                .map(arkret_wire::NonEmptyString::as_str),
+        )
         .bind::<Nullable<Jsonb>, _>(
             input
                 .device_metadata

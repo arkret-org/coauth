@@ -88,7 +88,7 @@ impl AccountStatusIssuerContext {
             did,
             crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
         ))
-        .map_err(|e| e.to_string())?;
+        .map_err(str::to_owned)?;
         if &own != authority
             || binding.binding_receipt.account_authority_id != own
             || binding.binding_receipt.proof.verification_method != method

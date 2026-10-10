@@ -51,6 +51,9 @@ FROM frontend-toolchain AS frontend-planner
 WORKDIR /app
 COPY ./coauth/ /app
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
+COPY ./soland/ /soland
+COPY ./cotest/ /cotest
+COPY ./garth/ /garth
 
 # cargo-chef computes a recipe keyed by workspace manifests so frontend
 # dependency compilation can be reused when Rust sources change.
@@ -64,6 +67,9 @@ COPY --from=frontend-planner /app/frontend-recipe.json frontend-recipe.json
 # `path = "../arkret-rust-sdk/..."` so the sibling tree must exist
 # at the layer where chef cook runs.
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
+COPY ./soland/ /soland
+COPY ./cotest/ /cotest
+COPY ./garth/ /garth
 
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
@@ -136,6 +142,9 @@ FROM builder-base AS builder-planner
 WORKDIR /app
 COPY ./coauth/ /app
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
+COPY ./soland/ /soland
+COPY ./cotest/ /cotest
+COPY ./garth/ /garth
 
 # cargo-chef keeps the dependency build layer keyed to Cargo manifests so
 # source-only changes can reuse compiled dependencies and downloaded crates.
@@ -152,6 +161,9 @@ COPY --from=builder-planner /app/backend-recipe.json backend-recipe.json
 # at the same layer. Without this COPY, the cook step fails with
 # `failed to read /arkret-rust-sdk/crates/core/Cargo.toml`.
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
+COPY ./soland/ /soland
+COPY ./cotest/ /cotest
+COPY ./garth/ /garth
 
 RUN --network=default \
   --mount=type=cache,id=builder-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \

@@ -401,7 +401,9 @@ impl Handler for InjectTestState {
 /// Account-status publication and principal-DID resolution both require a
 /// single configured Station whose audience is a `did_core_id`, so
 /// the tests that exercise those paths must configure one.
-pub(crate) const TEST_STATION_AUDIENCE: &str = "ak:did_core:webvh:zTestStation";
+// The destination pin and original Account Authority are the same fixture
+// Station; their core ids must agree in every accepted Account binding.
+pub(crate) const TEST_STATION_AUDIENCE: &str = "ak:did_core:web:example.com";
 
 fn test_arkret_config(stations: Vec<coauth_config::StationConfig>) -> ArkretConfig {
     // Seed the runtime identity fixture so DID-shaped assertions stay

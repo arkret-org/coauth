@@ -812,13 +812,108 @@ fn a_fresh_binding_hit_short_circuits_before_the_resolver() {
     }
 }
 
+// Count calls structurally so test-only resolver transports are not treated as
+// production network entry points, and fully qualified calls cannot bypass the guard.
+fn production_resolution_calls(source: &str) -> usize {
+    use syn::visit::Visit as _;
+
+    struct Calls {
+        count: usize,
+    }
+
+    fn test_only(attrs: &[syn::Attribute]) -> bool {
+        attrs.iter().any(|attr| {
+            attr.path().segments.last().is_some_and(|segment| segment.ident == "test")
+                || (attr.path().is_ident("cfg")
+                    && matches!(&attr.meta, syn::Meta::List(list) if list.tokens.to_string() == "test"))
+        })
+    }
+
+    impl<'ast> syn::visit::Visit<'ast> for Calls {
+        fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
+            if !test_only(&node.attrs) {
+                syn::visit::visit_item_mod(self, node);
+            }
+        }
+
+        fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
+            if !test_only(&node.attrs) {
+                syn::visit::visit_item_fn(self, node);
+            }
+        }
+
+        fn visit_item_impl(&mut self, node: &'ast syn::ItemImpl) {
+            if !test_only(&node.attrs) {
+                syn::visit::visit_item_impl(self, node);
+            }
+        }
+
+        fn visit_macro(&mut self, node: &'ast syn::Macro) {
+            // Macro bodies remain part of the boundary scan even when their
+            // DSL cannot be parsed as ordinary Rust expressions.
+            let tokens: String = node
+                .tokens
+                .to_string()
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect();
+            self.count += tokens.matches(".resolve_did_document(").count()
+                + tokens.matches("::resolve_did_document(").count();
+            syn::visit::visit_macro(self, node);
+        }
+
+        fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
+            if node.method == "resolve_did_document" {
+                self.count += 1;
+            }
+            syn::visit::visit_expr_method_call(self, node);
+        }
+
+        fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
+            if let syn::Expr::Path(path) = &*node.func
+                && path
+                    .path
+                    .segments
+                    .last()
+                    .is_some_and(|segment| segment.ident == "resolve_did_document")
+            {
+                self.count += 1;
+            }
+            syn::visit::visit_expr_call(self, node);
+        }
+    }
+
+    let parsed = syn::parse_file(source).expect("source must parse as Rust");
+    let mut calls = Calls { count: 0 };
+    calls.visit_file(&parsed);
+    calls.count
+}
+
 /// The whole crate must funnel every network resolution through
 /// [`resolve_and_accept_binding`]. If a handler ever calls
 /// `resolve_did_document` directly again, this fails.
 #[test]
 fn resolve_did_document_is_called_in_exactly_one_place() {
-    // Assembled at runtime so this file's own source does not match the scan.
-    let needle = format!(".{}_did_document(", "resolve");
+    // The scanner still rejects method and fully qualified production calls,
+    // while ignoring transports that can only be compiled for tests.
+    assert_eq!(
+        production_resolution_calls("fn f() { resolver.resolve_did_document(); }"),
+        1
+    );
+    assert_eq!(
+        production_resolution_calls("fn f() { Resolver::resolve_did_document(); }"),
+        1
+    );
+    assert_eq!(
+        production_resolution_calls("fn f() { transport!(resolver.resolve_did_document()); }"),
+        1
+    );
+    assert_eq!(
+        production_resolution_calls(
+            "#[cfg(test)] mod fixtures { fn f() { resolver.resolve_did_document(); } }"
+        ),
+        0
+    );
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut hits: Vec<String> = Vec::new();
     let mut stack = vec![root];
@@ -833,12 +928,8 @@ fn resolve_did_document_is_called_in_exactly_one_place() {
                 continue;
             }
             let text = std::fs::read_to_string(&path).expect("source file is UTF-8");
-            for (index, line) in text.lines().enumerate() {
-                // Only method invocations, not the trait declaration and not
-                // prose in doc comments.
-                if line.contains(needle.as_str()) && !line.trim_start().starts_with("//") {
-                    hits.push(format!("{}:{}", path.display(), index + 1));
-                }
+            for _ in 0..production_resolution_calls(&text) {
+                hits.push(path.display().to_string());
             }
         }
     }
@@ -851,7 +942,7 @@ fn resolve_did_document_is_called_in_exactly_one_place() {
     assert!(
         hits[0]
             .replace('\\', "/")
-            .contains("services/did_binding.rs:"),
+            .ends_with("services/did_binding.rs"),
         "unexpected call site: {}",
         hits[0]
     );

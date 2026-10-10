@@ -571,12 +571,11 @@ mod tests {
 // Exercise the registered issuer route against the PostgreSQL authority ledger.
 #[cfg(test)]
 mod controller_gate_http_regression {
-    use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
-    use coauth_data::{RepositoryAccess as _, UserPatch};
+    use coauth_data::UserPatch;
     use hyper::{Request, StatusCode};
 
     use super::*;
-    use crate::handlers::test_utils::{TEST_STATION_AUDIENCE, TestState, setup, unique_test_nonce};
+    use crate::handlers::test_utils::{TestState, setup, unique_test_nonce};
 
     #[tokio::test]
     async fn internal_gate_initial_binding_succeeds_strict_successor_refuses_and_original_replays()

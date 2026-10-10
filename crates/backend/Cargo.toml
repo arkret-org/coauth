@@ -84,7 +84,8 @@ opentelemetry-http = { workspace = true }
 opentelemetry-instrumentation-process = { workspace = true }
 opentelemetry-instrumentation-tokio = { workspace = true }
 opentelemetry-otlp = { workspace = true }
-opentelemetry-prometheus-text-exporter = { workspace = true }
+opentelemetry-prometheus = { workspace = true }
+prometheus = { workspace = true }
 opentelemetry-resource-detectors = { workspace = true }
 opentelemetry-semantic-conventions = { workspace = true }
 opentelemetry-stdout = { workspace = true }
@@ -139,6 +140,7 @@ anyhow = { workspace = true }
 vergen-gitcl = { workspace = true }
 
 [dev-dependencies]
+syn = { workspace = true, features = ["full", "visit"] }
 cotest-test-support = { path = "../../../cotest/crates/test-support" }
 arkret-wire = { workspace = true, features = ["test-support"] }
 coauth-config = { workspace = true, features = ["test-support"] }

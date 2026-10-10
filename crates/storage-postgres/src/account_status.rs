@@ -357,7 +357,9 @@ mod tests {
             .await
             .expect("actual PostgreSQL required; no opt-out for gate regression");
         let factory = PgRepositoryFactory::new(pool.clone());
-        let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+        let now = arkret_canonical::normalize_timestamp_canonical(coauth_data::Clock::now(
+            &coauth_data::SystemClock::default(),
+        ));
         let record = genesis_record(now);
         let local =
             coauth_data::LocalAccountId::new(format!("gate-empty-{}", uuid::Uuid::now_v7()))
@@ -428,7 +430,9 @@ mod tests {
             .await
             .expect("actual PostgreSQL required; no opt-out for gate regression");
         let factory = PgRepositoryFactory::new(pool.clone());
-        let now = arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now());
+        let now = arkret_canonical::normalize_timestamp_canonical(coauth_data::Clock::now(
+            &coauth_data::SystemClock::default(),
+        ));
         let record = genesis_record(now);
         let request_id = arkret_wire::RequestId::new_v7_at(now.timestamp_millis() as u64);
         let hash =

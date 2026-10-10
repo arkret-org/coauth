@@ -306,7 +306,11 @@ async fn exercise_handler(
                 .mirror()
                 .snapshot()
                 .iter()
-                .all(|accepted| accepted.binding().did() != &did)
+                .all(|accepted| {
+                    accepted.binding().did() != &did
+                        || Some(accepted.binding().trust_domain().as_str())
+                            != state.arkret_config.trust_domain.as_deref()
+                })
         );
     } else {
         response.assert_status(StatusCode::CREATED);

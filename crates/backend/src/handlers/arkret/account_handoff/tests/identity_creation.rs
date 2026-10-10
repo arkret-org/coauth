@@ -97,11 +97,11 @@ fn pcr_outcome(
             arkret_canonical::canonical::unsigned_value(&commit, &["commit_id", "signature"])
                 .unwrap();
         commit.commit_id = RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
-            &arkret_canonical::canonical_json_bytes(&identity).unwrap(),
+            arkret_canonical::canonical_json_bytes(&identity).unwrap(),
         ));
         let unsigned =
             arkret_canonical::canonical::unsigned_value(&commit, &["signature"]).unwrap();
-        let key = ed25519_dalek_3::SigningKey::from_bytes(&[23; 32]);
+        let key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[23; 32]);
         commit.signature = arkret_signatures::detached_object::sign_detached_object(
             &unsigned,
             DetachedSignatureContext::RealmCommit,

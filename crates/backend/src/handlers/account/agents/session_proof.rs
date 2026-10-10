@@ -1541,10 +1541,13 @@ mod tests {
             })))
             .mount(&server)
             .await;
-        let mut config = ArkretConfig::default();
-        config.runtime_owning_station_identity =
-            coauth_config::RuntimeOwningStationIdentity::fixture("did:web:soland.test");
-        config.trust_domain = Some("ak:trust_domain:authority.test".to_owned());
+        let mut config = ArkretConfig {
+            runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
+                "did:web:soland.test",
+            ),
+            trust_domain: Some("ak:trust_domain:authority.test".to_owned()),
+            ..Default::default()
+        };
         config.stations.push(coauth_config::StationConfig {
             name: "soland-test".to_owned(),
             endpoint: server.uri().parse().unwrap(),

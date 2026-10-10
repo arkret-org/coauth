@@ -141,6 +141,10 @@ repository_impl! {
         /// outcome, or reject a conflicting/not-found request.  The backend
         /// serializes by AccountId and expires every other unaccepted
         /// ready_for_claim row for that account in the same transaction.
+        #[expect(
+            clippy::too_many_arguments,
+            reason = "Preserve the named inputs of the atomic pairing commit and exact replay contract."
+        )]
         async fn finalize_device_pairing(
             &mut self,
             request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,

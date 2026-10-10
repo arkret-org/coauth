@@ -13,6 +13,12 @@ extend-ignore-re = [
     "\"[A-Za-z0-9+/_=-]{22,}\"",
 ]
 
+[default.extend-identifiers]
+# External crate/type names and a malformed request field used by a test.
+writeable = "writeable"
+Writeable = "Writeable"
+cerimony_id = "cerimony_id"
+
 [default.extend-words]
 Hashi = "Hashi"
 consts = "consts"

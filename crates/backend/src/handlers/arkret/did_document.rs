@@ -152,7 +152,7 @@ impl VerificationMethod {
         let did = arkret_wire::Did::new(document_did.to_owned())
             .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
         let key_id = arkret_wire::DidUrl::new(self.id.clone())
-            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_owned()))?;
 
         let enforce = |key: Option<&PublicKeyFingerprintInput<'_>>| {
             enforce_formal_test_material_policy(key, Some(&did), Some(&key_id), trust_domain)
@@ -252,7 +252,7 @@ pub fn enforce_formal_document_admission(
         .chain(&document.assertion_method)
     {
         let key_id = arkret_wire::DidUrl::new(reference.clone())
-            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+            .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_owned()))?;
         enforce_formal_test_material_policy(None, Some(&did), Some(&key_id), Some(trust_domain))
             .map_err(|error| match error {
                 FormalTestMaterialPolicyError::Denied(_) => {
@@ -283,8 +283,8 @@ pub struct DidService {
 #[cfg(test)]
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
-    use std::path::{Path, PathBuf};
 
+    use camino::{Utf8Path as Path, Utf8PathBuf as PathBuf};
     use serde_json::json;
 
     use super::*;
@@ -497,9 +497,9 @@ mod tests {
             }
         }
 
-        assert_eq!(rows.len(), 122);
-        assert_eq!(roles.get("test_material"), Some(&28));
-        assert_eq!(roles.get("deployment_like_example"), Some(&90));
+        assert_eq!(rows.len(), 127);
+        assert_eq!(roles.get("test_material"), Some(&30));
+        assert_eq!(roles.get("deployment_like_example"), Some(&93));
         assert_eq!(roles.get("derived_positive"), Some(&4));
     }
 }

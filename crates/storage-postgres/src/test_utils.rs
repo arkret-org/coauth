@@ -27,7 +27,9 @@ pub fn principal_registration_anchor_fixture(
             principal_endpoint: &endpoint,
             local_id,
             also_known_as: &[],
-            version_time: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+            version_time: arkret_canonical::normalize_timestamp_canonical(coauth_data::Clock::now(
+                &coauth_data::SystemClock::default(),
+            )),
             root_seed: &root_seed,
             next_root_public_key_multibase,
             witness_policy: None,

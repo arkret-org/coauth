@@ -90,7 +90,7 @@ CREATE TABLE public.accountability_subject_revocations (
 -- (agent_id, key_id, verification_method, accountable_principal_id,
 -- audience, issued_at, expires_at) so the fan-out payload soland writes as
 -- `ak.agent.key.authorize` stays field-aligned with the spec. `expires_at`
--- is NULLable: absent means the authorization never expires by time and is
+-- is nullable: absent means the authorization never expires by time and is
 -- governed solely by the revocation chain (key-management §3.6.1).
 CREATE TABLE public.agent_key_authorizations (
     id uuid NOT NULL,

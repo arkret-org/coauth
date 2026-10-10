@@ -564,7 +564,7 @@ mod tests {
             key: arkret_models_identity::ResolvedSignerKey {
                 public_key_b64u: arkret_wire::Base64UrlString::new(
                     arkret_canonical::base64url_encode(
-                        ed25519_dalek_3::SigningKey::from_bytes(&device_seed)
+                        crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&device_seed)
                             .verifying_key()
                             .as_bytes(),
                     ),
@@ -624,11 +624,11 @@ mod tests {
         .unwrap();
         invite_commit.commit_id =
             arkret_wire::RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
-                &arkret_canonical::canonical_json_bytes(&identity).unwrap(),
+                arkret_canonical::canonical_json_bytes(&identity).unwrap(),
             ));
         let unsigned =
             arkret_canonical::canonical::unsigned_value(&invite_commit, &["signature"]).unwrap();
-        let authority_key = ed25519_dalek_3::SigningKey::from_bytes(&[23; 32]);
+        let authority_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[23; 32]);
         invite_commit.signature = arkret_signatures::detached_object::sign_detached_object(
             &unsigned,
             arkret_wire::DetachedSignatureContext::RealmCommit,
@@ -753,12 +753,12 @@ mod tests {
         .unwrap();
         delivery.invite_commit.commit_id =
             arkret_wire::RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
-                &arkret_canonical::canonical_json_bytes(&identity).unwrap(),
+                arkret_canonical::canonical_json_bytes(&identity).unwrap(),
             ));
         let unsigned =
             arkret_canonical::canonical::unsigned_value(&delivery.invite_commit, &["signature"])
                 .unwrap();
-        let key = ed25519_dalek_3::SigningKey::from_bytes(&[23; 32]);
+        let key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[23; 32]);
         delivery.invite_commit.signature =
             arkret_signatures::detached_object::sign_detached_object(
                 &unsigned,

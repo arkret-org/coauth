@@ -250,7 +250,9 @@ async fn pairing_stage_idempotency_replays_exact_bytes_and_conflicts_on_changed_
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
-    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let now = arkret_canonical::normalize_timestamp_canonical(coauth_data::Clock::now(
+        &coauth_data::SystemClock::default(),
+    ));
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingPrincipal").unwrap(),
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingStation").unwrap(),
@@ -298,7 +300,9 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
-    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let now = arkret_canonical::normalize_timestamp_canonical(coauth_data::Clock::now(
+        &coauth_data::SystemClock::default(),
+    ));
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingPrincipal").unwrap(),
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zpairingStation").unwrap(),
@@ -533,7 +537,9 @@ async fn pairing_failure_budget_is_durable_bounded_and_transactional() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
-    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let now = arkret_canonical::normalize_timestamp_canonical(coauth_data::Clock::now(
+        &coauth_data::SystemClock::default(),
+    ));
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zbudgetPrincipal").unwrap(),
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zbudgetStation").unwrap(),
@@ -663,7 +669,9 @@ async fn pairing_failure_budget_linearizes_concurrent_failures_and_protects_term
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
     };
-    let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+    let now = arkret_canonical::normalize_timestamp_canonical(coauth_data::Clock::now(
+        &coauth_data::SystemClock::default(),
+    ));
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zconcurrentPrincipal").unwrap(),
         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zconcurrentStation").unwrap(),

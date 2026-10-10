@@ -11,7 +11,7 @@ use opentelemetry::propagation::{TextMapCompositePropagator, TextMapPropagator};
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{InstrumentationScope, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_prometheus_text_exporter::PrometheusExporter;
+use opentelemetry_prometheus::PrometheusExporter;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::metrics::periodic_reader_with_async_runtime::PeriodicReader;
 use opentelemetry_sdk::metrics::{ManualReader, SdkMeterProvider};
@@ -19,6 +19,7 @@ use opentelemetry_sdk::propagation::{BaggagePropagator, TraceContextPropagator};
 use opentelemetry_sdk::trace::span_processor_with_async_runtime::BatchSpanProcessor;
 use opentelemetry_sdk::trace::{IdGenerator, Sampler, SdkTracerProvider, Tracer};
 use opentelemetry_semantic_conventions as semcov;
+use prometheus::{Encoder as _, Registry, TextEncoder};
 
 static SCOPE: LazyLock<InstrumentationScope> = LazyLock::new(|| {
     InstrumentationScope::builder(env!("CARGO_PKG_NAME"))
@@ -33,7 +34,7 @@ pub static METER: LazyLock<Meter> =
 pub static TRACER: OnceLock<Tracer> = OnceLock::new();
 static METER_PROVIDER: OnceLock<SdkMeterProvider> = OnceLock::new();
 static TRACER_PROVIDER: OnceLock<SdkTracerProvider> = OnceLock::new();
-static PROMETHEUS_EXPORTER: OnceLock<PrometheusExporter> = OnceLock::new();
+static PROMETHEUS_REGISTRY: OnceLock<Registry> = OnceLock::new();
 
 pub fn setup(config: &TelemetryConfig) -> anyhow::Result<()> {
     let propagator = propagator(&config.tracing.propagators);
@@ -170,10 +171,11 @@ fn stdout_metric_reader() -> PeriodicReader<opentelemetry_stdout::MetricExporter
 /// Salvo handler for serving Prometheus metrics.
 #[salvo::handler]
 pub async fn prometheus_handler(res: &mut salvo::Response) {
-    if let Some(exporter) = PROMETHEUS_EXPORTER.get() {
+    if let Some(registry) = PROMETHEUS_REGISTRY.get() {
+        let encoder = TextEncoder::new();
         let mut buffer = Vec::with_capacity(1024);
 
-        if let Err(err) = exporter.export(&mut buffer) {
+        if let Err(err) = encoder.encode(&registry.gather(), &mut buffer) {
             tracing::error!(
                 error = &err as &dyn std::error::Error,
                 "Failed to export Prometheus metrics"
@@ -188,7 +190,7 @@ pub async fn prometheus_handler(res: &mut salvo::Response) {
         } else {
             res.status_code(salvo::http::StatusCode::OK);
             res.headers_mut()
-                .insert(CONTENT_TYPE, "text/plain;version=1.0.0".parse().unwrap());
+                .insert(CONTENT_TYPE, encoder.format_type().parse().unwrap());
             res.render(salvo::writing::Text::Plain(
                 String::from_utf8_lossy(&buffer).into_owned(),
             ));
@@ -204,13 +206,22 @@ pub async fn prometheus_handler(res: &mut salvo::Response) {
 }
 
 fn prometheus_metric_reader() -> anyhow::Result<PrometheusExporter> {
-    let exporter = PrometheusExporter::builder().without_scope_info().build();
+    let registry = Registry::new();
+    let exporter = build_prometheus_exporter(registry.clone())?;
 
-    PROMETHEUS_EXPORTER
-        .set(exporter.clone())
-        .map_err(|_| anyhow::anyhow!("PROMETHEUS_EXPORTER was set twice"))?;
+    PROMETHEUS_REGISTRY
+        .set(registry)
+        .map_err(|_| anyhow::anyhow!("PROMETHEUS_REGISTRY was set twice"))?;
 
     Ok(exporter)
+}
+
+fn build_prometheus_exporter(registry: Registry) -> anyhow::Result<PrometheusExporter> {
+    opentelemetry_prometheus::exporter()
+        .without_scope_info()
+        .with_registry(registry)
+        .build()
+        .context("Failed to configure Prometheus metric exporter")
 }
 
 fn init_meter(config: &MetricsConfig) -> anyhow::Result<()> {
@@ -253,4 +264,40 @@ fn resource() -> Resource {
             ),
         ])
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+    use opentelemetry::metrics::MeterProvider as _;
+
+    use super::*;
+
+    #[test]
+    fn prometheus_scrape_preserves_counters_histograms_and_labels() {
+        let registry = Registry::new();
+        let exporter = build_prometheus_exporter(registry.clone()).unwrap();
+        let provider = SdkMeterProvider::builder().with_reader(exporter).build();
+        let meter = provider.meter("coauth-ci");
+        let counter = meter.u64_counter("coauth_ci_requests").build();
+        let histogram = meter
+            .f64_histogram("coauth_ci_request_duration")
+            .with_unit("s")
+            .build();
+        let attributes = [KeyValue::new("method", "GET")];
+        counter.add(2, &attributes);
+        histogram.record(0.5, &attributes);
+
+        let encoder = TextEncoder::new();
+        let mut buffer = Vec::new();
+        encoder.encode(&registry.gather(), &mut buffer).unwrap();
+        let output = String::from_utf8(buffer).unwrap();
+        assert!(output.contains("# TYPE coauth_ci_requests_total counter"));
+        assert!(output.contains("coauth_ci_requests_total{method=\"GET\"} 2"));
+        assert!(output.contains("# TYPE coauth_ci_request_duration_seconds histogram"));
+        assert!(output.contains("coauth_ci_request_duration_seconds_count{method=\"GET\"} 1"));
+        assert!(output.contains("coauth_ci_request_duration_seconds_sum{method=\"GET\"} 0.5"));
+        assert!(!output.contains("otel_scope"));
+        assert_eq!(encoder.format_type(), "text/plain; version=0.0.4");
+        provider.shutdown().unwrap();
+    }
 }

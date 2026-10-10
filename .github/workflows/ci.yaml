@@ -40,7 +40,12 @@ jobs:
       - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+        run: |
+          bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+          bash .ci/checkout-sibling.sh soland ../soland
+          bash .ci/checkout-sibling.sh cotest ../cotest
+          bash .ci/checkout-sibling.sh garth ../garth
+          bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
 
       - name: Set up nightly Rust for rustfmt
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
@@ -49,7 +54,7 @@ jobs:
           components: rustfmt
 
       - name: Verify formatting
-        run: cargo fmt --all -- --check
+        run: cargo +nightly fmt --all -- --check
 
   clippy:
     name: Lint with Clippy
@@ -66,7 +71,12 @@ jobs:
       - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+        run: |
+          bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+          bash .ci/checkout-sibling.sh soland ../soland
+          bash .ci/checkout-sibling.sh cotest ../cotest
+          bash .ci/checkout-sibling.sh garth ../garth
+          bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
 
       - name: Verify Rust toolchain policy
         run: |
@@ -136,7 +146,12 @@ jobs:
       - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+        run: |
+          bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+          bash .ci/checkout-sibling.sh soland ../soland
+          bash .ci/checkout-sibling.sh cotest ../cotest
+          bash .ci/checkout-sibling.sh garth ../garth
+          bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
 
       - name: Audit with cargo-deny
         uses: EmbarkStudios/cargo-deny-action@76cd80eb775d7bbbd2d80292136d74d39e1b4918 # v2.0.14
@@ -159,7 +174,12 @@ jobs:
       - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+        run: |
+          bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+          bash .ci/checkout-sibling.sh soland ../soland
+          bash .ci/checkout-sibling.sh cotest ../cotest
+          bash .ci/checkout-sibling.sh garth ../garth
+          bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
@@ -214,6 +234,11 @@ jobs:
       - name: Fetch repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
+      - name: Fetch formal test-material registry
+        env:
+          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
+        run: bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
+
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
@@ -228,6 +253,11 @@ jobs:
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: nextest-archive
+
+      - name: Apply the current test database schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost/postgres
+        run: psql "$DATABASE_URL" --set ON_ERROR_STOP=on --file crates/storage-postgres/migrations/00000000000000_initial/up.sql
 
       - name: Execute test partition
         env:

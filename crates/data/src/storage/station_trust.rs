@@ -221,6 +221,10 @@ repository_impl! {
         /// Advance the anti-rollback floor and `last_verified_at` after a
         /// successful online re-verification of the pinned identity. The
         /// update is a CAS over name, endpoint and old history head.
+        #[expect(
+            clippy::too_many_arguments,
+            reason = "Keep the expected enrollment identity and new verified anti-rollback floor explicit in this compare-and-swap contract."
+        )]
         async fn record_verification(
             &mut self,
             clock: &dyn Clock,

@@ -181,7 +181,7 @@ async fn stage_device_pairing_with_key(
                 repo.cancel().await.ok();
                 return Err(duplicate_conflict());
             }
-            DevicePairingStageInsert::IdentifierCollision => continue,
+            DevicePairingStageInsert::IdentifierCollision => {}
         }
     }
 
@@ -636,7 +636,11 @@ fn validate_pairing_intent<'a>(
         return Err(ArkretRouteError::NotFound);
     }
     if record.new_device_pubkey != body.new_device_pubkey
-        || record.display_name.as_ref().map(|value| value.as_str()) != body.display_name.as_deref()
+        || record
+            .display_name
+            .as_ref()
+            .map(arkret_wire::NonEmptyString::as_str)
+            != body.display_name.as_deref()
         || arkret_canonical::canonical_json_bytes(&record.device_metadata)?
             != arkret_canonical::canonical_json_bytes(&body.device_metadata)?
     {
@@ -682,7 +686,7 @@ fn validate_pairing_intent<'a>(
         device_public_key_did: arkret_wire::DidKey::new(
             payload.device_public_key_did.as_str().to_owned(),
         )
-        .map_err(|error| proof_invalid(error.to_string()))?,
+        .map_err(|error| proof_invalid(error.to_owned()))?,
         hpke_key: payload.hpke_key.clone(),
         algorithms: payload.algorithms.clone(),
         device_key_algorithm: DevicePairingTargetKeyAlgorithm::Ed25519,
@@ -760,9 +764,8 @@ async fn load_current_realm_authority(
         })?;
     let keys = resolve_realm_authority_keys(depot, &bundle, None, now)
         .await
-        .map_err(|error| {
+        .inspect_err(|_| {
             tracing::warn!("device pairing authority verification keys are unavailable");
-            error
         })?;
     let freshness = RealmAuthorityFreshness::new(now, nonce);
     let verified = verify_realm_authority_bundle(&bundle, &freshness, &keys).map_err(|error| {
@@ -947,17 +950,10 @@ async fn resume_device_pairing_admission(
             .await
             .map_err(map_pairing_peer_error)?;
         let commit = match &peer_outcome {
-            arkret_wire::AuthoritySubmitOutcome::Accepted { status, commit }
-                if matches!(
-                    status,
-                    AuthorityCommitStatus::Committed | AuthorityCommitStatus::Duplicate
-                ) =>
-            {
-                commit.clone()
-            }
-            arkret_wire::AuthoritySubmitOutcome::Accepted { .. } => {
-                return Err(pairing_temporarily_unavailable());
-            }
+            arkret_wire::AuthoritySubmitOutcome::Accepted {
+                status: AuthorityCommitStatus::Committed | AuthorityCommitStatus::Duplicate,
+                commit,
+            } => commit.clone(),
             arkret_wire::AuthoritySubmitOutcome::Rejected {
                 status: AuthorityRejectionStatus::Rejected,
                 reason_code,

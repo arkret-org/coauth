@@ -162,11 +162,8 @@ async fn reserve_issue_operation(
 
     match reserved {
         SessionGrantReserveOutcome::Reserved(operation) => {
-            match body {
-                SessionGrantRequestBody::Agent(agent) => {
-                    validate_agent_before_reservation(depot, &mut repo, agent, holder_jkt).await?;
-                }
-                _ => {}
+            if let SessionGrantRequestBody::Agent(agent) = body {
+                validate_agent_before_reservation(depot, &mut repo, agent, holder_jkt).await?;
             }
             // The reservation must be durable before any OIDC code, handoff or
             // agent proof can be consumed in a later transaction.

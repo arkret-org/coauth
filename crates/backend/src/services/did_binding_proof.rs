@@ -169,7 +169,7 @@ pub(crate) fn verify_detached_jws_with_sdk(
         .detached_jws_key_id(detached_jws)
         .map_err(|error| SdkJwsVerifyError::InvalidShape(error.to_string()))?
         .ok_or_else(|| SdkJwsVerifyError::InvalidShape("missing kid".to_owned()))?
-        .to_owned();
+        .clone();
     let method = verification_methods
         .iter()
         .find(|method| method.id == verification_method)

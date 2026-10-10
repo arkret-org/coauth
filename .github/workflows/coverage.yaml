@@ -48,7 +48,12 @@ jobs:
       - name: Fetch Arkret Rust SDK
         env:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
-        run: bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+        run: |
+          bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
+          bash .ci/checkout-sibling.sh soland ../soland
+          bash .ci/checkout-sibling.sh cotest ../cotest
+          bash .ci/checkout-sibling.sh garth ../garth
+          bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
 
       - name: Set up Rust with llvm-tools
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
@@ -63,6 +68,11 @@ jobs:
         uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
         with:
           tool: grcov
+
+      - name: Apply the current test database schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost/postgres
+        run: psql "$DATABASE_URL" --set ON_ERROR_STOP=on --file crates/storage-postgres/migrations/00000000000000_initial/up.sql
 
       - name: Execute tests with coverage instrumentation
         run: |
