@@ -1,0 +1,128 @@
+# Reviewed exact historical fingerprints only. New secrets remain fatal.
+# No directory, rule, or history range is excluded by these entries.
+
+# Pinned public OIDF source commit SHA, not authentication material.
+39a3e4210d46f920e62b3b5760343cc75c0eced9:.github/workflows/oidc-conformance.yaml:generic-api-key:29
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+7df75d5df80e6e5944f725eb42da6a7e627b9746:config.dev.yaml:generic-api-key:53
+
+# Dependency names libcrux-secrets/libcrux-sha3 misparsed as a credential.
+570e7f96879ff40fde7a14adf9fa21ea2be44cbc:Cargo.lock:generic-api-key:6048
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+7df1df2317c5e7037933099685f6aef07bd1c786:config.dev.yaml:private-key:100
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+7df1df2317c5e7037933099685f6aef07bd1c786:config.dev.yaml:private-key:105
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+7df1df2317c5e7037933099685f6aef07bd1c786:config.dev.yaml:private-key:110
+
+# Public did:key identifier in a test fixture, not a private key.
+3e3ef516733cb851c13b6783ad03ff394a74e78b:crates/backend/src/services/did_binding/tests.rs:generic-api-key:236
+
+# Public did:key identifier in a test fixture, not a private key.
+378f86c4a9ddcbd1e267f5a76b439e9ec6503f31:crates/storage-postgres/src/user/tests.rs:generic-api-key:1560
+
+# registration_token_samples()/samples() synthetic documentation/test token.
+5873a8af7d14064479d9ab8f214fe51f6bccd4fa:crates/backend/src/handlers/admin/model.rs:generic-api-key:183
+
+# registration_token_samples()/samples() synthetic documentation/test token.
+5873a8af7d14064479d9ab8f214fe51f6bccd4fa:crates/backend/src/handlers/admin/model.rs:generic-api-key:194
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+dcf2b03030d75d005bf4f5e71b0e36ccba17fe4d:config.dev.yaml:private-key:105
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+f67e8158ed81f73c676961f386a9c7547bcf2b80:config.dev.yaml:private-key:100
+
+# Public did:key identifier in a test fixture, not a private key.
+f41717881d2f328edfcdae0ac8f428e33162ea73:crates/data/src/pg/user/tests.rs:generic-api-key:1523
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+bc38c69c8f5c3ee7621abd84e74ac1d9a7970a9f:config.dev.yaml:private-key:52
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+bc38c69c8f5c3ee7621abd84e74ac1d9a7970a9f:config.dev.yaml:private-key:80
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+bc38c69c8f5c3ee7621abd84e74ac1d9a7970a9f:config.dev.yaml:private-key:86
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+bc38c69c8f5c3ee7621abd84e74ac1d9a7970a9f:config.dev.yaml:private-key:93
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+937ffb3f24fa59e7b17009ee6b7f25321f00d1fd:config.dev.yaml:private-key:52
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+937ffb3f24fa59e7b17009ee6b7f25321f00d1fd:config.dev.yaml:private-key:80
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+937ffb3f24fa59e7b17009ee6b7f25321f00d1fd:config.dev.yaml:private-key:86
+
+# Removed historical localhost-only development fixture with published synthetic signing/wrapping keys; never use for production.
+937ffb3f24fa59e7b17009ee6b7f25321f00d1fd:config.dev.yaml:private-key:93
+
+# Explicit DEV-ONLY deterministic local key seed.
+3391f04cf185e6129a4570dd9a56a795067f2fc7:justfile:generic-api-key:13
+
+# Deterministic development-container seed, not a deployed credential.
+6dee90cb54e54d70a9de2146404b27a3f208a041:.devcontainer/compose.yml:generic-api-key:13
+
+# registration_token_samples()/samples() synthetic documentation/test token.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/backend/src/handlers/admin/model.rs:generic-api-key:605
+
+# registration_token_samples()/samples() synthetic documentation/test token.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/backend/src/handlers/admin/model.rs:generic-api-key:616
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/backend/src/handlers/admin/v1/personal_sessions.rs:generic-api-key:632
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/backend/src/handlers/admin/v1/personal_sessions.rs:generic-api-key:1085
+
+# SecretsConfig::test() deterministic hardcoded test configuration, separate from random production generate().
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets/generation.rs:private-key:82
+
+# SecretsConfig::test() deterministic hardcoded test configuration, separate from random production generate().
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets/generation.rs:private-key:101
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets.rs:private-key:145
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets.rs:private-key:201
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets.rs:private-key:264
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets.rs:private-key:270
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets.rs:private-key:317
+
+# Inline #[cfg(test)] fixture; published synthetic cryptographic/OAuth sample.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:crates/config/src/sections/secrets.rs:private-key:328
+
+# Removed imported configuration; exact read-only translation-download key is still intentionally published in the upstream element-hq/matrix-authentication-service localazy.json; no writeKey.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:localazy.json:generic-api-key:3
+
+# Published configuration/curl documentation example; synthetic client/key fixture, not an active deployment credential.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:docs/en/topics/admin-api.md:generic-api-key:96
+
+# Published configuration/curl documentation example; synthetic client/key fixture, not an active deployment credential.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:docs/en/topics/admin-api.md:generic-api-key:191
+
+# Published configuration/curl documentation example; synthetic client/key fixture, not an active deployment credential.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:docs/en/topics/admin-api.md:generic-api-key:203
+
+# Abbreviated 15-character CAPTCHA documentation sample, not a real provider-format credential.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:docs/en/reference/configuration.md:generic-api-key:391
+
+# Published configuration/curl documentation example; synthetic client/key fixture, not an active deployment credential.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:docs/en/reference/configuration.md:generic-api-key:739
+
+# Published configuration/curl documentation example; synthetic client/key fixture, not an active deployment credential.
+3a975e6b92b18ae23cb81ee3d243a6ad29966f95:docs/en/reference/configuration.md:private-key:202
