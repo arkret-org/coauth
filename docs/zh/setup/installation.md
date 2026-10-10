@@ -23,13 +23,13 @@ curl -sL https://github.com/arkret-org/coauth/releases/latest/download/coauth-aa
 Docker 镜像发布在 GitHub Container Registry：
 
 ```bash
-docker pull ghcr.io/arkret/coauth:latest
+docker pull ghcr.io/arkret-org/coauth:latest
 ```
 
 运行容器：
 
 ```bash
-docker run -v $(pwd)/config.yaml:/config.yaml ghcr.io/arkret/coauth:latest \
+docker run -v $(pwd)/config.yaml:/config.yaml ghcr.io/arkret-org/coauth:latest \
   server -c /config.yaml
 ```
 

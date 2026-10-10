@@ -42,7 +42,7 @@ curl -sL "$URL" | tar xzC /path/to/mas
 
 ## Using the Docker image
 
-A pre-built Docker image is available here: [`ghcr.io/arkret/coauth:latest`](https://ghcr.io/arkret/coauth:latest)
+A pre-built Docker image is available here: [`ghcr.io/arkret-org/coauth:latest`](https://ghcr.io/arkret-org/coauth:latest)
 
 The `latest` tag is built using the latest release.
 The `main` tag is built from the `main` branch, and each commit on the `main` branch is also tagged with a stable `sha-<commit sha>` tag.

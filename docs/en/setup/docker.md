@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
 
   coauth:
-    image: ghcr.io/arkret/coauth:latest
+    image: ghcr.io/arkret-org/coauth:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -128,7 +128,7 @@ This adds a metrics-only listener at `/metrics`; see
 cosign verify \
   --certificate-identity-regexp 'https://github\.com/arkret/coauth/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/arkret/coauth:latest
+  ghcr.io/arkret-org/coauth:latest
 ```
 
 ## See also

@@ -1,6 +1,6 @@
 # 使用 Docker / Docker Compose 运行
 
-`coauth` 在 `ghcr.io/arkret/coauth` 发布 OCI 镜像，每个版本提供两种变体：
+`coauth` 在 `ghcr.io/arkret-org/coauth` 发布 OCI 镜像，每个版本提供两种变体：
 
 - `:latest` / `:vX.Y.Z` —— distroless `nonroot`，适合生产环境。
 - `:latest-debug` / `:vX.Y.Z-debug` —— distroless `debug-nonroot`，自带 BusyBox shell，方便排查问题。
@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
 
   coauth:
-    image: ghcr.io/arkret/coauth:latest
+    image: ghcr.io/arkret-org/coauth:latest
     depends_on:
       postgres:
         condition: service_healthy
@@ -76,7 +76,7 @@ readinessProbe:
 cosign verify \
   --certificate-identity-regexp 'https://github\.com/arkret/coauth/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  ghcr.io/arkret/coauth:latest
+  ghcr.io/arkret-org/coauth:latest
 ```
 
 ## 相关文档

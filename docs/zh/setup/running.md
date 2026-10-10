@@ -67,7 +67,7 @@ WantedBy=multi-user.target
 ```yaml
 services:
   coauth:
-    image: ghcr.io/arkret/coauth:latest
+    image: ghcr.io/arkret-org/coauth:latest
     command: server -c /config.yaml
     volumes:
       - ./config.yaml:/config.yaml:ro
