@@ -47,6 +47,11 @@ jobs:
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
 
+          # cargo fmt --all traverses local dependencies' complete workspaces.
+          bash .ci/checkout-sibling.sh floria ../floria
+          bash .ci/checkout-sibling.sh inkson ../inkson
+          bash .ci/checkout-sibling.sh chime ../chime
+
       - name: Set up nightly Rust for rustfmt
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
