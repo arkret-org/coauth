@@ -14,7 +14,7 @@ which maps a handle string to a subject).
 
 **`ak.find.directory.read.list_handles_for_subject.v1` is a directory-service
 operation.** In a standard Arkret deployment that role is carried by the
-directory service (teabay), which applies disclosure policy, issuer-trust
+directory service (flagon), which applies disclosure policy, issuer-trust
 filtering, audience scoping, and `as_of` historical replay across all
 issuers visible in a Realm. coauth deliberately does **not** expose this
 operation:
@@ -28,7 +28,7 @@ operation:
   risk diverging from) the directory service's authoritative filtering.
 
 A consumer that needs `list_handles_for_subject` MUST call the directory
-service (teabay), not coauth.
+service (flagon), not coauth.
 
 ## What coauth provides instead
 

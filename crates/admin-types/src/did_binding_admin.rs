@@ -71,7 +71,7 @@ impl DidBindingKind {
 /// federation, audit-trail). Cache-allowed UI surfaces (verified
 /// badge, mention autocomplete, contact card) MAY use a bounded
 /// cache, but MUST degrade to unverified on cache miss or §6.1.2
-/// invalidation. coauth (and any teabay / soland mirror) is NOT a
+/// invalidation. coauth (and any flagon / soland mirror) is NOT a
 /// trust authority — it MUST NOT be treated as a wire-normative
 /// source of binding state.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
