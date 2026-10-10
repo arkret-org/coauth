@@ -49,8 +49,8 @@ jobs:
       - name: Extract version and commit timestamp
         id: version-info
         run: |
-          echo "describe=$(git describe --tags --match 'v*.*.*' --always)" >> $GITHUB_OUTPUT
-          echo "timestamp=$(git log -1 --format=%ct)" >> $GITHUB_OUTPUT
+          echo "describe=$(git describe --tags --match 'v*.*.*' --always)" >> "$GITHUB_OUTPUT"
+          echo "timestamp=$(git log -1 --format=%ct)" >> "$GITHUB_OUTPUT"
 
   # -- Container image --
 
@@ -296,9 +296,9 @@ jobs:
             "${IMAGE}:${SOURCE_SUFFIX}-amd64" \
             "${IMAGE}:${SOURCE_SUFFIX}-arm64"
 
-          digest="$(docker buildx imagetools inspect "${IMAGE}:${SOURCE_SUFFIX}" | awk '/Digest:/ { print $2; exit }')"
-          if [ -z "$digest" ]; then
-            echo "Failed to determine manifest digest for ${IMAGE}:${SOURCE_SUFFIX}" >&2
+          digest="$(docker buildx imagetools inspect "${IMAGE}:${SOURCE_SUFFIX}" --format '{{.Manifest.Digest}}')"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid manifest digest for ${IMAGE}:${SOURCE_SUFFIX}" >&2
             exit 1
           fi
 
