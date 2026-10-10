@@ -26,7 +26,6 @@ on:
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   CARGO_TERM_COLOR: always
-  COAUTH_CONFORMANCE_RESULTS: ${{ runner.temp }}/public-oidc-evidence
   COAUTH_CONFORMANCE_REF: 11999aad62ec292f36101410d9d5b761d44903ff
 
 concurrency:
@@ -57,6 +56,9 @@ jobs:
     steps:
       - name: Fetch repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set the public evidence directory
+        run: echo "COAUTH_CONFORMANCE_RESULTS=$RUNNER_TEMP/public-oidc-evidence" >> "$GITHUB_ENV"
 
       - name: Fetch Docker build source dependencies
         env:
