@@ -2,28 +2,11 @@
 
 name: Postgres lib-test gate
 
-# a dedicated job that runs the `--lib` test suites against a real, migrated
-# Postgres instance.
-#
-# Why a separate job from the existing `test` matrix in `ci.yaml`?
-#
-# * The `test` matrix runs `cargo nextest` against an *unmigrated*
-#   Postgres (no `coauth database migrate` step), which means every
-#   test that goes through `setup_test_pool()` builds a pool
-#   successfully but every SQL query fails on the missing tables. Those
-#   tests effectively only exercise their `Some(pool) = ... else
-#   { return; }` early-return arm in CI.
-#
-# * This job migrates the database first, then runs the lib tests with
-#   `DATABASE_URL` set, so the gate actually exercises the live PG path
-#   on every PR.
-#
-# `coauth-backend`'s handler tests are covered here too: they are gated on
-# BOTH `DATABASE_URL` and the `cedar` feature, so without this job that whole
-# face is skipped silently. Cross-test isolation is provided by the
-# `TestDatabase` guard (session-level `pg_advisory_lock` plus
-# `TRUNCATE ... RESTART IDENTITY CASCADE`), so they run against one shared
-# migrated database.
+# Runs repository and backend lib tests against a real, migrated Postgres.
+# The main CI test partitions also migrate their database; this gate adds
+# Cedar-enabled handler coverage and an explicit repository-test selection.
+# TestDatabase serializes shared database access with a session advisory lock
+# and truncates application tables between cases.
 
 on:
   pull_request:
@@ -115,30 +98,16 @@ jobs:
         run: cargo run --locked --bin coauth -- database -c config.ci.yaml migrate
 
       - name: Run a known-PG lib test against migrated Postgres
-        # scope: prove that the
-        # `setup_test_pool() -> Option<Pool>` gate actually fires under
-        # CI — i.e., at least one of the 168 callsites runs its full
-        # body instead of early-returning on `None`. We pick a single
-        # representative test (`pg::user::tests::test_user_repo`)
-        # that exercises the round-trip
-        # add → exists → find → list → patch → terms path against the
-        # real Postgres. The "1 passed" check below is the
-        # load-bearing signal: if the gate were stuck on `None` the
-        # output would say "0 passed; 0 failed" because the body
-        # never ran.
-        #
-        # Future round: once `coauth-data` PG tests get per-test
-        # schema isolation (none of them currently truncate state
-        # between runs, so they collide on shared usernames like
-        # `john` / `alice`), expand this to the full
-        # `cargo test --workspace --locked --lib` invocation.
+        # The exact selection and count assert that this test still exists
+        # in its current storage package. setup_test_pool fails when Postgres
+        # is unavailable, so a passing case exercises the migrated database.
         run: |
           set -euo pipefail
-          out=$(cargo test --locked --lib -p coauth-data \
-            --no-fail-fast pg::user::tests::test_user_repo -- --exact 2>&1)
+          out=$(cargo test --locked --lib -p coauth-storage-postgres \
+            --no-fail-fast user::tests::test_user_repo -- --exact 2>&1)
           echo "$out"
           if ! echo "$out" | grep -qE "test result: ok\\. 1 passed"; then
-            echo "::error::Expected pg::user::tests::test_user_repo to pass with PG present (gate did not fire)" >&2
+            echo "::error::Expected user::tests::test_user_repo to pass with PG present (gate did not fire)" >&2
             exit 1
           fi
 
