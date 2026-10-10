@@ -74,7 +74,7 @@ readinessProbe:
 
 ```sh
 cosign verify \
-  --certificate-identity-regexp 'https://github\.com/arkret/coauth/' \
+  --certificate-identity-regexp 'https://github\.com/arkret-org/coauth/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   ghcr.io/arkret-org/coauth:latest
 ```
