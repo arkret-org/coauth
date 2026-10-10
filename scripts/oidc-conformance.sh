@@ -59,6 +59,7 @@ WORK_DIR=""
 # silently overwrote this trap and left orphaned coauth processes; we
 # consolidate both responsibilities here so the hook is composable.
 cleanup() {
+    local incoming_status=$?
     if [[ -n "${COAUTH_PID}" ]] && kill -0 "${COAUTH_PID}" 2>/dev/null; then
         kill -INT "${COAUTH_PID}" 2>/dev/null || true
         for _ in 1 2 3 4 5; do
@@ -71,8 +72,9 @@ cleanup() {
         echo "[oidc-conformance] coauth log:"
         cat "${COAUTH_LOG}"
     fi
-    [[ -n "${COAUTH_LOG}" ]] && rm -f "${COAUTH_LOG}"
-    [[ -n "${WORK_DIR}" ]] && rm -rf "${WORK_DIR}"
+    if [[ -n "${COAUTH_LOG}" ]]; then rm -f "${COAUTH_LOG}"; fi
+    if [[ -n "${WORK_DIR}" ]]; then rm -rf "${WORK_DIR}"; fi
+    return "$incoming_status"
 }
 trap cleanup EXIT
 
