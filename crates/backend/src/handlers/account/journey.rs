@@ -3,8 +3,9 @@
 //! These endpoints expose the journey engine over HTTP, allowing clients to start
 //! journeys, query the current challenge, and submit stage responses.
 //!
-//! Session state is stored in-memory for now; a proper repository-backed store
-//! will replace this once `JourneySession` has a database repository.
+//! Sessions belong to this process and expire after one hour, including terminal
+//! sessions. These stage outcomes do not establish product authentication or
+//! durable account writes; those require the owning business services.
 
 use chrono::Utc;
 use coauth_data::journey::{
@@ -23,8 +24,7 @@ use ulid::Ulid;
 use super::{RouteError, make_rng};
 use crate::app_state::DepotExt as _;
 use crate::handlers::journey::{
-    CaptchaVerifyContext, JourneyExecutor, JourneyPlan, evict_journey_sessions,
-    journey_session_store_write,
+    CaptchaVerifyContext, JourneyExecutor, JourneyPlan, JourneyState, SESSIONS,
 };
 
 // ---------------------------------------------------------------------------
@@ -382,13 +382,7 @@ pub async fn start_journey(req: &mut Request) -> Result<Json<JourneyOutcome>, Ro
 
     let response = build_response(&plan, &session, challenge, None);
 
-    // Store in memory. Evict expired (and, if at capacity, oldest) sessions
-    // first so this unauthenticated endpoint cannot grow the map without bound.
-    {
-        let mut store = journey_session_store_write().await;
-        evict_journey_sessions(&mut store);
-        store.insert(session_id, (plan, session));
-    }
+    SESSIONS.insert(plan, session).await;
 
     Ok(Json(response))
 }
@@ -402,19 +396,10 @@ pub async fn start_journey(req: &mut Request) -> Result<Json<JourneyOutcome>, Ro
 pub async fn get_journey_session(req: &mut Request) -> Result<Json<JourneyOutcome>, RouteError> {
     let id = parse_journey_session_id(req)?;
 
-    let mut store = journey_session_store_write().await;
-
-    // Enforce the session TTL: an expired non-terminal session is treated as
-    // gone — remove it and report NotFound rather than continuing to serve it.
-    if let Some((_, session)) = store.get(&id)
-        && !session.status.is_terminal()
-        && session.expires_at <= Utc::now()
-    {
-        store.remove(&id);
-        return Err(RouteError::NotFound);
-    }
-
-    let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;
+    let lease = SESSIONS.get(id).await.ok_or(RouteError::NotFound)?;
+    let mut state = lease.state.lock().await;
+    let _admission = SESSIONS.admit(&lease).await.ok_or(RouteError::NotFound)?;
+    let JourneyState { plan, session } = &mut *state;
 
     if session.status.is_terminal() {
         // Return a JourneyDone challenge for completed sessions
@@ -454,19 +439,13 @@ pub async fn respond_journey(
         .await
         .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
 
-    let mut store = journey_session_store_write().await;
-
-    // Enforce the session TTL before accepting a response: an expired
-    // non-terminal session is treated as gone and may not be advanced.
-    if let Some((_, session)) = store.get(&id)
-        && !session.status.is_terminal()
-        && session.expires_at <= Utc::now()
+    let lease = SESSIONS.get(id).await.ok_or(RouteError::NotFound)?;
+    let mut state = lease.state.lock().await;
+    // Recheck after waiting for another response on this session.
     {
-        store.remove(&id);
-        return Err(RouteError::NotFound);
+        let _admission = SESSIONS.admit(&lease).await.ok_or(RouteError::NotFound)?;
     }
-
-    let (plan, session) = store.get_mut(&id).ok_or(RouteError::NotFound)?;
+    let JourneyState { plan, session } = &mut *state;
 
     if session.status.is_terminal() {
         return Err(RouteError::BadRequest(
@@ -503,6 +482,10 @@ pub async fn respond_journey(
     )
     .await
     .map_err(|e| RouteError::Internal(Box::new(e)))?;
+
+    // Recheck after external verification. Keep admission only for this
+    // synchronous commit, so eviction cannot race a successful update.
+    let _admission = SESSIONS.admit(&lease).await.ok_or(RouteError::NotFound)?;
 
     // Update the session context
     session.context = updated_context;
@@ -553,3 +536,7 @@ pub async fn respond_journey(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "journey_tests.rs"]
+mod tests;

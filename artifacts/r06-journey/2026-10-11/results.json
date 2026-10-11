@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "coauth": {
+    "passed": 1130,
+    "failed": 0,
+    "ignored": 4,
+    "exit": 0,
+    "features": "coauth-backend/cedar"
+  },
+  "clippy": 0,
+  "nightly_fmt": 0,
+  "source_heads": {
+    "coauth": "eace86bf7723fa82e48224aab768b997fcef840b",
+    "arkret-rust-sdk": "8b83ca9254bdd2e279360a1f1ecc760912962407",
+    "cotest": "48a2ba7f7833ca847255c76c0a5c2f9cfc7bb55e"
+  },
+  "source_sha256": {
+    "crates/backend/src/handlers/account/journey.rs": "5abf1b84dd23b9ecd6916c75081d62dca0db292a744ed9b6d6960901a7903cb4",
+    "crates/backend/src/handlers/account/journey_tests.rs": "987dd6dd12c9d01a824a2f3c9a98ff181997bed8da3aeacb45e8bccf2ef33697",
+    "crates/backend/src/handlers/journey/mod.rs": "c08037501278968b5f43a12b4982caeef210fdcc441ef17870f7453aacd331c4",
+    "crates/backend/src/handlers/journey/executor.rs": "3fccdf40e19985a747ff4ed8d2172067b01c1c7fc73ea557bd5fe53dc021daf2",
+    "crates/backend/src/handlers/journey/sessions.rs": "c1ca542db60b7d40674da524d1e3c457cedc33d572651316939fa8b5e4af79f3",
+    "crates/backend/src/handlers/journey/sessions_tests.rs": "ee93fa43e2807abeda2985743841dfb066630c05db5294232b02884e2edbd7ad",
+    "docs/architecture/journey-boundaries.md": "662bf4ca8d7c8889d57a2f3ebc5515c62550372b736a93f9ddc3c86689bfb0e6"
+  },
+  "logs": {
+    "workspace": "b614b657d742795411d1df3098d64eb9f4f0c9acb2b7332eb1f029fe2f1b4b4b",
+    "clippy": "3ee66fff3d02571aea1cafe259b0ade2a614679da1f7029a886240acdb614a26"
+  },
+  "target": "/Volumes/Data/Works/arkret-org/coauth/target",
+  "database_encoding": "UTF8",
+  "scope": "Process-local existing REST surface; nine new admission, cancellation, capacity and HTTP TTL tests. No claim of product registration/recovery/consent wiring or durable multi-instance continuation. Built-in REST plans contain no CAPTCHA stage; external wait tests exercise the session ownership boundary rather than claiming a real REST CAPTCHA caller."
+}

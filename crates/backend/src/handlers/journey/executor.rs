@@ -189,7 +189,7 @@ async fn validate_response(
                 password,
             },
         ) => {
-            // Store identified user in context
+            // Collect the supplied identifier; this does not authenticate a user.
             if let Some(ctx) = context.as_object_mut() {
                 ctx.insert("uid_field".into(), Value::String(uid_field.clone()));
                 if let Some(pw) = password {
@@ -201,8 +201,7 @@ async fn validate_response(
             StageOutcome::Continue
         }
         (StageKind::EmailVerification { .. }, StageSubmission::EmailVerification { code }) => {
-            // Actual verification happens in the stage implementation (side effect).
-            // The executor just validates the response shape.
+            // Shape validation only. No email verifier is wired to this executor.
             if code.is_empty() {
                 StageOutcome::Retry {
                     errors: vec![StageValidationError {
@@ -368,7 +367,7 @@ async fn validate_response(
                     }],
                 }
             } else {
-                // Actual token validation happens in the stage side-effect.
+                // Shape validation only. No enrollment token consumer is wired here.
                 StageOutcome::Continue
             }
         }
