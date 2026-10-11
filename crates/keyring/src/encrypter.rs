@@ -1,17 +1,8 @@
-// The `chacha20poly1305 0.10` API still consumes `generic-array 0.14`
-// `GenericArray<u8, _>` values for its key / nonce arguments. `digest 0.10`
-// re-exports those `generic_array` items with `#[deprecated]` nudges toward
-// the not-yet-stable `generic-array 1.x` migration. The workspace is pinned
-// to the RustCrypto 0.10/0.14 line (see root `Cargo.toml`), so suppress the
-// warnings file-locally until upstream ships a stable 1.x bridge.
-#![allow(deprecated)]
-
 use std::sync::Arc;
 
 use aead::Aead;
 use base64ct::{Base64, Encoding};
 use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
-use generic_array::GenericArray;
 use thiserror::Error;
 
 /// Helps encrypting and decrypting data
@@ -32,8 +23,7 @@ impl Encrypter {
     /// Creates an [`Encrypter`] out of an encryption key
     #[must_use]
     pub fn new(key: &[u8; 32]) -> Self {
-        let key = GenericArray::from_slice(key);
-        let aead = ChaCha20Poly1305::new(key);
+        let aead = ChaCha20Poly1305::new(key.into());
         let aead = Arc::new(aead);
         Self { aead }
     }
@@ -44,8 +34,7 @@ impl Encrypter {
     ///
     /// Will return `Err` when the payload failed to encrypt
     pub fn encrypt(&self, nonce: &[u8; 12], decrypted: &[u8]) -> Result<Vec<u8>, aead::Error> {
-        let nonce = GenericArray::from_slice(&nonce[..]);
-        let encrypted = self.aead.encrypt(nonce, decrypted)?;
+        let encrypted = self.aead.encrypt(nonce.into(), decrypted)?;
         Ok(encrypted)
     }
 
@@ -55,8 +44,7 @@ impl Encrypter {
     ///
     /// Will return `Err` when the payload failed to decrypt
     pub fn decrypt(&self, nonce: &[u8; 12], encrypted: &[u8]) -> Result<Vec<u8>, aead::Error> {
-        let nonce = GenericArray::from_slice(&nonce[..]);
-        let encrypted = self.aead.decrypt(nonce, encrypted)?;
+        let encrypted = self.aead.decrypt(nonce.into(), encrypted)?;
         Ok(encrypted)
     }
 

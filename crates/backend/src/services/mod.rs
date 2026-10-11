@@ -9,6 +9,8 @@ pub mod did_binding_proof;
 pub mod did_resolver;
 pub mod dpop;
 pub mod email_webhook;
+#[cfg(test)]
+mod encrypted_secrets_tests;
 pub mod erasure_receipt;
 pub mod handle_subject_validator;
 pub mod organization_bootstrap;

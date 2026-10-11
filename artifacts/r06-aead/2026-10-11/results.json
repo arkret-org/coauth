@@ -1,0 +1,78 @@
+{
+  "status": "passed",
+  "workspace": {
+    "passed": 1118,
+    "failed": 0,
+    "ignored": 4,
+    "exit": 0
+  },
+  "clippy": 0,
+  "nightly_fmt": 0,
+  "legacy": {
+    "generation": 0,
+    "keyring": {
+      "passed": 3,
+      "exit": 0
+    },
+    "rows": {
+      "passed": 1,
+      "exit": 0
+    },
+    "independent_openssl_comparison": "all 3 cases match"
+  },
+  "dep_matrix": {
+    "checks": 14,
+    "uncovered": []
+  },
+  "cotest_package_graph": {
+    "exit": 0,
+    "light": 606,
+    "root": 982
+  },
+  "database_encoding": "UTF8",
+  "target": "/Volumes/Data/Works/arkret-org/coauth/target",
+  "source": {
+    "coauth": {
+      "base": "1c5b20e3cbc36d0fa6f4e7e1244ebb4e3fee7e2c",
+      "files": {
+        "Cargo.toml": "01be7499f34ad53655703481abf566cd94a3e5863726e0976478afeb318a155f",
+        "Cargo.lock": "c12899696471f7d62e8b8a99454002ebae641c6f6d0cb29415c5ed05489d6565",
+        "crates/keyring/Cargo.toml": "c5eeb155261731ff1cd486f744c3af86401b19beeee57de38ecd59b3066fec44",
+        "crates/keyring/src/encrypter.rs": "77663508b3e43dcff817f68eb0ea336f108dd193ca5ae18ac38d4980b4848d6e",
+        "crates/keyring/tests/encrypter_contract.rs": "e03ecd21ad1401d37747f9be1afebd97a954e96b6b74156a029f1e667bbea959",
+        "crates/keyring/tests/fixtures/encrypted_secrets.json": "8d7c22f4837f318b840ed8b6b4952cc3d0d1c1e413d87076eb8c4bba3432f803",
+        "crates/keyring/tests/fixtures/README.md": "9ac4697488d87d64fc353a0e8353d325bcd82d59b554289c6afba906bbc94a05",
+        "crates/backend/src/services/encrypted_secrets_tests.rs": "ea1145978a532f8b834057c364bb6b006b17aa6d008987cbbca54d6b6cea67c1",
+        "crates/backend/src/services/mod.rs": "761ee1bf118c279f9cc472d4e8095f056c8e3dbcab48de1ceffa762ad5bf36a6"
+      }
+    },
+    "arkret-rust-sdk": {
+      "base": "219e1805aaf0e04f4e5ced66d7734f00c1667b33",
+      "files": {
+        "tools/dep_matrix.py": "41d27cf7d64ba942c81adfa93486e23c05c07920ca62c0ce9c1e7e5bf1e57230",
+        "tools/test_dep_matrix.py": "34cbff1c71cd1f158adeb9dcee8e2b226e5b6ebb5996d631a0b54c60f5092288",
+        "tools/dep_matrix_exemptions.json": "ba7ed8b700cfa78a7119f985e6209186b31a90fa056b1cb60b39baaa08e9dc36"
+      }
+    },
+    "cotest": {
+      "base": "77161986b998bfeda903be061e7e8202c49689f5",
+      "files": {
+        "Cargo.lock": "a145862cd93aad7bc94b3a4e21889ae0822dc47cfc48d03886eba66b27446787"
+      }
+    }
+  },
+  "logs": {
+    "generation": "fb2ba5b6ae0e54179503445f59dd0f26984f019af08dfe156e1f240ccf1dde57",
+    "legacy-keyring": "a3fc5aeacce93e5929d7382ec5e63fe603def42312c9c991f9a249a7d6c51c0a",
+    "legacy-rows": "e1482b7dca7459a4d1704aacbeafda45e005b9e9abb1e0270b69f51613befee8",
+    "workspace": "ec33a6af046f029426aa91f798e0ab5afd4117ddc13a7745eb6177d86ef90a79",
+    "clippy": "0fb2a0c9d8733d12e897c65968976cd70418da1dd532edbd03a5b9f8c24c332e",
+    "dep-matrix-tests": "2e280615a4880c351acb39f1cc38de4128be823c122d245a75ca2958ecfd9bfc",
+    "dep-matrix": "48e4507dfc304d7d504a2053562231cd74899775e92817cbb706c444fabe7a52",
+    "chacha-reverse": "c4c405dd43c45ac9320bcdb8f572541a0a344df665a9eae96f0f67cb79464dc0",
+    "dalek-reverse": "c8be869bf80018f471868208c89498b68617780810edee0d4ca3f6dc134cae55",
+    "cotest-package-graph": "0d9ca27f227f85e6d306604ad85667fbbf9a31cddc011107c24a2074e861c2cf"
+  },
+  "scope": "macOS arm64 local execution; reviewed Linux PostgreSQL CI configuration, not an assertion that CI or other native targets ran",
+  "interrupted_run": "Previous attempt stopped before natural completion; resumed exact final source gates are acceptance evidence."
+}

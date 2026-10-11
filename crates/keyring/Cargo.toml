@@ -20,7 +20,6 @@ const-oid = { workspace = true }
 der = { workspace = true }
 ed25519-dalek = { workspace = true }
 elliptic-curve = { workspace = true }
-generic-array = { workspace = true }
 k256 = { workspace = true }
 p256 = { workspace = true }
 p384 = { workspace = true }
@@ -36,6 +35,7 @@ spki = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+serde_json = { workspace = true }
 insta = { workspace = true }
 rand_chacha = { workspace = true }
 

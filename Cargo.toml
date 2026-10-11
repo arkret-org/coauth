@@ -75,7 +75,7 @@ syn = "3.0"
 # The dependency list below is sorted alphabetically; per-dependency notes sit
 # directly above the entry they describe.
 
-aead = { version = "0.5.2", features = ["std"] }
+aead = { version = "0.6.1", default-features = false, features = ["alloc"] }
 anyhow = "1.0.104"
 arc-swap = "1.9.2"
 argon2 = { version = "0.5.3", features = ["password-hash", "std"] }
@@ -109,7 +109,7 @@ bcrypt = "0.19.3"
 bytes = "1.12.1"
 camino = { version = "1.2.5", features = ["serde1"] }
 cedar-policy = "4"
-chacha20poly1305 = { version = "0.10.1", features = ["std"] }
+chacha20poly1305 = { version = "0.11.0", default-features = false, features = ["alloc"] }
 chrono = { version = "0.4.45", default-features = false, features = [
     "serde",
     "clock",
@@ -173,7 +173,7 @@ ecdsa = { version = "0.16.9", features = ["signing", "verifying"] }
 # Two Ed25519 generations, on purpose and under guard. `ed25519-dalek 2.2`
 # is the JOSE/keyring generation: it carries the `pkcs8` feature that keeps
 # every `coauth_keyring::PrivateKey` variant behind one return type (see the
-# `generic-array` note below), and `coauth_jose::jwa::Ed25519SigningKey` is an
+# shared PKCS#8 family note below), and `coauth_jose::jwa::Ed25519SigningKey` is an
 # alias for its type. `ed25519-dalek-3` is the generation the Arkret SDK signs
 # and verifies with, so anything crossing into `arkret-signatures` /
 # `arkret-identity` needs it. Only `coauth-backend` links both, and the two
@@ -189,36 +189,11 @@ figment = { version = "0.10.19", features = ["env", "yaml", "test"] }
 fluent-bundle = "0.16"
 form_urlencoded = "1.2.2"
 futures-util = "0.3.34"
-# Pinned to 0.14, and the reason is narrower than "RustCrypto is not ready".
-# The 1.x generation is already resolved in this repo's own `Cargo.lock`:
-# generic-array 1.4.5, digest 0.11.3, sha2 0.11.0, hmac 0.13.0,
-# elliptic-curve 0.14.1, ecdsa 0.17.0, p256 0.14.0, pkcs8 0.11.0,
-# signature 3.0.0, spki 0.8.0, der 0.8.1 and sec1 0.8.1 all appear there
-# today, pulled in through the Arkret SDK. So the 0.14 pin is not waiting on
-# the ecosystem; it is waiting on four specific crates.
-#
-# What blocks the move is `coauth_keyring::PrivateKey::to_pkcs8_der`: every
-# enum variant has to hand back the same `pkcs8` generation's document, and
-# `rsa 0.9.10`, `p384 0.13.1`, `p521 0.13.3` and `k256 0.13.4` have no
-# release built on `elliptic-curve 0.14` / `pkcs8 0.11`. Those four variants
-# are RS256/PS256, ES384, ES512 and ES256K - all required by our OIDC
-# surface, so they cannot be dropped to unblock the pin, and bumping
-# `generic-array` alone would only split `ArrayLength<u8>` bounds in two.
-#
-# Expiry condition, observable without trusting this comment: `rsa`, `p384`,
-# `p521` and `k256` each publish a release built on `elliptic-curve 0.14` /
-# `pkcs8 0.11`. Until then `cargo tree -i elliptic-curve@0.13.8` in this
-# workspace keeps `k256 0.13.4`, `p256 0.13.2`, `p384 0.13.1`, `p521 0.13.3`,
-# `ecdsa 0.16.9` and `primeorder 0.13.6` alive next to our own
-# `coauth-backend` / `coauth-jose` / `coauth-keyring` (`voprf 0.6.0-pre.1`
-# also sits in that subtree, via `arkret-models-discovery`, but it is not a
-# keyring concern), and `rsa 0.9.10`'s manifest still pins `pkcs8 0.10` /
-# `spki 0.7` / `signature 2.2`. When that subtree collapses, this pin can go.
-# The `#[deprecated]` notes on `digest::generic_array::*` stay expected until
-# then. `chacha20poly1305 0.10` / `aead 0.5` are a separate axis: the
-# keyring's encrypter needs only `KeyInit` + `AeadInPlace`, never `pkcs8`,
-# and is tracked on its own.
-generic-array = "0.14.9"
+# JOSE's PrivateKey::to_pkcs8_der returns one shared PKCS#8 document type.
+# RSA/P-384/P-521/K-256 still require the pkcs8 0.10 / elliptic-curve 0.13 /
+# signature 2 family, which retains generic-array 0.14 transitively.
+# Encrypter independently uses chacha20poly1305 0.11 / aead 0.6 and only
+# needs KeyInit + Aead, never PKCS#8.
 getrandom = { version = "0.4.3", default-features = false }
 gloo-timers = { version = "0.4", features = ["futures"] }
 headers = "0.4.1"

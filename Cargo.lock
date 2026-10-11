@@ -2110,16 +2110,15 @@ dependencies = [
 name = "coauth-keyring"
 version = "0.3.0"
 dependencies = [
- "aead 0.5.2",
+ "aead 0.6.1",
  "base64ct",
- "chacha20poly1305 0.10.1",
+ "chacha20poly1305 0.11.0",
  "coauth-iana",
  "coauth-jose",
  "const-oid 0.9.6",
  "der 0.7.10",
  "ed25519-dalek 2.2.0",
  "elliptic-curve 0.13.8",
- "generic-array",
  "insta",
  "k256",
  "p256 0.13.2",
@@ -2133,6 +2132,7 @@ dependencies = [
  "rand_core 0.6.4",
  "rsa",
  "sec1 0.7.3",
+ "serde_json",
  "spki 0.7.3",
  "thiserror 2.0.20",
 ]
