@@ -202,4 +202,116 @@ mod tests {
             );
         }
     }
+    #[test]
+    fn jose_and_sdk_signatures_match_the_fixed_compact_transcript() {
+        use coauth_iana::jose::JsonWebSignatureAlg;
+        use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
+
+        // Fixed seed and canonical input; expected bytes independently computed
+        // with OpenSSL Ed25519 through Python cryptography before this test.
+        let jose_key = ed25519_dalek::SigningKey::from_bytes(&[42; 32]);
+        let sdk_key = sdk_signing_key_from_seed_bytes(&[42; 32]);
+        let payload = serde_json::json!({"hello": "world"});
+        let jwt = Jwt::sign::<_, coauth_jose::jwa::Signature>(
+            JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519),
+            payload.clone(),
+            &coauth_jose::jwa::AsymmetricSigningKey::from(jose_key.clone()),
+        )
+        .unwrap();
+        let expected = "eyJhbGciOiJFZDI1NTE5In0.eyJoZWxsbyI6IndvcmxkIn0.Ej-oArFyOk_XWxZfzRahiYEqpEnR9NbT8wmFnrsGptqo2o9r01-Jt90JCoJUHRvGY6n-NtvpcxWLzaXi0z27BA";
+        assert_eq!(jwt.as_str(), expected);
+        let parts: Vec<_> = expected.split('.').collect();
+        let canonical = arkret_canonical::canonical_json_bytes(&payload).unwrap();
+        let detached = arkret_signatures::sign_ed25519_detached_jws(&sdk_key, &canonical).unwrap();
+        assert_eq!(detached, format!("{}..{}", parts[0], parts[2]));
+        jwt.verify::<_, ed25519_dalek::Signature>(&jose_key.verifying_key())
+            .unwrap();
+        let signature = arkret_canonical::base64url_decode(parts[2]).unwrap();
+        let signature = ed25519_dalek_3::Signature::from_slice(&signature).unwrap();
+        let transcript = format!("{}.{}", parts[0], parts[1]);
+        sdk_key
+            .verifying_key()
+            .verify_strict(transcript.as_bytes(), &signature)
+            .unwrap();
+        assert!(
+            sdk_key
+                .verifying_key()
+                .verify_strict(b"changed transcript", &signature)
+                .is_err()
+        );
+        let altered: Jwt<'_, serde_json::Value> = Jwt::try_from(
+            "eyJhbGciOiJFZDI1NTE5In0.e30.Ej-oArFyOk_XWxZfzRahiYEqpEnR9NbT8wmFnrsGptqo2o9r01-Jt90JCoJUHRvGY6n-NtvpcxWLzaXi0z27BA"
+        ).unwrap();
+        assert!(
+            altered
+                .verify::<_, ed25519_dalek::Signature>(&jose_key.verifying_key())
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn jose_and_sdk_jwt_policies_keep_distinct_header_and_key_selection_rules() {
+        use arkret_signatures::jwt::{
+            JwtVerificationError, JwtVerificationPolicy, verify_ed25519_jwt_with_jwks,
+        };
+        use coauth_iana::jose::JsonWebSignatureAlg;
+        use coauth_jose::jwt::{JsonWebSignatureHeader, Jwt};
+
+        let key = ed25519_dalek::SigningKey::from_bytes(&[42; 32]);
+        let public_key = arkret_canonical::base64url_encode(key.verifying_key().to_bytes());
+        let jwks = serde_json::json!({"keys": [{"kty":"OKP", "crv":"Ed25519", "x":public_key, "kid":"one", "use":"sig"}]});
+        let sdk_jwks = serde_json::from_value(jwks.clone()).unwrap();
+        let jose_jwks = serde_json::from_value(jwks.clone()).unwrap();
+        let policy = JwtVerificationPolicy::new(1000).max_clock_skew_seconds(0);
+        let claims = serde_json::json!({"exp":2000, "iat":1000});
+        let normal = Jwt::sign::<_, coauth_jose::jwa::Signature>(
+            JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519),
+            claims.clone(),
+            &coauth_jose::jwa::AsymmetricSigningKey::from(key.clone()),
+        )
+        .unwrap();
+        normal.verify_with_jwks(&jose_jwks).unwrap();
+        verify_ed25519_jwt_with_jwks(normal.as_str(), &sdk_jwks, &policy).unwrap();
+
+        // JOSE understands a broader registered header set. The SDK refuses
+        // every crit member, including [], whereas JOSE refuses non-empty lists.
+        let empty_crit: JsonWebSignatureHeader =
+            serde_json::from_value(serde_json::json!({"alg":"Ed25519", "crit":[]})).unwrap();
+        let jwt = Jwt::sign::<_, coauth_jose::jwa::Signature>(
+            empty_crit,
+            claims.clone(),
+            &coauth_jose::jwa::AsymmetricSigningKey::from(key.clone()),
+        )
+        .unwrap();
+        jwt.verify_with_jwks(&jose_jwks).unwrap();
+        assert_eq!(
+            verify_ed25519_jwt_with_jwks(jwt.as_str(), &sdk_jwks, &policy).unwrap_err(),
+            JwtVerificationError::UnsupportedCriticalHeader
+        );
+        let critical: JsonWebSignatureHeader =
+            serde_json::from_value(serde_json::json!({"alg":"Ed25519", "crit":["exp"]})).unwrap();
+        let jwt = Jwt::sign::<_, coauth_jose::jwa::Signature>(
+            critical,
+            claims,
+            &coauth_jose::jwa::AsymmetricSigningKey::from(key.clone()),
+        )
+        .unwrap();
+        assert!(jwt.verify_with_jwks(&jose_jwks).is_err());
+        assert_eq!(
+            verify_ed25519_jwt_with_jwks(jwt.as_str(), &sdk_jwks, &policy).unwrap_err(),
+            JwtVerificationError::UnsupportedCriticalHeader
+        );
+
+        let mut multiple = jwks;
+        multiple["keys"].as_array_mut().unwrap().push(serde_json::json!({
+            "kty":"OKP", "crv":"Ed25519", "x":arkret_canonical::base64url_encode(ed25519_dalek::SigningKey::from_bytes(&[43;32]).verifying_key().to_bytes()), "kid":"two", "use":"sig"
+        }));
+        let sdk_jwks = serde_json::from_value(multiple.clone()).unwrap();
+        let jose_jwks = serde_json::from_value(multiple).unwrap();
+        normal.verify_with_jwks(&jose_jwks).unwrap();
+        assert_eq!(
+            verify_ed25519_jwt_with_jwks(normal.as_str(), &sdk_jwks, &policy).unwrap_err(),
+            JwtVerificationError::AmbiguousKeySelection
+        );
+    }
 }

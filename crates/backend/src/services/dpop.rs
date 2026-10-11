@@ -20,15 +20,12 @@
 //!   we explicitly strip query / fragment).
 //! * `ath` — When a Bearer access token is carried alongside the proof, `ath =
 //!   base64url(sha256(access_token))` (RFC 9449 §4.3).
-//! * `iat` — Must be within `MAX_CLOCK_SKEW` of the verifier's clock.
-//! * `jti` — Must be unique inside the `NONCE_TTL` replay window; we cache observed `jti` values in
-//!   an in-memory map keyed by `jti`, value `iat + NONCE_TTL`. Production deployments running
-//!   multiple coauth replicas behind a load balancer will eventually want a Redis-backed cache, but
-//!   the in-process map is enough for a single-node deployment and for the cotest e2e harness.
+//! * `iat` — SDK proof age and future-clock leeway must pass.
+//! * `jti` — Production uses [`RepositoryJtiStore`] for durable replay admission shared by
+//!   replicas. Handoff may consume the JTI within its own transaction.
 //!
-//! This module is brand-new and only ever reads / writes session-grant
-//! claims through the existing `coauth_jose` plumbing; we never roll our
-//! own primitive crypto.
+//! The SDK owns cryptographic proof verification. This adapter owns replay
+//! admission and the session grant's `cnf.jkt` binding.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -78,13 +75,9 @@ pub enum DpopError {
 
 /// Replay-protection store for DPoP `jti` values (RFC 9449 §4.3).
 ///
-/// Abstracted behind a trait so the verifier logic does not bake in a
-/// particular storage backend. A single-node deployment (and the cotest
-/// e2e harness) uses the in-process [`InMemoryJtiStore`]; a horizontally
-/// scaled deployment can inject a shared backend (Redis / Postgres) via
-/// [`DpopVerifier::with_store`] so that a replayed proof landing on a
-/// different replica is still rejected. See this module's header for why
-/// a process-local map alone is insufficient behind a load balancer.
+/// Production injects [`RepositoryJtiStore`] through [`DpopVerifier::with_store`].
+/// [`InMemoryJtiStore`] is a bounded process-local implementation for tests and
+/// explicitly local consumers; it cannot share replay admission across replicas.
 #[async_trait]
 pub trait JtiReplayStore: Send + Sync + std::fmt::Debug {
     /// Atomically check whether `jti` is still inside its replay window

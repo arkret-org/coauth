@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "source_base": "994446bd7c6d84a00481a046341d1040af8d81f3",
+  "sources": {
+    "crates/backend/src/arkret_key_bridge.rs": "b420e74fe8e717c999cafff6ea7b896d37f4c968716c19909d74d3664fc5c50c",
+    "crates/backend/src/services/dpop.rs": "c8173041274681d668da6ebcbd904997e2bf5900747e3c71a15ce586646a37b5",
+    "docs/architecture/crypto-boundaries.md": "9f6cf2010e580660ba959e0c1871c1409e11dd10bcbeebe033d07d31ec534370"
+  },
+  "workspace": {
+    "exit": 0,
+    "passed": 1114,
+    "failed": 0,
+    "ignored": 4
+  },
+  "clippy": 0,
+  "nightly_fmt": 0,
+  "database_encoding": "UTF8",
+  "log_sha256": {
+    "workspace": "d5d1ec95cc805c07dffe8165aebfc92e607796a2bd8b8d5e88b9a3fe14e6dd50",
+    "clippy": "59c733e222614787dd369df4447a07aeabf67397d4cca1d4c29fb9ae2299712d"
+  },
+  "differential_tests": [
+    "jose_and_sdk_signatures_match_the_fixed_compact_transcript",
+    "jose_and_sdk_jwt_policies_keep_distinct_header_and_key_selection_rules"
+  ]
+}
