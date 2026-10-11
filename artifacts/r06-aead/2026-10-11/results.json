@@ -74,5 +74,23 @@
     "cotest-package-graph": "0d9ca27f227f85e6d306604ad85667fbbf9a31cddc011107c24a2074e861c2cf"
   },
   "scope": "macOS arm64 local execution; reviewed Linux PostgreSQL CI configuration, not an assertion that CI or other native targets ran",
-  "interrupted_run": "Previous attempt stopped before natural completion; resumed exact final source gates are acceptance evidence."
+  "interrupted_run": "Previous attempt stopped before natural completion; resumed exact final source gates are acceptance evidence.",
+  "post_sync": {
+    "source_heads": {
+      "coauth": "6894449ca50171d72efb997718bfbe640bf33b81",
+      "arkret-rust-sdk": "98e3f4f7dd091dd73649827670590fdbd344c653",
+      "cotest": "d40bc38973c51c01cccdd23dbf86346a51338278"
+    },
+    "workspace": {
+      "passed": 1118,
+      "failed": 0,
+      "ignored": 4,
+      "exit": 0
+    },
+    "clippy": 0,
+    "logs": {
+      "workspace": "bab97c1484fccf3da68912a27270bbd7e7055fed54099dc6680ab7863ba7453b",
+      "clippy": "f4d7885749d5a4b4358112912f4bdf35c8c87b914239545c9664137db5ce8a08"
+    }
+  }
 }
