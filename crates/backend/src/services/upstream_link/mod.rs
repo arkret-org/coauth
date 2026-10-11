@@ -1,3 +1,8 @@
+//! Upstream association, policy and registration inside the caller's transaction.
+//! Provider calls are explicit; transaction commits and cookie mutations remain
+//! in the controller, after successful domain outcomes.
+pub(crate) mod attributes;
+
 use std::net::IpAddr;
 
 use anyhow::Error as AnyhowError;
@@ -21,13 +26,39 @@ use rand_core::RngCore;
 use thiserror::Error;
 use ulid::Ulid;
 
-use crate::handlers::post_auth::OptionalPostAuthAction;
-use crate::handlers::upstream_oauth::UpstreamSessionsCookie;
-use crate::handlers::upstream_oauth::template::{AttributeMappingContext, environment};
+use self::attributes::{AttributeMappingContext, environment};
 use crate::policy::{
     PolicyInstance, RegisterInput, RegistrationMethod, Requester as PolicyRequester,
 };
-use crate::salvo_utils::SessionInfo;
+use crate::services::post_auth::next_relative_url;
+
+pub(crate) struct UpstreamLinkEnvironment<'a> {
+    pub url_builder: &'a UrlBuilder,
+    pub station: &'a dyn ConnectorAdmin,
+    pub policy: &'a mut PolicyInstance,
+    pub site_config: &'a SiteConfig,
+    pub user_agent: Option<String>,
+    pub ip_address: Option<IpAddr>,
+}
+
+pub(crate) struct RegistrationValidationInput<'a> {
+    pub ip_address: Option<IpAddr>,
+    pub user_agent: Option<String>,
+    pub username: &'a str,
+    pub email: Option<&'a str>,
+    pub accept_terms: bool,
+}
+
+pub(crate) struct UpstreamRegistrationInput {
+    pub upstream_session: UpstreamOAuthAuthorizationSession,
+    pub username: String,
+    pub displayname: Option<String>,
+    pub email: Option<String>,
+    pub avatar_url: Option<String>,
+    pub ip_address: Option<IpAddr>,
+    pub user_agent: Option<String>,
+    pub post_auth_action: Option<PostAuthAction>,
+}
 
 const DEFAULT_HANDLE_TEMPLATE: &str = "{{ user.preferred_username }}";
 const DEFAULT_DISPLAYNAME_TEMPLATE: &str = "{{ user.name }}";
@@ -36,9 +67,6 @@ const DEFAULT_AVATAR_TEMPLATE: &str = "{{ user.picture }}";
 
 #[derive(Debug, Error)]
 pub enum UpstreamLinkWorkflowError {
-    #[error("missing upstream session cookie")]
-    MissingCookie,
-
     #[error("upstream OAuth link not found")]
     LinkNotFound,
 
@@ -84,21 +112,28 @@ pub enum UpstreamLinkWorkflowError {
     #[error(transparent)]
     Repository(#[from] RepositoryError),
 
-    #[error(transparent)]
-    Internal(#[from] AnyhowError),
+    #[error("provider skips confirmation but supplies no handle")]
+    SkipConfirmationWithoutHandle,
+
+    #[error("registration policy evaluation failed")]
+    Policy(#[from] crate::policy::EvaluationError),
+
+    #[error("stored upstream ID token could not be decoded")]
+    StoredIdToken(#[from] coauth_jose::jwt::JwtDecodeError),
 }
 
 impl UpstreamLinkWorkflowError {
-    fn internal<E>(error: E) -> Self
-    where
-        E: std::error::Error + Send + Sync + 'static,
-    {
-        Self::Internal(AnyhowError::new(error))
-    }
-
     fn station(error: AnyhowError) -> Self {
         Self::ConnectorAdmin(error)
     }
+}
+
+/// Values extracted from authenticated cookies by the HTTP controller.
+pub(crate) struct UpstreamLinkContextInput {
+    pub link_id: Ulid,
+    pub upstream_session_id: Ulid,
+    pub browser_session_id: Option<Ulid>,
+    pub post_auth_action: Option<PostAuthAction>,
 }
 
 pub struct LoadedUpstreamLinkContext {
@@ -194,13 +229,14 @@ pub enum SubmitUpstreamLinkError {
 
 pub async fn load_upstream_link_context(
     repo: &mut BoxRepository,
-    session_info: &SessionInfo,
-    sessions_cookie: &UpstreamSessionsCookie,
-    link_id: Ulid,
+    input: UpstreamLinkContextInput,
 ) -> Result<LoadedUpstreamLinkContext, UpstreamLinkWorkflowError> {
-    let (session_id, post_auth_action) = sessions_cookie
-        .lookup_link(link_id)
-        .map_err(|_| UpstreamLinkWorkflowError::MissingCookie)?;
+    let UpstreamLinkContextInput {
+        link_id,
+        upstream_session_id: session_id,
+        browser_session_id,
+        post_auth_action,
+    } = input;
 
     let link = repo
         .upstream_oauth_link()
@@ -222,13 +258,22 @@ pub async fn load_upstream_link_context(
         return Err(UpstreamLinkWorkflowError::SessionConsumed);
     }
 
-    let browser_session = session_info.load_active_session(repo).await?;
+    // Resolve the browser session only after the link/session ownership and
+    // consumed-state checks, preserving the anti-enumeration order.
+    let browser_session = match browser_session_id {
+        Some(id) => repo
+            .browser_session()
+            .lookup(id)
+            .await?
+            .filter(BrowserSession::active),
+        None => None,
+    };
 
     Ok(LoadedUpstreamLinkContext {
         link,
         upstream_session,
         browser_session,
-        post_auth_action: post_auth_action.cloned(),
+        post_auth_action,
     })
 }
 
@@ -236,22 +281,24 @@ pub async fn load_upstream_link_state(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    url_builder: &UrlBuilder,
-    station: &dyn ConnectorAdmin,
-    policy: &mut PolicyInstance,
-    site_config: &SiteConfig,
-    user_agent: Option<String>,
-    ip_address: Option<IpAddr>,
+    input: UpstreamLinkEnvironment<'_>,
     context: LoadedUpstreamLinkContext,
 ) -> Result<LoadUpstreamLinkOutcome, UpstreamLinkWorkflowError> {
+    let UpstreamLinkEnvironment {
+        url_builder,
+        station,
+        policy,
+        site_config,
+        user_agent,
+        ip_address,
+    } = input;
     let LoadedUpstreamLinkContext {
         link,
         upstream_session,
         browser_session,
         post_auth_action,
     } = context;
-    let redirect_url =
-        OptionalPostAuthAction::from(post_auth_action.clone()).next_relative_url(url_builder);
+    let redirect_url = next_relative_url(post_auth_action.as_ref(), url_builder);
 
     match (browser_session, link.user_id) {
         (Some(session), Some(user_id)) if session.user.id == user_id => {
@@ -340,12 +387,14 @@ pub async fn load_upstream_link_state(
                 repo,
                 rng,
                 clock,
-                url_builder,
-                station,
-                policy,
-                site_config,
-                user_agent,
-                ip_address,
+                crate::services::upstream_link::UpstreamLinkEnvironment {
+                    url_builder,
+                    station,
+                    policy,
+                    site_config,
+                    user_agent,
+                    ip_address,
+                },
                 link,
                 upstream_session,
                 post_auth_action,
@@ -359,23 +408,25 @@ pub async fn submit_upstream_link_action(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    url_builder: &UrlBuilder,
-    station: &dyn ConnectorAdmin,
-    policy: &mut PolicyInstance,
-    site_config: &SiteConfig,
-    user_agent: Option<String>,
-    ip_address: Option<IpAddr>,
+    input: UpstreamLinkEnvironment<'_>,
     context: LoadedUpstreamLinkContext,
     action: UpstreamLinkAction,
 ) -> Result<SubmitUpstreamLinkOutcome, SubmitUpstreamLinkError> {
+    let UpstreamLinkEnvironment {
+        url_builder,
+        station,
+        policy,
+        site_config,
+        user_agent,
+        ip_address,
+    } = input;
     let LoadedUpstreamLinkContext {
         link,
         upstream_session,
         browser_session,
         post_auth_action,
     } = context;
-    let redirect_url =
-        OptionalPostAuthAction::from(post_auth_action.clone()).next_relative_url(url_builder);
+    let redirect_url = next_relative_url(post_auth_action.as_ref(), url_builder);
 
     match (browser_session, link.user_id, action) {
         (Some(session), None, UpstreamLinkAction::LinkCurrentSession) => {
@@ -417,11 +468,13 @@ pub async fn submit_upstream_link_action(
                 station,
                 policy,
                 site_config,
-                ip_address,
-                user_agent.clone(),
-                &attributes.handle,
-                attributes.email.as_deref(),
-                action.accept_terms,
+                crate::services::upstream_link::RegistrationValidationInput {
+                    ip_address,
+                    user_agent: user_agent.clone(),
+                    username: &attributes.handle,
+                    email: attributes.email.as_deref(),
+                    accept_terms: action.accept_terms,
+                },
             )
             .await?;
 
@@ -433,14 +486,16 @@ pub async fn submit_upstream_link_action(
                 rng,
                 clock,
                 repo,
-                upstream_session,
-                attributes.handle,
-                attributes.display_name,
-                attributes.email,
-                attributes.avatar_url,
-                ip_address,
-                user_agent,
-                post_auth_action,
+                crate::services::upstream_link::UpstreamRegistrationInput {
+                    upstream_session,
+                    username: attributes.handle,
+                    displayname: attributes.display_name,
+                    email: attributes.email,
+                    avatar_url: attributes.avatar_url,
+                    ip_address,
+                    user_agent,
+                    post_auth_action,
+                },
             )
             .await?;
 
@@ -468,16 +523,19 @@ async fn load_upstream_registration_screen(
     repo: &mut BoxRepository,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    url_builder: &UrlBuilder,
-    station: &dyn ConnectorAdmin,
-    policy: &mut PolicyInstance,
-    site_config: &SiteConfig,
-    user_agent: Option<String>,
-    ip_address: Option<IpAddr>,
+    input: UpstreamLinkEnvironment<'_>,
     link: UpstreamOAuthLink,
     upstream_session: UpstreamOAuthAuthorizationSession,
     post_auth_action: Option<PostAuthAction>,
 ) -> Result<LoadUpstreamLinkOutcome, UpstreamLinkWorkflowError> {
+    let UpstreamLinkEnvironment {
+        url_builder,
+        station,
+        policy,
+        site_config,
+        user_agent,
+        ip_address,
+    } = input;
     let provider = repo
         .upstream_oauth_provider()
         .lookup(link.provider_id)
@@ -485,8 +543,7 @@ async fn load_upstream_registration_screen(
         .ok_or(UpstreamLinkWorkflowError::ProviderNotFound)?;
 
     let suggestions = resolve_registration_suggestions(&provider, &upstream_session)?;
-    let redirect_url =
-        OptionalPostAuthAction::from(post_auth_action.clone()).next_relative_url(url_builder);
+    let redirect_url = next_relative_url(post_auth_action.as_ref(), url_builder);
 
     // If we have a suggested username, run pre-checks (policy, conflicts,
     // Station availability)
@@ -547,23 +604,23 @@ async fn load_upstream_registration_screen(
 
     if provider.claims_imports.skip_confirmation {
         let Some(ref username) = username else {
-            return Err(UpstreamLinkWorkflowError::Internal(AnyhowError::msg(
-                "No username available even though the provider is configured to skip confirmation",
-            )));
+            return Err(UpstreamLinkWorkflowError::SkipConfirmationWithoutHandle);
         };
 
         let registration = prepare_user_registration(
             rng,
             clock,
             repo,
-            upstream_session,
-            username.clone(),
-            suggestions.suggested_display_name.clone(),
-            suggestions.suggested_email.clone(),
-            suggestions.suggested_avatar_url.clone(),
-            ip_address,
-            user_agent,
-            post_auth_action,
+            crate::services::upstream_link::UpstreamRegistrationInput {
+                upstream_session,
+                username: username.clone(),
+                displayname: suggestions.suggested_display_name.clone(),
+                email: suggestions.suggested_email.clone(),
+                avatar_url: suggestions.suggested_avatar_url.clone(),
+                ip_address,
+                user_agent,
+                post_auth_action,
+            },
         )
         .await?;
 
@@ -643,7 +700,7 @@ async fn pre_check_handle(
             },
         })
         .await
-        .map_err(UpstreamLinkWorkflowError::internal)?;
+        .map_err(UpstreamLinkWorkflowError::from)?;
 
     // Only look for violations on the username field at this stage
     if eval_result
@@ -953,12 +1010,15 @@ async fn validate_registration_action(
     station: &dyn ConnectorAdmin,
     policy: &mut PolicyInstance,
     site_config: &SiteConfig,
-    ip_address: Option<IpAddr>,
-    user_agent: Option<String>,
-    username: &str,
-    email: Option<&str>,
-    accept_terms: bool,
+    input: RegistrationValidationInput<'_>,
 ) -> Result<UpstreamLinkFieldErrors, UpstreamLinkWorkflowError> {
+    let RegistrationValidationInput {
+        ip_address,
+        user_agent,
+        username,
+        email,
+        accept_terms,
+    } = input;
     let mut field_errors = UpstreamLinkFieldErrors::default();
 
     if username.is_empty() {
@@ -990,7 +1050,7 @@ async fn validate_registration_action(
             },
         })
         .await
-        .map_err(UpstreamLinkWorkflowError::internal)?;
+        .map_err(UpstreamLinkWorkflowError::from)?;
 
     for violation in &eval_result.violations {
         let code = if violation.msg.is_empty() {
@@ -1019,7 +1079,7 @@ fn build_attribute_context(
         .id_token()
         .map(Jwt::try_from)
         .transpose()
-        .map_err(UpstreamLinkWorkflowError::internal)?;
+        .map_err(UpstreamLinkWorkflowError::from)?;
 
     let mut context = AttributeMappingContext::new();
     if let Some(id_token) = id_token {
@@ -1088,15 +1148,18 @@ async fn prepare_user_registration(
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     repo: &mut BoxRepository,
-    upstream_session: UpstreamOAuthAuthorizationSession,
-    username: String,
-    displayname: Option<String>,
-    email: Option<String>,
-    avatar_url: Option<String>,
-    ip_address: Option<IpAddr>,
-    user_agent: Option<String>,
-    post_auth_action: Option<PostAuthAction>,
+    input: UpstreamRegistrationInput,
 ) -> Result<UserRegistration, UpstreamLinkWorkflowError> {
+    let UpstreamRegistrationInput {
+        upstream_session,
+        username,
+        displayname,
+        email,
+        avatar_url,
+        ip_address,
+        user_agent,
+        post_auth_action,
+    } = input;
     let mut registration = repo
         .user_registration()
         .add(
@@ -1144,6 +1207,9 @@ async fn prepare_user_registration(
         .await
         .map_err(UpstreamLinkWorkflowError::from)
 }
+
+#[cfg(test)]
+mod database_tests;
 
 #[cfg(test)]
 mod tests {

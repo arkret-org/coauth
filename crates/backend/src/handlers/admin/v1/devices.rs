@@ -515,8 +515,10 @@ mod tests {
             coauth_jose::jwk::JsonWebKeyPublicParameters::from(&session_private),
         );
         let principal_id = "ak:did_core:web:alice.example";
-        let station_id =
-            crate::handlers::arkret::required_audience_for(&state.url_builder, &grant_config);
+        let station_id = crate::services::station_trust::required_audience_for(
+            &state.url_builder,
+            &grant_config,
+        );
         let account_id = arkret_wire::AccountId::new(
             arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
             arkret_identifiers::DidCoreId::new(station_id).unwrap(),
@@ -525,24 +527,26 @@ mod tests {
         // seeded grant has to be minted against the same clock; one minted at
         // the mock epoch is already years expired.
         let grant_clock = coauth_data::SystemClock::default();
-        let material = crate::handlers::arkret::issue_session_grant(
+        let material = crate::services::session_grant::issue_session_grant(
             &mut rng,
             &grant_clock,
             &state.url_builder,
             &grant_config,
             &state.keyring,
-            &browser_session,
-            session_public,
-            principal_id,
-            &account_id,
-            arkret_identifiers::DeviceId::new(device_id.to_owned()).unwrap(),
-            vec![
-                crate::handlers::arkret::STATION_SESSION_BIND_SCOPE.to_owned(),
-                format!("urn:arkret:client:device:{device_id}"),
-            ],
+            crate::services::session_grant::TestGrantIssuance {
+                browser_session: &browser_session,
+                session_public_key: session_public,
+                subject_id: principal_id,
+                account_id: &account_id,
+                device_id: arkret_identifiers::DeviceId::new(device_id.to_owned()).unwrap(),
+                scopes: vec![
+                    crate::handlers::arkret::STATION_SESSION_BIND_SCOPE.to_owned(),
+                    format!("urn:arkret:client:device:{device_id}"),
+                ],
+            },
         )
         .unwrap();
-        let grant = crate::handlers::arkret::persist_session_grant(
+        let grant = crate::services::session_grant::persist_session_grant(
             &mut repo,
             &mut rng,
             &grant_clock,

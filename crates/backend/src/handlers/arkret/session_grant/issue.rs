@@ -14,6 +14,13 @@ use salvo::prelude::*;
 use super::*;
 use crate::handlers::arkret::canonical_response::ArkretCanonicalJson;
 use crate::handlers::arkret::*;
+use crate::services::session_grant::{
+    AgentGrantIssuance, HumanGrantIssuance, RecoveryGrantIssuance, SessionGrantError,
+    SessionGrantIssuanceSeed, commit_session_grant_issuance,
+    issue_recovery_session_grant_for_audience, issue_session_grant_for_audience,
+    mint_agent_session_grant,
+};
+use crate::services::station_trust::owning_station_id_for;
 
 fn redact_session_grant_intent(
     body: &SessionGrantRequestBody,
@@ -612,19 +619,20 @@ async fn issue_account_handoff_session_grant(
         .to_vec();
     let material = issue_session_grant_for_audience(
         &issuance_seed,
-        &*clock,
         &depot.arkret_config()?,
         &depot.keyring()?,
-        &browser_session,
-        crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
-        DidCoreId::new(handoff_audience.clone())?,
-        device_id.clone(),
-        granted_scope,
-        Some(&binding.principal_id),
-        &binding.account_id,
-        dpop.jkt.clone(),
-        device_binding,
-        SessionGrantProofKind::AccountHandoff,
+        HumanGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key: crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
+            audience_id: DidCoreId::new(handoff_audience.clone())?,
+            device_id: device_id.clone(),
+            scopes: granted_scope,
+            subject_override: Some(&binding.principal_id),
+            account_id: &binding.account_id,
+            dpop_jkt: dpop.jkt.clone(),
+            device_binding,
+            proof_kind: SessionGrantProofKind::AccountHandoff,
+        },
     )
     .map_err(map_session_grant_material_error)?;
     let wire_outcome = SessionGrantOutcome {
@@ -675,13 +683,17 @@ async fn issue_account_handoff_session_grant(
         &mut repo,
         &mut rng,
         &*clock,
-        operation.id,
-        &format!("account-handoff:{handoff_id}"),
-        &checkpoint,
-        proof_expires_at.min(handoff_expires_at),
-        &canonical_outcome,
-        Some(browser_session_id),
-        &material,
+        crate::services::session_grant::IssuanceCommit {
+            operation_id: operation.id,
+            proof: coauth_data::SessionGrantProofAuthorization {
+                authorization_ref: &format!("account-handoff:{handoff_id}"),
+                checkpoint: &checkpoint,
+                proof_expires_at: proof_expires_at.min(handoff_expires_at),
+            },
+            canonical_outcome: &canonical_outcome,
+            browser_session_id: Some(browser_session_id),
+            material: &material,
+        },
     )
     .await?;
     match committed {
@@ -835,14 +847,16 @@ async fn issue_recovery_session_grant(
         &issuance_seed,
         &depot.arkret_config()?,
         &depot.keyring()?,
-        crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
-        DidCoreId::new(handoff_audience.clone())?,
-        body.device_id.clone(),
-        granted_scope,
-        &binding.principal_id,
-        LocalAccountId::new(handoff_local_account_id.to_string())?,
-        &binding.account_id,
-        dpop.jkt.clone(),
+        RecoveryGrantIssuance {
+            session_public_key: crate::services::dpop::session_public_jwk(&dpop.public_jwk)?,
+            audience_id: DidCoreId::new(handoff_audience.clone())?,
+            device_id: body.device_id.clone(),
+            scopes: granted_scope,
+            subject_id: &binding.principal_id,
+            local_account_id: LocalAccountId::new(handoff_local_account_id.to_string())?,
+            account_id: &binding.account_id,
+            dpop_jkt: dpop.jkt.clone(),
+        },
     )
     .map_err(map_session_grant_material_error)?;
     let wire_outcome = SessionGrantOutcome {
@@ -889,13 +903,17 @@ async fn issue_recovery_session_grant(
         &mut repo,
         &mut rng,
         &*clock,
-        operation.id,
-        &format!("account-handoff-recovery:{handoff_id}"),
-        &checkpoint,
-        handoff_expires_at,
-        &canonical_outcome,
-        Some(browser_session.id),
-        &material,
+        crate::services::session_grant::IssuanceCommit {
+            operation_id: operation.id,
+            proof: coauth_data::SessionGrantProofAuthorization {
+                authorization_ref: &format!("account-handoff-recovery:{handoff_id}"),
+                checkpoint: &checkpoint,
+                proof_expires_at: handoff_expires_at,
+            },
+            canonical_outcome: &canonical_outcome,
+            browser_session_id: Some(browser_session.id),
+            material: &material,
+        },
     )
     .await?;
     match committed {
@@ -1253,9 +1271,6 @@ async fn issue_agent_key_proof_session_grant(
     // issuer_id signature and rechecks agent status inside the revocation
     // freshness window (AKP-0008 §4.11 natural-expiry path), bounded by the
     // ≤ 15-minute TTL.
-    let now = clock.now();
-    let expires_at = now + authorization.ttl;
-
     let session_public_key = serde_json::to_string(&dpop_binding.public_jwk).map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(error))
     })?;
@@ -1264,17 +1279,17 @@ async fn issue_agent_key_proof_session_grant(
         &issuance_seed,
         &arkret_config,
         &keyring,
-        &authorization.agent_id,
-        LocalAccountId::new(controller_user_id.to_string())?,
-        audience_id,
-        authorization.granted_scope.clone(),
-        dpop_binding.jkt.clone(),
-        session_public_key,
-        authorization.scope_details.clone(),
-        body.agent_key_authorization_ref.clone(),
-        body.proof.verification_method.clone(),
-        now,
-        expires_at,
+        AgentGrantIssuance {
+            agent_id: &authorization.agent_id,
+            local_account_id: LocalAccountId::new(controller_user_id.to_string())?,
+            audience_id,
+            scopes: authorization.granted_scope.clone(),
+            dpop_jkt: dpop_binding.jkt.clone(),
+            session_public_key,
+            scope_details: authorization.scope_details.clone(),
+            agent_key_authorization_ref: body.agent_key_authorization_ref.clone(),
+            verification_method: body.proof.verification_method.clone(),
+        },
     )
     .map_err(map_session_grant_material_error)?;
 
@@ -1309,13 +1324,17 @@ async fn issue_agent_key_proof_session_grant(
         &mut repo,
         &mut rng,
         &*clock,
-        operation.id,
-        &authorization_ref,
-        &checkpoint,
-        body.proof.expires_at,
-        &canonical_outcome,
-        None,
-        &material,
+        crate::services::session_grant::IssuanceCommit {
+            operation_id: operation.id,
+            proof: coauth_data::SessionGrantProofAuthorization {
+                authorization_ref: &authorization_ref,
+                checkpoint: &checkpoint,
+                proof_expires_at: body.proof.expires_at,
+            },
+            canonical_outcome: &canonical_outcome,
+            browser_session_id: None,
+            material: &material,
+        },
     )
     .await?;
     match committed {

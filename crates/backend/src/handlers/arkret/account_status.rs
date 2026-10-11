@@ -1,5 +1,4 @@
 //! Service-authenticated Account Authority issuer-ledger reads.
-
 use arkret_identity::DidBindingPurpose;
 use arkret_models_collaboration::account_lifecycle::{
     AccountStatusResolveOutcome, AccountStatusResolveRequestBody,
@@ -12,10 +11,11 @@ use arkret_wire::DidUrl;
 use coauth_data::{Clock as _, LocalAccountId, RepositoryAccess as _};
 use salvo::prelude::*;
 
-use super::{ArkretRouteError, owning_station_id_for};
+use super::ArkretRouteError;
 use crate::arkret_key_bridge::sdk_verifying_key_from_jose_verifying_key;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding;
+use crate::services::station_trust::owning_station_id_for;
 
 #[handler]
 pub async fn resolve_account_status(

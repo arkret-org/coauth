@@ -11,6 +11,8 @@ use coauth_keyring::Keyring;
 
 use super::*;
 use crate::arkret_key_bridge::{SdkSigningKey, sdk_signing_key_from_seed_bytes};
+use crate::services::session_grant::SessionGrantError;
+use crate::services::station_trust::{owning_station_did_for, owning_station_id_for};
 
 /// Output of [`issue_handle_claim`]. Carries the signed payload and the
 /// wire-level claim digest used as the audit-chain anchor.

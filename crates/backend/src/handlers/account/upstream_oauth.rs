@@ -17,13 +17,14 @@ use super::{DepotExt, RouteError, extract_bound_activity_tracker, make_clock, ma
 use crate::handlers::METER;
 use crate::handlers::account::registration_cookie::UserRegistrationSessions;
 use crate::handlers::upstream_oauth::UpstreamSessionsCookie;
-use crate::handlers::upstream_oauth::link_workflow::{
-    LoadUpstreamLinkOutcome, SubmitUpstreamLinkError, SubmitUpstreamLinkOutcome,
-    UpstreamLinkAction, UpstreamLinkRegistrationAction, UpstreamLinkWorkflowError,
-    load_upstream_link_context, load_upstream_link_state, submit_upstream_link_action,
-};
 use crate::salvo_utils::SessionInfoExt;
 use crate::salvo_utils::cookies::{CookieJar, TimedCookie};
+use crate::services::upstream_link::{
+    LoadUpstreamLinkOutcome, SubmitUpstreamLinkError, SubmitUpstreamLinkOutcome,
+    UpstreamLinkAction, UpstreamLinkContextInput, UpstreamLinkRegistrationAction,
+    UpstreamLinkWorkflowError, load_upstream_link_context, load_upstream_link_state,
+    submit_upstream_link_action,
+};
 
 static LOGIN_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER
@@ -94,19 +95,32 @@ pub async fn get_link(
 
     let sessions_cookie = UpstreamSessionsCookie::load(&cookie_jar);
     let (session_info, cookie_jar) = cookie_jar.session_info();
-    let context = load_upstream_link_context(&mut repo, &session_info, &sessions_cookie, link_id)
-        .await
-        .map_err(map_upstream_link_workflow_error)?;
+    let (upstream_session_id, post_auth_action) = sessions_cookie
+        .lookup_link(link_id)
+        .map_err(|_| RouteError::BadRequest("missing upstream session cookie".into()))?;
+    let context = load_upstream_link_context(
+        &mut repo,
+        UpstreamLinkContextInput {
+            link_id,
+            upstream_session_id,
+            browser_session_id: session_info.current_session_id(),
+            post_auth_action: post_auth_action.cloned(),
+        },
+    )
+    .await
+    .map_err(map_upstream_link_workflow_error)?;
     let outcome = load_upstream_link_state(
         &mut repo,
         &mut *rng,
         &*clock,
-        &url_builder,
-        &*station,
-        &mut policy,
-        &site_config,
-        user_agent,
-        ip_address,
+        crate::services::upstream_link::UpstreamLinkEnvironment {
+            url_builder: &url_builder,
+            station: &*station,
+            policy: &mut policy,
+            site_config: &site_config,
+            user_agent,
+            ip_address,
+        },
         context,
     )
     .await
@@ -160,9 +174,20 @@ pub async fn post_link(
 
     let sessions_cookie = UpstreamSessionsCookie::load(&cookie_jar);
     let (session_info, cookie_jar) = cookie_jar.session_info();
-    let context = load_upstream_link_context(&mut repo, &session_info, &sessions_cookie, link_id)
-        .await
-        .map_err(map_upstream_link_workflow_error)?;
+    let (upstream_session_id, post_auth_action) = sessions_cookie
+        .lookup_link(link_id)
+        .map_err(|_| RouteError::BadRequest("missing upstream session cookie".into()))?;
+    let context = load_upstream_link_context(
+        &mut repo,
+        UpstreamLinkContextInput {
+            link_id,
+            upstream_session_id,
+            browser_session_id: session_info.current_session_id(),
+            post_auth_action: post_auth_action.cloned(),
+        },
+    )
+    .await
+    .map_err(map_upstream_link_workflow_error)?;
 
     let action = match input {
         LinkAction::Link => UpstreamLinkAction::LinkCurrentSession,
@@ -183,12 +208,14 @@ pub async fn post_link(
         &mut repo,
         &mut *rng,
         &*clock,
-        &url_builder,
-        &*station,
-        &mut policy,
-        &site_config,
-        user_agent,
-        ip_address,
+        crate::services::upstream_link::UpstreamLinkEnvironment {
+            url_builder: &url_builder,
+            station: &*station,
+            policy: &mut policy,
+            site_config: &site_config,
+            user_agent,
+            ip_address,
+        },
         context,
         action,
     )
@@ -403,9 +430,6 @@ fn render_post_link_outcome(
 
 fn map_upstream_link_workflow_error(error: UpstreamLinkWorkflowError) -> RouteError {
     match error {
-        UpstreamLinkWorkflowError::MissingCookie => {
-            RouteError::BadRequest("missing upstream session cookie".into())
-        }
         UpstreamLinkWorkflowError::LinkNotFound | UpstreamLinkWorkflowError::SessionNotFound => {
             RouteError::NotFound
         }
@@ -425,6 +449,8 @@ fn map_upstream_link_workflow_error(error: UpstreamLinkWorkflowError) -> RouteEr
         | UpstreamLinkWorkflowError::RequiredAttributeRender { .. }
         | UpstreamLinkWorkflowError::ConnectorAdmin(_)
         | UpstreamLinkWorkflowError::Repository(_)
-        | UpstreamLinkWorkflowError::Internal(_) => RouteError::Internal(Box::new(error)),
+        | UpstreamLinkWorkflowError::SkipConfirmationWithoutHandle
+        | UpstreamLinkWorkflowError::Policy(_)
+        | UpstreamLinkWorkflowError::StoredIdToken(_) => RouteError::Internal(Box::new(error)),
     }
 }

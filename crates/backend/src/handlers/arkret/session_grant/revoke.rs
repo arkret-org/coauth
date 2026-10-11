@@ -14,6 +14,13 @@ use sha2::Digest as _;
 use super::*;
 use crate::handlers::arkret::*;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
+#[cfg(test)]
+use crate::services::session_grant::AgentGrantIssuance;
+#[cfg(test)]
+use crate::services::session_grant::SessionGrantIssuanceSeed;
+#[cfg(test)]
+use crate::services::session_grant::mint_agent_session_grant;
+use crate::services::station_trust::owning_station_id_for;
 
 const SESSION_REVOKE_PROOF_MAX_WINDOW_SECS: i64 = 300;
 
@@ -772,31 +779,32 @@ mod tests {
             &issuance_seed,
             &personal_did_web_config(),
             &test_keyring(),
-            &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
-            coauth_data::LocalAccountId::new("test-account").unwrap(),
-            DidCoreId::new("ak:did_core:web:coland.example").unwrap(),
-            vec!["ak.self.committed_event.stream.subscribe.v1".to_owned()],
-            "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
-            session_public_key,
-            serde_json::Map::from_iter([
-                (
-                    "controller_principal_id".to_owned(),
-                    serde_json::json!(controller_principal_id),
-                ),
-                (
-                    "resources".to_owned(),
-                    serde_json::json!({
-                        "realm_refs": ["ak:realm:team"],
-                    }),
-                ),
-            ]),
-            arkret_identifiers::EventId::new(
-                "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK",
-            )
-            .unwrap(),
-            arkret_wire::DidUrl::new("did:web:agent.example#runtime-key").unwrap(),
-            now,
-            now + Duration::minutes(15),
+            AgentGrantIssuance {
+                agent_id: &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
+                local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
+                audience_id: DidCoreId::new("ak:did_core:web:coland.example").unwrap(),
+                scopes: vec!["ak.self.committed_event.stream.subscribe.v1".to_owned()],
+                dpop_jkt: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
+                session_public_key,
+                scope_details: serde_json::Map::from_iter([
+                    (
+                        "controller_principal_id".to_owned(),
+                        serde_json::json!(controller_principal_id),
+                    ),
+                    (
+                        "resources".to_owned(),
+                        serde_json::json!({
+                            "realm_refs": ["ak:realm:team"],
+                        }),
+                    ),
+                ]),
+                agent_key_authorization_ref: arkret_identifiers::EventId::new(
+                    "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK",
+                )
+                .unwrap(),
+                verification_method: arkret_wire::DidUrl::new("did:web:agent.example#runtime-key")
+                    .unwrap(),
+            },
         )
         .expect("agent grant should mint");
 

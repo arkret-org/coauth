@@ -25,11 +25,8 @@ use super::account_handoff::{
     authenticate_account_handoff, enforce_handoff_operation,
     verify_account_handoff_holder_without_lookup,
 };
-use super::session_grant::{
-    SessionGrantIssuanceSeed, acquire_private_current_device_binding,
-    issue_session_grant_for_audience, persist_session_grant,
-};
-use super::{ArkretRouteError, DepotExt, owning_station_did_for, owning_station_id_for};
+use super::session_grant::acquire_private_current_device_binding;
+use super::{ArkretRouteError, DepotExt};
 use crate::handlers::account::auth::oidc_bridge::{
     VerifiedPrincipalIdentity, ensure_coland_account_registered,
 };
@@ -39,6 +36,11 @@ use crate::services::account_status_publication::{
 };
 use crate::services::coland_webvh;
 use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
+use crate::services::session_grant::{
+    HumanGrantIssuance, SessionGrantIssuanceSeed, issue_session_grant_for_audience,
+    persist_session_grant,
+};
+use crate::services::station_trust::{owning_station_did_for, owning_station_id_for};
 
 const PRIVATE_PRINCIPAL_GENESIS_PATH: &str = "/_coland/account-authority/principal-genesis/admit";
 
@@ -677,22 +679,23 @@ pub async fn account_register_endpoint(
     .await?;
     let material = issue_session_grant_for_audience(
         &issuance_seed,
-        &*clock,
         &depot.arkret_config()?,
         &keyring,
-        &browser_session,
-        session_public_key,
-        initial.audience_id.clone(),
-        initial.device_id.clone(),
-        STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
-            .iter()
-            .map(|operation| operation.as_str().to_owned())
-            .collect(),
-        Some(&body.principal_id),
-        &account_id,
-        grant.cnf_jkt.clone(),
-        device_binding,
-        arkret_models_identity::SessionGrantProofKind::AccountHandoff,
+        HumanGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key,
+            audience_id: initial.audience_id.clone(),
+            device_id: initial.device_id.clone(),
+            scopes: STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
+                .iter()
+                .map(|operation| operation.as_str().to_owned())
+                .collect(),
+            subject_override: Some(&body.principal_id),
+            account_id: &account_id,
+            dpop_jkt: grant.cnf_jkt.clone(),
+            device_binding,
+            proof_kind: arkret_models_identity::SessionGrantProofKind::AccountHandoff,
+        },
     )?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
     let session_grant_outcome = SessionGrantOutcome {

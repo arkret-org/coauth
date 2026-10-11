@@ -19,7 +19,6 @@ use thiserror::Error;
 use ulid::Ulid;
 
 use super::cache::LazyProviderInfos;
-use super::template::{AttributeMappingContext, environment};
 use super::{UpstreamSessionsCookie, client_credentials_for_provider};
 use crate::handlers::METER;
 use crate::handlers::account::DepotExt;
@@ -27,6 +26,7 @@ use crate::oidc_client::requests::jose::JwtVerificationData;
 use crate::oidc_client::types::client_credentials::ClientCredentials;
 use crate::salvo_utils::cookies::TimedCookie;
 use crate::salvo_utils::{GenericError, InternalError};
+use crate::services::upstream_link::attributes::{AttributeMappingContext, environment};
 
 static CALLBACK_COUNTER: LazyLock<Counter<u64>> = LazyLock::new(|| {
     METER

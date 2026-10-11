@@ -1,3 +1,13 @@
+#[cfg(debug_assertions)]
+use crate::services::session_grant::HumanGrantIssuance;
+use crate::services::session_grant::SessionGrantError;
+#[cfg(debug_assertions)]
+use crate::services::session_grant::SessionGrantIssuanceSeed;
+#[cfg(debug_assertions)]
+use crate::services::session_grant::commit_session_grant_issuance;
+#[cfg(debug_assertions)]
+use crate::services::session_grant::issue_session_grant_for_audience;
+use crate::services::station_trust::{owning_station_id_for, required_audience_for};
 mod account_handoff;
 mod account_register;
 mod account_status;
@@ -30,15 +40,12 @@ pub use session_grant::*;
 #[cfg(test)]
 mod tests;
 
-use anyhow::Error as AnyhowError;
 use arkret_wire::Problem;
 use coauth_config::ArkretConfig;
 #[cfg(debug_assertions)]
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
 use coauth_jose::constraints::Constrainable;
-use coauth_jose::jwt::JwtSignatureError;
-use coauth_keyring::WrongAlgorithmError;
 use coauth_oauth_types::scope::Scope;
 use salvo::prelude::*;
 #[cfg(debug_assertions)]
@@ -55,45 +62,6 @@ pub const CLAIM_DEVICE_ID: &str = "org.arkret.device_id";
 pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
 pub const STATION_SESSION_BIND_SCOPE: &str = "urn:arkret:station:session.bind";
-
-#[derive(Debug, Error)]
-pub enum SessionGrantError {
-    #[error("no signing key is configured for Arkret session grants")]
-    NoSigningKey,
-
-    #[error(transparent)]
-    JwtSignature(#[from] JwtSignatureError),
-
-    #[error(transparent)]
-    WrongAlgorithm(#[from] WrongAlgorithmError),
-
-    #[error(transparent)]
-    Serialize(#[from] serde_json::Error),
-
-    /// Canonical JSON or digest failure surfaced by the canonical owner crate.
-    #[error(transparent)]
-    Canonical(#[from] arkret_canonical::CanonicalError),
-
-    /// Wire construction or validation failure surfaced by the wire owner crate.
-    #[error(transparent)]
-    Wire(#[from] arkret_wire::WireError),
-
-    /// R3.2 (HC-COAUTH-1/2) — the handle-claim issuance request failed the
-    /// `claim_kind` allow-list or subject (holder/principal DID)
-    /// validation. Carries the SDK / shared wire reason code.
-    #[error(transparent)]
-    HandleClaimSubject(#[from] crate::services::handle_subject_validator::HandleClaimSubjectError),
-
-    #[error("principal_unknown")]
-    PrincipalUnknown,
-
-    /// Typed identifier parse failure surfaced by the identifiers owner crate.
-    #[error(transparent)]
-    Identifier(#[from] arkret_identifiers::IdentifierError),
-
-    #[error(transparent)]
-    Other(#[from] AnyhowError),
-}
 
 #[derive(Debug, Error)]
 pub enum ArkretRouteError {
@@ -742,25 +710,6 @@ impl salvo::oapi::EndpointOutRegister for ArkretRouteError {
     }
 }
 
-fn owning_station_identity_for(
-    arkret_config: &ArkretConfig,
-) -> coauth_config::DelegatedStationIdentity {
-    arkret_config
-        .runtime_owning_station_identity
-        .get()
-        .expect("Station trust preflight verifies the owning Station before serving requests")
-}
-
-/// Stable authorization id delegated by the owning Station.
-pub(crate) fn owning_station_id_for(arkret_config: &ArkretConfig) -> arkret_identifiers::DidCoreId {
-    owning_station_identity_for(arkret_config).station_id
-}
-
-/// Full DID delegated by the owning Station for issuer/controller proofs.
-pub(crate) fn owning_station_did_for(arkret_config: &ArkretConfig) -> arkret_identifiers::Did {
-    owning_station_identity_for(arkret_config).did
-}
-
 /// Local OIDC subject for Account Authority-issued OAuth tokens.
 ///
 /// This identifies the authenticated coauth account. Station DIDs are
@@ -864,20 +813,6 @@ pub(crate) fn require_canonical_handle(input: &str) -> Result<&str, ArkretRouteE
             format!("reason_code=handle_not_canonical; {message}"),
         )
     })
-}
-
-pub(crate) fn required_audience_for(
-    _url_builder: &UrlBuilder,
-    arkret_config: &ArkretConfig,
-) -> String {
-    // Session-grant `audience` is a `did_core_id` on the wire (the target
-    // service's stable authorization identity, account-operations schema), so
-    // the default local-admin audience is this deployment's own runtime
-    // service core id — never a URL.
-    arkret_config
-        .admin_audience
-        .clone()
-        .unwrap_or_else(|| owning_station_id_for(arkret_config).to_string())
 }
 
 pub(crate) fn trust_domain_for(url_builder: &UrlBuilder, arkret_config: &ArkretConfig) -> String {
@@ -1268,28 +1203,29 @@ pub async fn debug_issue_dpop_grant(
         .add(&mut rng, &*clock, &user, user_agent)
         .await?;
 
-    let material = issue_test_session_grant_for_audience(
+    let material = issue_session_grant_for_audience(
         &SessionGrantIssuanceSeed::from_operation(&operation)?,
-        &*clock,
         &arkret_config,
         &keyring,
-        &browser_session,
-        public_jwk,
-        audience_id,
-        arkret_identifiers::DeviceId::new(body.device_id.clone())?,
-        scopes,
-        Some(&principal_id),
-        &account_id,
-        jkt.clone(),
-        arkret_models_identity::SessionGrantDeviceBinding {
+        HumanGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key: public_jwk,
+            audience_id,
             device_id: arkret_identifiers::DeviceId::new(body.device_id.clone())?,
-            authorization_event_id: arkret_identifiers::EventId::new(
-                "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
-            )
-            .expect("cotest fixture authorization Event id"),
-            model_generation_ref: 1,
+            scopes,
+            subject_override: Some(&principal_id),
+            account_id: &account_id,
+            dpop_jkt: jkt.clone(),
+            device_binding: arkret_models_identity::SessionGrantDeviceBinding {
+                device_id: arkret_identifiers::DeviceId::new(body.device_id.clone())?,
+                authorization_event_id: arkret_identifiers::EventId::new(
+                    "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
+                )
+                .expect("cotest fixture authorization Event id"),
+                model_generation_ref: 1,
+            },
+            proof_kind: arkret_models_identity::SessionGrantProofKind::AccountHandoff,
         },
-        arkret_models_identity::SessionGrantProofKind::AccountHandoff,
     )?;
     let outcome = DebugIssueDpopGrantOutcome {
         grant_id: material.grant_id.to_string(),
@@ -1311,13 +1247,17 @@ pub async fn debug_issue_dpop_grant(
         &mut repo,
         &mut rng,
         &*clock,
-        operation.id,
-        &request_identity,
-        &checkpoint,
-        expires_at,
-        &canonical_outcome,
-        Some(browser_session.id),
-        &material,
+        crate::services::session_grant::IssuanceCommit {
+            operation_id: operation.id,
+            proof: coauth_data::SessionGrantProofAuthorization {
+                authorization_ref: &request_identity,
+                checkpoint: &checkpoint,
+                proof_expires_at: expires_at,
+            },
+            canonical_outcome: &canonical_outcome,
+            browser_session_id: Some(browser_session.id),
+            material: &material,
+        },
     )
     .await?;
     let chaos_committed = matches!(

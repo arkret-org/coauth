@@ -101,7 +101,7 @@ pub async fn deactivate_user(
     let station = depot.station()?;
     let keyring = depot.keyring()?;
     let arkret_config = depot.arkret_config()?;
-    let service_id = crate::handlers::arkret::owning_station_id_for(&arkret_config);
+    let service_id = crate::services::station_trust::owning_station_id_for(&arkret_config);
     let clock = make_clock();
     let mut rng = make_rng();
 

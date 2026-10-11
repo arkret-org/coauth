@@ -509,7 +509,7 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
-        let authority = crate::handlers::arkret::owning_station_id_for(&state.arkret_config);
+        let authority = crate::services::station_trust::owning_station_id_for(&state.arkret_config);
         assert!(
             repo.account_status_ledger()
                 .current_for_gate(authority.as_str(), &updated.id.to_string())

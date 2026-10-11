@@ -81,8 +81,8 @@ impl AccountStatusIssuerContext {
         self.ensure_current_authority(authority)?;
         validate_original_binding_tuple(binding, authority)?;
         let now = arkret_canonical::normalize_timestamp_canonical(now);
-        let own = crate::handlers::arkret::owning_station_id_for(&self.config);
-        let did = crate::handlers::arkret::owning_station_did_for(&self.config);
+        let own = crate::services::station_trust::owning_station_id_for(&self.config);
+        let did = crate::services::station_trust::owning_station_did_for(&self.config);
         let method = DidUrl::new(format!(
             "{}#{}",
             did,
@@ -366,7 +366,7 @@ pub(crate) mod fixtures {
             repo: &mut coauth_data::BoxRepository,
             config: &coauth_config::ArkretConfig,
             user: &coauth_data::User,
-        ) -> Result<Did, crate::handlers::arkret::SessionGrantError> {
+        ) -> Result<Did, crate::services::session_grant::SessionGrantError> {
             self.inner.primary_did_for_user(repo, config, user).await
         }
         fn delegated_resolver(&self, config: &coauth_config::ArkretConfig) -> Option<String> {
@@ -413,7 +413,7 @@ pub(crate) mod fixtures {
         config: &coauth_config::ArkretConfig,
         keyring: &coauth_keyring::Keyring,
     ) -> DidResolverServiceHandle {
-        let did = crate::handlers::arkret::owning_station_did_for(config);
+        let did = crate::services::station_trust::owning_station_did_for(config);
         assert!(
             did.as_str().starts_with("did:web:"),
             "non-Web issuer requires original verified history"
@@ -449,7 +449,7 @@ pub(crate) mod fixtures {
         config: &coauth_config::ArkretConfig,
         history: &[u8],
     ) -> DidResolverServiceHandle {
-        let did = crate::handlers::arkret::owning_station_did_for(config);
+        let did = crate::services::station_trust::owning_station_did_for(config);
         let verified = arkret_identity::verify_did_webvh_v1_chain_bytes(&did, history).unwrap();
         let document = serde_json::from_value(verified.head_state.clone()).unwrap();
         let key_log_head =

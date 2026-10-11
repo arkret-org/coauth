@@ -11,10 +11,10 @@ use serde_json::Value;
 use thiserror::Error;
 use url::Url;
 
-use crate::handlers::arkret::{
-    DidDocument, SessionGrantError, owning_station_did_for, owning_station_id_for,
-};
+use crate::handlers::arkret::DidDocument;
 use crate::outbound_http::RequestBuilderExt as _;
+use crate::services::session_grant::SessionGrantError;
+use crate::services::station_trust::{owning_station_did_for, owning_station_id_for};
 
 pub type DidResolverServiceHandle = Arc<dyn DidResolverService>;
 

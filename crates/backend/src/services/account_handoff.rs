@@ -191,7 +191,7 @@ pub(crate) async fn finalize_handoff_creation(
     let now = make_clock().now();
     let mut rng = make_rng();
     let account_subject = account_subject(
-        &crate::handlers::arkret::owning_station_id_for(arkret_config),
+        &crate::services::station_trust::owning_station_id_for(arkret_config),
         local_account_id,
     )?;
     let creation = repo

@@ -382,7 +382,7 @@ pub async fn post_invite_relay(
         return Err(RouteError::BadRequest("untrusted_principal_url".into()));
     }
 
-    let service_id = arkret::owning_station_id_for(&arkret_config);
+    let service_id = crate::services::station_trust::owning_station_id_for(&arkret_config);
     let trust_domain = arkret_identifiers::TrustDomainId::new(arkret::trust_domain_for(
         &url_builder,
         &arkret_config,
@@ -400,7 +400,7 @@ pub async fn post_invite_relay(
         principal_url.as_ref(),
         &http_client,
         &keyring,
-        arkret::owning_station_did_for(&arkret_config),
+        crate::services::station_trust::owning_station_did_for(&arkret_config),
         identity,
         trust_domain.clone(),
         trust_domain,

@@ -3,7 +3,6 @@
 //! Returns a feed of admin operations, optionally filtered by admin user or
 //! resource type. Queries the [`AuditRepository`] for persisted admin
 //! operation log entries.
-
 use coauth_admin_types::{AuditEntry, AuditFeedOutcome};
 use coauth_data::RepositoryAccess;
 use coauth_data::audit::{AdminOperation, AdminOperationFilter, AdminOperationLog};
@@ -15,8 +14,8 @@ use crate::handlers::admin::audit_helper::{
     AuditSignatureStatus, verify_admin_operation_signature,
 };
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::arkret::owning_station_did_for;
 use crate::handlers::common::DepotExt;
+use crate::services::station_trust::owning_station_did_for;
 use crate::{AppError, JsonResult};
 
 /// Convert an [`AdminOperation`] enum variant into a human-readable

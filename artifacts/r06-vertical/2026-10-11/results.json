@@ -1,0 +1,353 @@
+{
+  "status": "passed",
+  "coauth": {
+    "passed": 1133,
+    "failed": 0,
+    "ignored": 4,
+    "backend_passed": 631,
+    "exit": 0,
+    "features": "coauth-backend/cedar",
+    "ignored_scope": "Four existing CookieJar/storage doctests; no PostgreSQL skip flag."
+  },
+  "production_commands": {
+    "clippy": {
+      "command": "cargo clippy -j4 --workspace --all-targets --features coauth-backend/cedar -- -D warnings",
+      "exit": 0
+    },
+    "workspace": {
+      "command": "cargo test -j4 --workspace --features coauth-backend/cedar --no-fail-fast",
+      "exit": 0
+    },
+    "binary": {
+      "command": "cargo build -j4 -p coauth --bin coauth",
+      "exit": 0
+    },
+    "coland-binary": {
+      "command": "cargo build -j4 -p coland --bin coland",
+      "exit": 0
+    }
+  },
+  "coauth_nightly_fmt": {
+    "command": "cargo +nightly fmt --all -- --check",
+    "exit": 0
+  },
+  "contracts": {
+    "binaries": {
+      "coauth": {
+        "path": "/Volumes/Data/Works/arkret-org/coauth/target/debug/coauth",
+        "sha256": "bf7dcdae46e3254c54cc55b3ad5e77a9ce666fa19dc9cb0e2b5890e4cea75b95"
+      },
+      "coland": {
+        "path": "/Volumes/Data/Works/arkret-org/coland/target/debug/coland",
+        "sha256": "defef21a5f51ad6b5eff9a113b64100dba9077f23e49e4958847972b9d9af58c"
+      }
+    },
+    "targets": {
+      "coauth": "/Volumes/Data/Works/arkret-org/coauth/target",
+      "coland": "/Volumes/Data/Works/arkret-org/coland/target",
+      "cotest": "/Volumes/Data/Works/arkret-org/cotest/target"
+    },
+    "commands": {
+      "cotest-fmt": {
+        "command": [
+          "cargo",
+          "+nightly",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exit": 0
+      },
+      "cotest-clippy": {
+        "command": [
+          "cargo",
+          "clippy",
+          "-j",
+          "4",
+          "-p",
+          "cotest",
+          "--test",
+          "coauth_session_grant_response_loss",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit": 0
+      },
+      "response-loss": {
+        "command": [
+          "cargo",
+          "test",
+          "-j",
+          "4",
+          "-p",
+          "cotest",
+          "--test",
+          "coauth_session_grant_response_loss",
+          "--",
+          "--ignored",
+          "--nocapture"
+        ],
+        "exit": 0
+      },
+      "session_grant_issuer_ledger": {
+        "command": [
+          "cargo",
+          "test",
+          "-j",
+          "4",
+          "-p",
+          "cotest",
+          "--test",
+          "conformance_fixtures",
+          "session_grant_issuer_ledger",
+          "--",
+          "--nocapture"
+        ],
+        "exit": 0
+      },
+      "coauth_account_lifecycle_fixture": {
+        "command": [
+          "cargo",
+          "test",
+          "-j",
+          "4",
+          "-p",
+          "cotest",
+          "--test",
+          "conformance_fixtures",
+          "coauth_account_lifecycle_fixture",
+          "--",
+          "--nocapture"
+        ],
+        "exit": 0
+      },
+      "auth_session_proof_fixture": {
+        "command": [
+          "cargo",
+          "test",
+          "-j",
+          "4",
+          "-p",
+          "cotest",
+          "--test",
+          "conformance_fixtures",
+          "auth_session_proof_fixture",
+          "--",
+          "--nocapture"
+        ],
+        "exit": 0
+      },
+      "package-graph": {
+        "command": [
+          "python3",
+          "scripts/check_package_graph.py",
+          "--json"
+        ],
+        "exit": 0
+      }
+    },
+    "post_sync": true
+  },
+  "contract_counts": {
+    "response-loss": {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    "session_grant_issuer_ledger": {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    "coauth_account_lifecycle_fixture": {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    "auth_session_proof_fixture": {
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    }
+  },
+  "source_group": {
+    "base_head": "01c88364bbef042079a98fbc52d0a8e83c604440",
+    "files": {
+      "crates/backend/src/handlers/account/agents/key_pair.rs": "b2b77ee52f2f8333a1b69703e7193fc0c7316907937ce91364d4a057bf4bb97e",
+      "crates/backend/src/handlers/account/invite_relay.rs": "4e2b307fd4ceb12fb18b3eca5ec17948b8dd1cd63c4f83557cefb70f2890492c",
+      "crates/backend/src/handlers/account/upstream_oauth.rs": "9f75b8d5e0d70e55a13dc8f4891168f3303353fd829589707cdaa0267e3c2245",
+      "crates/backend/src/handlers/account/users.rs": "277f2452c211145c11d1fabe1093591a7db86304a5fc7cdc09937f1a04327585",
+      "crates/backend/src/handlers/admin/v1/account_dids.rs": "74c17b612121479b6d16dd2826a53ff80e6fbd663970be1329762766c4e0065a",
+      "crates/backend/src/handlers/admin/v1/account_dids/tests.rs": "7bca1a2949d756754ad015cfac68c142e4ab54ec820cbbee97a94c4872373b16",
+      "crates/backend/src/handlers/admin/v1/accounts.rs": "24ec2070f9bc2a7a9ab9e87d519806af8bb8fd9f7675ee105fa87126d2aee21c",
+      "crates/backend/src/handlers/admin/v1/accounts/risk_action.rs": "6ff7f7d4fc8420023125b86512a039b7d4faff8b04b3addbf0231405c9b7d030",
+      "crates/backend/src/handlers/admin/v1/accounts/security.rs": "a4fe0e2b9b8a5765b597e53e49ef1a64121795d262abfec6084e10c5fe755811",
+      "crates/backend/src/handlers/admin/v1/accounts/update.rs": "754b21f5bf126be3af937ce57fdc2498615e9a768b45c09dc9467c866019414c",
+      "crates/backend/src/handlers/admin/v1/audit_feed.rs": "1c824d2c729989dd63054aaa301fd7dd1fb2701d77a0b3678daef17774df4f17",
+      "crates/backend/src/handlers/admin/v1/circle_capabilities.rs": "631d133cbe8e30528fe5d3071dfb1e173582f3035ce3377ab612749d4a74338e",
+      "crates/backend/src/handlers/admin/v1/devices.rs": "68b1c2620597f43126643218df59cf2385c2f651807b83b6dd6b0fabae10b6e0",
+      "crates/backend/src/handlers/admin/v1/organizations.rs": "38d6d95a5d1a9a09cdd92f07139f23a28b8185fee6de77d627dc211171caa0c4",
+      "crates/backend/src/handlers/arkret/account_handoff.rs": "394efc564d099094ff462affc7ca3c37b653ff7c3489d9cf760bde4ae18f0cdd",
+      "crates/backend/src/handlers/arkret/account_register.rs": "8b9386f12d15bea9e1accde8e50e47c27e27d7bf20a34f985e2ddca4255c85b2",
+      "crates/backend/src/handlers/arkret/account_status.rs": "ba7a4ad4235861d79821fb1af36beccf5400d57beeca8717985d1127d1732056",
+      "crates/backend/src/handlers/arkret/controller_gate.rs": "0cc7b1cef0d08156a3bc08294f4a95627840cbf2bbad288d91c99df7928cb0d2",
+      "crates/backend/src/handlers/arkret/device_pairing.rs": "4c57002811a91316f17d50d2c0c55c093e9bd75672ddd71b89825af4c5fec870",
+      "crates/backend/src/handlers/arkret/erasure_request.rs": "e93370465321711b274e64168497dbe39b072c626a6cff474d29e6cac4cd9a4c",
+      "crates/backend/src/handlers/arkret/handle_claim.rs": "250a6c030d8133180ed9a1f360e184d81eaf82e0d253b70d48b97e9ac4165f7f",
+      "crates/backend/src/handlers/arkret/mod.rs": "049bf7e39e7363083995ccd42158609c6382246438a5daea75e43a1bac505ba1",
+      "crates/backend/src/handlers/arkret/recovery_authority.rs": "22a3679e636e5f594a73b7831579fe08b7395a0ed3998a52e7b18d4c22c91fa4",
+      "crates/backend/src/handlers/arkret/session_grant/issue.rs": "207d8987b134e3a232e9a00644b72c90ed3d56e972fcb242bae6d92fecaffe3e",
+      "crates/backend/src/handlers/arkret/session_grant/mod.rs": "8759af3de48b60be3285d32813913e34c14ee474126a86275d7a49d126b3181d",
+      "crates/backend/src/handlers/arkret/session_grant/refresh.rs": "852931387330f2bb5ac55619cc0ff019780f372b8c5db850f9e35e003ed4cd66",
+      "crates/backend/src/handlers/arkret/session_grant/revoke.rs": "9f9e0cc8fc4fb4ee11dea6979aacf96313279475b7b5cca949f9ce99a0307840",
+      "crates/backend/src/handlers/arkret/session_grant/types.rs": "3e6ebaba618aac42c464c8001cea75307d83d7de10502a1495fbfd294bafd424",
+      "crates/backend/src/handlers/arkret/tests.rs": "26a4df1001c5237c341cee84849c2513d1aeacdca80a8f287d2804bbcbcc657a",
+      "crates/backend/src/handlers/oauth/token_service/tests.rs": "b7ddec88889675e5c983845532f6c6985515688d0b2e1cee41c68fdc2156507c",
+      "crates/backend/src/handlers/post_auth.rs": "293749f5252e565aea88361380242780a315ed1c3654aebfb2cc958a020dce27",
+      "crates/backend/src/handlers/test_utils.rs": "719a7985a7ee928b7b44752f1ae485379ecd46a31b2f4d01df40331a962c9cde",
+      "crates/backend/src/handlers/upstream_oauth/callback.rs": "fdacfb64479a397d7f6c2ddf13e6beab302a7b22661dc2c4eb9283c83b2c257d",
+      "crates/backend/src/handlers/upstream_oauth/mod.rs": "f8fb9243e793b2cd684156b7dabc5b4657b9873b0039f3d37ded540d15190065",
+      "crates/backend/src/services/account_handoff.rs": "cd41602dc13bd715bef29aaf8be27779922571323e203d92f43d2d810913233c",
+      "crates/backend/src/services/account_status_publication/issuer_source.rs": "9a9f10a73dfe7122095688c54b13167b9797f9e259a5b2b64294de39948e41e0",
+      "crates/backend/src/services/did_resolver.rs": "3e3e0ac2a12ad39864aa491d7d648f177a7c2bfd9f1da18fd8dfde98763d50fc",
+      "crates/backend/src/services/mod.rs": "ff630c382b01fc45c1a9d3cb9dcb5fae31977f3692c98c82219e178d9de89347",
+      "crates/backend/src/services/station_trust.rs": "27c7bba0d601a3783e1dc33dda6ec20b90cf9a72035cfef6a5d4f2b8098e092a",
+      "crates/backend/src/services/upstream_oidc.rs": "88d934a05ce5d6d50bf8d6e07499a5f9c29bb848e37f1d9b63372bc83f22b534",
+      "crates/backend/src/services/user_admin.rs": "6747e53c1ca3dee118011463d146d1853a4337b44d5969d05f35b859c6d1ac41",
+      "crates/backend/src/services/post_auth.rs": "522ab59ffd252a7fb634989a67395a6eb3c9195b1faffafafb3bed376e38ea24",
+      "crates/backend/src/services/session_grant/error.rs": "b6809e8950b80f7ea64efbac8722ed9d69b52503c7d383a1868a12fe80621ec0",
+      "crates/backend/src/services/session_grant/issuance.rs": "a7b8c3696bb1395f4a3193f3bbec506671d2280fe375a2eabd3b98d3b3e65a00",
+      "crates/backend/src/services/session_grant/ledger.rs": "99806091c8f1f24e9afbbcd7298b084a5bb04412f9afb9334e3a00d7bf587561",
+      "crates/backend/src/services/session_grant/mod.rs": "817c6ccd901b295b58893fc2f597feaf453a01c86fe05e44009c7c60d461d24c",
+      "crates/backend/src/services/session_grant/types.rs": "094e1207e3582a2c80796d78b37a8cc3e9643db996a3a3b4f1e5bf9fbd46b141",
+      "crates/backend/src/services/upstream_link/attributes.rs": "0bdba997e59b3003590d14100246926d15a40b87d515bc52cb3a4cd888d40dc2",
+      "crates/backend/src/services/upstream_link/database_tests.rs": "bb29fc5f4773e068260623ff8ab94ee1eee012f4b73287f8f4f080b4b1d5f3ce",
+      "crates/backend/src/services/upstream_link/mod.rs": "c6a07d10bdf0d0006d80550e59bea59d214efc681d092a6819e92e2bf33c6375",
+      "docs/architecture/credential-and-upstream-boundaries.md": "77cc38893f5214f5a189d2a230c3f8fb11cfeab5e6aeb9b1065c6ed14f759bb8"
+    },
+    "dependency_heads": {
+      "arkret-rust-sdk": "8b83ca9254bdd2e279360a1f1ecc760912962407",
+      "cotest": "48a2ba7f7833ca847255c76c0a5c2f9cfc7bb55e",
+      "garth": "748db2c186536fe9a678333ee70073c66373945d",
+      "inkson": "4395af5693e2694b4fb003ba081f9d0d0e6799fe",
+      "coland": "bb4529fb576abb11da90d4957be0c194f496ab06",
+      "arkret-spec": "861564640e65ce90ddbf9be364f1cfa573865644"
+    },
+    "locks": {
+      "coauth": "22c2bf1ae55ac4613a3e7e3225f97a1e64c495b6dd2aa0391d4be0cef109d67f",
+      "arkret-rust-sdk": "1d58b64e91fec246247fa99287dfd2bfd7cafdad8805ded258df6812446ba0ab",
+      "cotest": "70f3d9730d2d7d62516125199c55011b42cea2cd4f7cdb8ee008c9af026b6320"
+    },
+    "coland_snapshot_at_live_build": {
+      "head": "8391bdd899049a0b06fa85a26b6654612c12000d",
+      "contracts_unchanged_from_coauth_freeze": true
+    },
+    "cotest_source": {
+      "Cargo.lock": "de2e5c23d889d6011f32a27aa1183de59a7eede6d5ffe1d1156f634e1dd50659",
+      "Cargo.toml": "26d31e0e49e6cafd5c86ee006958378597eee6308e607c1a294c28d79803eb72",
+      "src/scenarios/_helpers/coauth_bootstrap.rs": "c5ac5e7c9cff7a97fa750cd09e0cac3afb063460570df6cef3492d7b0ee798b1",
+      "src/scenarios/coauth_session_grant_response_loss.rs": null,
+      "src/scenarios/mod.rs": "bee2325e497de83ea34a0b82ccd8af1221bb9e2520fe0a4de910323fc033a24c",
+      "tests/coauth_session_grant_response_loss.rs": "425a96dd2eef1ce8d932ac42c92a42d01a521af7bedbd20bd6193622fa84169c",
+      "tests/coauth_session_grant_response_loss/scenario.rs": "8f107b43f867272d6a717de46cb2edde56f82c6b79f182b3cfdffa71b83bfef3"
+    },
+    "cotest_final_lock_sha256": "de2e5c23d889d6011f32a27aa1183de59a7eede6d5ffe1d1156f634e1dd50659",
+    "deleted_coauth_paths": [
+      "crates/backend/src/handlers/arkret/session_grant/issuance.rs",
+      "crates/backend/src/handlers/upstream_oauth/link_workflow.rs",
+      "crates/backend/src/handlers/upstream_oauth/template.rs"
+    ],
+    "current_dependency_heads": {
+      "arkret-rust-sdk": "8b83ca9254bdd2e279360a1f1ecc760912962407",
+      "cotest": "48a2ba7f7833ca847255c76c0a5c2f9cfc7bb55e",
+      "garth": "748db2c186536fe9a678333ee70073c66373945d",
+      "inkson": "4395af5693e2694b4fb003ba081f9d0d0e6799fe",
+      "coland": "8391bdd899049a0b06fa85a26b6654612c12000d",
+      "arkret-spec": "861564640e65ce90ddbf9be364f1cfa573865644"
+    },
+    "cotest_before_sync": {
+      "Cargo.lock": "de2e5c23d889d6011f32a27aa1183de59a7eede6d5ffe1d1156f634e1dd50659",
+      "Cargo.toml": "26d31e0e49e6cafd5c86ee006958378597eee6308e607c1a294c28d79803eb72",
+      "src/scenarios/_helpers/coauth_bootstrap.rs": "14140e32756ce271e37983524d979f59ecf5e02943cd5d3662b5ba7f1c7b82c1",
+      "src/scenarios/coauth_session_grant_response_loss.rs": null,
+      "src/scenarios/mod.rs": "bee2325e497de83ea34a0b82ccd8af1221bb9e2520fe0a4de910323fc033a24c",
+      "tests/coauth_session_grant_response_loss.rs": "5e3a6486ded686eb9f3195c71a3c5184f5a7217af088f7bf2e88bc47ae2d6555",
+      "tests/coauth_session_grant_response_loss/scenario.rs": "eea0af446bd54a7d11bf53c1bcc98a0d098b990fb3e0bb39d64225f7b74c52a9"
+    },
+    "cotest_post_sync_base_head": "cea3a509cd24d841cdb5b984844a6f347139789e",
+    "cotest_post_sync_upstream_head": "62fd509b23366f83155d7bc570522eddba4f678f"
+  },
+  "accepted_cotest_head": "04d0835fe6b474a3fe13c9004b042214086732ec",
+  "package_graph": {
+    "light_edge_package": "cotest-test-support",
+    "light_edge_crates": 606,
+    "root_package": "cotest",
+    "root_crates": 982,
+    "violations": [],
+    "missing_binaries": [],
+    "root_forbidden": [],
+    "client_package": "cotest-inkson-client-tests",
+    "missing_client_targets": [],
+    "client_crates": 1098,
+    "missing_client_dependencies": [],
+    "vacuous": false,
+    "status": "passed"
+  },
+  "logs_sha256": {
+    "binary.log": "e54f22e3e9c4a74148995f783989a3b138d3e6951c5b038c61d699d56baaebb4",
+    "clippy.log": "7864dbc2d449b4c9e3e675b4b92adfba9b79681dd11cafbc3d38bd2a46639626",
+    "coland-binary.log": "385e294475814a4ce99b3a42a73a0aa2d1605ef7f2018516fe80a522c9a7522f",
+    "contract-auth_session_proof_fixture-pre-sync.log": "1915feb566c1989e73abc2927209051004f9c621c9bbd3250a6f8afcbd046d64",
+    "contract-auth_session_proof_fixture.log": "f8323032d86a5a3978ed0a693d4ba05a6df157b5e00f434efc0f721b2a6f8c70",
+    "contract-coauth-fmt-pre-sync.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "contract-coauth-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "contract-coauth_account_lifecycle_fixture-pre-sync.log": "daef4270eb3514be10444ab25fe270ec1296051c090c38ee06caf8e6cc573baa",
+    "contract-coauth_account_lifecycle_fixture.log": "555ed13e4660fcbc21e7819f657656c03a50dac25e718a53a563a821fc2568b8",
+    "contract-cotest-clippy-pre-sync.log": "8ff6b46061ac2ec38217057e33b5fc499aeaee823991a91b8fa3c127ca474dfd",
+    "contract-cotest-clippy.log": "69fa32d13d741794e0e43ef4c406976d27dd2104e8a27467fd858205f97244c4",
+    "contract-cotest-fmt-pre-sync.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "contract-cotest-fmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "contract-cotest-initial-clippy.log": "180f076b2c4e95d5c16ea916de6c48d684efd99dadef3846a94a5804d4c3646d",
+    "contract-package-graph-pre-sync.log": "39b3452358c8df6a95127f8bcdb4f8c00851acf4e0136500ca2a5fde4af42f5e",
+    "contract-package-graph.log": "39b3452358c8df6a95127f8bcdb4f8c00851acf4e0136500ca2a5fde4af42f5e",
+    "contract-response-loss-missing-station.log": "eb7d861554e3547c899c91a2feccab2ee0f2cfe6fa4636ecbbda38468e8652d3",
+    "contract-response-loss-pre-sync.log": "5621164531046c37aeb26d2fa18b1672f351dfb74c3a3075f6b909ab90432cf1",
+    "contract-response-loss-retired-fixture.log": "dd32d3f3d85c2243767dafe89e762a5879b99da129488eafef46aab38bfa5823",
+    "contract-response-loss.log": "0af2ee64ccb6760fc88dcf0f8d04e103ce742cc2dd5096b23799dc1da914043d",
+    "contract-session_grant_issuer_ledger-pre-sync.log": "fcd89d08a7a733ace7f3a46698474fbc1d791055de4deeaf525ee1d4ec06fcb0",
+    "contract-session_grant_issuer_ledger.log": "7dffca27354895f44f235127d905b71f2210bfd7b1a08d3915f3ba7a35962ea3",
+    "fourth-clippy.log": "168b80b2e551f67d9a1cd1d7f6f1bb045f0782f954bec786d5bd72f2c9083a1a",
+    "initial-clippy.log": "108dd6f120a4d6efd285f717a7dbca991a8ec219fd2b1d207e32260fad7b42c4",
+    "second-clippy.log": "c4ff486fbd479a09bb3c55577e420b27edc305ce21d9b971f1ed612bc4fdd75b",
+    "third-clippy.log": "8bfa64aeb399bc2691516107c3fff863a82b4f913a86b8688f9b56fdd0042a5f",
+    "workspace.log": "48ceb5d7a8b83235f8c765a7d3f5c2d9f17cddd7ad8cbe377e44a3e7c57f7bce"
+  },
+  "database_encoding": "UTF8",
+  "source_sync_scope": "Coland 8391bdd899049a0b06fa85a26b6654612c12000d was present before the live SUT build; contracts consumed by Coauth are unchanged from initial bb4529fb baseline. Cotest origin/main 62fd509b was rebased and all seven affected Cotest gates rerun. Source and SUT hashes stayed fixed during final validation.",
+  "historical_failures": [
+    {
+      "boundary": "retired debug/bind-principal fixture",
+      "exit": 101,
+      "passed": 0,
+      "failed": 1,
+      "ignored": 0,
+      "scope": "404 before issuance; no restart/replay acceptance."
+    },
+    {
+      "boundary": "missing owning Station in the original chaos bootstrap",
+      "exit": 101,
+      "passed": 0,
+      "failed": 1,
+      "ignored": 0,
+      "scope": "Pre-existing runtime identity invariant panic before the post-commit marker; replaced with ordinary real HTTPS Station trust preflight."
+    },
+    {
+      "boundary": "initial Cotest dev-dependency/import declarations",
+      "exit": 101,
+      "scope": "Compile/Clippy failure; fixed direct test dependencies and removed unused import. Final strict check passed."
+    }
+  ],
+  "scope": "Signed issuer material and upstream domain services preserve explicit caller transactions. Three new PostgreSQL/HTTP tests and an actual committed-response loss/kill/restart/exact-replay case. The private account is seeded with the owning signed SDK fixture through the repository, not product onboarding. No claim of full multi-repository CI, actual product registration/message chains or Journey recovery wiring. No new first-party version, protocol profile, storage key, schema, or generic transaction macro."
+}

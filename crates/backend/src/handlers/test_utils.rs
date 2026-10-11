@@ -858,7 +858,7 @@ impl TestState {
         // Account-status publication requires the binding to have been accepted
         // by this deployment's verified owning Station identity.
         let account_authority_did =
-            crate::handlers::arkret::owning_station_did_for(&self.arkret_config).to_string();
+            crate::services::station_trust::owning_station_did_for(&self.arkret_config).to_string();
         let (_, audience) = self
             .station_admin
             .as_ref()
@@ -912,7 +912,7 @@ impl TestState {
             self.clock.as_ref(),
             self.station_admin.as_ref(),
             &self.keyring,
-            crate::handlers::arkret::owning_station_id_for(&self.arkret_config).as_str(),
+            crate::services::station_trust::owning_station_id_for(&self.arkret_config).as_str(),
             user,
             &binding,
             arkret_models_collaboration::objects::account_status::AccountStatus::Active,
@@ -956,7 +956,7 @@ impl TestState {
             resolver: endpoint.join("resolver").unwrap(),
             proof_required_for_pairwise: true,
         });
-        let authority = crate::handlers::arkret::owning_station_id_for(&self.arkret_config);
+        let authority = crate::services::station_trust::owning_station_id_for(&self.arkret_config);
         crate::services::station_trust::shared().insert_for_test(&endpoint, authority.as_str());
         self.did_resolver_service_override = Some(
             crate::services::account_status_publication::issuer_source::fixtures::webvh_issuer_resolver(

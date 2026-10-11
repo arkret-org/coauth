@@ -8,9 +8,8 @@
 //!   provider-specific userinfo-only adapters do not return signed ID tokens, so callbacks for
 //!   those adapters fail closed unless `COAUTH_ALLOW_NON_STANDARD_UPSTREAM_OAUTH=true` is set.
 //!
-//! - **Handler layer** (this module): User-facing flow orchestration (session management,
-//!   link/unlink, attribute mapping, conflict resolution). This logic is delegated to the private
-//!   `link_workflow` submodule.
+//! - **Handler layer** (this module): HTTP session and cookie orchestration. Association, attribute
+//!   mapping and conflict resolution belong to [`crate::services::upstream_link`].
 //!
 //! The `ConnectorRegistry` provides runtime provider lookup. Each upstream
 //! OAuth provider is NOT a `ConnectorProvider` (that's for Stations).
@@ -36,7 +35,6 @@ pub mod cache;
 pub mod callback;
 pub(crate) mod cookie;
 pub mod jwks_cache;
-pub(crate) mod template;
 
 pub(crate) use self::cookie::UpstreamSessionsCookie;
 
@@ -177,5 +175,3 @@ pub(crate) fn client_credentials_for_provider(
 
     Ok(client_credentials)
 }
-
-pub(crate) mod link_workflow;

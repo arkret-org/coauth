@@ -563,7 +563,7 @@ pub async fn pair_device(
 
     let authority = load_current_realm_authority(depot, &validated.event.realm_id, now).await?;
     let config = depot.arkret_config()?;
-    let target_station_id = super::owning_station_id_for(&config);
+    let target_station_id = crate::services::station_trust::owning_station_id_for(&config);
     if authority.verified.current_service_id() != &target_station_id
         || authority.bundle.current_service_id != target_station_id
     {

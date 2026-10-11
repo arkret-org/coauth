@@ -1,5 +1,4 @@
 //! Standard SessionGrant issuance after trusted root-anchored recovery completion.
-
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_collaboration::session_grants::SessionGrantOutcome;
 use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
@@ -27,13 +26,14 @@ use super::account_handoff::{
     verify_account_handoff_holder_without_lookup,
 };
 use super::canonical_response::ArkretCanonicalJson;
-use super::session_grant::{
-    SessionGrantIssuanceSeed, acquire_private_current_device_binding,
-    issue_session_grant_for_audience, new_session_grant_record,
-};
+use super::session_grant::acquire_private_current_device_binding;
 use crate::handlers::common::DepotExt;
 use crate::services::account_status_publication::{
     author_and_enqueue_transition, validate_transition_plan,
+};
+use crate::services::session_grant::{
+    HumanGrantIssuance, SessionGrantIssuanceSeed, issue_session_grant_for_audience,
+    new_session_grant_record,
 };
 use crate::services::station_trust::{effective_audience, shared};
 
@@ -201,7 +201,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             ))
         })?
         .to_owned();
-    let issuer_id = super::owning_station_id_for(&config);
+    let issuer_id = crate::services::station_trust::owning_station_id_for(&config);
     let request_identity = format!("recovery-completion:{}", request.transaction_id);
     let intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_request).into();
     let mut rng = crate::handlers::make_rng();
@@ -294,22 +294,23 @@ pub async fn issue_recovery_completion_grant_endpoint(
     }
     let material = issue_session_grant_for_audience(
         &issuance_seed,
-        &*clock,
         &config,
         &keyring,
-        &browser_session,
-        session_public_key,
-        initial.audience_id.clone(),
-        initial.device_id.clone(),
-        STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
-            .iter()
-            .map(|operation| operation.as_str().to_owned())
-            .collect(),
-        Some(&receipt.account_id.principal_id),
-        &account_id,
-        handoff.cnf_jkt.clone(),
-        device_binding,
-        SessionGrantProofKind::AccountHandoff,
+        HumanGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key,
+            audience_id: initial.audience_id.clone(),
+            device_id: initial.device_id.clone(),
+            scopes: STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
+                .iter()
+                .map(|operation| operation.as_str().to_owned())
+                .collect(),
+            subject_override: Some(&receipt.account_id.principal_id),
+            account_id: &account_id,
+            dpop_jkt: handoff.cnf_jkt.clone(),
+            device_binding,
+            proof_kind: SessionGrantProofKind::AccountHandoff,
+        },
     )?;
     let wire_grant = SessionGrantOutcome {
         account_id: material.account_id.clone(),
@@ -349,7 +350,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 &*clock,
                 station.as_ref(),
                 &keyring,
-                super::owning_station_id_for(&config).as_str(),
+                crate::services::station_trust::owning_station_id_for(&config).as_str(),
                 &current_user,
                 &principal_binding,
                 AccountStatus::Active,

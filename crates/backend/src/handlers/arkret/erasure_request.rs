@@ -26,7 +26,6 @@
 //! intent is durably recorded, not that physical erasure completed —
 //! completion is observed through the account-status read surface and the
 //! erasure receipt rail.
-
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::{
     AccountRequestErasureOutcome, AccountRequestErasureRequestBody, AccountRequestErasureStatus,
@@ -45,11 +44,12 @@ use coauth_principal::ConnectorAdmin;
 use rand_core::RngCore;
 use salvo::prelude::*;
 
-use super::{ArkretRouteError, owning_station_id_for};
+use super::ArkretRouteError;
 use crate::handlers::common::{DepotExt, extract_session_info, make_clock, make_rng};
 use crate::services::account_status_publication::{
     author_and_enqueue_transition, validate_transition_plan,
 };
+use crate::services::station_trust::owning_station_id_for;
 
 /// `reason_code` stamped on the self-service `erasure_pending` record so the
 /// record expresses its trigger source (§8.1: SHOULD, e.g. `gdpr_request`).

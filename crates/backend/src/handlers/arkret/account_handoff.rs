@@ -64,7 +64,7 @@ pub async fn issue_did_binding_challenge(
 
     let arkret_config = depot.arkret_config()?;
     let account_subject = account_subject(
-        &super::owning_station_id_for(&arkret_config),
+        &crate::services::station_trust::owning_station_id_for(&arkret_config),
         grant.local_account_id,
     )?;
     let url_builder = depot.url_builder()?;
@@ -549,7 +549,7 @@ pub async fn account_onboarding_state(
     let (grant, _dpop) = authenticate_account_handoff_state(req, depot).await?;
     let observed_at = make_clock().now();
     let account_subject = account_subject(
-        &super::owning_station_id_for(&depot.arkret_config()?),
+        &crate::services::station_trust::owning_station_id_for(&depot.arkret_config()?),
         grant.local_account_id,
     )?;
     let mut repo = depot.repo().await?;
@@ -628,7 +628,7 @@ pub async fn issue_identity_binding_challenge(
 
     let arkret_config = depot.arkret_config()?;
     let account_subject = account_subject(
-        &super::owning_station_id_for(&arkret_config),
+        &crate::services::station_trust::owning_station_id_for(&arkret_config),
         grant.local_account_id,
     )?;
     let url_builder = depot.url_builder()?;
@@ -774,7 +774,7 @@ pub async fn abandon_identity_creation(
             principal_id: body.principal_id,
             did_version_id: body.did_version_id,
             account_subject: account_subject(
-                &super::owning_station_id_for(&depot.arkret_config()?),
+                &crate::services::station_trust::owning_station_id_for(&depot.arkret_config()?),
                 grant.local_account_id,
             )?,
         })

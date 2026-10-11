@@ -24,6 +24,16 @@ use crate::handlers::test_utils::{
     CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, unique_test_nonce,
 };
 use crate::salvo_utils::SessionInfoExt;
+#[cfg(test)]
+use crate::services::session_grant::issue_session_grant;
+#[cfg(test)]
+use crate::services::session_grant::persist_unbound_session_grant;
+use crate::services::session_grant::{
+    AgentGrantIssuance, HumanGrantIssuance, RecoveryGrantIssuance, SessionGrantIssuanceSeed,
+    SessionGrantMaterial, issue_recovery_session_grant_for_audience,
+    issue_session_grant_for_audience, mint_agent_session_grant, persist_session_grant,
+};
+use crate::services::station_trust::{owning_station_id_for, required_audience_for};
 
 #[salvo::handler]
 async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
@@ -454,16 +464,20 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
         &url_builder,
         &arkret_config,
         &keyring,
-        &browser_session,
-        session_public_key,
-        &principal_id,
-        &account_id,
-        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+        crate::services::session_grant::TestGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key,
+            subject_id: &principal_id,
+            account_id: &account_id,
+            device_id: arkret_identifiers::DeviceId::new(
+                "ak:device:01964137-0000-7000-8000-000000000001",
+            )
             .unwrap(),
-        vec![
-            STATION_SESSION_BIND_SCOPE.to_owned(),
-            device_scope.to_owned(),
-        ],
+            scopes: vec![
+                STATION_SESSION_BIND_SCOPE.to_owned(),
+                device_scope.to_owned(),
+            ],
+        },
     )
     .unwrap();
 
@@ -532,16 +546,18 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
         &seed,
         &arkret_config,
         &keyring,
-        holder_jwk,
-        arkret_identifiers::DidCoreId::new(audience).unwrap(),
-        device_id.clone(),
-        arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
-            .map(str::to_owned)
-            .to_vec(),
-        &principal_core_id,
-        coauth_data::LocalAccountId::new("test-account").unwrap(),
-        &authority,
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        RecoveryGrantIssuance {
+            session_public_key: holder_jwk,
+            audience_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
+            device_id: device_id.clone(),
+            scopes: arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
+                .map(str::to_owned)
+                .to_vec(),
+            subject_id: &principal_core_id,
+            local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
+            account_id: &authority,
+            dpop_jkt: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+        },
     )
     .unwrap();
 
@@ -580,20 +596,25 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
             &overlong_seed,
             &arkret_config,
             &keyring,
-            test_session_public_jwk(&holder_key, "recovery-holder-key"),
-            arkret_identifiers::DidCoreId::new(
-                required_audience_for(&url_builder, &arkret_config,)
-            )
-            .unwrap(),
-            arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000077",)
+            RecoveryGrantIssuance {
+                session_public_key: test_session_public_jwk(&holder_key, "recovery-holder-key"),
+                audience_id: arkret_identifiers::DidCoreId::new(required_audience_for(
+                    &url_builder,
+                    &arkret_config,
+                ))
                 .unwrap(),
-            arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
-                .map(str::to_owned)
-                .to_vec(),
-            &principal_core_id,
-            coauth_data::LocalAccountId::new("test-account").unwrap(),
-            &authority,
-            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+                device_id: arkret_identifiers::DeviceId::new(
+                    "ak:device:01964137-0000-7000-8000-000000000077",
+                )
+                .unwrap(),
+                scopes: arkret_models_identity::RECOVERY_SESSION_GRANT_OPERATIONS
+                    .map(str::to_owned)
+                    .to_vec(),
+                subject_id: &principal_core_id,
+                local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
+                account_id: &authority,
+                dpop_jkt: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned()
+            }
         )
         .is_err()
     );
@@ -640,16 +661,21 @@ fn session_grant_uses_configured_ttl() {
         &url_builder,
         &arkret_config,
         &keyring,
-        &browser_session,
-        session_public_key,
-        &principal_id,
-        &account_id,
-        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+        crate::services::session_grant::TestGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key,
+            subject_id: &principal_id,
+            account_id: &account_id,
+            device_id: arkret_identifiers::DeviceId::new(
+                "ak:device:01964137-0000-7000-8000-000000000001",
+            )
             .unwrap(),
-        vec![
-            STATION_SESSION_BIND_SCOPE.to_owned(),
-            "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001".to_owned(),
-        ],
+            scopes: vec![
+                STATION_SESSION_BIND_SCOPE.to_owned(),
+                "urn:arkret:client:device:ak:device:01964137-0000-7000-8000-000000000001"
+                    .to_owned(),
+            ],
+        },
     )
     .unwrap();
 
@@ -841,13 +867,20 @@ async fn seed_persisted_session_grant(
         &state.url_builder,
         &grant_config,
         &state.keyring,
-        &browser_session,
-        test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
-        &principal_id,
-        &account_id,
-        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+        crate::services::session_grant::TestGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key: test_session_public_jwk(
+                &session_key,
+                format!("session-{}", browser_session.id),
+            ),
+            subject_id: &principal_id,
+            account_id: &account_id,
+            device_id: arkret_identifiers::DeviceId::new(
+                "ak:device:01964137-0000-7000-8000-000000000001",
+            )
             .unwrap(),
-        vec![STATION_SESSION_BIND_SCOPE.to_owned()],
+            scopes: vec![STATION_SESSION_BIND_SCOPE.to_owned()],
+        },
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
@@ -1296,30 +1329,36 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let account_id = test_account_id(principal_id.as_str(), &audience);
     let material = issue_session_grant_for_audience(
         &issuance_seed,
-        &grant_clock,
         &grant_config,
         &state.keyring,
-        &browser_session,
-        test_session_public_jwk(&session_key, format!("session-{}", browser_session.id)),
-        arkret_identifiers::DidCoreId::new(audience).unwrap(),
-        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
-            .unwrap(),
-        vec![STATION_SESSION_BIND_SCOPE.to_owned()],
-        Some(&principal_id),
-        &account_id,
-        bound_jkt.clone(),
-        arkret_models_identity::SessionGrantDeviceBinding {
+        HumanGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key: test_session_public_jwk(
+                &session_key,
+                format!("session-{}", browser_session.id),
+            ),
+            audience_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
             device_id: arkret_identifiers::DeviceId::new(
                 "ak:device:01964137-0000-7000-8000-000000000001",
             )
             .unwrap(),
-            authorization_event_id: arkret_identifiers::EventId::new(
-                "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
-            )
-            .unwrap(),
-            model_generation_ref: 1,
+            scopes: vec![STATION_SESSION_BIND_SCOPE.to_owned()],
+            subject_override: Some(&principal_id),
+            account_id: &account_id,
+            dpop_jkt: bound_jkt.clone(),
+            device_binding: arkret_models_identity::SessionGrantDeviceBinding {
+                device_id: arkret_identifiers::DeviceId::new(
+                    "ak:device:01964137-0000-7000-8000-000000000001",
+                )
+                .unwrap(),
+                authorization_event_id: arkret_identifiers::EventId::new(
+                    "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
+                )
+                .unwrap(),
+                model_generation_ref: 1,
+            },
+            proof_kind: arkret_models_identity::SessionGrantProofKind::AccountHandoff,
         },
-        arkret_models_identity::SessionGrantProofKind::AccountHandoff,
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);
@@ -1498,17 +1537,19 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         &issuance_seed,
         &state.arkret_config,
         &state.keyring,
-        &arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
-        coauth_data::LocalAccountId::new("test-account").unwrap(),
-        audience.clone(),
-        vec!["ak.agent.action:message.send".to_owned()],
-        "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(),
-        session_public_key.clone(),
-        scope_details.clone(),
-        arkret_identifiers::EventId::new(authorization_event_id).unwrap(),
-        arkret_wire::DidUrl::new("did:web:agent.example#runtime-key").unwrap(),
-        now,
-        now + Duration::try_minutes(15).unwrap(),
+        AgentGrantIssuance {
+            agent_id: &arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
+            local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
+            audience_id: audience.clone(),
+            scopes: vec!["ak.agent.action:message.send".to_owned()],
+            dpop_jkt: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(),
+            session_public_key: session_public_key.clone(),
+            scope_details: scope_details.clone(),
+            agent_key_authorization_ref: arkret_identifiers::EventId::new(authorization_event_id)
+                .unwrap(),
+            verification_method: arkret_wire::DidUrl::new("did:web:agent.example#runtime-key")
+                .unwrap(),
+        },
     )
     .unwrap();
     let raw_payload = jwt_payload_value(&material.grant_jwt);

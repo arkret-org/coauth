@@ -382,7 +382,7 @@ pub async fn record_delegation_handler(
         )
         .await?
         .ok_or_else(|| AppError::conflict("admin account has no published principal_id"))?,
-        None => crate::handlers::arkret::owning_station_id_for(&arkret_config),
+        None => crate::services::station_trust::owning_station_id_for(&arkret_config),
     };
     let clock = call_context.clock;
     let valid_from = body.valid_from.unwrap_or_else(|| clock.now());
@@ -551,7 +551,7 @@ pub async fn issue_statement_handler(
 
     let arkret_config = depot.arkret_config()?;
     let keyring = depot.keyring()?;
-    let service_did = crate::handlers::arkret::owning_station_did_for(&arkret_config);
+    let service_did = crate::services::station_trust::owning_station_did_for(&arkret_config);
 
     let call_context = extract_call_context(req, depot).await?;
     let executed_by = None;

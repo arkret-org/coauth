@@ -51,7 +51,7 @@ impl DidResolverService for FixedBindingResolver {
         repo: &mut BoxRepository,
         config: &ArkretConfig,
         user: &User,
-    ) -> Result<Did, crate::handlers::arkret::SessionGrantError> {
+    ) -> Result<Did, crate::services::session_grant::SessionGrantError> {
         self.base.primary_did_for_user(repo, config, user).await
     }
     fn delegated_resolver(&self, config: &ArkretConfig) -> Option<String> {
@@ -156,7 +156,7 @@ async fn exercise_handler(
         arkret_canonical::sha256_hex(request_id.as_bytes())
     ))
     .unwrap();
-    let audience = crate::handlers::arkret::owning_station_id_for(&state.arkret_config);
+    let audience = crate::services::station_trust::owning_station_id_for(&state.arkret_config);
     let subject = crate::handlers::arkret::account_subject(&audience, account.id).unwrap();
     let origin =
         WebOrigin::new(state.url_builder.http_base().origin().ascii_serialization()).unwrap();

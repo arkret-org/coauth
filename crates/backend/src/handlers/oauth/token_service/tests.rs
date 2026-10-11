@@ -360,30 +360,34 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
     );
     let principal_id = "ak:did_core:web:subject.example";
     let station_id =
-        crate::handlers::arkret::required_audience_for(&grant_url_builder, &grant_config);
+        crate::services::station_trust::required_audience_for(&grant_url_builder, &grant_config);
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
         arkret_identifiers::DidCoreId::new(station_id).unwrap(),
     );
-    let grant_material = crate::handlers::arkret::issue_session_grant(
+    let grant_material = crate::services::session_grant::issue_session_grant(
         &mut rng,
         &*clock,
         &grant_url_builder,
         &grant_config,
         &grant_keyring,
-        &browser_session,
-        grant_public_jwk,
-        principal_id,
-        &account_id,
-        arkret_identifiers::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001")
+        crate::services::session_grant::TestGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key: grant_public_jwk,
+            subject_id: principal_id,
+            account_id: &account_id,
+            device_id: arkret_identifiers::DeviceId::new(
+                "ak:device:01964137-0000-7000-8000-000000000001",
+            )
             .unwrap(),
-        vec![
-            crate::handlers::arkret::STATION_SESSION_BIND_SCOPE.to_owned(),
-            "urn:arkret:client:device:device-1".to_owned(),
-        ],
+            scopes: vec![
+                crate::handlers::arkret::STATION_SESSION_BIND_SCOPE.to_owned(),
+                "urn:arkret:client:device:device-1".to_owned(),
+            ],
+        },
     )
     .unwrap();
-    let session_grant = crate::handlers::arkret::persist_session_grant(
+    let session_grant = crate::services::session_grant::persist_session_grant(
         &mut repo,
         &mut rng,
         &*clock,

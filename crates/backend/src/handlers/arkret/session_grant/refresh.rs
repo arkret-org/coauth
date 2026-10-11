@@ -18,6 +18,10 @@ use salvo::prelude::*;
 use super::*;
 use crate::handlers::arkret::canonical_response::ArkretCanonicalJson;
 use crate::handlers::arkret::*;
+use crate::services::session_grant::{
+    AgentGrantIssuance, HumanGrantIssuance, SessionGrantIssuanceSeed,
+    issue_session_grant_for_audience, mint_agent_session_grant, new_session_grant_record,
+};
 
 fn refresh_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
     ArkretRouteError::coded(
@@ -588,23 +592,26 @@ pub async fn refresh_session_grant(
             &issuance_seed,
             &arkret_config,
             &keyring,
-            &prior_payload.account_id.principal_id,
-            LocalAccountId::new(controller_user_id.to_string())?,
-            prior_grant.audience_id.clone(),
-            scopes,
-            verification.jkt.clone(),
-            session_public_key,
-            scope_details,
-            arkret_identifiers::EventId::new(authorization.authorized_event_id.clone())?,
-            arkret_wire::DidUrl::new(authorization.verification_method.clone()).map_err(
-                |error| {
+            AgentGrantIssuance {
+                agent_id: &prior_payload.account_id.principal_id,
+                local_account_id: LocalAccountId::new(controller_user_id.to_string())?,
+                audience_id: prior_grant.audience_id.clone(),
+                scopes,
+                dpop_jkt: verification.jkt.clone(),
+                session_public_key,
+                scope_details,
+                agent_key_authorization_ref: arkret_identifiers::EventId::new(
+                    authorization.authorized_event_id.clone(),
+                )?,
+                verification_method: arkret_wire::DidUrl::new(
+                    authorization.verification_method.clone(),
+                )
+                .map_err(|error| {
                     ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
                         error.to_owned(),
                     ))
-                },
-            )?,
-            issuance_seed.not_before,
-            issuance_seed.expires_at,
+                })?,
+            },
         )?;
         let audience_id = new_material.audience_id.clone();
         let outcome = SessionGrantOutcome {
@@ -847,19 +854,22 @@ pub async fn refresh_session_grant(
     let device_id = arkret_identifiers::DeviceId::new(device_id.to_owned())?;
     let new_material = issue_session_grant_for_audience(
         &issuance_seed,
-        &*clock,
         &arkret_config,
         &keyring,
-        &browser_session,
-        crate::services::dpop::session_public_jwk(&verification.public_jwk)?,
-        audience_id,
-        device_id.clone(),
-        scopes,
-        Some(&prior_grant.subject_id),
-        &principal_binding.account_id,
-        verification.jkt.clone(),
-        device_binding,
-        proof_kind,
+        HumanGrantIssuance {
+            browser_session: &browser_session,
+            session_public_key: crate::services::dpop::session_public_jwk(
+                &verification.public_jwk,
+            )?,
+            audience_id,
+            device_id: device_id.clone(),
+            scopes,
+            subject_override: Some(&prior_grant.subject_id),
+            account_id: &principal_binding.account_id,
+            dpop_jkt: verification.jkt.clone(),
+            device_binding,
+            proof_kind,
+        },
     )?;
 
     let response_audience = new_material.audience_id.clone();

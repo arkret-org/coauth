@@ -183,7 +183,7 @@ pub async fn add_account_did(
         return Err(AppError::conflict("account DID binding is already active"));
     }
 
-    let expected_audience = crate::handlers::arkret::owning_station_id_for(&arkret_config);
+    let expected_audience = crate::services::station_trust::owning_station_id_for(&arkret_config);
     let expected_trust_domain = arkret_identifiers::TrustDomainId::new(
         crate::handlers::arkret::trust_domain_for(&url_builder, &arkret_config),
     )
@@ -626,7 +626,7 @@ pub(crate) async fn primary_did_for_user(
         .await
     {
         Ok(did) => Ok(Some(did)),
-        Err(crate::handlers::arkret::SessionGrantError::PrincipalUnknown) => Ok(None),
+        Err(crate::services::session_grant::SessionGrantError::PrincipalUnknown) => Ok(None),
         Err(error) => Err(AppError::bad_request(format!(
             "principal_id_policy: {error}"
         ))),

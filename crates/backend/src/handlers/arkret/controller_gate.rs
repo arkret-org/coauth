@@ -1,5 +1,4 @@
 //! Durable Account Authority controller-lifecycle gate issuance.
-
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::agent_signer_evidence::{
     AgentDetachedJws, ControllerAccountEligibility, ControllerAccountGateAttestation,
@@ -18,9 +17,10 @@ use coauth_data::{
 };
 use salvo::prelude::*;
 
-use super::{ArkretRouteError, owning_station_id_for};
+use super::ArkretRouteError;
 use crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes;
 use crate::handlers::common::DepotExt;
+use crate::services::station_trust::owning_station_id_for;
 
 const GATE_TTL: Duration = Duration::minutes(5);
 const REPLAY_RETENTION: Duration = Duration::days(7);
@@ -176,7 +176,8 @@ pub async fn issue_controller_gate_attestation(
     };
 
     let (status, eligibility) = controller_status(user.status);
-    let authority_did = super::owning_station_did_for(&depot.arkret_config()?);
+    let authority_did =
+        crate::services::station_trust::owning_station_did_for(&depot.arkret_config()?);
     let keyring = depot.keyring()?;
     // The attestation is signed as the owning Station, and coland verifies it
     // by resolving `verification_method` out of the Station's DID document.
@@ -600,7 +601,7 @@ mod controller_gate_http_regression {
             Some(authority.as_str())
         );
         assert_eq!(
-            crate::handlers::arkret::owning_station_id_for(&state.arkret_config).as_str(),
+            crate::services::station_trust::owning_station_id_for(&state.arkret_config).as_str(),
             authority.as_str()
         );
         let mut rng = state.rng();

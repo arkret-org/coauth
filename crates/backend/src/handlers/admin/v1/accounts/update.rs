@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Update endpoint: `PATCH /accounts/{id}` (profile / lifecycle patch).
-
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use salvo::prelude::*;
 use schemars::JsonSchema;
@@ -14,8 +13,8 @@ use crate::handlers::admin::audit_helper::AdminAuditSigning;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::params::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
-use crate::handlers::arkret::{owning_station_did_for, owning_station_id_for};
 use crate::handlers::common::DepotExt;
+use crate::services::station_trust::{owning_station_did_for, owning_station_id_for};
 use crate::{AppError, JsonResult};
 
 #[derive(Deserialize, JsonSchema)]

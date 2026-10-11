@@ -11,7 +11,6 @@
 //! Station activates the frozen candidate after its authorize Event is
 //! committed to the Agent-PCR Realm stream; polling only observes this
 //! transition.
-
 use std::collections::BTreeMap;
 
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
@@ -31,10 +30,8 @@ use super::proof::canonical_digest;
 use crate::AppError;
 use crate::handlers::account::{DepotExt, make_clock, make_rng};
 use crate::handlers::admin::audit_helper::record_service_admin_operation_signed;
-use crate::handlers::arkret::{
-    ArkretRouteError, is_allowed_session_grant_audience, owning_station_did_for,
-    owning_station_id_for,
-};
+use crate::handlers::arkret::{ArkretRouteError, is_allowed_session_grant_audience};
+use crate::services::station_trust::{owning_station_did_for, owning_station_id_for};
 
 /// Durable retry queue used when the authoritative Station cannot be
 /// reached after the exact pairing request has been persisted locally.

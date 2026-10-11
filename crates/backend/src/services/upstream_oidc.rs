@@ -313,7 +313,10 @@ impl UpstreamOidcService for DefaultUpstreamOidcService {
                 resolved,
                 requested_audience,
             ) {
-                let local_audience = arkret::required_audience_for(url_builder, arkret_config);
+                let local_audience = crate::services::station_trust::required_audience_for(
+                    url_builder,
+                    arkret_config,
+                );
                 return Ok(UpstreamOidcSessionGrantTarget {
                     audience: local_audience,
                     station_name: None,

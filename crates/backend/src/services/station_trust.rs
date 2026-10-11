@@ -1455,6 +1455,43 @@ async fn fetch_method_response(
     })
 }
 
+fn owning_station_identity_for(
+    arkret_config: &coauth_config::ArkretConfig,
+) -> coauth_config::DelegatedStationIdentity {
+    arkret_config
+        .runtime_owning_station_identity
+        .get()
+        .expect("Station trust preflight verifies the owning Station before serving requests")
+}
+
+/// Stable authorization id delegated by the owning Station.
+pub(crate) fn owning_station_id_for(
+    arkret_config: &coauth_config::ArkretConfig,
+) -> arkret_identifiers::DidCoreId {
+    owning_station_identity_for(arkret_config).station_id
+}
+
+/// Full DID delegated by the owning Station for issuer/controller proofs.
+pub(crate) fn owning_station_did_for(
+    arkret_config: &coauth_config::ArkretConfig,
+) -> arkret_identifiers::Did {
+    owning_station_identity_for(arkret_config).did
+}
+
+pub(crate) fn required_audience_for(
+    _url_builder: &coauth_data::UrlBuilder,
+    arkret_config: &coauth_config::ArkretConfig,
+) -> String {
+    // Session-grant `audience` is a `did_core_id` on the wire (the target
+    // service's stable authorization identity, account-operations schema), so
+    // the default local-admin audience is this deployment's own runtime
+    // service core id — never a URL.
+    arkret_config
+        .admin_audience
+        .clone()
+        .unwrap_or_else(|| owning_station_id_for(arkret_config).to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
