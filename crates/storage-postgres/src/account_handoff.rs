@@ -1914,14 +1914,17 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
 
     async fn finalize_device_pairing(
         &mut self,
-        request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
-        pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
-        account_id: &arkret_wire::AccountId,
-        target_proof: &arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
-        request_digest: &arkret_identifiers::Hash,
-        canonical_outcome: &[u8],
-        now: DateTime<Utc>,
+        input: coauth_data::storage::account_handoff::DevicePairingFinalizeInput<'_>,
     ) -> Result<DevicePairingFinalizeCommit, Self::Error> {
+        let coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+            request_id,
+            pairing_code,
+            account_id,
+            target_proof,
+            request_digest,
+            canonical_outcome,
+            now,
+        } = input;
         self.lock_device_pairing_account(account_id).await?;
         let row = diesel::sql_query(
             "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \

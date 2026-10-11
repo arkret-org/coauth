@@ -18,6 +18,24 @@ use coauth_data::{
 
 use crate::repository_impl;
 
+/// Internal input for one atomic repository operation.
+pub struct DevicePairingFinalizeInput<'a> {
+    /// Request id.
+    pub request_id: &'a arkret_models_collaboration::device_pairing::DevicePairingRequestId,
+    /// Pairing code.
+    pub pairing_code: &'a arkret_models_collaboration::device_pairing::DevicePairingCode,
+    /// Account id.
+    pub account_id: &'a arkret_wire::AccountId,
+    /// Target proof.
+    pub target_proof: &'a arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
+    /// Request digest.
+    pub request_digest: &'a arkret_identifiers::Hash,
+    /// Canonical outcome.
+    pub canonical_outcome: &'a [u8],
+    /// Now.
+    pub now: DateTime<Utc>,
+}
+
 repository_impl! {
     /// Stores the durable state machine used by account-first identity creation.
     pub trait AccountHandoffRepository {
@@ -141,20 +159,7 @@ repository_impl! {
         /// outcome, or reject a conflicting/not-found request.  The backend
         /// serializes by AccountId and expires every other unaccepted
         /// ready_for_claim row for that account in the same transaction.
-        #[expect(
-            clippy::too_many_arguments,
-            reason = "Preserve the named inputs of the atomic pairing commit and exact replay contract."
-        )]
-        async fn finalize_device_pairing(
-            &mut self,
-            request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
-            pairing_code: &arkret_models_collaboration::device_pairing::DevicePairingCode,
-            account_id: &arkret_wire::AccountId,
-            target_proof: &arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
-            request_digest: &arkret_identifiers::Hash,
-            canonical_outcome: &[u8],
-            now: DateTime<Utc>,
-        ) -> Result<DevicePairingFinalizeCommit, Self::Error>;
+        async fn finalize_device_pairing(&mut self, input: DevicePairingFinalizeInput<'_>) -> Result<DevicePairingFinalizeCommit, Self::Error>;
 
         /// Install or recover the Authority-owned private pairing journal.
         /// The first write freezes the canonical request and Event submission

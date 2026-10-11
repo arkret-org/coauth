@@ -165,6 +165,24 @@ pub struct StationTrustAudit {
     pub created_at: DateTime<Utc>,
 }
 
+/// Internal input for one atomic repository operation.
+pub struct StationTrustVerificationInput<'a> {
+    /// Clock.
+    pub clock: &'a dyn Clock,
+    /// Name.
+    pub name: &'a str,
+    /// Canonical endpoint.
+    pub canonical_endpoint: &'a str,
+    /// Expected method history head.
+    pub expected_method_history_head: &'a str,
+    /// Did.
+    pub did: &'a arkret_identifiers::Did,
+    /// Method history head.
+    pub method_history_head: &'a str,
+    /// Version id.
+    pub version_id: &'a str,
+}
+
 repository_impl! {
     /// Repository accessor for Station trust enrollments and their
     /// append-only audit log.
@@ -221,20 +239,7 @@ repository_impl! {
         /// Advance the anti-rollback floor and `last_verified_at` after a
         /// successful online re-verification of the pinned identity. The
         /// update is a CAS over name, endpoint and old history head.
-        #[expect(
-            clippy::too_many_arguments,
-            reason = "Keep the expected enrollment identity and new verified anti-rollback floor explicit in this compare-and-swap contract."
-        )]
-        async fn record_verification(
-            &mut self,
-            clock: &dyn Clock,
-            name: &str,
-            canonical_endpoint: &str,
-            expected_method_history_head: &str,
-            did: &arkret_identifiers::Did,
-            method_history_head: &str,
-            version_id: &str,
-        ) -> Result<bool, Self::Error>;
+        async fn record_verification(&mut self, input: StationTrustVerificationInput<'_>) -> Result<bool, Self::Error>;
 
         /// Delete an enrollment (explicit operator revocation). Returns `false`
         /// when no enrollment with that name exists.

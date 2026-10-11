@@ -432,13 +432,15 @@ pub async fn finalize_device_pairing(
     let result = repo
         .account_handoff()
         .finalize_device_pairing(
-            &body.device_pairing_request_id,
-            &body.pairing_code,
-            &binding.account_id,
-            &body.target_proof,
-            &request_digest,
-            &canonical_outcome,
-            now,
+            coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                request_id: &body.device_pairing_request_id,
+                pairing_code: &body.pairing_code,
+                account_id: &binding.account_id,
+                target_proof: &body.target_proof,
+                request_digest: &request_digest,
+                canonical_outcome: &canonical_outcome,
+                now,
+            },
         )
         .await?;
     match result {

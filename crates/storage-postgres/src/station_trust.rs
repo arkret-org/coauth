@@ -312,14 +312,17 @@ impl StationTrustRepository for PgStationTrustRepository<'_> {
     #[tracing::instrument(name = "db.station_trust.record_verification", skip_all, err)]
     async fn record_verification(
         &mut self,
-        clock: &dyn Clock,
-        name: &str,
-        canonical_endpoint: &str,
-        expected_method_history_head: &str,
-        did: &arkret_identifiers::Did,
-        method_history_head: &str,
-        version_id: &str,
+        input: coauth_data::storage::station_trust::StationTrustVerificationInput<'_>,
     ) -> Result<bool, Self::Error> {
+        let coauth_data::storage::station_trust::StationTrustVerificationInput {
+            clock,
+            name,
+            canonical_endpoint,
+            expected_method_history_head,
+            did,
+            method_history_head,
+            version_id,
+        } = input;
         let rows_affected = diesel::update(
             station_trust_enrollments::table
                 .filter(station_trust_enrollments::name.eq(name))
@@ -526,13 +529,16 @@ mod tests {
         assert!(
             repo.station_trust()
                 .record_verification(
-                    &clock,
-                    "coland",
-                    "https://coland.example/",
-                    "sha256:aa",
-                    &arkret_identifiers::Did::new("did:webvh:new:replacement.example").unwrap(),
-                    "sha256:ee",
-                    "3-ff"
+                    coauth_data::storage::station_trust::StationTrustVerificationInput {
+                        clock: &clock,
+                        name: "coland",
+                        canonical_endpoint: "https://coland.example/",
+                        expected_method_history_head: "sha256:aa",
+                        did: &arkret_identifiers::Did::new("did:webvh:new:replacement.example")
+                            .unwrap(),
+                        method_history_head: "sha256:ee",
+                        version_id: "3-ff"
+                    }
                 )
                 .await
                 .unwrap()

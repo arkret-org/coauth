@@ -1176,13 +1176,15 @@ async fn preflight_server(
     } else {
         repo.station_trust()
             .record_verification(
-                &SystemClock::default(),
-                &server.name,
-                &canonical_endpoint,
-                &old_head,
-                &verified.did,
-                &verified.method_history_head,
-                &verified.version_id,
+                coauth_data::storage::station_trust::StationTrustVerificationInput {
+                    clock: &SystemClock::default(),
+                    name: &server.name,
+                    canonical_endpoint: &canonical_endpoint,
+                    expected_method_history_head: &old_head,
+                    did: &verified.did,
+                    method_history_head: &verified.method_history_head,
+                    version_id: &verified.version_id,
+                },
             )
             .await?
     };
@@ -1301,13 +1303,15 @@ async fn revalidate_all(
                     let result = repo
                         .station_trust()
                         .record_verification(
-                            &SystemClock::default(),
-                            &server.name,
-                            &endpoint,
-                            &floor.0,
-                            &verified.did,
-                            &verified.method_history_head,
-                            &verified.version_id,
+                            coauth_data::storage::station_trust::StationTrustVerificationInput {
+                                clock: &SystemClock::default(),
+                                name: &server.name,
+                                canonical_endpoint: &endpoint,
+                                expected_method_history_head: &floor.0,
+                                did: &verified.did,
+                                method_history_head: &verified.method_history_head,
+                                version_id: &verified.version_id,
+                            },
                         )
                         .await;
                     match result {

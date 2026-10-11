@@ -1843,6 +1843,7 @@ dependencies = [
  "coauth-storage-postgres",
  "coauth-tasks",
  "coauth-templates",
+ "coland-contracts",
  "cookie",
  "cookie_store",
  "cotest-test-support",
@@ -1910,7 +1911,6 @@ dependencies = [
  "sha2 0.10.9",
  "signature 2.2.0",
  "socket2",
- "coland-contracts",
  "subtle",
  "syn 3.0.3",
  "thiserror 2.0.20",
@@ -2312,6 +2312,21 @@ dependencies = [
  "tracing",
  "url",
  "walkdir",
+]
+
+[[package]]
+name = "coland-contracts"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
+ "arkret-models-crypto",
+ "arkret-wire",
+ "chrono",
+ "serde",
+ "serde_json",
+ "url",
 ]
 
 [[package]]
@@ -10074,21 +10089,6 @@ checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "coland-contracts"
-version = "0.3.0"
-dependencies = [
- "arkret-canonical",
- "arkret-identifiers",
- "arkret-models-collaboration",
- "arkret-models-crypto",
- "arkret-wire",
- "chrono",
- "serde",
- "serde_json",
- "url",
 ]
 
 [[package]]

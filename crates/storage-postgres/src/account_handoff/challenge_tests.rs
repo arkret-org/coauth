@@ -332,13 +332,15 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
     assert!(matches!(
         repo.account_handoff()
             .finalize_device_pairing(
-                &first.device_pairing_request_id,
-                &second.pairing_code,
-                &account_id,
-                &first_proof,
-                &hash('0'),
-                b"{\"wrong_code\":true}",
-                now,
+                coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                    request_id: &first.device_pairing_request_id,
+                    pairing_code: &second.pairing_code,
+                    account_id: &account_id,
+                    target_proof: &first_proof,
+                    request_digest: &hash('0'),
+                    canonical_outcome: b"{\"wrong_code\":true}",
+                    now
+                }
             )
             .await
             .unwrap(),
@@ -366,15 +368,15 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
     let mut repo = factory.create().await.unwrap();
     assert!(matches!(
         repo.account_handoff()
-            .finalize_device_pairing(
-                &first.device_pairing_request_id,
-                &first.pairing_code,
-                &account_id,
-                &first_proof,
-                &first_digest,
-                first_outcome,
+            .finalize_device_pairing(coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                request_id: &first.device_pairing_request_id,
+                pairing_code: &first.pairing_code,
+                account_id: &account_id,
+                target_proof: &first_proof,
+                request_digest: &first_digest,
+                canonical_outcome: first_outcome,
                 now,
-            )
+            })
             .await
             .unwrap(),
         DevicePairingFinalizeCommit::Committed(bytes) if bytes == first_outcome
@@ -384,15 +386,15 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
     let mut repo = factory.create().await.unwrap();
     assert!(matches!(
         repo.account_handoff()
-            .finalize_device_pairing(
-                &first.device_pairing_request_id,
-                &first.pairing_code,
-                &account_id,
-                &first_proof,
-                &first_digest,
-                first_outcome,
+            .finalize_device_pairing(coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                request_id: &first.device_pairing_request_id,
+                pairing_code: &first.pairing_code,
+                account_id: &account_id,
+                target_proof: &first_proof,
+                request_digest: &first_digest,
+                canonical_outcome: first_outcome,
                 now,
-            )
+            })
             .await
             .unwrap(),
         DevicePairingFinalizeCommit::Replay(bytes) if bytes == first_outcome
@@ -403,13 +405,15 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
     assert!(matches!(
         repo.account_handoff()
             .finalize_device_pairing(
-                &first.device_pairing_request_id,
-                &first.pairing_code,
-                &account_id,
-                &first_proof,
-                &hash('b'),
-                first_outcome,
-                now,
+                coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                    request_id: &first.device_pairing_request_id,
+                    pairing_code: &first.pairing_code,
+                    account_id: &account_id,
+                    target_proof: &first_proof,
+                    request_digest: &hash('b'),
+                    canonical_outcome: first_outcome,
+                    now
+                }
             )
             .await
             .unwrap(),
@@ -443,13 +447,15 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
     assert!(matches!(
         repo.account_handoff()
             .finalize_device_pairing(
-                &second.device_pairing_request_id,
-                &second.pairing_code,
-                &account_id,
-                &second_proof,
-                &second_digest,
-                b"{\"second\":true}",
-                now,
+                coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                    request_id: &second.device_pairing_request_id,
+                    pairing_code: &second.pairing_code,
+                    account_id: &account_id,
+                    target_proof: &second_proof,
+                    request_digest: &second_digest,
+                    canonical_outcome: b"{\"second\":true}",
+                    now
+                }
             )
             .await
             .unwrap(),
@@ -483,15 +489,15 @@ async fn pairing_finalize_replays_exactly_conflicts_on_change_and_supersedes_pri
     let mut repo = factory.create().await.unwrap();
     assert!(matches!(
         repo.account_handoff()
-            .finalize_device_pairing(
-                &first.device_pairing_request_id,
-                &first.pairing_code,
-                &account_id,
-                &first_proof,
-                &first_digest,
-                first_outcome,
-                now + Duration::hours(1),
-            )
+            .finalize_device_pairing(coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                request_id: &first.device_pairing_request_id,
+                pairing_code: &first.pairing_code,
+                account_id: &account_id,
+                target_proof: &first_proof,
+                request_digest: &first_digest,
+                canonical_outcome: first_outcome,
+                now: now + Duration::hours(1),
+            })
             .await
             .unwrap(),
         DevicePairingFinalizeCommit::Replay(bytes) if bytes == first_outcome
@@ -721,13 +727,15 @@ async fn pairing_failure_budget_linearizes_concurrent_failures_and_protects_term
     assert!(matches!(
         repo.account_handoff()
             .finalize_device_pairing(
-                &replayable.device_pairing_request_id,
-                &replayable.pairing_code,
-                &account_id,
-                &replayable_proof,
-                &replayable_digest,
-                replayable_outcome,
-                now,
+                coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                    request_id: &replayable.device_pairing_request_id,
+                    pairing_code: &replayable.pairing_code,
+                    account_id: &account_id,
+                    target_proof: &replayable_proof,
+                    request_digest: &replayable_digest,
+                    canonical_outcome: replayable_outcome,
+                    now
+                }
             )
             .await
             .unwrap(),
@@ -745,15 +753,15 @@ async fn pairing_failure_budget_linearizes_concurrent_failures_and_protects_term
     let mut repo = factory.create().await.unwrap();
     assert!(matches!(
         repo.account_handoff()
-            .finalize_device_pairing(
-                &replayable.device_pairing_request_id,
-                &replayable.pairing_code,
-                &account_id,
-                &replayable_proof,
-                &replayable_digest,
-                replayable_outcome,
+            .finalize_device_pairing(coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                request_id: &replayable.device_pairing_request_id,
+                pairing_code: &replayable.pairing_code,
+                account_id: &account_id,
+                target_proof: &replayable_proof,
+                request_digest: &replayable_digest,
+                canonical_outcome: replayable_outcome,
                 now,
-            )
+            })
             .await
             .unwrap(),
         DevicePairingFinalizeCommit::Replay(bytes) if bytes == replayable_outcome
@@ -766,13 +774,15 @@ async fn pairing_failure_budget_linearizes_concurrent_failures_and_protects_term
     assert!(matches!(
         repo.account_handoff()
             .finalize_device_pairing(
-                &terminal.device_pairing_request_id,
-                &terminal.pairing_code,
-                &account_id,
-                &terminal_proof,
-                &terminal_digest,
-                terminal_outcome,
-                now,
+                coauth_data::storage::account_handoff::DevicePairingFinalizeInput {
+                    request_id: &terminal.device_pairing_request_id,
+                    pairing_code: &terminal.pairing_code,
+                    account_id: &account_id,
+                    target_proof: &terminal_proof,
+                    request_digest: &terminal_digest,
+                    canonical_outcome: terminal_outcome,
+                    now
+                }
             )
             .await
             .unwrap(),
