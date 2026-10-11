@@ -16,15 +16,15 @@ use url::Url;
 
 const DEV_DATABASE_URI: &str = "postgresql://coauth:coauth@localhost/coauth";
 const DEV_PUBLIC_BASE: &str = "https://auth.local.host/";
-const DEV_SOLAND_URL: &str = "https://local.host/";
-const DEV_SOLAND_IDENTITY_RESOLVER_URL: &str = "https://local.host/_arkret/root/identity/resolve";
-const DEV_SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET: &str =
+const DEV_COLAND_URL: &str = "https://local.host/";
+const DEV_COLAND_IDENTITY_RESOLVER_URL: &str = "https://local.host/_arkret/root/identity/resolve";
+const DEV_COLAND_INTERNAL_AUTHORITY_SHARED_SECRET: &str =
     "local-coauth-session-grant-introspection";
-const DEV_SOLAND_WEBVH_REGISTRATION_BEARER: &str = "local-soland-webvh-registration";
+const DEV_COLAND_WEBVH_REGISTRATION_BEARER: &str = "local-coland-webvh-registration";
 /// The dev Station's own trust domain. `arkret.trust_domain` is coauth's;
 /// §2.2.3 binds the *target* service's domain, so it is a fact of the
 /// Station entry and is never derived from the endpoint host.
-const DEV_SOLAND_TRUST_DOMAIN: &str = "ak:trust_domain:local.host";
+const DEV_COLAND_TRUST_DOMAIN: &str = "ak:trust_domain:local.host";
 const DEV_COAUTH_TRUST_DOMAIN: &str = "ak:trust_domain:auth.local.host";
 const DEV_KEYSTORE_PATH: &str = "./.local/keystore/coauth.v1";
 const DEV_KEYSTORE_MASTER_KEY_FILE: &str = "./.local/secrets/coauth-keystore-master-key";
@@ -184,20 +184,20 @@ fn apply_generated_config_options(
         config.http.issuer = Some(public_base_url);
         config.arkret.trust_domain = Some(DEV_COAUTH_TRUST_DOMAIN.to_owned());
         config.arkret.stations = vec![StationConfig {
-            name: "soland-dev".to_owned(),
-            endpoint: DEV_SOLAND_URL.parse().expect("valid dev soland URL"),
+            name: "coland-dev".to_owned(),
+            endpoint: DEV_COLAND_URL.parse().expect("valid dev coland URL"),
             internal_authority_shared_secret: Some(
-                DEV_SOLAND_INTERNAL_AUTHORITY_SHARED_SECRET
+                DEV_COLAND_INTERNAL_AUTHORITY_SHARED_SECRET
                     .to_owned()
                     .into(),
             ),
             embedded_webvh_registration_bearer: Some(
-                DEV_SOLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
+                DEV_COLAND_WEBVH_REGISTRATION_BEARER.to_owned(),
             ),
-            trust_domain: Some(DEV_SOLAND_TRUST_DOMAIN.to_owned()),
+            trust_domain: Some(DEV_COLAND_TRUST_DOMAIN.to_owned()),
         }];
         config.arkret.identity_registry = Some(IdentityRegistryConfig {
-            resolver: DEV_SOLAND_IDENTITY_RESOLVER_URL
+            resolver: DEV_COLAND_IDENTITY_RESOLVER_URL
                 .parse()
                 .expect("valid dev identity resolver URL"),
             proof_required_for_pairwise: false,
@@ -248,11 +248,11 @@ mod tests {
             .arkret
             .stations
             .first()
-            .expect("dev config should include Soland");
-        assert_eq!(station.endpoint.as_str(), DEV_SOLAND_URL);
+            .expect("dev config should include Coland");
+        assert_eq!(station.endpoint.as_str(), DEV_COLAND_URL);
         assert_eq!(
             station.trust_domain.as_deref(),
-            Some(DEV_SOLAND_TRUST_DOMAIN)
+            Some(DEV_COLAND_TRUST_DOMAIN)
         );
         assert_eq!(
             config.arkret.trust_domain.as_deref(),
@@ -279,6 +279,6 @@ mod tests {
             .arkret
             .identity_registry
             .expect("dev config should include an identity resolver");
-        assert_eq!(registry.resolver.as_str(), DEV_SOLAND_IDENTITY_RESOLVER_URL);
+        assert_eq!(registry.resolver.as_str(), DEV_COLAND_IDENTITY_RESOLVER_URL);
     }
 }

@@ -106,7 +106,7 @@ impl std::fmt::Display for AdminAccountStatus {
 ///
 /// Field order mirrors `AccountRecord` in
 /// `coauth/crates/backend/src/handlers/admin/v1/accounts.rs` so the
-/// generated `OpenAPI` document and the sodmin client decoder stay in
+/// generated `OpenAPI` document and the codmin client decoder stay in
 /// lock-step. The `id` is intentionally NOT here — it lives on the
 /// JSON:API envelope (`SingleResource::id`).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

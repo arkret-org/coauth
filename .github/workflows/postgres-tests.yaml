@@ -60,7 +60,7 @@ jobs:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
         run: |
           bash .ci/checkout-sibling.sh arkret-rust-sdk ../arkret-rust-sdk
-          bash .ci/checkout-sibling.sh soland ../soland
+          bash .ci/checkout-sibling.sh coland ../coland
           bash .ci/checkout-sibling.sh cotest ../cotest
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec

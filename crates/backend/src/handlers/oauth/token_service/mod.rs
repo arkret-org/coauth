@@ -38,7 +38,7 @@ pub use refresh_token::handle_refresh_token;
 /// lifetime is the window an attacker retains access after a leak. The
 /// configuration schema already caps the value, but we clamp again at issuance
 /// as defence in depth so a tampered config can never mint a
-/// long-lived bearer token. This matches the soland-side
+/// long-lived bearer token. This matches the coland-side
 /// `capped_bearer_expiry <= 15min` rule.
 #[must_use]
 pub(crate) fn capped_access_token_ttl(ttl: chrono::Duration) -> chrono::Duration {

@@ -2,10 +2,10 @@
 
 coauth runs as the deployment-private account-authentication component behind
 the owning Station's Account Authority surface. Downstream Stations such as
-Soland consume OAuth/OIDC tokens and Arkret session grants; they do not discover
+Coland consume OAuth/OIDC tokens and Arkret session grants; they do not discover
 coauth as a separate Arkret service role.
 
-## Configure Soland as a Station
+## Configure Coland as a Station
 
 Declare each trusted Station in the `arkret.stations`
 section:
@@ -13,11 +13,11 @@ section:
 ```yaml
 arkret:
   stations:
-    - name: soland
-      endpoint: https://soland.example.com/
-      trust_domain: ak:trust_domain:soland.example.com
-      internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
-      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
+    - name: coland
+      endpoint: https://coland.example.com/
+      trust_domain: ak:trust_domain:coland.example.com
+      internal_authority_shared_secret_file: /run/secrets/coland_internal_authority_shared_secret
+      embedded_webvh_registration_bearer: ${COLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 - `name`: operator-facing identifier for the Station.
@@ -49,13 +49,13 @@ before processing jobs.
 After a legitimate identity genesis (new SCID), replace the pin explicitly:
 
 ```console
-$ coauth station trust replace --name soland \
+$ coauth station trust replace --name coland \
     --expect-old ak:did_core:webvh:<old-scid> \
     --accept-new ak:did_core:webvh:<new-scid>
 ```
 
 Replacement revokes session grants bound to the old audience in the same
-transaction. `coauth station trust revoke --name soland` removes the
+transaction. `coauth station trust revoke --name coland` removes the
 pin entirely; the server then refuses to serve until the next full automatic
 verification establishes a binding again.
 
@@ -84,8 +84,8 @@ v1 protocol operations:
 
 | coauth call | Station endpoint | Operation id | When |
 | --- | --- | --- | --- |
-| Device signing-key directory lookup | `POST /_soland/gate/account/device-signing-keys/query` | `org.arkret.soland.gate.account.device_signing_keys.query` | Verifying a device holder proof during session-grant refresh / soft-logout restore |
-| Collaboration capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | Materialising a coauth-issued `ak.capability.grant` / `ak.capability.revoke` |
+| Device signing-key directory lookup | `POST /_coland/gate/account/device-signing-keys/query` | `org.arkret.coland.gate.account.device_signing_keys.query` | Verifying a device holder proof during session-grant refresh / soft-logout restore |
+| Collaboration capability fanout | `POST /_coland/root/authz/capability-fanout` | `org.arkret.coland.root.authz.capability_fanout.submit` | Materialising a coauth-issued `ak.capability.grant` / `ak.capability.revoke` |
 
 Both edges are authenticated with the shared bearer configured on the matching
 `stations` entry:
@@ -100,7 +100,7 @@ replace the pin.
 ```yaml
 arkret:
   stations:
-    - name: soland
+    - name: coland
       # ...
       embedded_webvh_registration_bearer: "<shared S2S secret>"
 ```

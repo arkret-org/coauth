@@ -2,7 +2,7 @@
 
 coauth is a deployment-private Station Account Authority component. It handles account authentication,
 OAuth/OIDC, session grants, and Station integration for downstream
-systems such as Soland. It is meant to stay lightweight in terms of resource
+systems such as Coland. It is meant to stay lightweight in terms of resource
 usage and easily scalable horizontally.
 
 ## Scope and goals

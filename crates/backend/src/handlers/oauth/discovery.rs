@@ -71,7 +71,7 @@ pub async fn get(depot: &Depot) -> Json<serde_json::Value> {
         .cloned()
         .unwrap_or_default();
     // During cold start the owning Station identity is deliberately absent.
-    // Serve an uncached standard OIDC document so Soland can discover JWKS;
+    // Serve an uncached standard OIDC document so Coland can discover JWKS;
     // once trust is ready, cache the complete document including Arkret's
     // Station-scoped admin audience.
     if discovery_admin_audience(&arkret_config).is_none() {

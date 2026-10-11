@@ -21,15 +21,15 @@ use crate::AppError;
 // paused agents — existing tokens must         fail closed within the
 // configured window even before reducer         convergence catches up.
 //
-// Full reducer/persistence wiring is in soland (the Station is the
+// Full reducer/persistence wiring is in coland (the Station is the
 // persistence authority). coauth owns the gate endpoints and the wire-level
 // error matrix for `agent_key_pair` / the `agent_key_proof` session-grant
-// branch, then relies on soland projection state for pairing lifetime, agent
+// branch, then relies on coland projection state for pairing lifetime, agent
 // lifecycle, accepted runtime keys, and accountability-grant coverage.
 //
 // Session revocation strategy: agent runtime grants are stateless, short-lived
 // signed JWTs rather than durable browser-session rows. coauth caps the grant
-// TTL to 15 minutes; soland rechecks lifecycle/revocation state at the resource
+// TTL to 15 minutes; coland rechecks lifecycle/revocation state at the resource
 // edge during the freshness window, and normal projection gates reject after
 // convergence. Do not introduce a second coauth-local revocation table without
 // changing this strategy explicitly.
@@ -266,7 +266,7 @@ pub fn enforce_verification_method_binding(
 /// fail-closed reasoning as AUTH-1).
 ///
 /// `is_paused` / `is_deactivated` come from the reducer-stamped agent
-/// state projection in soland; coauth queries them over the principal
+/// state projection in coland; coauth queries them over the principal
 /// server binding before issuing the grant.
 pub fn enforce_agent_lifecycle_gate(
     is_paused: bool,

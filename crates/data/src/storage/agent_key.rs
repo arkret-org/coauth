@@ -38,18 +38,18 @@ pub struct NewAgentKeyAuthorization {
     pub request_canonical_digest: String,
     /// `sha256:<hex>` digest of the canonical fan-out payload.
     pub raw_payload_digest: String,
-    /// Initial soland fan-out state.
-    pub soland_fanout_state: AccountabilityGrantFanoutState,
-    /// Idempotency key used for soland fan-out and retry jobs.
-    pub soland_fanout_idempotency_key: String,
-    /// Payload queued for soland fan-out.
-    pub soland_fanout_payload: serde_json::Value,
+    /// Initial coland fan-out state.
+    pub coland_fanout_state: AccountabilityGrantFanoutState,
+    /// Idempotency key used for coland fan-out and retry jobs.
+    pub coland_fanout_idempotency_key: String,
+    /// Payload queued for coland fan-out.
+    pub coland_fanout_payload: serde_json::Value,
     /// Initial fan-out attempt count.
-    pub soland_fanout_attempt: i32,
+    pub coland_fanout_attempt: i32,
     /// Next retry timestamp, if a retry is scheduled.
-    pub soland_fanout_next_retry_at: Option<DateTime<Utc>>,
+    pub coland_fanout_next_retry_at: Option<DateTime<Utc>>,
     /// Terminal failure reason, if fan-out entered dead-letter state.
-    pub soland_fanout_dead_letter_reason: Option<String>,
+    pub coland_fanout_dead_letter_reason: Option<String>,
 }
 
 /// Parameters used to record a one-time consumption of an agent-key-proof
@@ -130,7 +130,7 @@ repository_impl! {
             reason: &str,
         ) -> Result<usize, Self::Error>;
 
-        /// Mark one authorization as delivered to Soland and atomically revoke
+        /// Mark one authorization as delivered to Coland and atomically revoke
         /// only the authorization Event ids observed in its signed supersedes set.
         async fn mark_fanout_delivered_and_revoke(
             &mut self,

@@ -23,7 +23,7 @@ the preferred scope for stable admin tooling.
 Arkret admin capability family. `coauth` accepts the wildcard family and
 `urn:arkret:admin:<capability>` prefixes as administrative access.
 
-Use this family for Arkret-native admin integrations such as `sodmin` or
+Use this family for Arkret-native admin integrations such as `codmin` or
 internal automation that wants a Arkret namespace instead of the coauth one.
 
 ## `urn:arkret:client:*`

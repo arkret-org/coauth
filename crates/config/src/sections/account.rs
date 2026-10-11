@@ -52,7 +52,7 @@ pub struct AccountConfig {
 
     /// Allow registration flows to bypass delivery of verification email in
     /// dev/test deployments (default: `false`). Verification/recovery policy
-    /// remains in coauth; soland only provides DID/webvh primitives.
+    /// remains in coauth; coland only provides DID/webvh primitives.
     #[serde(default = "disabled_default", skip_serializing_if = "matches_disabled")]
     pub registration_email_delivery_bypass_allowed: bool,
 

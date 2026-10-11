@@ -126,7 +126,7 @@ pub async fn post_agent_key_pair(
             return Err(AppError::conflict("witness_disagreement").into());
         }
         let stored_body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
-            serde_json::from_value(existing.soland_fanout_payload.clone()).map_err(|error| {
+            serde_json::from_value(existing.coland_fanout_payload.clone()).map_err(|error| {
                 AppError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     format!("stored Agent key-pair request is invalid: {error}"),
@@ -196,7 +196,7 @@ pub async fn post_agent_key_pair(
         let outcome = commit_and_mark_agent_key_authorization(
             depot,
             &existing.authorized_event_id,
-            &existing.soland_fanout_idempotency_key,
+            &existing.coland_fanout_idempotency_key,
             &existing.raw_payload_digest,
             &authoritative_server.name,
             stored_body,
@@ -373,8 +373,8 @@ pub async fn post_agent_key_pair(
     // an operation-specific precondition of runtime-key pairing. In
     // particular, Coauth's local grant table is not the protocol truth source
     // for the controller-authored `ak.identity.accountability_grant` already
-    // accepted by Soland. Requiring a duplicate row here makes every normal
-    // Soland-orchestrated pairing fail with `accountability_grant_missing`.
+    // accepted by Coland. Requiring a duplicate row here makes every normal
+    // Coland-orchestrated pairing fail with `accountability_grant_missing`.
     // Agent session issuance still performs its required accountability gate.
 
     let mut rng = make_rng();
@@ -439,12 +439,12 @@ pub async fn post_agent_key_pair(
                     .expect("validated pairing request approval digest")
                     .to_string(),
                 raw_payload_digest: raw_payload_digest.clone(),
-                soland_fanout_state: AccountabilityGrantFanoutState::Queued,
-                soland_fanout_idempotency_key: idempotency_key.clone(),
-                soland_fanout_payload: fanout_payload.clone(),
-                soland_fanout_attempt: 0,
-                soland_fanout_next_retry_at: Some(issued_at),
-                soland_fanout_dead_letter_reason: None,
+                coland_fanout_state: AccountabilityGrantFanoutState::Queued,
+                coland_fanout_idempotency_key: idempotency_key.clone(),
+                coland_fanout_payload: fanout_payload.clone(),
+                coland_fanout_attempt: 0,
+                coland_fanout_next_retry_at: Some(issued_at),
+                coland_fanout_dead_letter_reason: None,
             },
         )
         .await?;
@@ -948,10 +948,10 @@ async fn resolve_controller_signing_keys(
             )
         })?;
     let mut directory_url = station.endpoint.clone();
-    directory_url.set_path("/_soland/gate/account/device-signing-keys/query");
+    directory_url.set_path("/_coland/gate/account/device-signing-keys/query");
     directory_url.set_query(None);
     directory_url.set_fragment(None);
-    let query = soland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryQueryRequestBody {
+    let query = coland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryQueryRequestBody {
         principal_id: controller_account_id.principal_id.clone(),
         device_ids: method_devices.values().cloned().collect(),
     };
@@ -972,7 +972,7 @@ async fn resolve_controller_signing_keys(
             "controller Station device signing-key directory rejected the request",
         ));
     }
-    let directory: soland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryOutcome =
+    let directory: coland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryOutcome =
         response
             .json()
             .await

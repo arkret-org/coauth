@@ -3,7 +3,7 @@
 name: Gitea Integration e2e
 
 # bring up the docker-compose integration stack
-# (Postgres + coauth + soland + sodmin) and run the smoke + e2e harness
+# (Postgres + coauth + coland + codmin) and run the smoke + e2e harness
 # scripts against it. Captures container logs as artefacts on failure so
 # a red CI surface is debuggable without re-spinning the stack locally.
 #
@@ -12,7 +12,7 @@ name: Gitea Integration e2e
 #   - integration-e2e.sh       : 3 protocol-level scenarios (S1/S2/S3)
 #
 # The smoke + e2e scripts are 404-tolerant for surfaces that aren't
-# wired in the published soland/sodmin tags, so this job goes green
+# wired in the published coland/codmin tags, so this job goes green
 # when the wire is reachable even if the higher-level scenarios skip.
 
 on:
@@ -54,7 +54,7 @@ jobs:
       - name: Bring up integration stack
         env:
           # Build coauth from the local Dockerfile (compose handles this
-          # via the build: clause). soland / sodmin are profile-gated
+          # via the build: clause). coland / codmin are profile-gated
           # (--profile downstream) and not pulled by default — the e2e
           # harness is 404-tolerant for those surfaces and skips the
           # corresponding scenarios when they aren't reachable.
@@ -71,7 +71,7 @@ jobs:
         if: ${{ failure() }}
         run: |
           mkdir -p target/integration-logs
-          # The default profile only runs postgres + coauth; soland/sodmin
+          # The default profile only runs postgres + coauth; coland/codmin
           # only exist under --profile downstream, but we collect them
           # unconditionally and tolerate misses so the same job is useful
           # for both profile sets.
@@ -80,9 +80,9 @@ jobs:
           docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
             logs --no-color coauth   > target/integration-logs/coauth.log   2>&1 || true
           docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
-            logs --no-color soland   > target/integration-logs/soland.log   2>&1 || true
+            logs --no-color coland   > target/integration-logs/coland.log   2>&1 || true
           docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
-            logs --no-color sodmin   > target/integration-logs/sodmin.log   2>&1 || true
+            logs --no-color codmin   > target/integration-logs/codmin.log   2>&1 || true
           docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
             ps > target/integration-logs/ps.txt 2>&1 || true
           # Also dump the generated test config so we can see what coauth booted with.

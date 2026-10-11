@@ -28,7 +28,7 @@ spec:
           port: {{ .Values.service.port }}
         - protocol: TCP
           port: {{ .Values.service.metricsPort }}
-  {{- if or $egress.postgresCidrs $egress.oidcProviderCidrs $egress.solandCidrs $egress.dns.enabled }}
+  {{- if or $egress.postgresCidrs $egress.oidcProviderCidrs $egress.colandCidrs $egress.dns.enabled }}
   egress:
     {{- if $egress.postgresCidrs }}
     - to:
@@ -50,15 +50,15 @@ spec:
         - protocol: TCP
           port: {{ $egress.oidcProviderPort }}
     {{- end }}
-    {{- if $egress.solandCidrs }}
+    {{- if $egress.colandCidrs }}
     - to:
-        {{- range $egress.solandCidrs }}
+        {{- range $egress.colandCidrs }}
         - ipBlock:
             cidr: {{ . | quote }}
         {{- end }}
       ports:
         - protocol: TCP
-          port: {{ $egress.solandPort }}
+          port: {{ $egress.colandPort }}
     {{- end }}
     {{- if $egress.dns.enabled }}
     - to:

@@ -5,7 +5,7 @@
 //! - `GET /_coauth/account/integration/describe` — `IntegrationManifest` from
 //!   `coauth/crates/backend/src/handlers/account/auth/oidc_bridge.rs`.
 //!
-//! These types contain deployment-private integration data consumed by sodmin.
+//! These types contain deployment-private integration data consumed by codmin.
 //! `service_kind` classifies that private manifest, not an Arkret service role;
 //! this response is never a public ServiceDescribe or federation discovery target.
 //! Historical rollout metadata, TODO text, and example payloads belong
@@ -98,7 +98,7 @@ mod tests {
             "describe_path": "/_coauth/gate/account/integration/describe",
             "dependencies": [
                 {
-                    "service": "soland",
+                    "service": "coland",
                     "purpose": "station_session_exchange",
                     "required_contract": "arkret.rest.principal_bridge.v1",
                     "discovery_path": "/_coauth/gate/account/auth/bridge/describe",
@@ -118,7 +118,7 @@ mod tests {
         assert_eq!(m.service, "coauth");
         assert_eq!(m.service_kind, "account_authority");
         assert_eq!(m.dependencies.len(), 1);
-        assert_eq!(m.dependencies[0].service, "soland");
+        assert_eq!(m.dependencies[0].service, "coland");
         assert_eq!(m.surfaces.len(), 1);
         assert_eq!(m.surfaces[0].name, "auth_bridge");
     }
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn dependency_round_trip() {
         let d = IntegrationManifestDependency {
-            service: "soland".into(),
+            service: "coland".into(),
             purpose: "session-exchange".into(),
             required_contract: "arkret.rest.principal_bridge.v1".into(),
             discovery_path: "/_coauth/gate/account/auth/bridge/describe".into(),

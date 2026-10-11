@@ -86,7 +86,7 @@ jobs:
 
       - name: Bring up integration stack (Postgres + coauth)
         env:
-          # Build the coauth image locally inside compose; soland/sodmin
+          # Build the coauth image locally inside compose; coland/codmin
           # are profile-gated and not pulled here. Only coauth is
           # exercised by the OIDC harness.
           COAUTH_IMAGE: coauth:ci

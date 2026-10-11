@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 //! Cross-service helper that consults the holder's consent result on the
-//! `server_name` (`soland`) before coauth admits or relays an invite.
+//! `server_name` (`coland`) before coauth admits or relays an invite.
 //!
 //! Consent is holder-private state serialized by the holder's current
 //! governance Station. The reader-facing surface is the typed current result
@@ -41,14 +41,14 @@ pub enum ConsentLookup {
     /// grant has been revoked or none was ever recorded.
     Known(ConsentGrantState),
 
-    /// soland is not configured, the endpoint is unreachable, or the
+    /// coland is not configured, the endpoint is unreachable, or the
     /// response could not be parsed. Callers must apply their own fail-safe
     /// policy (default-deny for `consent_required` profiles, quarantine
     /// otherwise).
     Unknown { reason: &'static str },
 }
 
-/// Consent read result when soland answers for the requested resource key.
+/// Consent read result when coland answers for the requested resource key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConsentGrantState {
     pub consent_id: String,
@@ -58,7 +58,7 @@ pub struct ConsentGrantState {
 
 /// Look up the holder's consent result on their `server_name`.
 ///
-/// * `station_url` — base URL of the holder's soland deployment. `None` means soland is not wired
+/// * `station_url` — base URL of the holder's coland deployment. `None` means coland is not wired
 ///   into this coauth instance and the gate degrades to `ConsentLookup::Unknown`.
 /// * `holder_principal_id` — the target holder principal used only for local diagnostics. It is not
 ///   transmitted; the destination derives the wire holder from its authenticated session.
@@ -190,7 +190,7 @@ async fn query_consent_result_scope(
         .append_pair("consent_scope", scope.as_str());
 
     let response = match outbound_http::send_with_policy(
-        outbound_http::soland_policy("consent_result_read")
+        outbound_http::coland_policy("consent_result_read")
             .with_timeout(std::time::Duration::from_secs(5)),
         || {
             http_client.get(url.clone()).header(
@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_granted_when_soland_returns_an_active_result() {
+    async fn consent_granted_when_coland_returns_an_active_result() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();
@@ -507,7 +507,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn consent_unknown_when_soland_returns_500() {
+    async fn consent_unknown_when_coland_returns_500() {
         setup();
         let server = MockServer::start().await;
         let client = reqwest::Client::new();

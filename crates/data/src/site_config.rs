@@ -70,7 +70,7 @@ pub struct SiteConfig {
 
     /// coauth extension: whether dev/test registration clients may skip
     /// outbound verification email delivery. This keeps delivery policy and
-    /// recovery/contact business logic in coauth instead of soland.
+    /// recovery/contact business logic in coauth instead of coland.
     pub registration_email_delivery_bypass_allowed: bool,
 
     /// coauth extension: whether registration tokens are required for password

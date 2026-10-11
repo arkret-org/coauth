@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Bring up the coauth integration stack (Postgres + coauth and optionally
-# soland + sodmin via profiles).
+# coland + codmin via profiles).
 #
 # Usage:
 #   ./scripts/integration-up.sh                      # core stack (postgres + coauth)
-#   ./scripts/integration-up.sh --with-downstream    # + soland + sodmin (need :dev tags)
+#   ./scripts/integration-up.sh --with-downstream    # + coland + codmin (need :dev tags)
 #   ./scripts/integration-up.sh --down               # tear down + remove volumes
 #
 # Image overrides (env vars consumed by docker-compose.integration.yaml):
-#   COAUTH_IMAGE  SOLAND_IMAGE  SODMIN_IMAGE
+#   COAUTH_IMAGE  COLAND_IMAGE  CODMIN_IMAGE
 #
 # The compose file lives at the repo root; this script wraps the common
 # flag combinations so the smoke harness has a single entry point.
@@ -209,8 +209,8 @@ COAUTH_IMAGE="${COAUTH_IMAGE_REF}" \
 echo "[integration-up] stack is up. Endpoints:"
 echo "  coauth   http://127.0.0.1:57080/health"
 if [[ " $* " == *" --with-downstream "* ]]; then
-    echo "  soland   http://127.0.0.1:58008/health"
-    echo "  sodmin   http://127.0.0.1:59090/health"
+    echo "  coland   http://127.0.0.1:58008/health"
+    echo "  codmin   http://127.0.0.1:59090/health"
 fi
 echo
 echo "Run ./scripts/integration-smoke.sh to verify each /health returns 200."

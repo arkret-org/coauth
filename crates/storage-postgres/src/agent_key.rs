@@ -88,18 +88,18 @@ mod tests {
             .unwrap(),
             agent_key_scope: r#"{"actions":["ak.self.committed_event.stream.subscribe.v1","ak.self.committed_event.read.scan.v1","ak.self.events.command.submit.v1"],"resources":[]}"#
                 .to_owned(),
-            audience: vec!["did:web:soland.test".to_owned()],
+            audience: vec!["did:web:coland.test".to_owned()],
             issued_at: clock.now(),
             expires_at: None,
             pairing_request_id: format!("pair-{event_suffix}"),
             request_canonical_digest: format!("sha256:{}", "1".repeat(64)),
             raw_payload_digest: format!("sha256:{}", "2".repeat(64)),
-            soland_fanout_state: AccountabilityGrantFanoutState::Queued,
-            soland_fanout_idempotency_key: format!("ak:event:{event_suffix}"),
-            soland_fanout_payload: serde_json::json!({}),
-            soland_fanout_attempt: 0,
-            soland_fanout_next_retry_at: Some(clock.now()),
-            soland_fanout_dead_letter_reason: None,
+            coland_fanout_state: AccountabilityGrantFanoutState::Queued,
+            coland_fanout_idempotency_key: format!("ak:event:{event_suffix}"),
+            coland_fanout_payload: serde_json::json!({}),
+            coland_fanout_attempt: 0,
+            coland_fanout_next_retry_at: Some(clock.now()),
+            coland_fanout_dead_letter_reason: None,
         }
     }
 
@@ -315,12 +315,12 @@ struct AgentKeyAuthorizationRow {
     quarantined_at: Option<DateTime<Utc>>,
     quarantine_reason: Option<String>,
     raw_payload_digest: String,
-    soland_fanout_state: String,
-    soland_fanout_idempotency_key: String,
-    soland_fanout_payload: serde_json::Value,
-    soland_fanout_attempt: i32,
-    soland_fanout_next_retry_at: Option<DateTime<Utc>>,
-    soland_fanout_dead_letter_reason: Option<String>,
+    coland_fanout_state: String,
+    coland_fanout_idempotency_key: String,
+    coland_fanout_payload: serde_json::Value,
+    coland_fanout_attempt: i32,
+    coland_fanout_next_retry_at: Option<DateTime<Utc>>,
+    coland_fanout_dead_letter_reason: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -330,9 +330,9 @@ impl TryFrom<AgentKeyAuthorizationRow> for AgentKeyAuthorization {
 
     fn try_from(value: AgentKeyAuthorizationRow) -> Result<Self, Self::Error> {
         let id = Ulid::from(value.id);
-        let soland_fanout_state = value.soland_fanout_state.parse().map_err(|e| {
+        let coland_fanout_state = value.coland_fanout_state.parse().map_err(|e| {
             DatabaseInconsistencyError::on("agent_key_authorizations")
-                .column("soland_fanout_state")
+                .column("coland_fanout_state")
                 .row(id)
                 .source(e)
         })?;
@@ -356,12 +356,12 @@ impl TryFrom<AgentKeyAuthorizationRow> for AgentKeyAuthorization {
             quarantined_at: value.quarantined_at,
             quarantine_reason: value.quarantine_reason,
             raw_payload_digest: value.raw_payload_digest,
-            soland_fanout_state,
-            soland_fanout_idempotency_key: value.soland_fanout_idempotency_key,
-            soland_fanout_payload: value.soland_fanout_payload,
-            soland_fanout_attempt: value.soland_fanout_attempt,
-            soland_fanout_next_retry_at: value.soland_fanout_next_retry_at,
-            soland_fanout_dead_letter_reason: value.soland_fanout_dead_letter_reason,
+            coland_fanout_state,
+            coland_fanout_idempotency_key: value.coland_fanout_idempotency_key,
+            coland_fanout_payload: value.coland_fanout_payload,
+            coland_fanout_attempt: value.coland_fanout_attempt,
+            coland_fanout_next_retry_at: value.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: value.coland_fanout_dead_letter_reason,
             created_at: value.created_at,
             updated_at: value.updated_at,
         })
@@ -385,12 +385,12 @@ struct InsertableAgentKeyAuthorization {
     pairing_request_id: String,
     request_canonical_digest: String,
     raw_payload_digest: String,
-    soland_fanout_state: String,
-    soland_fanout_idempotency_key: String,
-    soland_fanout_payload: serde_json::Value,
-    soland_fanout_attempt: i32,
-    soland_fanout_next_retry_at: Option<DateTime<Utc>>,
-    soland_fanout_dead_letter_reason: Option<String>,
+    coland_fanout_state: String,
+    coland_fanout_idempotency_key: String,
+    coland_fanout_payload: serde_json::Value,
+    coland_fanout_attempt: i32,
+    coland_fanout_next_retry_at: Option<DateTime<Utc>>,
+    coland_fanout_dead_letter_reason: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -456,12 +456,12 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             pairing_request_id: params.pairing_request_id,
             request_canonical_digest: params.request_canonical_digest,
             raw_payload_digest: params.raw_payload_digest,
-            soland_fanout_state: params.soland_fanout_state.to_string(),
-            soland_fanout_idempotency_key: params.soland_fanout_idempotency_key,
-            soland_fanout_payload: params.soland_fanout_payload,
-            soland_fanout_attempt: params.soland_fanout_attempt,
-            soland_fanout_next_retry_at: params.soland_fanout_next_retry_at,
-            soland_fanout_dead_letter_reason: params.soland_fanout_dead_letter_reason,
+            coland_fanout_state: params.coland_fanout_state.to_string(),
+            coland_fanout_idempotency_key: params.coland_fanout_idempotency_key,
+            coland_fanout_payload: params.coland_fanout_payload,
+            coland_fanout_attempt: params.coland_fanout_attempt,
+            coland_fanout_next_retry_at: params.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: params.coland_fanout_dead_letter_reason,
             created_at: now,
             updated_at: now,
         };
@@ -490,12 +490,12 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             quarantined_at: None,
             quarantine_reason: None,
             raw_payload_digest: row.raw_payload_digest,
-            soland_fanout_state: params.soland_fanout_state,
-            soland_fanout_idempotency_key: row.soland_fanout_idempotency_key,
-            soland_fanout_payload: row.soland_fanout_payload,
-            soland_fanout_attempt: row.soland_fanout_attempt,
-            soland_fanout_next_retry_at: row.soland_fanout_next_retry_at,
-            soland_fanout_dead_letter_reason: row.soland_fanout_dead_letter_reason,
+            coland_fanout_state: params.coland_fanout_state,
+            coland_fanout_idempotency_key: row.coland_fanout_idempotency_key,
+            coland_fanout_payload: row.coland_fanout_payload,
+            coland_fanout_attempt: row.coland_fanout_attempt,
+            coland_fanout_next_retry_at: row.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: row.coland_fanout_dead_letter_reason,
             created_at: now,
             updated_at: now,
         })
@@ -563,10 +563,10 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
         .set((
             agent_key_authorizations::quarantined_at.eq(Some(now)),
             agent_key_authorizations::quarantine_reason.eq(Some("event_hash_collision")),
-            agent_key_authorizations::soland_fanout_state
+            agent_key_authorizations::coland_fanout_state
                 .eq(AccountabilityGrantFanoutState::DeadLettered.as_str()),
-            agent_key_authorizations::soland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
-            agent_key_authorizations::soland_fanout_dead_letter_reason
+            agent_key_authorizations::coland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
+            agent_key_authorizations::coland_fanout_dead_letter_reason
                 .eq(Some("event_hash_collision".to_owned())),
             agent_key_authorizations::updated_at.eq(now),
         ))
@@ -637,10 +637,10 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
                 .filter(agent_key_authorizations::quarantined_at.is_null()),
         )
         .set((
-            agent_key_authorizations::soland_fanout_state
+            agent_key_authorizations::coland_fanout_state
                 .eq(AccountabilityGrantFanoutState::Delivered.as_str()),
-            agent_key_authorizations::soland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
-            agent_key_authorizations::soland_fanout_dead_letter_reason.eq(Option::<String>::None),
+            agent_key_authorizations::coland_fanout_next_retry_at.eq(Option::<DateTime<Utc>>::None),
+            agent_key_authorizations::coland_fanout_dead_letter_reason.eq(Option::<String>::None),
             agent_key_authorizations::updated_at.eq(now),
         ))
         .execute(self.conn)

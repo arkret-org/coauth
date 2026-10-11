@@ -10,7 +10,7 @@ const CONTROLLER: &str = "ak:did_core:web:controller.example";
 const CONTROLLER_FULL: &str = "did:web:controller.example";
 const CONTROLLER_VM: &str = "did:web:controller.example#key-1";
 const VM: &str = "did:web:agent.example#runtime-key-1";
-const AUDIENCE: &str = "ak:did_core:web:soland.local";
+const AUDIENCE: &str = "ak:did_core:web:coland.local";
 const PAIRING_REQUEST_ID: &str = "agent_pairing_request:01999999-0000-7000-8000-00000000feed";
 /// Seed of the Agent runtime signing key these fixtures pair.
 ///

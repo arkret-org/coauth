@@ -30,31 +30,31 @@ pub struct AccountabilityGrant {
     pub revoked_reason: Option<String>,
     /// `sha256:<hex>` digest of the canonical fan-out payload.
     pub raw_payload_digest: String,
-    /// Current soland fan-out state.
-    pub soland_fanout_state: AccountabilityGrantFanoutState,
-    /// Idempotency key used for soland fan-out and retry jobs.
-    pub soland_fanout_idempotency_key: String,
-    /// Payload queued for soland fan-out.
-    pub soland_fanout_payload: serde_json::Value,
+    /// Current coland fan-out state.
+    pub coland_fanout_state: AccountabilityGrantFanoutState,
+    /// Idempotency key used for coland fan-out and retry jobs.
+    pub coland_fanout_idempotency_key: String,
+    /// Payload queued for coland fan-out.
+    pub coland_fanout_payload: serde_json::Value,
     /// Current fan-out attempt count.
-    pub soland_fanout_attempt: i32,
+    pub coland_fanout_attempt: i32,
     /// Next retry timestamp, if a retry is scheduled.
-    pub soland_fanout_next_retry_at: Option<DateTime<Utc>>,
+    pub coland_fanout_next_retry_at: Option<DateTime<Utc>>,
     /// Terminal failure reason, if fan-out entered dead-letter state.
-    pub soland_fanout_dead_letter_reason: Option<String>,
+    pub coland_fanout_dead_letter_reason: Option<String>,
     /// Row creation timestamp.
     pub created_at: DateTime<Utc>,
     /// Row update timestamp.
     pub updated_at: DateTime<Utc>,
 }
 
-/// Durable soland fan-out state for an accountability grant.
+/// Durable coland fan-out state for an accountability grant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountabilityGrantFanoutState {
     /// Fan-out payload has been queued for retryable delivery.
     Queued,
-    /// Fan-out has been accepted by soland.
+    /// Fan-out has been accepted by coland.
     Delivered,
     /// Fan-out exhausted retries and needs operator attention.
     DeadLettered,

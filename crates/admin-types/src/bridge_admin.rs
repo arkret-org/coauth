@@ -7,7 +7,7 @@
 //!   `AdminBridgeRiskAction*Example` request examples.
 //!
 //! The request examples are typed so the backend OpenAPI surface and
-//! sodmin consume the same product contract.
+//! codmin consume the same product contract.
 
 use serde::{Deserialize, Serialize};
 

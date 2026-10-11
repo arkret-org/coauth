@@ -11,7 +11,7 @@ use crate::handlers::arkret::ArkretRouteError;
 use crate::handlers::common::DepotExt as _;
 use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
 
-const PRIVATE_CURRENT_DEVICE_PATH: &str = "/_soland/account-authority/current-device/check";
+const PRIVATE_CURRENT_DEVICE_PATH: &str = "/_coland/account-authority/current-device/check";
 
 #[derive(serde::Serialize)]
 #[serde(deny_unknown_fields)]

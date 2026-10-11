@@ -14,10 +14,10 @@ export COAUTH_ALLOW_INSECURE_DEV_EMAIL_BYPASS := "1"
 # Dev-only SSRF egress allowlist for the loopback-fronted local hosts.
 # COA-SEC-01 made outbound private/loopback egress deny-by-default in ALL
 # builds (debug no longer auto-allows via `cfg!(debug_assertions)`). Local dev
-# fronts coauth and soland behind Caddy at `auth.local.host` / `local.host`,
+# fronts coauth and coland behind Caddy at `auth.local.host` / `local.host`,
 # both resolving to 127.0.0.1. The OIDC session-grant exchange has coauth fetch
 # its own issuer discovery doc (`https://auth.local.host/.well-known/...`) and
-# call soland (`https://local.host/...`); without this allowlist those self
+# call coland (`https://local.host/...`); without this allowlist those self
 # calls are blocked at the resolver and the exchange fails closed with a 409
 # `invalid_discovery_binding`. Scoped to the two dev hosts so SSRF protection
 # stays on for every other target. NEVER set in production.
@@ -198,7 +198,7 @@ config-generate *ARGS:
 #
 # NOT a bare `cargo clean`. The workspace-level `../.cargo/config.toml` points
 # `build.target-dir` at one directory shared by every sibling repository, and
-# `cargo clean` obeys it: it would delete inkson's, soland's and the SDK's
+# `cargo clean` obeys it: it would delete inkson's, coland's and the SDK's
 # artifacts too. `-p` restricts the purge to the crates defined here. Add new
 # crates to this list; a stale name fails loudly with `did not match any
 # packages`.

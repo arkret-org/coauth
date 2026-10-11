@@ -13,7 +13,7 @@
 //! per-account inventory endpoint emits a free-form `state` string the
 //! UI displays as-is. Sharing the inventory shape is the priority
 //! because that's what the account-detail page consumes; the issuance
-//! path is sodmin-server-only and can lift in a later round.
+//! path is codmin-server-only and can lift in a later round.
 //!
 //! The shared shape carries every field the backend emits, with
 //! chrono-typed timestamps so a malformed or missing datetime fails to

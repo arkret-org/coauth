@@ -584,7 +584,7 @@ mod tests {
     fn station_config_for(endpoint: Url) -> ArkretConfig {
         ArkretConfig {
             stations: vec![StationConfig {
-                name: "soland".to_owned(),
+                name: "coland".to_owned(),
                 endpoint: endpoint.clone(),
                 internal_authority_shared_secret: None,
                 embedded_webvh_registration_bearer: None,

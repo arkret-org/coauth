@@ -102,11 +102,11 @@ arkret:
     # The Station identity is verified from this exact endpoint and durably
     # bound on first startup. The per-edge secret and trust domains remain
     # explicit deployment facts.
-  - name: soland-example
+  - name: coland-example
     endpoint: https://local.host/
-    internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
-    embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
-    trust_domain: ak:trust_domain:soland.example
+    internal_authority_shared_secret_file: /run/secrets/coland_internal_authority_shared_secret
+    embedded_webvh_registration_bearer: ${COLAND_WEBVH_REGISTRATION_BEARER}
+    trust_domain: ak:trust_domain:coland.example
   # Standalone identity Providers use the same standard operations. Configure
   # this instead of a registration-capable Station, or set
   # identity_provider when more than one candidate exists.

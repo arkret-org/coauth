@@ -1,6 +1,6 @@
 # Admin API
 
-`coauth` provides a REST-like API for administrators and `sodmin` to manage
+`coauth` provides a REST-like API for administrators and `codmin` to manage
 accounts, sessions, devices, claims, OAuth clients, notification channels,
 connectors, and policy data. The API is only available to administrators and
 trusted automation.
@@ -43,7 +43,7 @@ When the admin API resource is enabled, `coauth` serves the same generated
 specification at these runtime paths:
 
 - `GET /_coauth/admin/openapi.yaml` for the Arkret-native admin API contract.
-- `GET /.well-known/arkret/openapi.yaml` for discovery by `sodmin` and
+- `GET /.well-known/arkret/openapi.yaml` for discovery by `codmin` and
   service automation.
 - `GET /api-doc/admin/openapi.json` for Swagger tooling.
 - `GET /admin-swagger-ui/` for the hosted Swagger UI.
@@ -51,7 +51,7 @@ specification at these runtime paths:
 ## Admin bridge discovery examples
 
 `GET /_coauth/admin/bridge/describe` publishes the typed admin bridge contract
-used by `sodmin` and by local automation. The response shape and request body
+used by `codmin` and by local automation. The response shape and request body
 examples are generated from `coauth-admin-types::bridge_admin`, so the OpenAPI
 schema, backend response, and Rust consumers share one source of truth.
 

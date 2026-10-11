@@ -74,8 +74,8 @@ networkPolicy:
     postgresPort: 5432
     oidcProviderCidrs: []
     oidcProviderPort: 443
-    solandCidrs: []
-    solandPort: 443
+    colandCidrs: []
+    colandPort: 443
     dns:
       enabled: true
       namespaceSelector:

@@ -1910,7 +1910,7 @@ dependencies = [
  "sha2 0.10.9",
  "signature 2.2.0",
  "socket2",
- "soland-contracts",
+ "coland-contracts",
  "subtle",
  "syn 3.0.3",
  "thiserror 2.0.20",
@@ -10077,7 +10077,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "soland-contracts"
+name = "coland-contracts"
 version = "0.3.0"
 dependencies = [
  "arkret-canonical",

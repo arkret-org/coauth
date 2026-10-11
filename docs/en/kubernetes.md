@@ -193,7 +193,7 @@ inject the connection URL through `database.urlSecret`.
 
 Production operators should review `podDisruptionBudget`, `autoscaling`, and
 `networkPolicy` values before rollout. When `networkPolicy.enabled=true`, egress
-is limited to DNS plus the relevant Postgres, upstream OIDC, and soland CIDR
+is limited to DNS plus the relevant Postgres, upstream OIDC, and coland CIDR
 blocks listed in values.
 
 ## Debugging a distroless container

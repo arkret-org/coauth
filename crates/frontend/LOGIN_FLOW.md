@@ -1,7 +1,7 @@
 # Login Flow Cross-Check
 
-This note captures the coauth-side login flow that `sodmin` should align with.
-No `sodmin` files are modified by this slice; the shared admin bridge boundary
+This note captures the coauth-side login flow that `codmin` should align with.
+No `codmin` files are modified by this slice; the shared admin bridge boundary
 continues to live in `coauth-admin-types`.
 
 ## SPA Flow
@@ -19,9 +19,9 @@ upstream providers from the same account-auth service layer. The SPA uses the
 JSON API routes under `/_coauth/gate/account/auth/*`; the server-rendered fallback posts form
 data to `/login` and then calls the same password-login service path.
 
-## Sodmin Boundary
+## Codmin Boundary
 
-`sodmin` should not post login credentials through the admin bridge. The
+`codmin` should not post login credentials through the admin bridge. The
 admin bridge is for operator/admin workflows and is described by
 `GET /_coauth/admin/bridge/describe`. Interactive user login should target the
 account-auth endpoints above or follow the provider `authorize_url` returned by

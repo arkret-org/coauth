@@ -4,7 +4,7 @@
 
 ## Overview
 
-`coauth` is the organization-deploy auth / DID-binding service that complements `soland` (Station). This guide covers the supported deployment paths.
+`coauth` is the organization-deploy auth / DID-binding service that complements `coland` (Station). This guide covers the supported deployment paths.
 
 ## Prerequisites
 
@@ -37,9 +37,9 @@ secrets:
 arkret:
   trust_domain: ak:trust_domain:acme.example
   stations:
-  - name: soland
-    endpoint: https://soland.acme.example/
-    embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
+  - name: coland
+    endpoint: https://coland.acme.example/
+    embedded_webvh_registration_bearer: ${COLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 The KeyStore master key, OIDC client secrets, and DB password MUST come from
@@ -103,8 +103,8 @@ Defaults:
 External Postgres is REQUIRED — chart does not bundle a database.
 
 NetworkPolicy application egress is default-deny when enabled without explicit
-CIDRs. Add Postgres, upstream OIDC, and soland CIDR blocks through
-`networkPolicy.egress.{postgresCidrs,oidcProviderCidrs,solandCidrs}`; DNS egress
+CIDRs. Add Postgres, upstream OIDC, and coland CIDR blocks through
+`networkPolicy.egress.{postgresCidrs,oidcProviderCidrs,colandCidrs}`; DNS egress
 is enabled for the cluster DNS pods by default.
 
 ## Operational hooks

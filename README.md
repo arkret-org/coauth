@@ -23,7 +23,7 @@ adapt the package list to coauth's workspace.
 > [`.github/workflows/ci.yaml`](.github/workflows/ci.yaml)) fails the build
 > if anything that looks like a credential lands in a tracked path.
 
-Local development follows Soland's repository layout: all file-backed runtime
+Local development follows Coland's repository layout: all file-backed runtime
 state lives below the gitignored `.local/` directory. The encrypted KeyStore
 and its master key are separate files; neither is source configuration.
 
@@ -56,14 +56,14 @@ The deployment-level `trust_domain` config knob is
 
 ```yaml
 arkret:
-  trust_domain: ak:trust_domain:soland-prod.eu
+  trust_domain: ak:trust_domain:coland-prod.eu
 ```
 
 The value MUST match `ak:trust_domain:<scope>` where `<scope>` is
 `[a-z0-9._:-]{1,128}` and starts with `[a-z0-9]`. coauth validates it
 on load via `ArkretConfig::validate_trust_domain` (mirrors the SDK's
 `TrustDomainId` acceptance rules) and injects it into the Realm
-policy + `/_arkret/describe` document via soland's config API.
+policy + `/_arkret/describe` document via coland's config API.
 
 The `trust_domain` value binds peer and recovery authorization
 transcripts to this deployment. Rotate it only with coordinated expiry
@@ -92,9 +92,9 @@ work that affects wire shape is tracked in [`../arkret-spec/spec/v1/`](../arkret
 ## Integration model
 
 - `inkson` acts as a public/native Arkret client and consumes OIDC tokens.
-- Stations such as `soland` consume session grants and account
+- Stations such as `coland` consume session grants and account
   metadata from `coauth`.
-- `sodmin` uses the admin API with `urn:coauth:admin` or
+- `codmin` uses the admin API with `urn:coauth:admin` or
   `urn:arkret:admin:*`.
 - A delegated/public DID resolver remains the identity registry / resolver source.
 
@@ -114,7 +114,7 @@ ServiceDescribe or public service-kind registration.
 
 coauth hosts **no** DID documents (`/.well-known/did.json`, `/did.json`, and
 `/users/{id}/did.json` were removed): DID hosting is the Station's
-job — soland's embedded webvh provider serves
+job — coland's embedded webvh provider serves
 `did:webvh` documents under its own authority, and coauth only mints/registers
 against it. coauth-issued artefacts (session grants, handle claims) are
 verified via the introspection endpoints and the OAuth JWKS.
@@ -152,7 +152,7 @@ uses:
 .local/media/                              # local file-backed media
 ```
 
-Account, OAuth and registration rows remain in PostgreSQL, just as Soland's
+Account, OAuth and registration rows remain in PostgreSQL, just as Coland's
 relational state does; `.local/` contains only Coauth's file-backed local
 artifacts.
 
@@ -173,9 +173,9 @@ database:
 
 arkret:
   stations:
-    - name: soland
-      endpoint: https://soland.example.com/
-      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
+    - name: coland
+      endpoint: https://coland.example.com/
+      embedded_webvh_registration_bearer: ${COLAND_WEBVH_REGISTRATION_BEARER}
   identity_registry:
     resolver: https://resolver.example.com/
     proof_required_for_pairwise: true
@@ -232,9 +232,9 @@ just build-all
 | `/_coauth/account/integration/describe` | Deployment-private integration metadata, not a public Arkret role |
 | `/_arkret/find/directory/resolve-handle` | Handle -> DID resolution |
 | `/_arkret/gate/account/session-grants/introspect` | Station session grant validation |
-| `/_coauth/admin/*` | Admin API for `sodmin` and service automation |
+| `/_coauth/admin/*` | Admin API for `codmin` and service automation |
 | `/_coauth/admin/openapi.yaml` | Coauth admin API OpenAPI document |
-| `/.well-known/arkret/openapi.yaml` | Admin API discovery document for `sodmin` |
+| `/.well-known/arkret/openapi.yaml` | Admin API discovery document for `codmin` |
 
 ## Documentation
 
@@ -254,7 +254,7 @@ rollout details.
 - [ ] `COAUTH_DEVELOPMENT_MODE=false` (or unset in production builds)
 - [ ] TLS enabled at the reverse proxy (`COAUTH_TLS_CERT_PATH` / `COAUTH_TLS_KEY_PATH` when terminated in-process)
 - [ ] CSP header configured at the reverse proxy
-- [ ] CORS limited to the allowed origins for sodmin / public clients
+- [ ] CORS limited to the allowed origins for codmin / public clients
 - [ ] Secrets in a secret manager (session-grant signing seed, OAuth client secrets, upstream provider creds)
 - [ ] Log redaction enabled (default outside dev mode)
 - [ ] Admin auth in production mode (admin capabilities + scopes, no dev-login)

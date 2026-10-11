@@ -11,7 +11,7 @@
 #
 # Usage:
 #   ./scripts/integration-smoke.sh                     # core stack
-#   ./scripts/integration-smoke.sh --with-downstream   # + soland + sodmin
+#   ./scripts/integration-smoke.sh --with-downstream   # + coland + codmin
 
 set -euo pipefail
 
@@ -37,23 +37,23 @@ probe() {
 # docker-compose-mapped ports (default: 57080 etc.) or a coauth bound
 # locally on its native port (e.g. COAUTH_BASE=http://127.0.0.1:7080).
 COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}"
-SOLAND_BASE="${SOLAND_BASE:-http://127.0.0.1:58008}"
-SODMIN_BASE="${SODMIN_BASE:-http://127.0.0.1:59090}"
+COLAND_BASE="${COLAND_BASE:-http://127.0.0.1:58008}"
+CODMIN_BASE="${CODMIN_BASE:-http://127.0.0.1:59090}"
 
 probes=(
     "coauth ${COAUTH_BASE}/health"
 )
 
 # Add downstream probes based on flags. The default profile
-# only brings up postgres + coauth, so probing soland/sodmin would fail
+# only brings up postgres + coauth, so probing coland/codmin would fail
 # even on a healthy stack — they're gated behind --with-downstream now
 # to match the integration-up.sh profile semantics.
 for arg in "$@"; do
     case "${arg}" in
         --with-downstream)
             probes+=(
-                "soland ${SOLAND_BASE}/health"
-                "sodmin ${SODMIN_BASE}/health"
+                "coland ${COLAND_BASE}/health"
+                "codmin ${CODMIN_BASE}/health"
             )
             ;;
     esac

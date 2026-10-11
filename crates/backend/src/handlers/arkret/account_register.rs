@@ -31,16 +31,16 @@ use super::session_grant::{
 };
 use super::{ArkretRouteError, DepotExt, owning_station_did_for, owning_station_id_for};
 use crate::handlers::account::auth::oidc_bridge::{
-    VerifiedPrincipalIdentity, ensure_soland_account_registered,
+    VerifiedPrincipalIdentity, ensure_coland_account_registered,
 };
 use crate::handlers::{make_clock, make_rng};
 use crate::services::account_status_publication::{
     author_and_enqueue_transition, validate_transition_plan,
 };
+use crate::services::coland_webvh;
 use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
-use crate::services::soland_webvh;
 
-const PRIVATE_PRINCIPAL_GENESIS_PATH: &str = "/_soland/account-authority/principal-genesis/admit";
+const PRIVATE_PRINCIPAL_GENESIS_PATH: &str = "/_coland/account-authority/principal-genesis/admit";
 
 /// `POST /_arkret/gate/account/register` identity-creation branch.
 #[handler]
@@ -289,7 +289,7 @@ pub async fn account_register_endpoint(
             // expired first attempt without holding a database transaction
             // open across network I/O.
             repo.save().await?;
-            let outcome = soland_webvh::submit_did_operation(
+            let outcome = coland_webvh::submit_did_operation(
                 &depot.http_client()?,
                 &station.endpoint,
                 station.bearer.as_deref(),
@@ -634,7 +634,7 @@ pub async fn account_register_endpoint(
         principal_id: body.principal_id.clone(),
         did: body.did.clone(),
     };
-    ensure_soland_account_registered(
+    ensure_coland_account_registered(
         &depot.http_client()?,
         Some(station.endpoint.as_str()),
         &verified_principal,

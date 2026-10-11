@@ -15,7 +15,7 @@ The intended external review scope is the v1.0 coauth service:
   invite-claim states, deactivation, lock, and erasure scheduling.
 - DID binding: JWS verification, DID document resolution, verification method
   matching, canonical statement matching, and fixture coverage.
-- Admin API: `coauth-admin-types` shared DTOs, `sodmin` bridge discovery,
+- Admin API: `coauth-admin-types` shared DTOs, `codmin` bridge discovery,
   account mutation workflows, risk-action durable proposal approval/execute,
   audit feed, and policy dry-runs.
 - Policy and signing: policy-response signing transcript, policy decision basis,

@@ -242,7 +242,7 @@ fn account_api_subrouters() -> (Router, Router) {
         // (`ak.gate.account.command.pair_agent_key.v1`): the agent runtime submits
         // its locally-generated public key + proof-of-possession; coauth
         // validates the PoP, writes a durable agent key authorization, and fans
-        // `ak.agent.key.authorize` out to soland.
+        // `ak.agent.key.authorize` out to coland.
         .push(
             Router::with_path("gate/account/agent-key-pair")
                 .options(oidc_preflight_handler)

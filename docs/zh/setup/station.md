@@ -1,21 +1,21 @@
 # Station 配置
 
 coauth 作为所属 Station 的部署私有账号认证组件运行，位于 Station 发布的 Account
-Authority surface 背后。Soland 等下游 Station 消费 OAuth/OIDC token 和 Arkret
+Authority surface 背后。Coland 等下游 Station 消费 OAuth/OIDC token 和 Arkret
 session grant，但不会把 coauth 发现为独立 Arkret 服务角色。
 
-## 配置 Soland Station
+## 配置 Coland Station
 
 在 `arkret.stations` 中声明受信任的 Station：
 
 ```yaml
 arkret:
   stations:
-    - name: soland
-      endpoint: https://soland.example.com/
-      trust_domain: ak:trust_domain:soland.example.com
-      internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
-      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
+    - name: coland
+      endpoint: https://coland.example.com/
+      trust_domain: ak:trust_domain:coland.example.com
+      internal_authority_shared_secret_file: /run/secrets/coland_internal_authority_shared_secret
+      embedded_webvh_registration_bearer: ${COLAND_WEBVH_REGISTRATION_BEARER}
 ```
 
 - `name`：面向运维的 Station 标识。
@@ -41,13 +41,13 @@ Coauth HTTP 服务不会等待这项验证完成才开始监听。它会先发�
 发生合法的身份 genesis（新 SCID）后，显式替换 pin:
 
 ```console
-$ coauth station trust replace --name soland \
+$ coauth station trust replace --name coland \
     --expect-old ak:did_core:webvh:<old-scid> \
     --accept-new ak:did_core:webvh:<new-scid>
 ```
 
 替换会在同一事务中吊销绑定旧 audience 的 session grant。
-`coauth station trust revoke --name soland` 则整体移除 pin；此后服务在
+`coauth station trust revoke --name coland` 则整体移除 pin；此后服务在
 下一轮自动完整验证重新建立 binding 之前拒绝提供服务。
 
 ## 部署私有 Account Authority 签名方
@@ -70,8 +70,8 @@ coauth 作为 Station 的私有账号认证组件，向 Station 发起两类**�
 
 | coauth 调用 | Station 端点 | Operation id | 时机 |
 | --- | --- | --- | --- |
-| 设备验签公钥目录查询 | `POST /_soland/gate/account/device-signing-keys/query` | `org.arkret.soland.gate.account.device_signing_keys.query` | 在 session-grant 刷新 / soft-logout 恢复时验证设备 holder proof |
-| 协作 capability fanout | `POST /_soland/root/authz/capability-fanout` | `org.arkret.soland.root.authz.capability_fanout.submit` | 物化 coauth 签发的 `ak.capability.grant` / `ak.capability.revoke` |
+| 设备验签公钥目录查询 | `POST /_coland/gate/account/device-signing-keys/query` | `org.arkret.coland.gate.account.device_signing_keys.query` | 在 session-grant 刷新 / soft-logout 恢复时验证设备 holder proof |
+| 协作 capability fanout | `POST /_coland/root/authz/capability-fanout` | `org.arkret.coland.root.authz.capability_fanout.submit` | 物化 coauth 签发的 `ak.capability.grant` / `ak.capability.revoke` |
 
 两条边都用对应 `stations` 条目上配置的共享 bearer 鉴权：
 
@@ -83,7 +83,7 @@ service core 证明连续、非回退的 WebVH history 后才会自动 CAS 更�
 ```yaml
 arkret:
   stations:
-    - name: soland
+    - name: coland
       # ...
       embedded_webvh_registration_bearer: "<共享 S2S 密钥>"
 ```

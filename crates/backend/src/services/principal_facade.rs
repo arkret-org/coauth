@@ -13,7 +13,7 @@
 //!   always the real, persisted profile; and
 //! * treats the account/device *mutation* hooks as no-ops — they exist to mirror state into a
 //!   downstream principal projection, but here there is no separate projection to keep (the device
-//!   set has no reader: the admin device list aggregates session grants, and soland is the
+//!   set has no reader: the admin device list aggregates session grants, and coland is the
 //!   authoritative device store).
 //!
 //! The result removes the mock-vs-real divergence entirely: a single source of
@@ -496,13 +496,13 @@ mod tests {
     #[test]
     fn account_status_destination_uses_the_only_configured_station() {
         let config = coauth_config::ArkretConfig {
-            stations: vec![station("soland-dev")],
+            stations: vec![station("coland-dev")],
             ..coauth_config::ArkretConfig::default()
         };
 
         let server = default_station(&config).expect("single destination");
 
-        assert_eq!(server.name, "soland-dev");
+        assert_eq!(server.name, "coland-dev");
     }
 
     #[test]

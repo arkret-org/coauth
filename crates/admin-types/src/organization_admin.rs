@@ -4,7 +4,7 @@
 //! Domain enums come from the storage-neutral model crate. Response records
 //! are private admin-wire DTOs populated through explicit mappings.
 //!
-//! sodmin can render the full organization control state from these DTOs
+//! codmin can render the full organization control state from these DTOs
 //! without touching the database or parsing any product-private fields.
 
 use arkret_identifiers::{Did, DidCoreId};

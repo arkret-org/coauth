@@ -20,7 +20,7 @@
 Arkret 管理能力族。`coauth` 接受 wildcard scope，也接受
 `urn:arkret:admin:<capability>` 前缀作为管理权限。
 
-这个命名空间适合 `sodmin` 等 Arkret-native 管理集成。
+这个命名空间适合 `codmin` 等 Arkret-native 管理集成。
 
 ## `urn:arkret:client:*`
 

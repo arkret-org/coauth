@@ -14,7 +14,7 @@
 //!
 //! It deliberately does **not** issue the Realm-side `ak.realm.admin`
 //! authorization required to write the event into Realm history — that is
-//! soland's job. coauth only produces the organization-side endorsement /
+//! coland's job. coauth only produces the organization-side endorsement /
 //! revocation proof.
 //!
 //! ## Boundary
@@ -23,7 +23,7 @@
 //! account_authority}) requires a resolvable, live organization delegation. The
 //! [`RepositoryDelegationResolver`] resolves `authorization.delegation_ref`
 //! against the durable `organization_delegations` table, so a forged or expired
-//! delegation fails closed exactly as soland's verifier would reject it.
+//! delegation fails closed exactly as coland's verifier would reject it.
 
 use arkret_models_collaboration::{
     RealmOrganizationAuthorization, RealmOrganizationControlScope, RealmOrganizationIssuerRole,
@@ -136,7 +136,7 @@ where
     .map_err(|error| OrganizationStatementError::Canonical(error.to_owned()))?;
 
     // Build the statement with a placeholder proof. The canonical signing bytes
-    // are produced by the SDK (shared with soland's verifier) and exclude
+    // are produced by the SDK (shared with coland's verifier) and exclude
     // authorization.proof and authorization.signed_at, so signing over them and
     // writing the real proof back yields a verifiable statement.
     let payload = RealmOrganizationPayload {
@@ -195,7 +195,7 @@ where
     }
 
     // COA-ORG-03 acceptance: the statement we sign is exactly the statement
-    // soland's SDK verifier accepts. Self-verify before returning.
+    // coland's SDK verifier accepts. Self-verify before returning.
     let expected_realm_id = payload.realm_id.clone();
     verify_realm_organization_statement(&payload, &expected_realm_id, now, resolver)
         .map_err(|e| OrganizationStatementError::SelfVerify(e.to_string()))?;

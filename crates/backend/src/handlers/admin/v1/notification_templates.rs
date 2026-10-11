@@ -4,7 +4,7 @@
 //! - `POST /_coauth/admin/notification-templates/publish` — publish a new template version
 //!
 //! Wire shapes (request + response bodies) live in
-//! `coauth-admin-types::notification_admin` so sodmin and any other
+//! `coauth-admin-types::notification_admin` so codmin and any other
 //! admin client deserialize against the same typed definition rustc
 //! enforces here.
 

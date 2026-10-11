@@ -53,7 +53,7 @@ use crate::services::peer_protocol_client::{
 const PAIRING_TTL: Duration = Duration::minutes(10);
 const PAIRING_TOMBSTONE_RETENTION: Duration = Duration::hours(24);
 const PAIRING_CODE_ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const PRIVATE_EVENT_ADMISSION_PATH: &str = "/_soland/account-authority/events/admit";
+const PRIVATE_EVENT_ADMISSION_PATH: &str = "/_coland/account-authority/events/admit";
 
 fn mint_pairing_code(rng: &mut (impl RngCore + ?Sized)) -> DevicePairingCode {
     let mut bytes = [0_u8; 8];

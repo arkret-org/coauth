@@ -239,9 +239,9 @@ pub struct ArkretConfig {
     /// told the trust domain is unset and fail closed.
     ///
     /// Typically provisioned consistently across the deployment.
-    // TODO(trust-domain-runtime-propagation): once soland exposes a `PATCH /admin/v1/policy/
+    // TODO(trust-domain-runtime-propagation): once coland exposes a `PATCH /admin/v1/policy/
     //  trust_domain` mutation, propagate changes from coauth's runtime
-    //  reload through that channel rather than requiring a soland
+    //  reload through that channel rather than requiring a coland
     //  restart.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trust_domain: Option<String>,
@@ -612,7 +612,7 @@ impl From<Option<ClientSecret>> for InternalAuthoritySharedSecretRaw {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StationConfig {
-    /// Human-readable identifier for the consumer, such as `soland-prod`.
+    /// Human-readable identifier for the consumer, such as `coland-prod`.
     pub name: String,
 
     /// Base URL of the Station integration point.
@@ -712,7 +712,7 @@ mod tests {
     #[test]
     fn trust_domain_accepts_well_formed_scope() {
         assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:example.net").is_ok());
-        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:soland-prod.eu").is_ok());
+        assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:coland-prod.eu").is_ok());
         assert!(ArkretConfig::validate_trust_domain("ak:trust_domain:tenant_a.shard_1").is_ok());
     }
 
@@ -1034,8 +1034,8 @@ mod tests {
     fn station_trust_domain_is_validated_and_independent_of_the_deployment_one() {
         let figment = figment::Figment::new();
         let station = |trust_domain: Option<&str>| StationConfig {
-            name: "soland".to_owned(),
-            endpoint: "https://soland.example/".parse().unwrap(),
+            name: "coland".to_owned(),
+            endpoint: "https://coland.example/".parse().unwrap(),
             internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
             trust_domain: trust_domain.map(ToOwned::to_owned),
@@ -1048,7 +1048,7 @@ mod tests {
         // A Station in a different domain from this deployment is the normal
         // split-host case, not a conflict.
         assert!(
-            config(station(Some("ak:trust_domain:soland.example")))
+            config(station(Some("ak:trust_domain:coland.example")))
                 .validate(&figment)
                 .is_ok()
         );
@@ -1056,12 +1056,12 @@ mod tests {
         // it fail closed instead of guessing.
         assert!(config(station(None)).validate(&figment).is_ok());
         assert!(
-            config(station(Some("ak:trust_domain:Soland.Example")))
+            config(station(Some("ak:trust_domain:Coland.Example")))
                 .validate(&figment)
                 .is_err()
         );
         assert!(
-            config(station(Some("soland.example")))
+            config(station(Some("coland.example")))
                 .validate(&figment)
                 .is_err()
         );

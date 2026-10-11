@@ -90,7 +90,7 @@ impl Deref for TestDatabase {
 /// Without `DATABASE_URL` this **panics** by default. Returning `None`
 /// silently made `cargo test --workspace` green on a machine with no
 /// database while every Postgres-backed case had run zero assertions, which
-/// is the opposite of soland's `TestDatabase::lease_blocking()` in the same
+/// is the opposite of coland's `TestDatabase::lease_blocking()` in the same
 /// workspace and hid the real state of this crate for as long as it existed.
 ///
 /// Set `COAUTH_SKIP_POSTGRES_TESTS=1` to accept the skip deliberately; each
@@ -167,7 +167,7 @@ struct FingerprintRow {
 /// compares. That misses only the first transition on a database created before
 /// this fence existed -- from then on an edit is caught on the next run.
 ///
-/// soland solves the same problem differently because its harness *does* create
+/// coland solves the same problem differently because its harness *does* create
 /// databases: there the fingerprint is part of the leased slot name, so a stale
 /// slot is never a candidate. Here nothing can create the database for you, so
 /// the honest move is to fail with the commands that fix it.

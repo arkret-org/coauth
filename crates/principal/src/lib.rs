@@ -272,7 +272,7 @@ impl PrincipalAgentKeyPairCommitRequest {
 /// Arkret principal system.
 ///
 /// This trait keeps account-lifecycle call sites testable while
-/// Arkret/Soland integrations use session grants and downstream discovery.
+/// Arkret/Coland integrations use session grants and downstream discovery.
 #[async_trait::async_trait]
 pub trait ConnectorAdmin: Send + Sync {
     /// Get the principal system authority used for generated account
@@ -634,8 +634,8 @@ where
 /// provision users into, query state from, and synchronize with.
 ///
 /// [`ConnectorAdmin`] is the primary implementation of this trait
-/// for Arkret/Soland-facing principal connectors.
+/// for Arkret/Coland-facing principal connectors.
 pub trait ConnectorProvider: ConnectorAdmin {
-    /// A human-readable name for this connector (e.g. "soland").
+    /// A human-readable name for this connector (e.g. "coland").
     fn provider_name(&self) -> &str;
 }

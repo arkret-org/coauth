@@ -44,7 +44,7 @@ use crate::{AppError, JsonResult};
 
 // `AdminBridgeDescribeResponse` and the nested `AdminBridgeRiskAction*Example`
 // triple live in `coauth_admin_types::bridge_admin`. The describe endpoint
-// below returns the shared `AdminBridgeDescribe` directly so the sodmin admin
+// below returns the shared `AdminBridgeDescribe` directly so the codmin admin
 // SPA decodes the same typed shape, keeping the structured
 // `action` / `reason` / `ticket` / `approved_by` / `approval_note` /
 // `execution_note` fields it renders.
@@ -52,7 +52,7 @@ use crate::{AppError, JsonResult};
 /// Backend wrapper that owns the resource ID + JSON:API attributes. The
 /// attributes block is the shared `AdminAccountAttributes` from
 /// `coauth-admin-types` so any field rename / reorder shows up as a
-/// rustc error in both the backend and `sodmin` client at the same time.
+/// rustc error in both the backend and `codmin` client at the same time.
 ///
 /// The `id` is `#[serde(skip)]` because it lives on the JSON:API
 /// envelope (`data.id`), not in the `attributes` block. The

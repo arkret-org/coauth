@@ -1,6 +1,6 @@
 # 使用管理 API
 
-`coauth` 提供 REST-like 管理 API，供管理员、`sodmin` 和受信任的自动化系统管理账号、
+`coauth` 提供 REST-like 管理 API，供管理员、`codmin` 和受信任的自动化系统管理账号、
 会话、设备、claim、OAuth 客户端、通知渠道、连接器和策略数据。
 
 管理 API 默认不暴露。需要在 `http.listeners` 的 `resources` 中启用 `adminapi`。所有请求
@@ -11,7 +11,7 @@
 完整 API 文档以 OpenAPI 规范提供。启用 `adminapi` 后，运行时会暴露这些路径：
 
 - `GET /_coauth/admin/openapi.yaml`：Arkret-native 管理 API 合约。
-- `GET /.well-known/arkret/openapi.yaml`：供 `sodmin` 和服务自动化发现。
+- `GET /.well-known/arkret/openapi.yaml`：供 `codmin` 和服务自动化发现。
 - `GET /api-doc/admin/openapi.json`：兼容 Swagger 工具的 JSON 版本。
 - `GET /admin-swagger-ui/`：服务内置 Swagger UI。
 

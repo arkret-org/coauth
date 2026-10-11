@@ -1,6 +1,6 @@
 //! Admin endpoints for managing AKP-0007 `ak.circle.*` capability grants.
 //!
-//! Surfaces three routes consumed by sodmin and any other admin client:
+//! Surfaces three routes consumed by codmin and any other admin client:
 //!
 //! - `GET    /_coauth/admin/circles/capabilities` — list grants
 //! - `POST   /_coauth/admin/circles/capabilities` — create a grant

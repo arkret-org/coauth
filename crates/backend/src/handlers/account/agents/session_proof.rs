@@ -77,7 +77,7 @@ pub async fn fetch_agent_participation_overlay(
         arkret_wire::AccountId::new(controller.clone(), station_id),
     );
     let outcome: arkret_models_collaboration::governance::agent_participation::AgentParticipationOutcome = channel
-        .post_private_json("private_agent_participation_read", "/_soland/account-authority/agent-participation/read", &accounts, None)
+        .post_private_json("private_agent_participation_read", "/_coland/account-authority/agent-participation/read", &accounts, None)
         .await.map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
     let mut scopes = BTreeSet::new();
     if outcome.agent_id != agent.as_str()
@@ -106,7 +106,7 @@ pub struct AgentSessionAuthorization {
     pub granted_scope: Vec<String>,
     /// Materialized `scope_details` overlay baked into the session-grant JWT
     /// payload (canonical resource constraints + optional participation
-    /// entries). This is the JWT-internal shape soland enforces against; it is
+    /// entries). This is the JWT-internal shape coland enforces against; it is
     /// not an unsigned field in the `SessionGrantOutcome` wire DTO.
     pub scope_details: serde_json::Map<String, serde_json::Value>,
     /// Capped agent session TTL (≤ 15 min).
@@ -283,7 +283,7 @@ struct AgentScopeRequestInput {
 /// `repo` is borrowed for the active-key lookup + replay consumption;
 /// `controller_status` reports whether the accountable controller is
 /// deactivated/suspended (resolved by the caller from the local user record or
-/// soland introspection) so a deactivated controller fails closed.
+/// coland introspection) so a deactivated controller fails closed.
 pub async fn validate_agent_session_proof(
     repo: &mut coauth_data::BoxRepository,
     rng: &mut (dyn rand_core::RngCore + Send),
@@ -603,7 +603,7 @@ fn validate_agent_key_authorization_binding(
     if authorization.quarantined_at.is_some() {
         return Err(AgentAuthRejection::ProofInvalid);
     }
-    if authorization.soland_fanout_state
+    if authorization.coland_fanout_state
         != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
     {
         return Err(AgentAuthRejection::ProofInvalid);
@@ -651,7 +651,7 @@ fn validate_authoritative_agent_session_evidence(
     // accepted-at Agent DID commitment. Re-bind that cached evidence to the
     // current authoritative projection before every session issuance.
     let paired_request: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
-        serde_json::from_value(authorization.soland_fanout_payload.clone())
+        serde_json::from_value(authorization.coland_fanout_payload.clone())
             .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     let controller_account_id = paired_request
         .authorize_event
@@ -1495,11 +1495,11 @@ mod tests {
         Mock::given(method("GET"))
             .and(header(
                 "source-service-id",
-                "ak:did_core:web:soland.test",
+                "ak:did_core:web:coland.test",
             ))
             .and(header(
                 "destination-service-id",
-                "ak:did_core:web:soland.test",
+                "ak:did_core:web:coland.test",
             ))
             .and(header(
                 "arkret-operation",
@@ -1543,17 +1543,17 @@ mod tests {
             .await;
         let mut config = ArkretConfig {
             runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
-                "did:web:soland.test",
+                "did:web:coland.test",
             ),
             trust_domain: Some("ak:trust_domain:authority.test".to_owned()),
             ..Default::default()
         };
         config.stations.push(coauth_config::StationConfig {
-            name: "soland-test".to_owned(),
+            name: "coland-test".to_owned(),
             endpoint: server.uri().parse().unwrap(),
             internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,
-            trust_domain: Some("ak:trust_domain:soland.test".to_owned()),
+            trust_domain: Some("ak:trust_domain:coland.test".to_owned()),
         });
         (server, config)
     }
@@ -1691,13 +1691,13 @@ mod tests {
             quarantined_at: None,
             quarantine_reason: None,
             raw_payload_digest: format!("sha256:{}", "2".repeat(64)),
-            soland_fanout_state:
+            coland_fanout_state:
                 coauth_data::accountability::AccountabilityGrantFanoutState::Delivered,
-            soland_fanout_idempotency_key: "coauth:agent_key_authorize:test".to_owned(),
-            soland_fanout_payload: serde_json::json!({}),
-            soland_fanout_attempt: 0,
-            soland_fanout_next_retry_at: None,
-            soland_fanout_dead_letter_reason: None,
+            coland_fanout_idempotency_key: "coauth:agent_key_authorize:test".to_owned(),
+            coland_fanout_payload: serde_json::json!({}),
+            coland_fanout_attempt: 0,
+            coland_fanout_next_retry_at: None,
+            coland_fanout_dead_letter_reason: None,
             created_at: now,
             updated_at: now,
         }
@@ -1755,10 +1755,10 @@ mod tests {
     }
 
     #[test]
-    fn authorization_binding_rejects_key_before_soland_acceptance() {
+    fn authorization_binding_rejects_key_before_coland_acceptance() {
         let now = chrono::Utc::now();
         let mut authorization = agent_key_authorization(now);
-        authorization.soland_fanout_state =
+        authorization.coland_fanout_state =
             coauth_data::accountability::AccountabilityGrantFanoutState::Queued;
 
         let err = validate_agent_key_authorization_binding(
@@ -2360,7 +2360,7 @@ mod tests {
                     "0".repeat(64)
                 ))
                 .unwrap(),
-                audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example")
+                audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:coland.example")
                     .unwrap(),
                 issued_at: "2026-09-09T00:00:00.000Z".parse().unwrap(),
                 expires_at: "2026-09-09T00:05:00.000Z".parse().unwrap(),
@@ -2496,7 +2496,7 @@ mod participation_overlay_tests {
             arkret_wire::AccountId::new(controller.clone(), station),
         );
         Mock::given(method("POST"))
-            .and(path("/_soland/account-authority/agent-participation/read"))
+            .and(path("/_coland/account-authority/agent-participation/read"))
             .and(header("authorization", "Bearer owner-credential"))
             .and(body_json(&accounts))
             .respond_with(

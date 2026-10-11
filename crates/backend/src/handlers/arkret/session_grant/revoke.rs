@@ -774,7 +774,7 @@ mod tests {
             &test_keyring(),
             &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
             coauth_data::LocalAccountId::new("test-account").unwrap(),
-            DidCoreId::new("ak:did_core:web:soland.example").unwrap(),
+            DidCoreId::new("ak:did_core:web:coland.example").unwrap(),
             vec!["ak.self.committed_event.stream.subscribe.v1".to_owned()],
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
             session_public_key,

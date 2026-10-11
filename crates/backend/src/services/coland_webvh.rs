@@ -8,7 +8,7 @@ use crate::outbound_http;
 
 /// Errors produced while forwarding a client-signed DID operation.
 #[derive(Debug, Error)]
-pub enum SolandWebvhError {
+pub enum ColandWebvhError {
     #[error("station endpoint is not a valid URL: {0}")]
     InvalidEndpoint(#[from] url::ParseError),
     #[error("station DID operation submit request failed: {0}")]
@@ -25,14 +25,14 @@ pub async fn submit_did_operation(
     principal_endpoint: &Url,
     bearer: Option<&str>,
     body: &DidOperationSubmitRequestBody,
-) -> Result<DidOperationSubmitOutcome, SolandWebvhError> {
+) -> Result<DidOperationSubmitOutcome, ColandWebvhError> {
     let endpoint = principal_endpoint
         .join("/_arkret/root/identity/submit-did-operation")
-        .map_err(SolandWebvhError::InvalidEndpoint)?;
+        .map_err(ColandWebvhError::InvalidEndpoint)?;
     let body_bytes = arkret_canonical::canonical_json_bytes(body)
-        .map_err(|error| SolandWebvhError::Canonical(error.to_string()))?;
+        .map_err(|error| ColandWebvhError::Canonical(error.to_string()))?;
     let response = outbound_http::send_with_policy(
-        outbound_http::soland_policy("identity_submit_did_operation")
+        outbound_http::coland_policy("identity_submit_did_operation")
             .with_timeout(std::time::Duration::from_secs(15)),
         || {
             let mut request = http_client
@@ -54,13 +54,13 @@ pub async fn submit_did_operation(
     let response_body = response.text().await.unwrap_or_default();
     if status.is_success() {
         return serde_json::from_str(&response_body).map_err(|error| {
-            SolandWebvhError::SubmitRejected {
+            ColandWebvhError::SubmitRejected {
                 status: status.as_u16(),
                 body: format!("invalid response body: {error}"),
             }
         });
     }
-    Err(SolandWebvhError::SubmitRejected {
+    Err(ColandWebvhError::SubmitRejected {
         status: status.as_u16(),
         body: response_body.chars().take(512).collect(),
     })

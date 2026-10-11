@@ -11,7 +11,7 @@ use crate::repository_impl;
 /// Parameters used to create a durable collaboration capability grant.
 #[derive(Debug, Clone)]
 pub struct NewCollaborationCapabilityGrant {
-    /// Standard protocol grant id that soland will materialize.
+    /// Standard protocol grant id that coland will materialize.
     pub capability_grant_id: String,
     /// Standard `ak.capability.grant` event id for reducer ingestion.
     pub grant_event_id: String,
@@ -29,7 +29,7 @@ pub struct NewCollaborationCapabilityGrant {
     pub granted_by: DidCoreId,
     /// Canonical digest of the queued fan-out payload.
     pub grant_raw_payload_digest: String,
-    /// Idempotency key used for soland fan-out.
+    /// Idempotency key used for coland fan-out.
     pub grant_fanout_idempotency_key: String,
 }
 

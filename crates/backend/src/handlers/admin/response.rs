@@ -9,7 +9,7 @@
 //!
 //! The wire-shape structs (`SingleResource`, `SingleOutcome`,
 //! `PaginatedOutcome`, link/meta helpers) and the `Resource` trait now
-//! live in `coauth_admin_types::envelope` so `sodmin` can deserialize
+//! live in `coauth_admin_types::envelope` so `codmin` can deserialize
 //! the same shape without reimplementing it. This module keeps only the
 //! cursor-paginated builder (`PaginatedOutcome::for_page`) plus the
 //! error-response shape — both depend on `coauth_data` and therefore

@@ -102,10 +102,10 @@ rate_limiting:
 arkret:
   trust_domain: ak:trust_domain:local.host
   stations:
-  - name: soland-dev
+  - name: coland-dev
     endpoint: https://local.host/
     internal_authority_shared_secret: local-coauth-session-grant-introspection
-    embedded_webvh_registration_bearer: local-soland-webvh-registration
+    embedded_webvh_registration_bearer: local-coland-webvh-registration
     # The Station's own trust domain, as a registered fact of this entry
     # (service-http-binding.md 2.2.3). `arkret.trust_domain` above is coauth's
     # own; the internal channel binds the target's separately and fails closed

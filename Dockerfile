@@ -51,7 +51,7 @@ FROM frontend-toolchain AS frontend-planner
 WORKDIR /app
 COPY ./coauth/ /app
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
-COPY ./soland/ /soland
+COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 
@@ -67,7 +67,7 @@ COPY --from=frontend-planner /app/frontend-recipe.json frontend-recipe.json
 # `path = "../arkret-rust-sdk/..."` so the sibling tree must exist
 # at the layer where chef cook runs.
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
-COPY ./soland/ /soland
+COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 
@@ -142,7 +142,7 @@ FROM builder-base AS builder-planner
 WORKDIR /app
 COPY ./coauth/ /app
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
-COPY ./soland/ /soland
+COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 
@@ -161,7 +161,7 @@ COPY --from=builder-planner /app/backend-recipe.json backend-recipe.json
 # at the same layer. Without this COPY, the cook step fails with
 # `failed to read /arkret-rust-sdk/crates/core/Cargo.toml`.
 COPY ./arkret-rust-sdk/ /arkret-rust-sdk
-COPY ./soland/ /soland
+COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 

@@ -3,7 +3,7 @@
 This documentation describes `coauth`, a Station-internal authentication and
 account-management component behind the Station's Account Authority entry. It is
 intended for operators, administrators, and developers integrating coauth with
-Arkret Stations, public DID resolver services, `sodmin`, and first-party clients.
+Arkret Stations, public DID resolver services, `codmin`, and first-party clients.
 
 `coauth` is an OAuth and OpenID Connect provider. Its primary product
 surface is Arkret-native account, session, DID-binding, claim, and admin

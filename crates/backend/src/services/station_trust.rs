@@ -1457,7 +1457,7 @@ mod tests {
 
     fn server(endpoint: &str) -> StationConfig {
         StationConfig {
-            name: "soland".to_owned(),
+            name: "coland".to_owned(),
             endpoint: Url::parse(endpoint).unwrap(),
             internal_authority_shared_secret: None,
             embedded_webvh_registration_bearer: None,

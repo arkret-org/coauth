@@ -75,9 +75,9 @@ database:
 arkret:
   admin_audience: ak:did_core:web:localhost
   stations:
-    - name: soland
-      endpoint: https://soland.example.com/
-      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
+    - name: coland
+      endpoint: https://coland.example.com/
+      embedded_webvh_registration_bearer: ${COLAND_WEBVH_REGISTRATION_BEARER}
 
 secrets:
   backend: encrypted_file

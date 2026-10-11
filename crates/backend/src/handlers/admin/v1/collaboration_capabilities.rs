@@ -4,8 +4,8 @@
 //! - `GET /_coauth/admin/collaboration/capabilities`
 //!
 //! Issuing and revoking a collaboration capability used to live here too, via a
-//! deployment-private `POST /_soland/root/authz/capability-fanout` edge that
-//! handed soland a pre-minted `event_id` and a payload, which soland then
+//! deployment-private `POST /_coland/root/authz/capability-fanout` edge that
+//! handed coland a pre-minted `event_id` and a payload, which coland then
 //! projected as if an Event had been accepted. No Event ever existed, and the
 //! fanout proof signed a transcript rather than an Event digest.
 //!
@@ -21,7 +21,7 @@
 //!
 //! The review surfaces stay because they need no key. See the arkret-work task
 //! `2026-08-08-collaboration-capability-review-source.md` for repointing them
-//! at soland's authoritative capability projection.
+//! at coland's authoritative capability projection.
 
 use coauth_admin_types::collaboration_capability_admin::{
     CollaborationCapabilityGrant, ListCollaborationCapabilityGrantsOutcome,

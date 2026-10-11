@@ -13,7 +13,7 @@ const ACCESS_TOKEN_TTL_MICROS: i64 = 5 * 60 * 1_000_000;
 /// Hard ceiling on bearer access-token lifetime: 15 minutes. Bearer tokens are
 /// not revocation-checked on every request, so their lifetime is the window an
 /// attacker keeps access after a leak; this matches the
-/// `capped_bearer_expiry <= 15min` rule enforced on the soland side. Both the
+/// `capped_bearer_expiry <= 15min` rule enforced on the coland side. Both the
 /// configuration schema and the token issuance path clamp to this value.
 pub const MAX_ACCESS_TOKEN_TTL_SECS: i64 = 15 * 60;
 
@@ -60,7 +60,7 @@ pub struct SessionLimitConfig {
 pub struct ExperimentalConfig {
     /// Lifetime of access tokens (seconds). Default: 300 (5 min). Hard-capped
     /// at 900 (15 min): bearer access tokens must be short-lived, matching the
-    /// `capped_bearer_expiry <= 15min` rule enforced on the soland side. The
+    /// `capped_bearer_expiry <= 15min` rule enforced on the coland side. The
     /// issuance path additionally clamps to this ceiling as a defence in depth.
     #[schemars(with = "u64", range(min = 60, max = 900))]
     #[serde(

@@ -1,7 +1,7 @@
 //! JSON:API-shaped envelopes used by every admin endpoint.
 //!
 //! These types describe the wire shape of `data` / `links` / `meta`
-//! that the backend writes and `sodmin` reads. Migrated out of
+//! that the backend writes and `codmin` reads. Migrated out of
 //! `coauth/crates/backend/src/handlers/admin/response.rs` so a typed
 //! Rust struct backs the wire on both sides instead of a hand-mirrored
 //! one.
@@ -119,7 +119,7 @@ impl SingleResourceMeta {
 /// One JSON:API resource — `{ "type", "id", "attributes", "links", "meta" }`.
 ///
 /// Generic over the inner attributes type. The backend sets `type_` from
-/// `T::KIND` when constructing, sodmin trusts what the wire emits.
+/// `T::KIND` when constructing, codmin trusts what the wire emits.
 ///
 /// Schema derives (`JsonSchema` / `ToSchema`) are intentionally NOT on the
 /// generic envelope types — auto-deriving them imposes `T: 'static`,

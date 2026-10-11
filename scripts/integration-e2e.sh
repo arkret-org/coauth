@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Integration e2e: exercise three happy-path scenarios across the
-# coauth + soland + sodmin stack brought up by `integration-up.sh`.
+# coauth + coland + codmin stack brought up by `integration-up.sh`.
 #
 # Scope vs. integration-smoke.sh:
 #
@@ -11,14 +11,14 @@
 #   - integration-e2e.sh (this file) drives real protocol-level
 #     workflows over HTTP. The three scenarios are:
 #
-#     S1: account create → DID bind → soland resource access (Space
-#         create + send a message). Exercises the coauth↔soland glue.
+#     S1: account create → DID bind → coland resource access (Space
+#         create + send a message). Exercises the coauth↔coland glue.
 #
 #     S2: passkey register → passkey auth → session establishment.
 #         Exercises the WebAuthn assertion + session cookie path.
 #
 #     S3: risk-action proposal → 2-of-2 admin approval → execution.
-#         Exercises the admin scaffold lifecycle that lands in sodmin.
+#         Exercises the admin scaffold lifecycle that lands in codmin.
 #
 # Each scenario logs PASS / FAIL with stage timings so a CI run shows
 # *where* the e2e budget is being spent. Failures inside a scenario are
@@ -45,8 +45,8 @@
 set -uo pipefail
 
 readonly COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}"
-readonly SOLAND_BASE="${SOLAND_BASE:-http://127.0.0.1:58008}"
-readonly SODMIN_BASE="${SODMIN_BASE:-http://127.0.0.1:59090}"
+readonly COLAND_BASE="${COLAND_BASE:-http://127.0.0.1:58008}"
+readonly CODMIN_BASE="${CODMIN_BASE:-http://127.0.0.1:59090}"
 readonly STAGE_TIMEOUT="${STAGE_TIMEOUT:-10}"
 
 # Track total pass/fail across scenarios.
@@ -112,7 +112,7 @@ preflight() {
 }
 
 # ─────────────────────────────────────────────────────────────────────
-# S1: account create → DID bind → soland resource access
+# S1: account create → DID bind → coland resource access
 # ─────────────────────────────────────────────────────────────────────
 scenario_s1() {
     SCENARIOS_RUN=$((SCENARIOS_RUN + 1))
@@ -156,32 +156,32 @@ scenario_s1() {
         return 0
     fi
 
-    # 3. Create a Space on soland and send a message.
-    stage "soland-space-create" \
-        -X POST "${SOLAND_BASE}/_arkret/self/spaces" \
+    # 3. Create a Space on coland and send a message.
+    stage "coland-space-create" \
+        -X POST "${COLAND_BASE}/_arkret/self/spaces" \
         -H 'Content-Type: application/json' \
         -d "$(jq -nc --arg n "${local_part}-space" '{name: $n}')"
-    # 000 = curl failed to connect (soland not running under the default
+    # 000 = curl failed to connect (coland not running under the default
     # `postgres + coauth` profile). Treat as skip, not fail — the same
     # workflow runs against `--profile downstream` when the :dev tags
     # are available.
     if [[ "${LAST_STATUS}" == "404" || "${LAST_STATUS}" == "000" ]]; then
-        scenario_skip "S1" "soland not reachable / space-create not wired (${LAST_STATUS})"
+        scenario_skip "S1" "coland not reachable / space-create not wired (${LAST_STATUS})"
         return 0
     fi
     if [[ "${LAST_STATUS}" != "200" && "${LAST_STATUS}" != "201" ]]; then
-        scenario_fail "S1 stage soland-space-create: ${LAST_STATUS}: ${LAST_BODY}"
+        scenario_fail "S1 stage coland-space-create: ${LAST_STATUS}: ${LAST_BODY}"
         return 0
     fi
     local space_id
     space_id="$(echo "${LAST_BODY}" | jq -r '.space_id // .id // empty')"
 
-    stage "soland-send-message" \
-        -X POST "${SOLAND_BASE}/_arkret/self/spaces/${space_id}/messages" \
+    stage "coland-send-message" \
+        -X POST "${COLAND_BASE}/_arkret/self/spaces/${space_id}/messages" \
         -H 'Content-Type: application/json' \
         -d "$(jq -nc '{body: "hello-from-e2e"}')"
     if [[ "${LAST_STATUS}" != "200" && "${LAST_STATUS}" != "201" ]]; then
-        scenario_fail "S1 stage soland-send-message: ${LAST_STATUS}: ${LAST_BODY}"
+        scenario_fail "S1 stage coland-send-message: ${LAST_STATUS}: ${LAST_BODY}"
         return 0
     fi
 

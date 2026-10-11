@@ -1,6 +1,7 @@
 pub mod account_claims;
 pub mod account_status_publication;
 pub mod admin_invite_review;
+pub mod coland_webvh;
 pub mod device_revoke;
 pub mod did_binding;
 pub mod did_binding_proof;
@@ -16,7 +17,6 @@ pub mod principal_facade;
 pub mod refresh_token_rotation;
 pub mod risk_action_proposals;
 pub mod risk_action_state;
-pub mod soland_webvh;
 pub mod station_trust;
 pub mod upstream_oidc;
 pub mod upstream_oidc_mapping;

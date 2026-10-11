@@ -151,7 +151,7 @@ jobs:
           CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
         run: |
           bash coauth/.ci/checkout-sibling.sh arkret-rust-sdk arkret-rust-sdk
-          bash coauth/.ci/checkout-sibling.sh soland soland
+          bash coauth/.ci/checkout-sibling.sh coland coland
           bash coauth/.ci/checkout-sibling.sh cotest cotest
           bash coauth/.ci/checkout-sibling.sh garth garth
 

@@ -1,6 +1,6 @@
 [package]
 name = "coauth-admin-types"
-description = "Shared serde types for the coauth admin API surface, consumed by the coauth backend (server-side serialize) and by sodmin (client-side deserialize)."
+description = "Shared serde types for the coauth admin API surface, consumed by the coauth backend (server-side serialize) and by codmin (client-side deserialize)."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -14,7 +14,7 @@ publish.workspace = true
 default = []
 # Enable JSON Schema + salvo OpenAPI derives. Backends turn this on so
 # `#[salvo::endpoint]` can populate the OpenAPI document; pure clients
-# (e.g. sodmin) leave it off to avoid pulling salvo + schemars. The
+# (e.g. codmin) leave it off to avoid pulling salvo + schemars. The
 # The storage-neutral domain enums enable matching schema derives.
 schema = ["dep:schemars", "dep:salvo", "coauth-data-model/schema"]
 

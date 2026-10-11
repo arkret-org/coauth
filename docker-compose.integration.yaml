@@ -1,4 +1,4 @@
-# Integration stack: Postgres + coauth (+ optional soland/sodmin).
+# Integration stack: Postgres + coauth (+ optional coland/codmin).
 #
 # This compose is intended for local bring-up smoke / e2e harness work; it
 # deliberately keeps secrets, ports, and images close to defaults so that
@@ -12,17 +12,17 @@
 #              `coauth healthcheck` subcommand directly via CMD (not
 #              CMD-SHELL) — the binary issues an HTTP probe to the
 #              configured /health listener and exits 0 on 200.
-#   - soland / sodmin : pulled by tag. No `:dev` tags are published
+#   - coland / codmin : pulled by tag. No `:dev` tags are published
 #              yet, so these services are gated behind profiles. Override
 #              with the matching `*_IMAGE` env var when iterating against
 #              locally-built images, e.g.
-#                  SOLAND_IMAGE=soland:dev SODMIN_IMAGE=sodmin:dev \
+#                  COLAND_IMAGE=coland:dev CODMIN_IMAGE=codmin:dev \
 #                      docker compose -f docker-compose.integration.yaml \
 #                          --profile downstream up
 #
 # Profiles:
 #   - default       : postgres + coauth                  (always-runnable)
-#   - downstream    : adds soland + sodmin               (requires :dev images)
+#   - downstream    : adds coland + codmin               (requires :dev images)
 #
 # Config strategy:
 #   The coauth container expects a config at /etc/coauth/config.yaml. The
@@ -97,55 +97,55 @@ services:
       retries: 30
       start_period: 15s
 
-  # soland / sodmin are gated behind `--profile downstream` because no
+  # coland / codmin are gated behind `--profile downstream` because no
   # `:dev` tags are published yet. Bring them up with explicitly-built
-  # local images via `SOLAND_IMAGE=soland:dev SODMIN_IMAGE=sodmin:dev
+  # local images via `COLAND_IMAGE=coland:dev CODMIN_IMAGE=codmin:dev
   # docker compose ... --profile downstream up`. The e2e harness is
   # 404-tolerant for these surfaces, so the default profile (coauth-only)
   # still exercises every wired path.
-  soland:
-    image: ${SOLAND_IMAGE:-soland:dev}
-    container_name: arkret-soland
+  coland:
+    image: ${COLAND_IMAGE:-coland:dev}
+    container_name: arkret-coland
     profiles: ["downstream"]
     depends_on:
       coauth:
         condition: service_healthy
     environment:
-      # soland reads `DATABASE_URL` (or `SOLAND_DATABASE_URL`) and
-      # `SOLAND_BIND`; it has no coauth-issuer environment setting.
+      # coland reads `DATABASE_URL` (or `COLAND_DATABASE_URL`) and
+      # `COLAND_BIND`; it has no coauth-issuer environment setting.
       DATABASE_URL: postgresql://arkret:arkret@postgres:5432/arkret
-      SOLAND_BIND: 0.0.0.0:8698
+      COLAND_BIND: 0.0.0.0:8698
       RUST_LOG: info
     ports:
       - "58008:8698"
-    # Same distroless reasoning as coauth — assume soland ships its own
+    # Same distroless reasoning as coauth — assume coland ships its own
     # `healthcheck` subcommand. If a deployment uses a different image
-    # without one, override via `SOLAND_HEALTHCHECK_CMD`.
+    # without one, override via `COLAND_HEALTHCHECK_CMD`.
     healthcheck:
-      test: ["CMD", "/usr/local/bin/soland", "healthcheck"]
+      test: ["CMD", "/usr/local/bin/coland", "healthcheck"]
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 15s
 
-  sodmin:
-    image: ${SODMIN_IMAGE:-sodmin:dev}
-    container_name: arkret-sodmin
+  codmin:
+    image: ${CODMIN_IMAGE:-codmin:dev}
+    container_name: arkret-codmin
     profiles: ["downstream"]
     depends_on:
       coauth:
         condition: service_healthy
-      soland:
+      coland:
         condition: service_healthy
     environment:
-      SODMIN_BIND: 0.0.0.0:9090
-      SODMIN_COAUTH_BASE: http://coauth:7080/
-      SODMIN_SOLAND_BASE: http://soland:8008/
+      CODMIN_BIND: 0.0.0.0:9090
+      CODMIN_COAUTH_BASE: http://coauth:7080/
+      CODMIN_COLAND_BASE: http://coland:8008/
       RUST_LOG: info
     ports:
       - "59090:9090"
     healthcheck:
-      test: ["CMD", "/usr/local/bin/sodmin", "healthcheck"]
+      test: ["CMD", "/usr/local/bin/codmin", "healthcheck"]
       interval: 5s
       timeout: 5s
       retries: 30

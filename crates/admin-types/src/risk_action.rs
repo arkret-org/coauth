@@ -6,7 +6,7 @@
 //! endpoints, plus the GET-side `current` snapshot and history transition
 //! record. They migrated out of
 //! `coauth/crates/backend/src/handlers/admin/v1/accounts/risk_action.rs`
-//! so that `sodmin` can build the same struct it serializes against the
+//! so that `codmin` can build the same struct it serializes against the
 //! one the backend deserializes.
 
 use arkret_identifiers::DidCoreId;

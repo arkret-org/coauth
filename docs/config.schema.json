@@ -1404,7 +1404,7 @@
       "type": "object",
       "properties": {
         "name": {
-          "description": "Human-readable identifier for the consumer, such as `soland-prod`.",
+          "description": "Human-readable identifier for the consumer, such as `coland-prod`.",
           "type": "string"
         },
         "endpoint": {
@@ -4053,7 +4053,7 @@
           "type": "boolean"
         },
         "registration_email_delivery_bypass_allowed": {
-          "description": "Allow registration flows to bypass delivery of verification email in\ndev/test deployments (default: `false`). Verification/recovery policy\nremains in coauth; soland only provides DID/webvh primitives.",
+          "description": "Allow registration flows to bypass delivery of verification email in\ndev/test deployments (default: `false`). Verification/recovery policy\nremains in coauth; coland only provides DID/webvh primitives.",
           "type": "boolean"
         },
         "password_change_allowed": {
@@ -4098,7 +4098,7 @@
       "type": "object",
       "properties": {
         "access_token_ttl": {
-          "description": "Lifetime of access tokens (seconds). Default: 300 (5 min). Hard-capped\nat 900 (15 min): bearer access tokens must be short-lived, matching the\n`capped_bearer_expiry <= 15min` rule enforced on the soland side. The\nissuance path additionally clamps to this ceiling as a defence in depth.",
+          "description": "Lifetime of access tokens (seconds). Default: 300 (5 min). Hard-capped\nat 900 (15 min): bearer access tokens must be short-lived, matching the\n`capped_bearer_expiry <= 15min` rule enforced on the coland side. The\nissuance path additionally clamps to this ceiling as a defence in depth.",
           "type": "integer",
           "format": "uint64",
           "minimum": 60,

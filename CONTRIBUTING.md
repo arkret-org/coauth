@@ -45,7 +45,7 @@ Conformance and integration helpers live under `conformance/` and `scripts/`;
 use the CI workflow definitions as the source of truth for the exact command
 line.
 
-Integration stack (coauth + soland + Postgres) via docker-compose:
+Integration stack (coauth + coland + Postgres) via docker-compose:
 
 ```sh
 docker compose -f docker-compose.integration.yaml up --build

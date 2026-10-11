@@ -4,9 +4,9 @@
 
 //! Per-recipient invite-relay handler (consent-gated forward).
 //!
-//! Before an actor (coauth admin / inkson UI / sodmin operator) can deliver an
+//! Before an actor (coauth admin / inkson UI / codmin operator) can deliver an
 //! invite to a target principal, coauth must consult the holder's consent
-//! result at the target Station (`soland`). The read+gate helper lives in
+//! result at the target Station (`coland`). The read+gate helper lives in
 //! `consent_result_query`; this handler is the call-site that uses it.
 //!
 //! ## Flow
@@ -63,7 +63,7 @@ pub struct InviteRelayRequestBody {
     /// trusted as authentication on its own.
     pub inviter_id: DidCoreId,
 
-    /// Base URL of the target's `server_name` (`soland`).
+    /// Base URL of the target's `server_name` (`coland`).
     ///
     /// With an invite delivery, this must match the configured endpoint for
     /// its exact recipient AccountId's Station. When omitted, that Station

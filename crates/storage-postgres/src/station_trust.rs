@@ -422,7 +422,7 @@ mod tests {
             canonical_endpoint: format!("https://{name}.example/"),
             service_id: arkret_identifiers::DidCoreId::new(service_id.to_owned())
                 .expect("valid service core id"),
-            did: arkret_identifiers::Did::new(format!("did:webvh:{scid}:soland.example"))
+            did: arkret_identifiers::Did::new(format!("did:webvh:{scid}:coland.example"))
                 .expect("valid DID"),
             method_history_head: "sha256:aa".to_owned(),
             version_id: "1-bb".to_owned(),
@@ -444,7 +444,7 @@ mod tests {
 
         assert!(
             repo.station_trust()
-                .find_by_endpoint("https://soland.example/")
+                .find_by_endpoint("https://coland.example/")
                 .await
                 .unwrap()
                 .is_none()
@@ -452,7 +452,7 @@ mod tests {
 
         let enrolled = repo
             .station_trust()
-            .enroll(&clock, enrollment_params("soland", "ak:did_core:webvh:old"))
+            .enroll(&clock, enrollment_params("coland", "ak:did_core:webvh:old"))
             .await
             .unwrap()
             .unwrap();
@@ -460,29 +460,29 @@ mod tests {
 
         let fetched = repo
             .station_trust()
-            .find_by_endpoint("https://soland.example/")
+            .find_by_endpoint("https://coland.example/")
             .await
             .unwrap()
             .unwrap();
         assert_eq!(fetched.service_id.as_str(), "ak:did_core:webvh:old");
         assert_eq!(
             repo.station_trust()
-                .find_by_name("soland")
+                .find_by_name("coland")
                 .await
                 .unwrap()
                 .unwrap()
                 .canonical_endpoint,
-            "https://soland.example/"
+            "https://coland.example/"
         );
 
         // CAS replace with a stale expectation must not apply.
-        let mut new_params = enrollment_params("soland", "ak:did_core:webvh:new");
+        let mut new_params = enrollment_params("coland", "ak:did_core:webvh:new");
         new_params.version_id = "2-dd".to_owned();
         let replaced = repo
             .station_trust()
             .replace(
                 &clock,
-                "soland",
+                "coland",
                 &arkret_identifiers::DidCoreId::new("ak:did_core:webvh:stale".to_owned()).unwrap(),
                 new_params.clone(),
             )
@@ -491,7 +491,7 @@ mod tests {
         assert!(!replaced);
         assert_eq!(
             repo.station_trust()
-                .find_by_name("soland")
+                .find_by_name("coland")
                 .await
                 .unwrap()
                 .unwrap()
@@ -505,7 +505,7 @@ mod tests {
             .station_trust()
             .replace(
                 &clock,
-                "soland",
+                "coland",
                 &arkret_identifiers::DidCoreId::new("ak:did_core:webvh:old".to_owned()).unwrap(),
                 new_params,
             )
@@ -514,7 +514,7 @@ mod tests {
         assert!(replaced);
         assert_eq!(
             repo.station_trust()
-                .find_by_name("soland")
+                .find_by_name("coland")
                 .await
                 .unwrap()
                 .unwrap()
@@ -527,8 +527,8 @@ mod tests {
             repo.station_trust()
                 .record_verification(
                     &clock,
-                    "soland",
-                    "https://soland.example/",
+                    "coland",
+                    "https://coland.example/",
                     "sha256:aa",
                     &arkret_identifiers::Did::new("did:webvh:new:replacement.example").unwrap(),
                     "sha256:ee",
@@ -539,7 +539,7 @@ mod tests {
         );
         assert_eq!(
             repo.station_trust()
-                .find_by_name("soland")
+                .find_by_name("coland")
                 .await
                 .unwrap()
                 .unwrap()
@@ -552,7 +552,7 @@ mod tests {
                 &mut rng,
                 &clock,
                 NewStationTrustAudit {
-                    enrollment_name: "soland".to_owned(),
+                    enrollment_name: "coland".to_owned(),
                     action: StationTrustAuditAction::Replaced,
                     service_id: Some(
                         arkret_identifiers::DidCoreId::new("ak:did_core:webvh:new".to_owned())
@@ -569,16 +569,16 @@ mod tests {
             .unwrap();
         let audits = repo
             .station_trust()
-            .list_audits("soland", 10)
+            .list_audits("coland", 10)
             .await
             .unwrap();
         assert_eq!(audits.len(), 1);
         assert_eq!(audits[0].action, StationTrustAuditAction::Replaced);
 
-        assert!(repo.station_trust().revoke("soland").await.unwrap());
+        assert!(repo.station_trust().revoke("coland").await.unwrap());
         assert!(
             repo.station_trust()
-                .find_by_name("soland")
+                .find_by_name("coland")
                 .await
                 .unwrap()
                 .is_none()

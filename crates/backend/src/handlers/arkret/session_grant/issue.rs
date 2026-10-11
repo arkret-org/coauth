@@ -1249,7 +1249,7 @@ async fn issue_agent_key_proof_session_grant(
     // The agent runtime authenticates with its own key, not a human browser
     // session, so there is no browser-session anchor to persist against. The
     // grant is a self-validating signed `ak.session.grant` JWT bound to the
-    // runtime's DPoP key with the capped agent TTL; soland verifies the coauth
+    // runtime's DPoP key with the capped agent TTL; coland verifies the coauth
     // issuer_id signature and rechecks agent status inside the revocation
     // freshness window (AKP-0008 §4.11 natural-expiry path), bounded by the
     // ≤ 15-minute TTL.

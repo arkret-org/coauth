@@ -10,7 +10,7 @@
 
 // `IntegrationManifest` (and the nested `IntegrationManifestDependency`
 // / `IntegrationManifestSurface`) live in
-// `coauth_admin_types::integration_manifest_admin` so the sodmin admin SPA
+// `coauth_admin_types::integration_manifest_admin` so the codmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
 use arkret_identifiers::{DeviceId, Did, DidCoreId};
@@ -25,10 +25,10 @@ use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
 };
+use coland_contracts::admin::AccountLocalpartAddRequestBody;
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
-use soland_contracts::admin::AccountLocalpartAddRequestBody;
 use ulid::Ulid;
 
 use super::{DepotExt, DpopSessionBinding, RouteError, make_clock, make_rng};
@@ -125,14 +125,14 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
     )
 }
 
-fn soland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
+fn coland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid Station endpoint: {error}"))?;
-    base.join(soland_contracts::ACCOUNT_PROJECTION_PATH)
+    base.join(coland_contracts::ACCOUNT_PROJECTION_PATH)
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
-fn soland_account_localparts_endpoint(
+fn coland_account_localparts_endpoint(
     principal_endpoint: &str,
     principal_id: &str,
 ) -> Result<url::Url, String> {
@@ -140,16 +140,16 @@ fn soland_account_localparts_endpoint(
         .map_err(|error| format!("invalid Station endpoint: {error}"))?;
     let principal_id = DidCoreId::new(principal_id.to_owned())
         .map_err(|error| format!("invalid principal id: {error}"))?;
-    soland_contracts::account_localparts_endpoint(endpoint, &principal_id)
+    coland_contracts::account_localparts_endpoint(endpoint, &principal_id)
         .map_err(|error| error.to_string())
 }
 
-fn soland_account_register_body(
+fn coland_account_register_body(
     principal: &VerifiedPrincipalIdentity,
     display_name: Option<&str>,
     device_id: Option<&str>,
-) -> Result<soland_contracts::AccountProjectionRequestBody, String> {
-    Ok(soland_contracts::AccountProjectionRequestBody {
+) -> Result<coland_contracts::AccountProjectionRequestBody, String> {
+    Ok(coland_contracts::AccountProjectionRequestBody {
         principal_id: principal.principal_id.clone(),
         did: principal.did.clone(),
         display_name: display_name.map(ToOwned::to_owned),
@@ -162,16 +162,16 @@ fn soland_account_register_body(
     })
 }
 
-async fn send_soland_account_register(
+async fn send_coland_account_register(
     http_client: &reqwest::Client,
     endpoint: &url::Url,
     bearer: &str,
-    body: &soland_contracts::AccountProjectionRequestBody,
+    body: &coland_contracts::AccountProjectionRequestBody,
 ) -> Result<(reqwest::StatusCode, String), String> {
     let body_bytes = arkret_canonical::canonical_json_bytes(body)
         .map_err(|error| format!("canonicalize principal account register request: {error}"))?;
     let response =
-        outbound_http::send_with_policy(outbound_http::soland_policy("account_register"), || {
+        outbound_http::send_with_policy(outbound_http::coland_policy("account_register"), || {
             http_client
                 .post(endpoint.clone())
                 .bearer_auth(bearer)
@@ -188,7 +188,7 @@ async fn send_soland_account_register(
     Ok((status, body))
 }
 
-async fn send_soland_primary_localpart(
+async fn send_coland_primary_localpart(
     http_client: &reqwest::Client,
     endpoint: &url::Url,
     bearer: &str,
@@ -201,7 +201,7 @@ async fn send_soland_primary_localpart(
     let body_bytes = arkret_canonical::canonical_json_bytes(&body)
         .map_err(|error| format!("canonicalize principal localpart request: {error}"))?;
     let response = outbound_http::send_with_policy(
-        outbound_http::soland_policy("account_primary_localpart_sync"),
+        outbound_http::coland_policy("account_primary_localpart_sync"),
         || {
             http_client
                 .post(endpoint.clone())
@@ -220,14 +220,14 @@ async fn send_soland_primary_localpart(
     Ok((status, body))
 }
 
-fn soland_account_register_failure(status: reqwest::StatusCode, body: &str) -> String {
+fn coland_account_register_failure(status: reqwest::StatusCode, body: &str) -> String {
     format!(
         "principal account register returned {status}: {}",
         body.chars().take(256).collect::<String>()
     )
 }
 
-fn soland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> String {
+fn coland_account_localpart_failure(status: reqwest::StatusCode, body: &str) -> String {
     format!(
         "principal account primary localpart sync returned {status}: {}",
         body.chars().take(256).collect::<String>()
@@ -240,7 +240,7 @@ pub(crate) struct VerifiedPrincipalIdentity {
     pub did: Did,
 }
 
-pub(crate) async fn ensure_soland_account_registered(
+pub(crate) async fn ensure_coland_account_registered(
     http_client: &reqwest::Client,
     principal_endpoint: Option<&str>,
     principal: &VerifiedPrincipalIdentity,
@@ -263,21 +263,21 @@ pub(crate) async fn ensure_soland_account_registered(
             "canonical principal account registration requires embedded_webvh_registration_bearer"
                 .to_owned()
         })?;
-    let endpoint = soland_account_register_endpoint(principal_endpoint)?;
-    let request_body = soland_account_register_body(principal, display_name, device_id)?;
+    let endpoint = coland_account_register_endpoint(principal_endpoint)?;
+    let request_body = coland_account_register_body(principal, display_name, device_id)?;
     let (status, response_body) =
-        send_soland_account_register(http_client, &endpoint, bearer, &request_body).await?;
+        send_coland_account_register(http_client, &endpoint, bearer, &request_body).await?;
     if !status.is_success() {
-        return Err(soland_account_register_failure(status, &response_body));
+        return Err(coland_account_register_failure(status, &response_body));
     }
     let endpoint =
-        soland_account_localparts_endpoint(principal_endpoint, principal.principal_id.as_str())?;
+        coland_account_localparts_endpoint(principal_endpoint, principal.principal_id.as_str())?;
     let (status, response_body) =
-        send_soland_primary_localpart(http_client, &endpoint, bearer, primary_localpart).await?;
+        send_coland_primary_localpart(http_client, &endpoint, bearer, primary_localpart).await?;
     if status.is_success() {
         return Ok(());
     }
-    Err(soland_account_localpart_failure(status, &response_body))
+    Err(coland_account_localpart_failure(status, &response_body))
 }
 
 /// Validate an OIDC authorization code to create an AccountHandoff. This is
@@ -1344,7 +1344,7 @@ pub async fn integration_describe() -> Result<Json<IntegrationManifest>, RouteEr
         describe_path: "/_coauth/account/integration/describe".to_owned(),
         dependencies: vec![
             IntegrationManifestDependency {
-                service: "soland".to_owned(),
+                service: "coland".to_owned(),
                 purpose: "station_session_exchange".to_owned(),
                 required_contract: "arkret.rest.principal_bridge.v1".to_owned(),
                 discovery_path: "/_arkret/describe".to_owned(),
@@ -1400,7 +1400,7 @@ mod tests {
     const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_OPERATION_BEARER: &str = "account-operation-secret";
-    const ACCOUNT_REGISTER_PATH: &str = soland_contracts::ACCOUNT_PROJECTION_PATH;
+    const ACCOUNT_REGISTER_PATH: &str = coland_contracts::ACCOUNT_PROJECTION_PATH;
 
     fn test_principal() -> VerifiedPrincipalIdentity {
         let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();
@@ -1465,31 +1465,31 @@ mod tests {
     }
 
     #[test]
-    fn soland_account_register_endpoint_uses_private_projection_path() {
-        let endpoint = soland_account_register_endpoint("https://local.host/base/path").unwrap();
+    fn coland_account_register_endpoint_uses_private_projection_path() {
+        let endpoint = coland_account_register_endpoint("https://local.host/base/path").unwrap();
 
         // The standard account-register route lives at the service root;
         // the join must also discard any base path on the endpoint URL.
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/_soland/gate/account/project"
+            "https://local.host/_coland/gate/account/project"
         );
     }
 
     #[test]
-    fn soland_account_localparts_endpoint_encodes_principal_id_segment() {
+    fn coland_account_localparts_endpoint_encodes_principal_id_segment() {
         let endpoint =
-            soland_account_localparts_endpoint("https://local.host/base/path", TEST_PRINCIPAL_ID)
+            coland_account_localparts_endpoint("https://local.host/base/path", TEST_PRINCIPAL_ID)
                 .unwrap();
 
         assert_eq!(
             endpoint.as_str(),
-            "https://local.host/_soland/accounts/ak:did_core:webvh:scid:local.host/localparts"
+            "https://local.host/_coland/accounts/ak:did_core:webvh:scid:local.host/localparts"
         );
     }
 
     #[tokio::test]
-    async fn soland_account_projection_registers_account_then_syncs_primary_localpart() {
+    async fn coland_account_projection_registers_account_then_syncs_primary_localpart() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
@@ -1504,7 +1504,7 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_ID)
+        let localparts_path = coland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_ID)
             .unwrap()
             .path()
             .to_owned();
@@ -1531,7 +1531,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        ensure_soland_account_registered(
+        ensure_coland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
             &test_principal(),
@@ -1545,7 +1545,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn soland_account_register_failed_precondition_is_not_swallowed() {
+    async fn coland_account_register_failed_precondition_is_not_swallowed() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
@@ -1557,7 +1557,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let error = ensure_soland_account_registered(
+        let error = ensure_coland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
             &test_principal(),
@@ -1573,7 +1573,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn soland_primary_localpart_conflict_blocks_grant_issuance() {
+    async fn coland_primary_localpart_conflict_blocks_grant_issuance() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
@@ -1586,7 +1586,7 @@ mod tests {
             .expect(1)
             .mount(&server)
             .await;
-        let localparts_path = soland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_ID)
+        let localparts_path = coland_account_localparts_endpoint(&server.uri(), TEST_PRINCIPAL_ID)
             .unwrap()
             .path()
             .to_owned();
@@ -1600,7 +1600,7 @@ mod tests {
             .mount(&server)
             .await;
 
-        let error = ensure_soland_account_registered(
+        let error = ensure_coland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
             &test_principal(),
@@ -1617,10 +1617,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn soland_account_projection_rejects_empty_primary_localpart_before_registration() {
+    async fn coland_account_projection_rejects_empty_primary_localpart_before_registration() {
         let server = MockServer::start().await;
 
-        let error = ensure_soland_account_registered(
+        let error = ensure_coland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
             &test_principal(),
@@ -1637,9 +1637,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn soland_account_register_requires_operation_bearer() {
+    async fn coland_account_register_requires_operation_bearer() {
         let server = MockServer::start().await;
-        let error = ensure_soland_account_registered(
+        let error = ensure_coland_account_registered(
             &reqwest::Client::new(),
             Some(&server.uri()),
             &test_principal(),

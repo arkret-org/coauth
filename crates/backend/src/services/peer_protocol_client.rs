@@ -329,7 +329,7 @@ impl<'a> PeerProtocolClient<'a> {
         )?;
 
         let response = outbound_http::send_with_policy(
-            outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
+            outbound_http::coland_policy(policy_name).with_timeout(Duration::from_secs(5)),
             || {
                 let mut request = self
                     .http_client
@@ -359,7 +359,7 @@ impl<'a> PeerProtocolClient<'a> {
     {
         let signed = self.signed_request("GET", &url, operation_id, None, None)?;
         let response = outbound_http::send_with_policy(
-            outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
+            outbound_http::coland_policy(policy_name).with_timeout(Duration::from_secs(5)),
             || {
                 let mut request = self.http_client.get(url.clone());
                 for (name, value) in &signed.headers {
@@ -513,7 +513,7 @@ impl<'a> InternalAuthorityChannel<'a> {
         let body_bytes = canonical_json_bytes(body)
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
         let response = outbound_http::send_with_policy(
-            outbound_http::soland_policy(policy_name).with_timeout(Duration::from_secs(5)),
+            outbound_http::coland_policy(policy_name).with_timeout(Duration::from_secs(5)),
             || {
                 let mut request = self
                     .http_client

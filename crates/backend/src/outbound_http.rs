@@ -241,15 +241,15 @@ async fn fetch_bounded_inner(
 /// retry. The attempt budget stays deliberately below the §9 ceiling of 5
 /// retries per 5 minutes.
 #[must_use]
-pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPolicy {
-    OutboundRequestPolicy::new("soland", operation)
+pub(crate) const fn coland_policy(operation: &'static str) -> OutboundRequestPolicy {
+    OutboundRequestPolicy::new("coland", operation)
         .with_timeout(Duration::from_secs(10))
         .with_max_attempts(2)
 }
 
 /// Policy for Station trust verification.
 ///
-/// Coauth and Soland are commonly launched together behind the same reverse
+/// Coauth and Coland are commonly launched together behind the same reverse
 /// proxy. During that short readiness window the proxy can legitimately
 /// return 502/503/504 even though the configured endpoint is correct. Use the
 /// full Arkret retry budget here (one initial attempt plus at most five
@@ -258,7 +258,7 @@ pub(crate) const fn soland_policy(operation: &'static str) -> OutboundRequestPol
 /// statuses are retried; verified evidence conflicts still fail immediately.
 #[must_use]
 pub(crate) const fn principal_trust_policy(operation: &'static str) -> OutboundRequestPolicy {
-    OutboundRequestPolicy::new("soland", operation)
+    OutboundRequestPolicy::new("coland", operation)
         .with_timeout(Duration::from_secs(10))
         .with_max_attempts(6)
 }

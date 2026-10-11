@@ -337,7 +337,7 @@ fn config_with_internal_authority_shared_secret(bearer: &str) -> ArkretConfig {
         ),
         trust_domain: Some("ak:trust_domain:auth.example".to_owned()),
         stations: vec![StationConfig {
-            name: "soland-dev".to_owned(),
+            name: "coland-dev".to_owned(),
             endpoint: "https://session-grant-static.test/".parse().unwrap(),
             internal_authority_shared_secret: Some(bearer.to_owned().into()),
             embedded_webvh_registration_bearer: None,
@@ -365,7 +365,7 @@ fn station_internal_authority_shared_secret_matches_exact_token() {
 fn shared_static_bearer_is_rejected_as_ambiguous() {
     let mut config = config_with_internal_authority_shared_secret("shared-cluster-token");
     config.stations.push(StationConfig {
-        name: "soland-beta".to_owned(),
+        name: "coland-beta".to_owned(),
         endpoint: "https://session-grant-static-beta.test/".parse().unwrap(),
         internal_authority_shared_secret: Some("shared-cluster-token".to_owned().into()),
         embedded_webvh_registration_bearer: None,
@@ -682,7 +682,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         .unwrap(),
         local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
         device_id: Some("device-1".to_owned()),
-        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
+        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:coland.example.com")
             .unwrap(),
         scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
@@ -704,7 +704,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
 
     let body = serde_json::to_value(SessionGrantRecord::from(grant)).unwrap();
 
-    assert_eq!(body["audience_id"], "ak:did_core:web:soland.example.com");
+    assert_eq!(body["audience_id"], "ak:did_core:web:coland.example.com");
     assert_eq!(
         body["scopes"],
         serde_json::json!([STATION_SESSION_BIND_SCOPE])
@@ -737,7 +737,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
         .unwrap(),
         local_account_id: coauth_data::LocalAccountId::new(user.id.to_string()).unwrap(),
         device_id: Some("device-1".to_owned()),
-        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:soland.example.com")
+        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:coland.example.com")
             .unwrap(),
         scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
         grant_jwt: "header.payload.signature".to_owned(),
@@ -762,7 +762,7 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
             &grant,
             Some(&user),
             now,
-            Some("ak:did_core:web:soland.example.com")
+            Some("ak:did_core:web:coland.example.com")
         ),
         SessionGrantAdminIntrospectionStatus::Active
     );
@@ -1567,13 +1567,13 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
                 pairing_request_id: "agent-pairing-request".to_owned(),
                 request_canonical_digest: format!("sha256:{}", "a".repeat(64)),
                 raw_payload_digest: format!("sha256:{}", "b".repeat(64)),
-                soland_fanout_state:
+                coland_fanout_state:
                     coauth_data::accountability::AccountabilityGrantFanoutState::Queued,
-                soland_fanout_idempotency_key: authorization_event_id.to_owned(),
-                soland_fanout_payload: serde_json::json!({}),
-                soland_fanout_attempt: 0,
-                soland_fanout_next_retry_at: None,
-                soland_fanout_dead_letter_reason: None,
+                coland_fanout_idempotency_key: authorization_event_id.to_owned(),
+                coland_fanout_payload: serde_json::json!({}),
+                coland_fanout_attempt: 0,
+                coland_fanout_next_retry_at: None,
+                coland_fanout_dead_letter_reason: None,
             },
         )
         .await
@@ -1666,7 +1666,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
         seed_persisted_session_grant(&mut state).await;
 
     // Hits the deployment-private Account Authority introspection adapter.
-    // (the surface soland calls). The selector check runs before auth, so an
+    // (the surface coland calls). The selector check runs before auth, so an
     // ambiguous selector is rejected regardless of bearer.
 
     // Both present → 422 schema_violation: the body parsed, and it fails the
@@ -2044,7 +2044,7 @@ fn issue_handle_claim_emits_canonical_handle_and_aliases() {
     let keyring = test_account_authority_keyring();
 
     // Subject is the client-created webvh principal DID, passed by the caller.
-    let subject_id = "ak:did_core:webvh:zQmExampleScid:soland.example";
+    let subject_id = "ak:did_core:webvh:zQmExampleScid:coland.example";
     let account_id = arkret_wire::AccountId::new(
         arkret_identifiers::DidCoreId::new(subject_id).unwrap(),
         owning_station_id_for(&arkret_config),
@@ -2141,7 +2141,7 @@ fn issue_handle_claim_rejects_organization_kind_without_organization_id() {
     let keyring = test_keyring();
 
     let account_id = arkret_wire::AccountId::new(
-        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zQmExampleScid:soland.example")
+        arkret_identifiers::DidCoreId::new("ak:did_core:webvh:zQmExampleScid:coland.example")
             .unwrap(),
         owning_station_id_for(&arkret_config),
     );

@@ -99,7 +99,7 @@ mod tests {
         // The wire shape of `DeviceRevokeOutcome` is part of the
         // admin-handler contract (it is serialised back to the
         // operator). Lock down the field names + their typed payload:
-        // a regression here would break every sodmin client.
+        // a regression here would break every codmin client.
         let now = Utc::now();
         let outcome = DeviceRevokeOutcome {
             device_id: "ak:device:0196419b-0000-7000-8000-000000000006".to_owned(),

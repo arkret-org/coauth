@@ -114,7 +114,7 @@ sha1 = { workspace = true, features = ["oid"] }
 sha2 = { workspace = true }
 signature = { workspace = true }
 socket2 = { workspace = true }
-soland-contracts = { workspace = true }
+coland-contracts = { workspace = true }
 subtle = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }

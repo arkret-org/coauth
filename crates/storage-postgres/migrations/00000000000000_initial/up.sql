@@ -65,12 +65,12 @@ CREATE TABLE public.accountability_grants (
     revoked_at timestamp with time zone,
     revoked_reason text,
     raw_payload_digest text NOT NULL,
-    soland_fanout_state text NOT NULL,
-    soland_fanout_idempotency_key text NOT NULL,
-    soland_fanout_payload jsonb NOT NULL,
-    soland_fanout_attempt integer DEFAULT 0 NOT NULL,
-    soland_fanout_next_retry_at timestamp with time zone,
-    soland_fanout_dead_letter_reason text,
+    coland_fanout_state text NOT NULL,
+    coland_fanout_idempotency_key text NOT NULL,
+    coland_fanout_payload jsonb NOT NULL,
+    coland_fanout_attempt integer DEFAULT 0 NOT NULL,
+    coland_fanout_next_retry_at timestamp with time zone,
+    coland_fanout_dead_letter_reason text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
@@ -88,7 +88,7 @@ CREATE TABLE public.accountability_subject_revocations (
 -- AKP-0008 §4.5: durable accepted agent key authorizations. Column order
 -- tracks event-payload.schema.json#/$defs/agent_key_authorize_payload
 -- (agent_id, key_id, verification_method, accountable_principal_id,
--- audience, issued_at, expires_at) so the fan-out payload soland writes as
+-- audience, issued_at, expires_at) so the fan-out payload coland writes as
 -- `ak.agent.key.authorize` stays field-aligned with the spec. `expires_at`
 -- is nullable: absent means the authorization never expires by time and is
 -- governed solely by the revocation chain (key-management §3.6.1).
@@ -111,12 +111,12 @@ CREATE TABLE public.agent_key_authorizations (
     quarantined_at timestamp with time zone,
     quarantine_reason text,
     raw_payload_digest text NOT NULL,
-    soland_fanout_state text NOT NULL,
-    soland_fanout_idempotency_key text NOT NULL,
-    soland_fanout_payload jsonb NOT NULL,
-    soland_fanout_attempt integer DEFAULT 0 NOT NULL,
-    soland_fanout_next_retry_at timestamp with time zone,
-    soland_fanout_dead_letter_reason text,
+    coland_fanout_state text NOT NULL,
+    coland_fanout_idempotency_key text NOT NULL,
+    coland_fanout_payload jsonb NOT NULL,
+    coland_fanout_attempt integer DEFAULT 0 NOT NULL,
+    coland_fanout_next_retry_at timestamp with time zone,
+    coland_fanout_dead_letter_reason text,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
@@ -1379,7 +1379,7 @@ ALTER TABLE ONLY public.accountability_grants
     ADD CONSTRAINT accountability_grants_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.accountability_grants
-    ADD CONSTRAINT accountability_grants_soland_fanout_idempotency_key_key UNIQUE (soland_fanout_idempotency_key);
+    ADD CONSTRAINT accountability_grants_coland_fanout_idempotency_key_key UNIQUE (coland_fanout_idempotency_key);
 
 ALTER TABLE ONLY public.accountability_subject_revocations
     ADD CONSTRAINT accountability_subject_revocations_pkey PRIMARY KEY (id);
@@ -1394,7 +1394,7 @@ ALTER TABLE ONLY public.agent_key_authorizations
     ADD CONSTRAINT agent_key_authorizations_authorized_event_id_key UNIQUE (authorized_event_id);
 
 ALTER TABLE ONLY public.agent_key_authorizations
-    ADD CONSTRAINT agent_key_authorizations_soland_fanout_idempotency_key_key UNIQUE (soland_fanout_idempotency_key);
+    ADD CONSTRAINT agent_key_authorizations_coland_fanout_idempotency_key_key UNIQUE (coland_fanout_idempotency_key);
 
 ALTER TABLE ONLY public.agent_key_authorization_collision_variants
     ADD CONSTRAINT agent_key_authorization_collision_variants_pkey PRIMARY KEY (id);

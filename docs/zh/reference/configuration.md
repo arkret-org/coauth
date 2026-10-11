@@ -77,13 +77,13 @@ arkret:
   principal_method: did:webvh
 
   stations:
-    - name: soland
-      endpoint: https://soland.example.com/
-      internal_authority_shared_secret_file: /run/secrets/soland_internal_authority_shared_secret
-      embedded_webvh_registration_bearer: ${SOLAND_WEBVH_REGISTRATION_BEARER}
+    - name: coland
+      endpoint: https://coland.example.com/
+      internal_authority_shared_secret_file: /run/secrets/coland_internal_authority_shared_secret
+      embedded_webvh_registration_bearer: ${COLAND_WEBVH_REGISTRATION_BEARER}
 
   # 配置多个 Station trust edge 时必须显式指定。
-  owning_station: soland
+  owning_station: coland
 
   identity_registry:
     resolver: https://resolver.example.com/

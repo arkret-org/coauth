@@ -292,7 +292,7 @@ pub async fn introspect_session_grant(
             // report active WITH metadata over this authenticated S2S channel;
             // only the advisory flag is raised. (Forcing `active=false` /
             // withholding metadata here broke every Station session:
-            // soland never reached its own DPoP check and read "not active".)
+            // coland never reached its own DPoP check and read "not active".)
             None => {
                 proof_required = true;
             }

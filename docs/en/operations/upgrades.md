@@ -38,7 +38,7 @@ The following surfaces are tracked contracts:
 
 - `/.well-known/openid-configuration`
 - `/.well-known/arkret/openapi.yaml`
-- `/_coauth/admin/openapi.yaml` (the canonical `sodmin` integration
+- `/_coauth/admin/openapi.yaml` (the canonical `codmin` integration
   contract)
 - The Station's `/_arkret/gate/account/*` operations dispatched to coauth;
   `/_arkret/describe` remains the owning Station's surface.

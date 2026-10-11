@@ -4,7 +4,7 @@
 //! Since the [`NotificationCenter`] is not available in the HTTP depot,
 //! channel availability is inferred from the site configuration flags.
 //!
-//! Wire shape lives in `coauth-admin-types::notification_admin` so sodmin
+//! Wire shape lives in `coauth-admin-types::notification_admin` so codmin
 //! and any other admin client deserialize against the same typed
 //! definition rustc enforces here.
 

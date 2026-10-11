@@ -89,15 +89,15 @@ mod tests {
             reason: Some("test grant".to_owned()),
             issued_at: now,
             raw_payload_digest: digest(&format!("payload-{label}")),
-            soland_fanout_state: AccountabilityGrantFanoutState::Queued,
-            soland_fanout_idempotency_key: format!("idem-{label}"),
-            soland_fanout_payload: serde_json::json!({
+            coland_fanout_state: AccountabilityGrantFanoutState::Queued,
+            coland_fanout_idempotency_key: format!("idem-{label}"),
+            coland_fanout_payload: serde_json::json!({
                 "kind": "org.arkret.coauth.accountability_grant.fanout.v1",
                 "label": label,
             }),
-            soland_fanout_attempt: 0,
-            soland_fanout_next_retry_at: Some(now),
-            soland_fanout_dead_letter_reason: None,
+            coland_fanout_attempt: 0,
+            coland_fanout_next_retry_at: Some(now),
+            coland_fanout_dead_letter_reason: None,
         }
     }
 
@@ -124,7 +124,7 @@ mod tests {
 
         let mut duplicate = sample_new(&mut rng, &clock, &label, &agent, &controller);
         duplicate.accountability_grant_id = grant_id(&mut rng, &clock);
-        duplicate.soland_fanout_idempotency_key = format!("idem-{label}-2");
+        duplicate.coland_fanout_idempotency_key = format!("idem-{label}-2");
         let err = repo
             .accountability_grant()
             .add(&mut rng, &clock, duplicate)
@@ -156,23 +156,23 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            grant.soland_fanout_state,
+            grant.coland_fanout_state,
             AccountabilityGrantFanoutState::Queued
         );
-        assert_eq!(grant.soland_fanout_attempt, 0);
-        assert!(grant.soland_fanout_next_retry_at.is_some());
+        assert_eq!(grant.coland_fanout_attempt, 0);
+        assert!(grant.coland_fanout_next_retry_at.is_some());
 
-        let queue = unique_label("soland-accountability-grant-fanout");
+        let queue = unique_label("coland-accountability-grant-fanout");
         repo.queue_job()
             .schedule(
                 &mut rng,
                 &clock,
                 &queue,
-                grant.soland_fanout_payload.clone(),
+                grant.coland_fanout_payload.clone(),
                 serde_json::json!({
-                    "idempotency_key": grant.soland_fanout_idempotency_key,
-                    "attempt": grant.soland_fanout_attempt,
-                    "next_retry_at": grant.soland_fanout_next_retry_at,
+                    "idempotency_key": grant.coland_fanout_idempotency_key,
+                    "attempt": grant.coland_fanout_attempt,
+                    "next_retry_at": grant.coland_fanout_next_retry_at,
                 }),
             )
             .await
@@ -358,12 +358,12 @@ struct AccountabilityGrantRow {
     revoked_at: Option<DateTime<Utc>>,
     revoked_reason: Option<String>,
     raw_payload_digest: String,
-    soland_fanout_state: String,
-    soland_fanout_idempotency_key: String,
-    soland_fanout_payload: serde_json::Value,
-    soland_fanout_attempt: i32,
-    soland_fanout_next_retry_at: Option<DateTime<Utc>>,
-    soland_fanout_dead_letter_reason: Option<String>,
+    coland_fanout_state: String,
+    coland_fanout_idempotency_key: String,
+    coland_fanout_payload: serde_json::Value,
+    coland_fanout_attempt: i32,
+    coland_fanout_next_retry_at: Option<DateTime<Utc>>,
+    coland_fanout_dead_letter_reason: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -373,9 +373,9 @@ impl TryFrom<AccountabilityGrantRow> for AccountabilityGrant {
 
     fn try_from(value: AccountabilityGrantRow) -> Result<Self, Self::Error> {
         let id = Ulid::from(value.id);
-        let soland_fanout_state = value.soland_fanout_state.parse().map_err(|e| {
+        let coland_fanout_state = value.coland_fanout_state.parse().map_err(|e| {
             DatabaseInconsistencyError::on("accountability_grants")
-                .column("soland_fanout_state")
+                .column("coland_fanout_state")
                 .row(id)
                 .source(e)
         })?;
@@ -392,12 +392,12 @@ impl TryFrom<AccountabilityGrantRow> for AccountabilityGrant {
             revoked_at: value.revoked_at,
             revoked_reason: value.revoked_reason,
             raw_payload_digest: value.raw_payload_digest,
-            soland_fanout_state,
-            soland_fanout_idempotency_key: value.soland_fanout_idempotency_key,
-            soland_fanout_payload: value.soland_fanout_payload,
-            soland_fanout_attempt: value.soland_fanout_attempt,
-            soland_fanout_next_retry_at: value.soland_fanout_next_retry_at,
-            soland_fanout_dead_letter_reason: value.soland_fanout_dead_letter_reason,
+            coland_fanout_state,
+            coland_fanout_idempotency_key: value.coland_fanout_idempotency_key,
+            coland_fanout_payload: value.coland_fanout_payload,
+            coland_fanout_attempt: value.coland_fanout_attempt,
+            coland_fanout_next_retry_at: value.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: value.coland_fanout_dead_letter_reason,
             created_at: value.created_at,
             updated_at: value.updated_at,
         })
@@ -416,12 +416,12 @@ struct InsertableAccountabilityGrant {
     reason: Option<String>,
     issued_at: DateTime<Utc>,
     raw_payload_digest: String,
-    soland_fanout_state: String,
-    soland_fanout_idempotency_key: String,
-    soland_fanout_payload: serde_json::Value,
-    soland_fanout_attempt: i32,
-    soland_fanout_next_retry_at: Option<DateTime<Utc>>,
-    soland_fanout_dead_letter_reason: Option<String>,
+    coland_fanout_state: String,
+    coland_fanout_idempotency_key: String,
+    coland_fanout_payload: serde_json::Value,
+    coland_fanout_attempt: i32,
+    coland_fanout_next_retry_at: Option<DateTime<Utc>>,
+    coland_fanout_dead_letter_reason: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -504,12 +504,12 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
             reason: params.reason,
             issued_at: params.issued_at,
             raw_payload_digest: params.raw_payload_digest,
-            soland_fanout_state: params.soland_fanout_state.to_string(),
-            soland_fanout_idempotency_key: params.soland_fanout_idempotency_key,
-            soland_fanout_payload: params.soland_fanout_payload,
-            soland_fanout_attempt: params.soland_fanout_attempt,
-            soland_fanout_next_retry_at: params.soland_fanout_next_retry_at,
-            soland_fanout_dead_letter_reason: params.soland_fanout_dead_letter_reason,
+            coland_fanout_state: params.coland_fanout_state.to_string(),
+            coland_fanout_idempotency_key: params.coland_fanout_idempotency_key,
+            coland_fanout_payload: params.coland_fanout_payload,
+            coland_fanout_attempt: params.coland_fanout_attempt,
+            coland_fanout_next_retry_at: params.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: params.coland_fanout_dead_letter_reason,
             created_at: now,
             updated_at: now,
         };
@@ -531,12 +531,12 @@ impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
             revoked_at: None,
             revoked_reason: None,
             raw_payload_digest: row.raw_payload_digest,
-            soland_fanout_state: params.soland_fanout_state,
-            soland_fanout_idempotency_key: row.soland_fanout_idempotency_key,
-            soland_fanout_payload: row.soland_fanout_payload,
-            soland_fanout_attempt: row.soland_fanout_attempt,
-            soland_fanout_next_retry_at: row.soland_fanout_next_retry_at,
-            soland_fanout_dead_letter_reason: row.soland_fanout_dead_letter_reason,
+            coland_fanout_state: params.coland_fanout_state,
+            coland_fanout_idempotency_key: row.coland_fanout_idempotency_key,
+            coland_fanout_payload: row.coland_fanout_payload,
+            coland_fanout_attempt: row.coland_fanout_attempt,
+            coland_fanout_next_retry_at: row.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: row.coland_fanout_dead_letter_reason,
             created_at: now,
             updated_at: now,
         })

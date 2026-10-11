@@ -178,7 +178,7 @@ pub async fn issue_controller_gate_attestation(
     let (status, eligibility) = controller_status(user.status);
     let authority_did = super::owning_station_did_for(&depot.arkret_config()?);
     let keyring = depot.keyring()?;
-    // The attestation is signed as the owning Station, and soland verifies it
+    // The attestation is signed as the owning Station, and coland verifies it
     // by resolving `verification_method` out of the Station's DID document.
     // That document authorizes exactly one method for this Account Authority,
     // holding the designated Account Authority key. Selecting "an Ed25519

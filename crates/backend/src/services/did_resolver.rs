@@ -374,7 +374,7 @@ impl DidResolverService for DefaultDidResolverService {
             // RULING (2026-07 review, CAU-SPEC-02 closed): coauth deliberately
             // does NOT resolve/verify `did:webvh` natively. identity-did.md
             // §3.5 places webvh hosting and log/history verification authority
-            // on the Station (soland); every other method —
+            // on the Station (coland); every other method —
             // including `did:webvh` — is delegated to the configured
             // `identity_registry.resolver`, and deployments without one
             // fail closed with `UnsupportedMethod`. Do not add a local webvh
@@ -908,12 +908,12 @@ mod tests {
 
     #[test]
     fn explicit_development_resolver_keeps_https_and_exact_loopback_targets() {
-        let host = "soland-server1.localhost".to_owned();
+        let host = "coland-server1.localhost".to_owned();
         let policy = ResolverEgressPolicy {
             guard: crate::outbound_http::egress_guard(true, &[host]),
         };
         let url =
-            Url::parse("https://soland-server1.localhost/_arkret/root/identity/resolve").unwrap();
+            Url::parse("https://coland-server1.localhost/_arkret/root/identity/resolve").unwrap();
         policy.enforce_url_policy(&url).unwrap();
         policy
             .guard
@@ -934,7 +934,7 @@ mod tests {
             );
         }
         for raw in [
-            "http://soland-server1.localhost/resolve",
+            "http://coland-server1.localhost/resolve",
             "https://unregistered.localhost/resolve",
             "https://resolver.example/resolve",
         ] {
@@ -984,8 +984,8 @@ mod tests {
     fn configured_trusted_hosts_are_the_only_loopback_widening() {
         let config = ArkretConfig {
             stations: vec![coauth_config::StationConfig {
-                name: "soland-alpha".to_owned(),
-                endpoint: "https://soland-alpha.local.host/".parse().unwrap(),
+                name: "coland-alpha".to_owned(),
+                endpoint: "https://coland-alpha.local.host/".parse().unwrap(),
                 internal_authority_shared_secret: None,
                 embedded_webvh_registration_bearer: None,
                 trust_domain: None,
@@ -994,7 +994,7 @@ mod tests {
         };
         let policy = ResolverEgressPolicy::from_config(&config);
         let trusted =
-            Url::parse("https://soland-alpha.local.host/webvh/service/did.jsonl").unwrap();
+            Url::parse("https://coland-alpha.local.host/webvh/service/did.jsonl").unwrap();
 
         policy
             .enforce_url_policy(&trusted)
@@ -1008,7 +1008,7 @@ mod tests {
 
         assert!(
             policy
-                .enforce_url_policy(&Url::parse("http://soland-alpha.local.host/resolve").unwrap())
+                .enforce_url_policy(&Url::parse("http://coland-alpha.local.host/resolve").unwrap())
                 .is_err(),
             "HTTPS stays mandatory even for configured trusted hosts"
         );
@@ -1021,7 +1021,7 @@ mod tests {
                 .is_err(),
             "mixed public+loopback answers stay rejected"
         );
-        let unregistered = Url::parse("https://soland-beta.local.host/resolve").unwrap();
+        let unregistered = Url::parse("https://coland-beta.local.host/resolve").unwrap();
         assert!(
             policy
                 .guard

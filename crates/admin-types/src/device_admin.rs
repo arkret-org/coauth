@@ -1,7 +1,7 @@
 //! Shared wire DTOs for the coauth device-administration surface.
 //!
 //! These types are serialized by `coauth-backend` and deserialized by
-//! operator clients such as `sodmin`. Keeping both sides on this crate turns a
+//! operator clients such as `codmin`. Keeping both sides on this crate turns a
 //! field or enum drift into a compile error instead of a runtime serde mismatch.
 
 use chrono::{DateTime, Utc};

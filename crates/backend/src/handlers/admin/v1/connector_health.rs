@@ -1,6 +1,6 @@
 //! Admin endpoint for checking connector provider health.
 //!
-//! Wire shape lives in `coauth-admin-types::connector_health` so sodmin
+//! Wire shape lives in `coauth-admin-types::connector_health` so codmin
 //! and any other admin client deserialize the same struct rustc has
 //! type-checked the backend against.
 
