@@ -11,7 +11,7 @@
 coauth config generate > config.yaml
 ```
 
-选择 `secrets.backend` 后，首次生产启动只运行一个带 `--first-provisioning` 的 server；
+选择 `secrets.backend` 后，首次生产启动使用 `--first-provisioning`；共享同一持久存储的并发 server 原子复用首个提交的密钥包，不能互相覆盖；
 后续 server、worker 和 `config sync` 只装载已持久化的密钥包。
 
 生成结果会比较冗长。实际部署时通常只保留你要覆盖的配置段，把未修改的默认项删掉。

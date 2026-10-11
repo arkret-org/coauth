@@ -15,7 +15,7 @@ coauth server [选项] -c <配置文件>
 | `--no-migrate` | 启动时不自动执行数据库迁移 |
 | `--no-worker` | 不启动后台任务 Worker |
 | `--no-sync` | 不将配置文件中的 OAuth 客户端和上游提供商同步到数据库 |
-| `--first-provisioning` | durable KeyStore 为空时生成运行时密钥包；生产首次部署只能在一个 server 上使用 |
+| `--first-provisioning` | durable KeyStore 为空时原子创建运行时密钥包；共享同一存储的并发首次启动复用首个提交值 |
 
 ## 启动流程
 

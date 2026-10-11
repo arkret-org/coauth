@@ -202,8 +202,9 @@ the selected entry name.
 coauth server --first-provisioning -c config.yaml
 ```
 
-Run the command with `--first-provisioning` exactly once when the configured
-KeyStore is empty. Later server and worker starts omit the flag and load the
+Use `--first-provisioning` for the initial deployment when the configured
+KeyStore is empty. Concurrent initial servers sharing the same durable store
+atomically reuse its first committed bundle. Later server and worker starts omit the flag and load the
 same durable key bundle. This runs migrations, syncs config-backed state,
 starts the HTTP service, and launches the background worker unless disabled
 with flags.

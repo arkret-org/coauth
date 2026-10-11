@@ -149,8 +149,8 @@ secrets:
 ```
 
 `backend` 可选当前用户的平台凭据库 `platform`，或 `encrypted_file`。后者的数据文件与
-32-byte、base64 编码的 master-key 文件必须分开备份。KeyStore 为空时，只运行一个带
-`--first-provisioning` 的生产 server；后续 server、worker 和 `config sync` 只装载已存在
+32-byte、base64 编码的 master-key 文件必须分开备份。KeyStore 为空时，使用带
+`--first-provisioning` 的生产 server；共享同一存储的并发首次启动原子复用首个提交值；后续 server、worker 和 `config sync` 只装载已存在
 的 bundle，缺失时 fail closed。所有副本必须共享同一 encrypted file 和 master key。
 
 ## `passwords`

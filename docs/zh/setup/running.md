@@ -31,7 +31,7 @@ coauth server -c config.yaml
 | `--no-migrate` | 启动时不自动执行数据库迁移 |
 | `--no-worker` | 不启动后台任务 Worker |
 | `--no-sync` | 不同步配置文件中的 OAuth 客户端和上游提供商到数据库 |
-| `--first-provisioning` | durable KeyStore 为空时执行一次密钥初始化；生产环境只允许一个初始副本使用 |
+| `--first-provisioning` | durable KeyStore 为空时原子创建密钥包；共享同一存储的并发初始副本复用赢家值 |
 
 ## 分离部署
 
@@ -107,7 +107,7 @@ volumes:
 如果文件权限类似 `0600 root:root`，启动时就会报
 `Permission denied (os error 13)`。
 应通过所有者/ACL 授权 `65532` 读取 master-key 文件并写入 KeyStore volume。首次只启动
-一个带 `--first-provisioning` 的副本；后续普通副本必须共享同一 volume 和 master key。
+带 `--first-provisioning` 的初始副本；共享该存储的并发创建会复用首个提交值；后续普通副本必须共享同一 volume 和 master key。
 
 ## 日志配置
 

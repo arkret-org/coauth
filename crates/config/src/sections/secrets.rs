@@ -265,21 +265,15 @@ async fn load_runtime_from_store(
             let encoded = generated.encode()?;
             let persisted = tokio::task::spawn_blocking(move || {
                 store
-                    .store(KEY_BUNDLE_ID, &encoded)
-                    .context("persisting generated Coauth runtime key bundle")?;
-
-                // Use the backend's committed value, not the local candidate.
-                // Detect acknowledged writes whose complete value is unreadable.
-                store
-                    .load(KEY_BUNDLE_ID)
-                    .context("reloading provisioned Coauth runtime key bundle")
+                    .create_if_absent(KEY_BUNDLE_ID, &encoded)
+                    .context("atomically provisioning Coauth runtime key bundle")
             })
             .await
             .context("joining Coauth runtime key bundle provisioning task")??;
             build_runtime(StoredKeyBundle::decode(persisted.as_slice())?)
         }
         Err(error) if error.is_not_found() => bail!(
-            "coauth_runtime_keys_first_provisioning_required: no runtime key bundle exists; run exactly one production server with --first-provisioning"
+            "coauth_runtime_keys_first_provisioning_required: no runtime key bundle exists; run a production server with --first-provisioning"
         ),
         Err(error) => Err(anyhow::Error::new(error).context("loading Coauth runtime key bundle")),
     }
@@ -350,7 +344,8 @@ fn paths_refer_to_same_file(left: &Utf8PathBuf, right: &Utf8PathBuf) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Barrier, Mutex};
 
     use arkret_keystore::{KeyBytes, KeyStoreError};
     use tempfile::tempdir;
@@ -361,6 +356,10 @@ mod tests {
     struct TestKeyStore {
         keys: Mutex<BTreeMap<String, Vec<u8>>>,
         requires_private_runtime: bool,
+        initial_load_barrier: Option<Barrier>,
+        load_calls: AtomicUsize,
+        corrupt_winner: bool,
+        fail_creation: bool,
     }
 
     impl TestKeyStore {
@@ -378,13 +377,21 @@ mod tests {
     impl KeyStore for TestKeyStore {
         fn load(&self, id: &str) -> std::result::Result<KeyBytes, KeyStoreError> {
             self.enter_private_runtime();
-            self.keys
+            let loaded = self
+                .keys
                 .lock()
                 .unwrap()
                 .get(id)
                 .cloned()
                 .map(KeyBytes::new)
-                .ok_or_else(|| KeyStoreError::not_found(id))
+                .ok_or_else(|| KeyStoreError::not_found(id));
+            if let Some(barrier) = &self.initial_load_barrier
+                && self.load_calls.fetch_add(1, Ordering::SeqCst) < 2
+            {
+                // Both initial reads must observe a miss before either can commit.
+                barrier.wait();
+            }
+            loaded
         }
 
         fn store(&self, id: &str, key: &[u8]) -> std::result::Result<(), KeyStoreError> {
@@ -395,6 +402,28 @@ mod tests {
                 .unwrap()
                 .insert(id.to_owned(), key.to_vec());
             Ok(())
+        }
+
+        fn create_if_absent(
+            &self,
+            id: &str,
+            key: &[u8],
+        ) -> std::result::Result<KeyBytes, KeyStoreError> {
+            self.enter_private_runtime();
+            arkret_keystore::validate_id(id)?;
+            if self.fail_creation {
+                return Err(KeyStoreError::backend("injected commit failure"));
+            }
+            let mut keys = self.keys.lock().unwrap();
+            if self.corrupt_winner {
+                keys.entry(id.to_owned())
+                    .or_insert_with(|| b"invalid-winner".to_vec());
+            }
+            Ok(KeyBytes::new(
+                keys.entry(id.to_owned())
+                    .or_insert_with(|| key.to_vec())
+                    .clone(),
+            ))
         }
 
         fn list(&self) -> std::result::Result<Vec<String>, KeyStoreError> {
@@ -432,6 +461,67 @@ mod tests {
             read_only.encrypter().decrypt_string(&ciphertext).unwrap(),
             b"persistent"
         );
+    }
+
+    #[tokio::test]
+    async fn concurrent_first_provisioning_uses_one_committed_identity() {
+        let store: Arc<dyn KeyStore> = Arc::new(TestKeyStore {
+            initial_load_barrier: Some(Barrier::new(2)),
+            ..TestKeyStore::default()
+        });
+        let (left, right) = tokio::join!(
+            load_runtime_from_store(Arc::clone(&store), true),
+            load_runtime_from_store(Arc::clone(&store), true)
+        );
+        let (left, right) = (left.unwrap(), right.unwrap());
+        let restarted = load_runtime_from_store(store, false).await.unwrap();
+        for runtime in [&right, &restarted] {
+            assert_eq!(
+                serde_json::to_value(left.keyring().public_jwks()).unwrap(),
+                serde_json::to_value(runtime.keyring().public_jwks()).unwrap()
+            );
+            assert_eq!(left.encryption_key(), runtime.encryption_key());
+            let ciphertext = left
+                .encrypter()
+                .encrypt_to_string(b"shared identity")
+                .unwrap();
+            assert_eq!(
+                runtime.encrypter().decrypt_string(&ciphertext).unwrap(),
+                b"shared identity"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn corrupt_competing_winner_is_preserved_and_rejected() {
+        let store = Arc::new(TestKeyStore {
+            corrupt_winner: true,
+            ..TestKeyStore::default()
+        });
+        assert!(load_runtime_from_store(store.clone(), true).await.is_err());
+        assert_eq!(
+            store.load(KEY_BUNDLE_ID).unwrap().as_slice(),
+            b"invalid-winner"
+        );
+        assert!(load_runtime_from_store(store.clone(), true).await.is_err());
+        assert_eq!(
+            store.load(KEY_BUNDLE_ID).unwrap().as_slice(),
+            b"invalid-winner"
+        );
+    }
+
+    #[tokio::test]
+    async fn failed_first_creation_does_not_start_with_local_keys() {
+        let store = Arc::new(TestKeyStore {
+            fail_creation: true,
+            ..TestKeyStore::default()
+        });
+        let error = load_runtime_from_store(store.clone(), true)
+            .await
+            .err()
+            .unwrap();
+        assert!(format!("{error:#}").contains("injected commit failure"));
+        assert!(store.load(KEY_BUNDLE_ID).unwrap_err().is_not_found());
     }
 
     #[tokio::test]

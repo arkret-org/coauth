@@ -15,8 +15,9 @@ coauth config generate > config.yaml
 The generated file is intentionally verbose. In practice you usually keep the
 sections you override and remove the untouched defaults.
 
-After selecting `secrets.backend`, run one initial production server with
-`--first-provisioning`. Later servers, workers, and `config sync` only load the
+After selecting `secrets.backend`, start the initial production servers with
+`--first-provisioning`. Concurrent creators sharing the same durable store
+reuse its first committed bundle without overwriting it. Later servers, workers, and `config sync` only load the
 persisted key bundle.
 
 ## Sections you will almost always edit

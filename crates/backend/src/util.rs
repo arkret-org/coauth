@@ -856,11 +856,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_diesel_pool_recycles_connections_back_to_a_clean_session() {
-        // Postgres-only path: skip cleanly when DATABASE_URL is not configured
-        // (matches the workspace-wide gate added in C32.4).
-        let Ok(database_url) = coauth_config::runtime_var("DATABASE_URL") else {
+        // Hold the shared fixture lease while creating/dropping the probe table.
+        // Other tests reset all public tables and must not race this DDL.
+        let Some(_database_lease) = coauth_storage_postgres::test_utils::setup_test_pool().await
+        else {
             return;
         };
+        let database_url = coauth_config::runtime_var("DATABASE_URL")
+            .expect("the test database lease requires DATABASE_URL");
         let config = DatabaseConfig {
             uri: Some(database_url),
             max_connections: NonZeroU32::new(1).unwrap(),

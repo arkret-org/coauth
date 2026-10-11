@@ -1,0 +1,104 @@
+{
+  "status": "passed",
+  "gates": {
+    "sdk-clippy": 0,
+    "sdk-tests": 0,
+    "linux": 0,
+    "coauth-clippy": 0,
+    "coauth-workspace": 0
+  },
+  "coauth": {
+    "passed": 1121,
+    "failed": 0,
+    "ignored": 4,
+    "exit": 0,
+    "features": "coauth-backend/cedar"
+  },
+  "sdk_macos": {
+    "passed": 18,
+    "failed": 0,
+    "ignored": 1,
+    "native_keychain_processes": true
+  },
+  "sdk_linux": {
+    "passed": 20,
+    "failed": 0,
+    "native_secret_service_processes": true,
+    "real_daemon": true,
+    "target": "aarch64-unknown-linux-gnu"
+  },
+  "native_ci": {
+    "head": "64641d6836c907d069becc5856e11bf42e068ac1",
+    "run": 38128262207,
+    "named_jobs": {
+      "Native keystore (ubuntu-latest)": {
+        "databaseId": 114437045346,
+        "conclusion": "success",
+        "url": "https://github.com/arkret-org/arkret-rust-sdk/actions/runs/38128262207/job/114437045346"
+      },
+      "Native keystore (windows-latest)": {
+        "databaseId": 114437045355,
+        "conclusion": "success",
+        "url": "https://github.com/arkret-org/arkret-rust-sdk/actions/runs/38128262207/job/114437045355"
+      },
+      "Native keystore (macos-latest)": {
+        "databaseId": 114437045417,
+        "conclusion": "success",
+        "url": "https://github.com/arkret-org/arkret-rust-sdk/actions/runs/38128262207/job/114437045417"
+      }
+    },
+    "windows": {
+      "passed": 20,
+      "failed": 0,
+      "ignored": 1
+    },
+    "scope": "Only three native-keystore jobs; not a claim that the whole CI passed. Follow-up SDK commit relocates contract tests and stabilizes Linux test daemon initialization; backend algorithms and Windows source are unchanged."
+  },
+  "source": {
+    "coauth": {
+      "base": "19055483d1b8f9247b2344a06546c3b14d11d3f4",
+      "sha256": {
+        "Cargo.lock": "22c2bf1ae55ac4613a3e7e3225f97a1e64c495b6dd2aa0391d4be0cef109d67f",
+        "crates/config/src/sections/secrets.rs": "713f47b5c2b2cbe184fdd60b68343712b28cfa1681cee420c9c64d8391c7cd61",
+        "crates/backend/src/util.rs": "23d403fa7997030b75cc7db0d5bde5a1ce9b0db997d6120f8b96edf216eb6c78"
+      }
+    },
+    "arkret-rust-sdk": {
+      "base": "8b83ca9254bdd2e279360a1f1ecc760912962407",
+      "sha256": {
+        "Cargo.toml": "f59a2fdf66f018f46b957bcbd2adcc59a8742d42177fb642b8237e4719210bea",
+        "Cargo.lock": "1d58b64e91fec246247fa99287dfd2bfd7cafdad8805ded258df6812446ba0ab",
+        "crates/keystore/Cargo.toml": "a5acd7315a0f3c8d551b5177012c7b77e54b000d63c7252296ce5df985ed1f19",
+        "crates/keystore/src/contract.rs": "efd15974cf74c71a7d913988e6ee05b1fc4ccb0a525d1d3f8457a47b6ced286b",
+        "crates/keystore/src/contract_tests.rs": "744e689033e80c387c7bcee408d3488f2a63afa39d1c8f19e1186a88159e6fe4",
+        "crates/keystore/src/encrypted_file.rs": "f9b88269a1ec429eac20a1464d0693dfa63f84860d15d0a4d2c9ea663b42f7e7",
+        "crates/keystore/src/macos.rs": "c9561707e86fbdb5039dedbb547caaff047b0417db048c8756a23edaec2ec7f1",
+        "crates/keystore/src/linux.rs": "abc67e1bf668e258d8774ff656dd0a2b51632b5eb9dd46dec581dd61b3fd1e53",
+        "crates/keystore/src/windows.rs": "cd6ca4e300502b56e7b808dc41c036b16f1af81c35834f9e41605395bdb9bdac",
+        "crates/keystore/tests/first_creation.rs": "9326c9bda722e869294e912a8a13adaa0ded2c8f35358e5f0df053c6b46c67ea",
+        "tools/with-test-secret-service.sh": "c34efcfd86383867b5afc4c9c8afff861c386464e99302382c75832230148770",
+        ".github/workflows/ci.yml": "a88c4c2bff40770b8aa316962f85ea654bdd4318a6898915276ed244207823c7"
+      }
+    },
+    "cotest": {
+      "base": "d40bc38973c51c01cccdd23dbf86346a51338278",
+      "sha256": {
+        "Cargo.lock": "70f3d9730d2d7d62516125199c55011b42cea2cd4f7cdb8ee008c9af026b6320"
+      }
+    }
+  },
+  "logs": {
+    "sdk-clippy": "ca41f4f0872f6f45a9d22b969f1358a263d33990aee8aefe58feeea833c54137",
+    "sdk-tests": "d5875b7ae1a9763405f4656c4a5d509dda92929697c15055760d730000a38581",
+    "linux": "b7b9a3eb7e85b6bb40f12b7864965e7f42458e4ac678dfb65456fbf88e1823e7",
+    "coauth-clippy": "2eee3c60947c11b763ae20f64abdbdf09972350dfd414fdf8bef88ac1d1ed5b3",
+    "coauth-workspace": "ecb39a0518dc95b3e9ecb2c8d3761170e525231499cb2207b3790d9c1e0d56af",
+    "windows-ci": "f538d2015b4568036a1f76929b34e896f6c35f45746ccecbf0ca9c6ee88bba8d",
+    "native-ci-status": "1f7792d4f0d6ad1139cd65d4643600846ab5b36ae3ec016bf51ef9cf84f8e9df",
+    "matrix": "4434aab95050e9c6f4dbdee01b09c4fec3b575634d6f740eee108f957b8262b4",
+    "failed-first-workspace": "9b014e41ca46cf510acfdebd010a45b85648fb2908de602eae97d0ea15fa6c03"
+  },
+  "database": "UTF8 isolated PostgreSQL; no skip override",
+  "target": "/Volumes/Data/Works/arkret-org/coauth/target",
+  "first_failed_workspace": "One database reset raced an unleased pool cleanup test dropping its public probe table. Added the same TestDatabase lease; final complete workspace and Clippy reran successfully. No reset suppression or ignored assertion."
+}

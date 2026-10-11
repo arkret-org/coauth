@@ -12,7 +12,7 @@ Options:
 - `--no-migrate`: Do not apply pending database migrations on start.
 - `--no-worker`: Do not start the background task worker (see [`worker`](./worker.md)).
 - `--no-sync`: Do not sync the configuration (OAuth clients and upstream providers) with the database.
-- `--first-provisioning`: Generate the runtime key bundle only when the durable KeyStore is empty. Use on exactly one initial production server.
+- `--first-provisioning`: Generate the runtime key bundle only when the durable KeyStore is empty. Concurrent initial servers sharing the same durable store atomically reuse its first committed bundle.
 
 ```
 $ coauth server -c config.yaml
@@ -91,5 +91,5 @@ the container process.
 A host file with permissions like `0600 root:root` will fail at startup with
 `Permission denied (os error 13)`.
 Change ownership/ACLs so `uid=65532` can read the master-key file and write the
-KeyStore volume. Run one initial replica with `--first-provisioning`; ordinary
+KeyStore volume. Initial replicas may use `--first-provisioning` concurrently against that same store; ordinary
 replicas must omit it and share the same volume and master key.
