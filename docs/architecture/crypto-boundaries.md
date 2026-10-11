@@ -21,6 +21,18 @@ The JWT verifier surfaces remain separate. In particular, accepting empty `crit`
 
 `coauth-jose/tests/jws.rs` retains fixed external token/key vectors and randomized sign/verify coverage for its supported algorithm families. RSA-PSS and ECDSA verification uses fixed vectors and cross-verification; freshly generated signatures need not be byte-identical across implementations. Deterministic Ed25519 common input additionally compares exact compact and detached signature bytes against an independently computed fixed vector.
 
+## Native DID approval for account risk actions
+
+The `/_coauth/admin/accounts/{id}/risk-action/{proposal_id}/approve` endpoint retains the local `org.arkret.coauth.account_risk_action.approval.v1` transcript: proposal ID, target account ID, action, optional ticket, approval note and approved-by principal. It is a Coauth product contract, separate from the Spec Realm-policy approval contexts. The authenticated OAuth administrator must project to that exact approved-by principal; two independent accepted principals are required when the configured high-risk threshold is two.
+
+For `did:webvh`, the resolver supplies complete native-history validation and closed SDK `IdentityMethodEvidence::DidWebvh` containing the selected version and current control-key digest. Station only returns this evidence for a current, non-deactivated selection whose DID document, sequence and key-log head belong to the same verified snapshot. Coauth requires the exact accepted DID and principal projection, the closed evidence and key-log head, and the SDK human-principal document profile. Principal documents do not carry root or device verification methods; Coauth must not synthesize such methods or use a document-VM lookup to authorize a native root.
+
+The detached proof's protected `kid` must be the exact canonical Ed25519 method-native `did:key:<multibase>#<same multibase>`. Coauth decodes it with SDK codecs, compares its key digest to the resolver's current control-key pin, selects the SDK `ApprovalSignature` purpose and verifies the existing transcript. The proof identifies a candidate key; it cannot establish its own authority. An old rotated root, a different accepted principal's root, a noncanonical method, a mismatched fragment, a bad signature or missing native authority evidence is rejected before any approval-history write.
+
+After resolution and signature verification complete, Coauth observes its injected clock once. The same resolution must pass SDK `AdminAction` acceptance and high-risk freshness at that local instant, which is also the persisted approval time. No signed timestamp or new wire field is introduced. This binds local acceptance and its ledger record; it does not claim an atomic cut across Station resolution and subsequent remote rotation or deactivation.
+
+Execution requires a non-empty `execution_note`. A valid request with too few approvals is rejected; a valid repeat execution returns conflict without another history mutation. Proposals have no invented expiry field: the integration credential-expiry boundary uses revocation of an actual administrator access token.
+
 ## Independent AEAD dependency axis
 
 The Encrypter uses `Aead` and `KeyInit`, not PKCS#8. Its dependency upgrade is independent of the JOSE `PrivateKey` enum's shared PKCS#8 return type. PKCS#8 PEM/DER protection and the SDK keystore's authenticated encrypted vault are distinct boundaries.

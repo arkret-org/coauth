@@ -33,6 +33,8 @@ use crate::services::risk_action_proposals::{
 use crate::services::station_trust::owning_station_id_for;
 use crate::{AppError, JsonResult};
 
+mod native_approval;
+
 #[derive(Serialize, JsonSchema, ToSchema)]
 pub struct AccountRiskActionExecuteOutcome {
     /// Stable persisted state-record identifier for this risk-action state
@@ -379,7 +381,8 @@ async fn verify_approval_proof_jws(
     ticket: Option<&str>,
     approval_note: &str,
     approved_by: &str,
-) -> Result<String, AppError> {
+    clock: &dyn coauth_data::Clock,
+) -> Result<(String, DateTime<Utc>), AppError> {
     if proof_jws.trim().is_empty() {
         return Err(AppError::bad_request(
             "risk action approvals require approval_proof_jws",
@@ -393,6 +396,51 @@ async fn verify_approval_proof_jws(
         approval_note,
         approved_by,
     )?;
+    if authority_did.starts_with("did:webvh:") {
+        // A human DID document is an identity anchor, not a root-key registry.
+        // The owning Station verifies native history/witnesses and returns its
+        // closed current-control pin. Never derive authority from the proof's
+        // did:key locator alone or synthesize a verificationMethod entry.
+        let resolution = did_resolver
+            .resolve_did_binding_evidence(
+                http_client,
+                url_builder,
+                arkret_config,
+                keyring,
+                repo,
+                authority_did,
+            )
+            .await
+            .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
+        let principal = arkret_identifiers::DidCoreId::new(approved_by.to_owned())
+            .map_err(|error| AppError::bad_request(error.to_string()))?;
+        let method = native_approval::verify_native_approval_jws(
+            &resolution,
+            &principal,
+            &payload,
+            proof_jws,
+        )
+        .map_err(|error| AppError::bad_request(format!("approval_proof_jws_invalid: {error}")))?;
+        let approved_at = clock.now();
+        // Persist and grade the very same resolution at the durable approval
+        // cut, with the acting admin's registered purpose and freshness. A new
+        // approval always requests current native pins; document reuse cannot
+        // stand in for a rotated or deactivated method-control key.
+        crate::services::did_binding::accept_authority_resolution(
+            url_builder,
+            arkret_config,
+            repo,
+            binding_store,
+            &resolution,
+            authority_did,
+            arkret_identity::DidBindingPurpose::AdminAction,
+            crate::services::did_binding::high_risk_freshness(),
+            approved_at,
+        )
+        .await
+        .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
+        return Ok((method, approved_at));
+    }
     // §4 row 7 — risk actions (`disable` / `erase` / `reset_recovery` /
     // `lock`) are high-risk writes, so the approving admin's own DID must
     // satisfy `fresh_within(HIGH_RISK_MAX_AGE)` under the closed `AdminAction`
@@ -403,6 +451,7 @@ async fn verify_approval_proof_jws(
     // (`approved_by`), but authority resolution keys on a complete DID: it
     // resolves `authority_did` — the `verified_did` retained on the same
     // accepted binding, already projection-checked against `approved_by`.
+    let approved_at = clock.now();
     let resolution = crate::services::did_binding::authority_document(
         http_client,
         url_builder,
@@ -414,7 +463,7 @@ async fn verify_approval_proof_jws(
         authority_did,
         arkret_identity::DidBindingPurpose::AdminAction,
         crate::services::did_binding::high_risk_freshness(),
-        crate::handlers::make_clock().now(),
+        approved_at,
     )
     .await
     .map_err(|error| AppError::bad_request(format!("admin_did_resolve_failed: {error}")))?;
@@ -423,12 +472,13 @@ async fn verify_approval_proof_jws(
             "approved_by DID document has no verificationMethod entries",
         ));
     }
-    verify_detached_jws_with_sdk(
+    let method = verify_detached_jws_with_sdk(
         proof_jws,
         &payload,
         &resolution.document.verification_method,
     )
-    .map_err(|error| AppError::bad_request(format!("approval_proof_jws_invalid: {error}")))
+    .map_err(|error| AppError::bad_request(format!("approval_proof_jws_invalid: {error}")))?;
+    Ok((method, approved_at))
 }
 
 fn state_revision_for(proposal: &RiskActionProposalRecord) -> u64 {
@@ -606,7 +656,6 @@ pub async fn approve(
         user: admin_user,
         ..
     } = extract_call_context(req, depot).await?;
-    let approved_at = clock.now();
     let id = extract_ulid_param(req)?;
     let proposal_id = req
         .param::<String>("proposal_id")
@@ -638,7 +687,7 @@ pub async fn approve(
             .map(arkret_identifiers::DidCoreId::as_str),
     )?;
     let approval_note = params.approval_note.as_deref().unwrap_or_default();
-    let verification_method = verify_approval_proof_jws(
+    let (verification_method, approved_at) = verify_approval_proof_jws(
         &http_client,
         &url_builder,
         &arkret_config,
@@ -654,6 +703,7 @@ pub async fn approve(
         existing.ticket.as_deref(),
         approval_note,
         &approved_by,
+        &*clock,
     )
     .await?;
     let approved = risk_action_proposals

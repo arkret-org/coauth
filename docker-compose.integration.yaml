@@ -21,7 +21,7 @@
 #                          --profile downstream up
 #
 # Profiles:
-#   - default       : postgres + coauth                  (always-runnable)
+#   - default       : postgres + coauth                  (health/OIDC utility)
 #   - downstream    : adds coland + codmin               (requires :dev images)
 #
 # Config strategy:
@@ -100,9 +100,9 @@ services:
   # coland / codmin are gated behind `--profile downstream` because no
   # `:dev` tags are published yet. Bring them up with explicitly-built
   # local images via `COLAND_IMAGE=coland:dev CODMIN_IMAGE=codmin:dev
-  # docker compose ... --profile downstream up`. The e2e harness is
-  # 404-tolerant for these surfaces, so the default profile (coauth-only)
-  # still exercises every wired path.
+  # docker compose ... --profile downstream up`. Accepted principal, owning
+  # Station and TLS supply comes from `integration-up.sh --business`; this
+  # utility Compose does not provide business integration coverage.
   coland:
     image: ${COLAND_IMAGE:-coland:dev}
     container_name: arkret-coland

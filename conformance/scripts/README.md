@@ -34,9 +34,14 @@ URIs, and the variant `(client_auth_type, response_mode, ...)` tuples.
    # native release binary
    cargo run --release -p coauth-cli -- server --config <config.yaml>
 
-   # docker compose
+   # Compose health/OIDC utility (keeps this service available to the suite)
    bash scripts/integration-up.sh
    ```
+   For the independent accepted-account, browser WebAuthn and two-admin
+   business scenarios, run `bash scripts/integration-up.sh --business`.
+   That command supplies a canonical Station and TLS deployment, executes all
+   three required scenarios and cleans up; it is not a persistent server for
+   this OIDCC suite. See [the integration runbook](../../scripts/integration/README.md).
 2. **`jq`** on `$PATH` (the runner parses the plan matrix with `jq`).
 3. **`docker`** on `$PATH` for the actual harness invocation. If you
    only want to verify configs render cleanly, run with `--dry-run`

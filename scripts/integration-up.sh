@@ -3,7 +3,8 @@
 # coland + codmin via profiles).
 #
 # Usage:
-#   ./scripts/integration-up.sh                      # core stack (postgres + coauth)
+#   ./scripts/integration-up.sh --business           # canonical S1/S2/S3, automatic cleanup
+#   ./scripts/integration-up.sh                      # core health/OIDC utilities only
 #   ./scripts/integration-up.sh --with-downstream    # + coland + codmin (need :dev tags)
 #   ./scripts/integration-up.sh --down               # tear down + remove volumes
 #
@@ -24,6 +25,68 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE_FILE="${REPO_ROOT}/docker-compose.integration.yaml"
 GENERATED_CONFIG="${REPO_ROOT}/conformance/test-config.yaml"
 COAUTH_IMAGE_REF="${COAUTH_IMAGE:-coauth:dev}"
+
+# Business integration uses Cotest's canonical Station/Account Authority/CA
+# provisioning. The small Compose stack below remains a health/OIDC utility.
+# It cannot supply accepted principal material or claim business coverage.
+if [[ "${1:-}" == "--business" ]]; then
+    shift
+    for dependency in pwsh cargo node python3; do
+        command -v "${dependency}" >/dev/null || { echo "missing ${dependency}" >&2; exit 2; }
+    done
+    requested_jobs="${CARGO_BUILD_JOBS:-4}"
+    [[ "${requested_jobs}" =~ ^[1-9][0-9]*$ ]] || { echo "CARGO_BUILD_JOBS must be a positive integer" >&2; exit 2; }
+    case "${requested_jobs}" in
+        1|2|3) export CARGO_BUILD_JOBS="${requested_jobs}" ;;
+        *) export CARGO_BUILD_JOBS=4 ;;
+    esac
+    selection_args=()
+    binary_args=()
+    custom_grep=0
+    custom_required=0
+    custom_coauth=0
+    coauth_argument_pending=0
+    selected_coauth_bin=""
+    for argument in "$@"; do
+        if (( coauth_argument_pending )); then
+            selected_coauth_bin="${argument}"
+            coauth_argument_pending=0
+            continue
+        fi
+        case "$(printf '%s' "${argument}" | tr '[:upper:]' '[:lower:]')" in
+            -grep|-grep:*) custom_grep=1 ;;
+            -requirescenario|-requirescenario:*) custom_required=1 ;;
+            -coauthbin) custom_coauth=1; coauth_argument_pending=1 ;;
+            -coauthbin:*) custom_coauth=1; selected_coauth_bin="${argument#*:}" ;;
+        esac
+    done
+    if (( custom_grep == 0 )); then
+        selection_args+=("-Grep" "provisioning bridge")
+        if (( custom_required == 0 )); then
+            selection_args+=("-RequireScenario" "harness/provisioning-bridge.spec.ts")
+        fi
+    fi
+    if (( custom_coauth )); then
+        [[ -n "${selected_coauth_bin}" && "${coauth_argument_pending}" == 0 ]] || { echo "-CoauthBin requires a binary path" >&2; exit 2; }
+        export COAUTH_INTEGRATION_COAUTH_BIN="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "${selected_coauth_bin}")"
+    fi
+    cargo build --manifest-path "${REPO_ROOT}/Cargo.toml" -p coauth-backend --example integration-approval -j "${CARGO_BUILD_JOBS}"
+    if (( custom_coauth == 0 )); then
+        pwsh -NoProfile -File "${REPO_ROOT}/../cotest/scripts/prepare-cargo-artifact.ps1" \
+            -ManifestPath "${REPO_ROOT}/Cargo.toml" -BinaryName coauth -Jobs "${CARGO_BUILD_JOBS}"
+        cargo_target="$(cargo metadata --manifest-path "${REPO_ROOT}/Cargo.toml" --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
+        export COAUTH_INTEGRATION_COAUTH_BIN="${cargo_target}/debug/coauth"
+        binary_args+=("-CoauthBin" "${COAUTH_INTEGRATION_COAUTH_BIN}")
+    fi
+    # The hook executes inside the canonical runner's exported deployment and
+    # must finish successfully before the selected joint checks.
+    exec pwsh -NoProfile -File "${REPO_ROOT}/../cotest/scripts/run-joint-e2e.ps1" \
+        -RunProfile joint-api -StartCoauth -StartMockEmail -ClientKind garth \
+        ${selection_args[@]+"${selection_args[@]}"} \
+        ${binary_args[@]+"${binary_args[@]}"} \
+        -ForbidSkippedTests \
+        -PostProvisionCommand "bash '../coauth/scripts/integration-e2e.sh'" "$@"
+fi
 
 if [[ ! -f "${COMPOSE_FILE}" ]]; then
     echo "[integration-up] missing ${COMPOSE_FILE}" >&2

@@ -45,11 +45,22 @@ Conformance and integration helpers live under `conformance/` and `scripts/`;
 use the CI workflow definitions as the source of truth for the exact command
 line.
 
-Integration stack (coauth + coland + Postgres) via docker-compose:
+Canonical business integration (accepted account/PCR, browser WebAuthn and
+two independently authenticated administrators):
 
 ```sh
-docker compose -f docker-compose.integration.yaml up --build
+bash scripts/run-locally.sh
 ```
+
+The runner supplies isolated PostgreSQL, Coauth, Coland, registration mail,
+owning Station identity and HTTPS, and removes its services on completion.
+S2 includes the real ten-minute ceremony expiry. All three business scenarios
+must execute and pass; missing services or skipped cases fail the run. See the
+[integration runbook](scripts/integration/README.md) for prerequisites and results.
+
+For a separate Compose health/OIDC utility, use
+`bash scripts/run-locally.sh --oidc`; add `--with-conformance` to run the
+basic-OP certification plan. These checks do not claim S1/S2/S3 coverage.
 
 See [`docs/`](./docs) for service-specific runbooks.
 

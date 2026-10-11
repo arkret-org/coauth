@@ -1,30 +1,17 @@
 #!/usr/bin/env bash
-# One-shot local bring-up + verify for the coauth integration stack.
-#
-# What this does, in order:
-#
-#   1. integration-up.sh        (build coauth image + bring up postgres + coauth)
-#   2. wait for /health to be 200
-#   3. mounted-config check     (`coauth healthcheck --config /etc/coauth/config.yaml`)
-#   4. discovery URL probe      (curl /.well-known/openid-configuration + jq)
-#   5. integration-smoke.sh
-#   6. integration-e2e.sh       (S1 + S2 + S3)
-#   7. (optional) oidc-conformance.sh --plan basic-op
-#
-# Designed so a developer can iterate end-to-end with a single command.
-# Each step prints its own headline so failures are easy to attribute.
+# Local verification entry. The default runs all three canonical business
+# scenarios with runner-owned PostgreSQL, Station, Account Authority and TLS.
 #
 # Usage:
+#   ./scripts/run-locally.sh                    # canonical S1/S2/S3 + cleanup
+#   ./scripts/run-locally.sh -JointDir /path    # pass options to Cotest runner
+#   ./scripts/run-locally.sh --keep             # retain canonical services
+#   ./scripts/run-locally.sh --oidc             # Compose health + OIDC discovery
+#   ./scripts/run-locally.sh --with-conformance # Compose + basic-OP certification
+#   ./scripts/run-locally.sh --oidc --down      # remove Compose utility volumes
 #
-#   ./scripts/run-locally.sh                          # core stack
-#   ./scripts/run-locally.sh --with-conformance       # + plan-basic-op
-#   ./scripts/run-locally.sh --keep                   # don't tear down on success
-#   ./scripts/run-locally.sh --down                   # just tear down + exit
-#
-# Exit codes:
-#   0 — every selected step passed
-#   2 — usage error / missing dep
-#   3 — at least one step failed (the failing step's exit code propagates)
+# Business integration fails if any required scenario cannot execute. OIDC
+# utility checks report only their selected health/discovery/certification work.
 
 set -uo pipefail
 
@@ -34,22 +21,37 @@ SCRIPTS="${REPO_ROOT}/scripts"
 WITH_CONFORMANCE=0
 KEEP=0
 ACTION="up"
+MODE="business"
+RUNNER_ARGS=()
 
 for arg in "$@"; do
     case "${arg}" in
-        --with-conformance) WITH_CONFORMANCE=1 ;;
+        --with-conformance) WITH_CONFORMANCE=1; MODE="oidc" ;;
+        --oidc)             MODE="oidc" ;;
         --keep)             KEEP=1 ;;
         --down)             ACTION="down" ;;
         -h|--help)
-            sed -n '2,30p' "${BASH_SOURCE[0]}"
+            sed -n '2,15p' "${BASH_SOURCE[0]}"
             exit 0
             ;;
         *)
-            echo "[run-locally] unknown flag: ${arg}" >&2
-            exit 2
+            RUNNER_ARGS+=("${arg}")
             ;;
     esac
 done
+
+if [[ "${MODE}" == "business" ]]; then
+    if [[ "${ACTION}" == "down" ]]; then
+        echo "[run-locally] --down manages the Compose utility; use --oidc --down" >&2
+        exit 2
+    fi
+    if (( KEEP == 1 )); then RUNNER_ARGS+=("-KeepServices"); fi
+    exec bash "${SCRIPTS}/integration-up.sh" --business ${RUNNER_ARGS[@]+"${RUNNER_ARGS[@]}"}
+fi
+if (( ${#RUNNER_ARGS[@]} != 0 )); then
+    echo "[run-locally] runner options apply only to the canonical business run" >&2
+    exit 2
+fi
 
 if [[ "${ACTION}" == "down" ]]; then
     bash "${SCRIPTS}/integration-up.sh" --down
@@ -59,7 +61,7 @@ fi
 step() { echo; echo "[run-locally] ============================================================"; echo "[run-locally]   ${*}"; echo "[run-locally] ============================================================"; }
 
 # 1. integration-up
-step "step 1/7 — integration-up (build + bring up postgres + coauth)"
+step "step 1/6 — integration-up (build + bring up postgres + coauth)"
 bash "${SCRIPTS}/integration-up.sh" || {
     echo "[run-locally] integration-up failed; check docker compose logs" >&2
     exit 3
@@ -68,7 +70,7 @@ bash "${SCRIPTS}/integration-up.sh" || {
 cleanup() {
     if (( KEEP == 1 )); then
         echo "[run-locally] --keep set; leaving stack up. Tear down with:"
-        echo "  ./scripts/run-locally.sh --down"
+        echo "  ./scripts/run-locally.sh --oidc --down"
         return
     fi
     echo
@@ -78,7 +80,7 @@ cleanup() {
 trap cleanup EXIT
 
 # 2. wait for /health
-step "step 2/7 — wait for /health 200 on host port 57080"
+step "step 2/6 — wait for /health 200 on host port 57080"
 ATTEMPTS="${HEALTH_ATTEMPTS:-60}"
 for attempt in $(seq 1 "${ATTEMPTS}"); do
     code="$(curl -fsS -o /dev/null -m 2 -w '%{http_code}' http://127.0.0.1:57080/health || echo "000")"
@@ -95,7 +97,7 @@ for attempt in $(seq 1 "${ATTEMPTS}"); do
 done
 
 # 3. mounted YAML check
-step "step 3/7 — mounted YAML config check"
+step "step 3/6 — mounted YAML config check"
 if docker compose -f "${REPO_ROOT}/docker-compose.integration.yaml" exec -T coauth \
         /usr/local/bin/coauth healthcheck --config /etc/coauth/config.yaml; then
     echo "[run-locally] in-container healthcheck OK"
@@ -105,7 +107,7 @@ else
 fi
 
 # 4. discovery
-step "step 4/7 — fetch /.well-known/openid-configuration"
+step "step 4/6 — fetch /.well-known/openid-configuration"
 DISCOVERY_BODY="$(curl -fsS http://127.0.0.1:57080/.well-known/openid-configuration)" || {
     echo "[run-locally] discovery fetch failed" >&2
     exit 3
@@ -116,24 +118,16 @@ echo "${DISCOVERY_BODY}" | jq '{issuer, authorization_endpoint, token_endpoint, 
 }
 
 # 5. smoke
-step "step 5/7 — integration-smoke"
+step "step 5/6 — integration-smoke"
 COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}" \
     bash "${SCRIPTS}/integration-smoke.sh" || {
     echo "[run-locally] integration-smoke failed" >&2
     exit 3
 }
 
-# 6. e2e
-step "step 6/7 — integration-e2e (S1 + S2 + S3)"
-COAUTH_BASE="${COAUTH_BASE:-http://127.0.0.1:57080}" \
-    bash "${SCRIPTS}/integration-e2e.sh" || {
-    echo "[run-locally] integration-e2e failed" >&2
-    exit 3
-}
-
-# 7. conformance (optional)
+# 6. conformance (optional)
 if (( WITH_CONFORMANCE == 1 )); then
-    step "step 7/7 — oidc-conformance plan-basic-op"
+    step "step 6/6 — oidc-conformance plan-basic-op"
     COAUTH_SKIP_BOOT=1 \
         COAUTH_BIND=127.0.0.1:57080 \
         COAUTH_RUN_FULL_CONFORMANCE=1 \
@@ -142,7 +136,7 @@ if (( WITH_CONFORMANCE == 1 )); then
         exit 3
     }
 else
-    step "step 7/7 — oidc-conformance (skipped; pass --with-conformance to run)"
+    step "OIDC health and discovery checks complete"
 fi
 
 echo

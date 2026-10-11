@@ -140,6 +140,7 @@ anyhow = { workspace = true }
 vergen-gitcl = { workspace = true }
 
 [dev-dependencies]
+arkret-crypto = { path = "../../../arkret-rust-sdk/crates/crypto", features = ["identity-root"] }
 syn = { workspace = true, features = ["full", "visit"] }
 cotest-test-support = { path = "../../../cotest/crates/test-support" }
 arkret-wire = { workspace = true, features = ["test-support"] }

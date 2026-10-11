@@ -2,8 +2,7 @@
 # Integration smoke: hit each service's `/health` endpoint and confirm 200.
 #
 # Intentionally tiny: this is a bring-up smoke, not an e2e harness. The
-# scope is "the docker-compose.integration.yaml stack actually came up and
-# the probed services are reachable on their published ports".
+# scope is service health, never business coverage.
 #
 # Exit codes:
 #   0 — every probed endpoint returned HTTP 200
@@ -50,6 +49,12 @@ probes=(
 # to match the integration-up.sh profile semantics.
 for arg in "$@"; do
     case "${arg}" in
+        --canonical)
+            COAUTH_BASE="${COTEST_COAUTH_BASE_URL:?canonical Coauth is required}"
+            COLAND_BASE="${COTEST_COLAND_BASE_URL:?canonical Coland is required}"
+            probes=("coauth ${COAUTH_BASE}/health" "coland ${COLAND_BASE}/health")
+            export CURL_CA_BUNDLE="${NODE_EXTRA_CA_CERTS:?canonical CA is required}"
+            ;;
         --with-downstream)
             probes+=(
                 "coland ${COLAND_BASE}/health"
