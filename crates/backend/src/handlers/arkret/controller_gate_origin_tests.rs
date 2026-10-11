@@ -272,13 +272,24 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
         .unwrap()
         .controller_account_gate_attestation
         .principal_id = governance.service_core_id();
-    let rejected = coland_http::test_admit_authority_forward(&governance, &peer, tampered, at)
-        .await
-        .expect_err("substituted controller must fail producer verification");
+    let rejected = Box::pin(coland_http::test_admit_authority_forward(
+        &governance,
+        &peer,
+        tampered,
+        at,
+    ))
+    .await
+    .expect_err("substituted controller must fail producer verification");
     assert!(
         !matches!(&rejected, coland_services::ServiceError::Conflict(detail) if detail == "Realm authority is unavailable")
     );
-    let result = coland_http::test_admit_authority_forward(&governance, &peer, request, at).await;
+    let result = Box::pin(coland_http::test_admit_authority_forward(
+        &governance,
+        &peer,
+        request,
+        at,
+    ))
+    .await;
     assert!(
         matches!(result, Err(coland_services::ServiceError::Conflict(ref detail)) if detail == "Realm authority is unavailable"),
         "valid actual carrier must reach ordinary Realm authorization: {result:?}"

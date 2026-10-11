@@ -1,101 +1,81 @@
-# Copyright (c) 2026 Arkret Authors. Licensed under the Apache License, Version 2.0; see LICENSE-APACHE for details.
-
+# Copyright (c) 2026 Arkret Authors. Licensed under the Apache License, Version 2.0.
 name: Gitea Integration e2e
-
-# bring up the docker-compose integration stack
-# (Postgres + coauth + coland + codmin) and run the smoke + e2e harness
-# scripts against it. Captures container logs as artefacts on failure so
-# a red CI surface is debuggable without re-spinning the stack locally.
-#
-#   - integration-up.sh --wait : compose up -d --wait
-#   - integration-smoke.sh     : 200-OK probes on each /health
-#   - integration-e2e.sh       : 3 protocol-level scenarios (S1/S2/S3)
-#
-# The smoke + e2e scripts are 404-tolerant for surfaces that aren't
-# wired in the published coland/codmin tags, so this job goes green
-# when the wire is reachable even if the higher-level scenarios skip.
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: "4"
 
 concurrency:
-  group: gitea-integration-e2e-${{ gitea.ref }}
+  group: integration-e2e-${{ gitea.ref }}
   cancel-in-progress: true
 
 jobs:
   integration-e2e:
-    name: docker-compose integration e2e
+    name: canonical S1 / S2 / S3 business integration
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-
+    timeout-minutes: 90
     permissions:
       contents: read
-
     steps:
       - name: Fetch repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
-      - name: Install jq + curl
-        run: |
-          if ! command -v jq >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1; then
-            sudo apt-get update -y && sudo apt-get install -y jq curl
-          fi
-
-      - name: Bring up integration stack
+      - name: Fetch canonical provisioning and protocol dependencies
         env:
-          # Build coauth from the local Dockerfile (compose handles this
-          # via the build: clause). coland / codmin are profile-gated
-          # (--profile downstream) and not pulled by default — the e2e
-          # harness is 404-tolerant for those surfaces and skips the
-          # corresponding scenarios when they aren't reachable.
-          COAUTH_IMAGE: coauth:ci
-        run: bash scripts/integration-up.sh
-
-      - name: Run integration smoke (probes /health)
-        run: bash scripts/integration-smoke.sh
-
-      - name: Run integration e2e scenarios (S1 / S2 / S3)
-        run: bash scripts/integration-e2e.sh
-
-      - name: Capture container logs on failure
-        if: ${{ failure() }}
+          CI_REPO_TOKEN: ${{ secrets.CI_REPO_TOKEN || github.token }}
         run: |
-          mkdir -p target/integration-logs
-          # The default profile only runs postgres + coauth; coland/codmin
-          # only exist under --profile downstream, but we collect them
-          # unconditionally and tolerate misses so the same job is useful
-          # for both profile sets.
-          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
-            logs --no-color postgres > target/integration-logs/postgres.log 2>&1 || true
-          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
-            logs --no-color coauth   > target/integration-logs/coauth.log   2>&1 || true
-          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
-            logs --no-color coland   > target/integration-logs/coland.log   2>&1 || true
-          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
-            logs --no-color codmin   > target/integration-logs/codmin.log   2>&1 || true
-          docker compose -f docker-compose.integration.yaml --profile downstream --profile did-webvh \
-            ps > target/integration-logs/ps.txt 2>&1 || true
-          # Also dump the generated test config so we can see what coauth booted with.
-          cp conformance/test-config.yaml target/integration-logs/test-config.yaml 2>/dev/null || true
+          for repository in arkret-rust-sdk arkret-spec coland cotest garth chime inkson floria; do
+            bash .ci/checkout-sibling.sh "$repository" "../$repository"
+          done
 
-      - name: Upload integration diagnostic logs
-        if: ${{ failure() }}
-        uses: christopherhx/gitea-upload-artifact@81f940d004763f986ba3582c007fd842dd5cb0d7 # v4 branch
+      - name: Set up Rust 1.98.0
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
-          name: integration-e2e-logs
-          path: target/integration-logs/
-          if-no-files-found: ignore
+          toolchain: 1.98.0
 
-      - name: Tear down integration stack
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install native and browser prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config curl jq
+          npm ci --prefix ../cotest/e2e
+          cd ../cotest/e2e
+          npx playwright install --with-deps chromium
+
+      - name: Prepare canonical TLS and isolated deployment prerequisites
+        run: bash ../cotest/scripts/prepare-linux-joint-e2e.sh setup
+
+      - name: Validate business scenario types
+        run: |
+          node ../cotest/e2e/node_modules/typescript/bin/tsc --project scripts/integration/tsconfig.json
+          node --test scripts/integration/verify-results.test.mjs
+
+      - name: Run accepted account, browser WebAuthn, and two-admin scenarios
+        run: bash scripts/integration-up.sh --business -JointDir "${RUNNER_TEMP}/coauth-integration"
+
+      - name: Upload business results and diagnostic logs
         if: ${{ always() }}
-        run: bash scripts/integration-up.sh --down
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: coauth-business-integration
+          path: |
+            ${{ runner.temp }}/coauth-integration/coauth-integration/business-summary.json
+            ${{ runner.temp }}/coauth-integration/coauth-integration/business-junit.xml
+            ${{ runner.temp }}/coauth-integration/services/**/*.log
+            ${{ runner.temp }}/coauth-integration/preflight*.json
+          if-no-files-found: warn
+
+      - name: Restore runner prerequisites
+        if: ${{ always() }}
+        run: bash ../cotest/scripts/prepare-linux-joint-e2e.sh restore

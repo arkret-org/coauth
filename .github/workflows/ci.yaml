@@ -82,6 +82,7 @@ jobs:
           bash .ci/checkout-sibling.sh cotest ../cotest
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
+          bash .ci/checkout-sibling.sh floria ../floria
 
       - name: Verify Rust toolchain policy
         run: |
@@ -157,6 +158,7 @@ jobs:
           bash .ci/checkout-sibling.sh cotest ../cotest
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
+          bash .ci/checkout-sibling.sh floria ../floria
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
@@ -194,6 +196,7 @@ jobs:
           bash .ci/checkout-sibling.sh cotest ../cotest
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
+          bash .ci/checkout-sibling.sh floria ../floria
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master

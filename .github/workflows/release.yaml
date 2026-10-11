@@ -154,6 +154,7 @@ jobs:
           bash coauth/.ci/checkout-sibling.sh coland coland
           bash coauth/.ci/checkout-sibling.sh cotest cotest
           bash coauth/.ci/checkout-sibling.sh garth garth
+          bash coauth/.ci/checkout-sibling.sh floria floria
 
       - name: Configure Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1

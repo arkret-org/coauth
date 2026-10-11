@@ -85,7 +85,7 @@ def main():
     parser.add_argument("--archives", type=Path)
     parser.add_argument("--junit", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--source-ref", default=os.environ.get("COAUTH_CONFORMANCE_REF"))
+    parser.add_argument("--source-ref", default=os.environ.get("OPENID_CONFORMANCE_REF"))
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     if args.archives is not None:

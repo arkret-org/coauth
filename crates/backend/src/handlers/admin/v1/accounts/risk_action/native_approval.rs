@@ -62,7 +62,7 @@ pub(super) fn verify_native_approval_jws(
             &did,
             principal,
             &[multibase.to_owned()],
-            &DidUrl::new(method.to_owned()).map_err(|error| error.to_string())?,
+            &DidUrl::new(method.clone()).map_err(str::to_owned)?,
             arkret_identity::principal_control::DirectIdentityControlPurpose::ApprovalSignature,
         )
         .map_err(|error| error.to_string())?;
@@ -78,14 +78,13 @@ pub(super) fn verify_native_approval_jws(
     if verified.key_id() != Some(method.as_str()) {
         return Err("protected kid changed during verification".into());
     }
-    Ok(method.to_owned())
+    Ok(method)
 }
 
 #[cfg(test)]
 mod tests {
     use arkret_signatures::webvh::{PrincipalInceptionInput, PrincipalRotationInput};
     use arkret_wire::NonEmptyString;
-    use ed25519_dalek_3::{Signer as _, SigningKey};
     use serde_json::json;
 
     use super::*;
@@ -93,16 +92,14 @@ mod tests {
 
     fn multikey(seed: &[u8; 32]) -> String {
         arkret_canonical::ed25519_pubkey_to_did_key_multibase(
-            &SigningKey::from_bytes(seed).verifying_key().to_bytes(),
+            &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(seed)
+                .verifying_key()
+                .to_bytes(),
         )
     }
 
     fn proof(seed: &[u8; 32], method: &str, payload: &[u8]) -> String {
-        let input =
-            arkret_signatures::ed25519_detached_jws_signing_input(payload, Some(method)).unwrap();
-        let signature = SigningKey::from_bytes(seed).sign(input.as_bytes());
-        arkret_signatures::ed25519_detached_jws_from_signature(&signature.to_bytes(), Some(method))
-            .unwrap()
+        crate::arkret_key_bridge::sdk_detached_jws_for_test(seed, method, payload)
     }
 
     // Recreate only the existing resolver's closed product response from a

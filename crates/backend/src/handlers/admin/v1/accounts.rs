@@ -651,14 +651,10 @@ fn account_claim_value(payload: &serde_json::Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use base64ct::{Base64UrlUnpadded, Encoding as _};
-    use coauth_data::RepositoryAccess;
     use coauth_data::personal::session::PersonalSessionOwner;
-    use coauth_iana::jose::JsonWebSignatureAlg;
-    use coauth_jose::constraints::Constrainable as _;
-    use coauth_jose::jwt::JsonWebSignatureHeader;
+    use coauth_data::{Clock, RepositoryAccess};
+    use coauth_principal::ConnectorAdmin;
     use hyper::{Request, StatusCode};
-    use signature::RandomizedSigner as _;
     use ulid::Ulid;
 
     use crate::handlers::test_utils::{RequestBuilderExt, ResponseExt, TestState, setup};
@@ -815,8 +811,8 @@ mod tests {
         state.seed_principal_binding(&user, "riskexectarget").await;
         // The proposal endpoint already resolves the acting admin's principal
         // DID, so the admin binding has to exist before the first request.
-        let admin_did = admin_did_for_token(&state, &token, "riskexec").await;
-        let admin_authority_did = seed_admin_authority_acceptance(&state, &admin_did).await;
+        let admin = native_admin_for_token(&mut state, &token, "riskexec").await;
+        let admin_did = admin.principal_id.clone();
 
         let response = state
             .request(
@@ -835,14 +831,13 @@ mod tests {
         assert_eq!(body["approval_mode"], "durable_proposal_required");
         let approval_note = "approved for controlled executor";
         let approval_proof_jws = sign_risk_action_approval_proof(
-            &state,
+            &admin,
             &proposal_id,
             user.id,
             "lock",
             Some("INC-2.1"),
             approval_note,
             &admin_did,
-            &admin_authority_did,
         );
 
         let proposals =
@@ -979,8 +974,8 @@ mod tests {
         state
             .seed_principal_binding(&user, "riskapprovetarget")
             .await;
-        let admin_did = admin_did_for_token(&state, &token, "riskapprove").await;
-        let admin_authority_did = seed_admin_authority_acceptance(&state, &admin_did).await;
+        let admin = native_admin_for_token(&mut state, &token, "riskapprove").await;
+        let admin_did = admin.principal_id.clone();
 
         let response = state
             .request(
@@ -1001,14 +996,13 @@ mod tests {
             crate::services::risk_action_proposals::risk_action_proposals_service(pool.clone());
         let approval_note = "first real admin approval";
         let approval_proof_jws = sign_risk_action_approval_proof(
-            &state,
+            &admin,
             &proposal_id,
             user.id,
             "disable",
             Some("INC-SEC-COA-1"),
             approval_note,
             &admin_did,
-            &admin_authority_did,
         );
 
         let response = state
@@ -1138,136 +1132,270 @@ mod tests {
         assert_eq!(body["data"][0]["did"], did);
     }
 
-    /// Bind an accepted principal DID to the admin behind `token` and return
-    /// it.
-    ///
-    /// The risk-action workflow resolves the acting admin through the same
-    /// accepted-binding projection as every other principal lookup, so a
-    /// fabricated DID is never the admin's actor id.
-    async fn admin_did_for_token(state: &TestState, token: &str, label: &str) -> String {
+    struct NativeAdminFixture {
+        principal_id: String,
+        root_seed: [u8; 32],
+        control_method: String,
+    }
+
+    /// The fixture transports one complete SDK-verified principal history;
+    /// other resolutions still use the original Station issuer resolver.
+    struct NativeAdminResolver {
+        base: crate::services::did_resolver::DidResolverServiceHandle,
+        resolution: crate::services::did_resolver::DidResolution,
+    }
+
+    #[async_trait::async_trait]
+    impl crate::services::did_resolver::DidResolverService for NativeAdminResolver {
+        fn service_id(
+            &self,
+            config: &coauth_config::ArkretConfig,
+        ) -> arkret_identifiers::DidCoreId {
+            self.base.service_id(config)
+        }
+        fn issuer_did(&self, config: &coauth_config::ArkretConfig) -> arkret_identifiers::Did {
+            self.base.issuer_did(config)
+        }
+        fn resolver_egress_policy(&self) -> &crate::services::did_resolver::ResolverEgressPolicy {
+            self.base.resolver_egress_policy()
+        }
+        async fn primary_did_for_user(
+            &self,
+            repo: &mut coauth_data::BoxRepository,
+            config: &coauth_config::ArkretConfig,
+            user: &coauth_data::User,
+        ) -> Result<arkret_identifiers::Did, crate::services::session_grant::SessionGrantError>
+        {
+            self.base.primary_did_for_user(repo, config, user).await
+        }
+        fn delegated_resolver(&self, config: &coauth_config::ArkretConfig) -> Option<String> {
+            self.base.delegated_resolver(config)
+        }
+        fn proof_required_for_pairwise(&self, config: &coauth_config::ArkretConfig) -> bool {
+            self.base.proof_required_for_pairwise(config)
+        }
+        async fn resolve_did_document(
+            &self,
+            http: &reqwest::Client,
+            url: &coauth_data::UrlBuilder,
+            config: &coauth_config::ArkretConfig,
+            keyring: &coauth_keyring::Keyring,
+            repo: &mut coauth_data::BoxRepository,
+            did: &str,
+        ) -> Result<
+            crate::services::did_resolver::DidResolution,
+            crate::services::did_resolver::DidResolveError,
+        > {
+            if did == self.resolution.document.id {
+                return Ok(self.resolution.clone());
+            }
+            self.base
+                .resolve_did_document(http, url, config, keyring, repo, did)
+                .await
+        }
+        async fn resolve_did_binding_evidence(
+            &self,
+            http: &reqwest::Client,
+            url: &coauth_data::UrlBuilder,
+            config: &coauth_config::ArkretConfig,
+            keyring: &coauth_keyring::Keyring,
+            repo: &mut coauth_data::BoxRepository,
+            did: &str,
+        ) -> Result<
+            crate::services::did_resolver::DidResolution,
+            crate::services::did_resolver::DidResolveError,
+        > {
+            if did == self.resolution.document.id {
+                return Ok(self.resolution.clone());
+            }
+            self.base
+                .resolve_did_binding_evidence(http, url, config, keyring, repo, did)
+                .await
+        }
+    }
+
+    async fn native_admin_for_token(
+        state: &mut TestState,
+        token: &str,
+        label: &str,
+    ) -> NativeAdminFixture {
+        use coauth_data::user::PrincipalDidRepository as _;
+
         let mut repo = state.repository().await.unwrap();
         let access = repo
             .personal_access_token()
             .find_by_token(token)
             .await
             .unwrap()
-            .expect("test token should resolve");
+            .unwrap();
         let session = repo
             .personal_session()
             .lookup(access.session_id)
             .await
             .unwrap()
-            .expect("test token session should resolve");
+            .unwrap();
         let PersonalSessionOwner::User(user_id) = session.owner else {
             panic!("admin test token should be user-owned");
         };
-        let user = repo
-            .user()
-            .lookup(user_id)
-            .await
-            .unwrap()
-            .expect("admin token user should resolve");
+        let user = repo.user().lookup(user_id).await.unwrap().unwrap();
         repo.cancel().await.unwrap();
-        state.seed_principal_binding(&user, label).await
-    }
 
-    /// File an `AdminAction` authority acceptance for the admin's accepted
-    /// principal binding into the durable verified-DID-binding store.
-    ///
-    /// The approve step resolves the admin's authority document through the
-    /// `verified_did` retained on that binding. Tests configure no
-    /// delegated resolver, so the acceptance must already be durable — the §4
-    /// "binding hit, zero resolver calls" path — or the high-risk freshness
-    /// gate fails closed.
-    async fn seed_admin_authority_acceptance(state: &TestState, admin_did: &str) -> String {
-        use coauth_data::user::PrincipalDidRepository as _;
-
+        let root_seed = [93; 32];
+        let anchor = coauth_storage_postgres::test_utils::principal_registration_anchor_fixture(
+            &format!("{label}-{}", user.id),
+            root_seed,
+        );
+        let arkret_models_identity::PrincipalRegistrationAnchor::WebvhRegistration {
+            log_entries,
+            witness_records,
+            normalized_did_document,
+            ..
+        } = &anchor;
+        let entries: Vec<serde_json::Value> = log_entries
+            .iter()
+            .map(|entry| serde_json::to_value(entry).unwrap())
+            .collect();
+        let witnesses: Vec<serde_json::Value> = witness_records
+            .iter()
+            .map(|entry| serde_json::to_value(entry).unwrap())
+            .collect();
+        let document: crate::handlers::arkret::DidDocument =
+            serde_json::from_value(serde_json::to_value(normalized_did_document).unwrap()).unwrap();
+        let did = arkret_identifiers::Did::new(document.id.clone()).unwrap();
+        let verified = arkret_identity::verify_did_webvh_v1_log_and_witness_records(
+            &did, &entries, &witnesses,
+        )
+        .unwrap();
+        let public_key =
+            arkret_canonical::decode_ed25519_multibase(&verified.log.active_update_keys[0])
+                .unwrap();
+        assert_eq!(
+            public_key,
+            crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&root_seed)
+                .verifying_key()
+                .to_bytes()
+        );
+        let control_key_digest = arkret_wire::Hash::new(format!(
+            "sha256:{}",
+            arkret_canonical::sha256_hex(public_key)
+        ))
+        .unwrap();
+        let key_log_head = arkret_wire::Hash::new(
+            arkret_canonical::canonical_sha256(entries.last().unwrap()).unwrap(),
+        )
+        .unwrap();
+        let principal_id = arkret_identifiers::project_did_to_core_id(&did).unwrap();
+        let version_id = verified.log.head_version_id;
+        let authority =
+            crate::services::station_trust::owning_station_did_for(&state.arkret_config);
+        let (_, audience) = state
+            .station_admin
+            .as_ref()
+            .account_status_destination()
+            .unwrap();
+        let mut receipt = coauth_storage_postgres::test_utils::account_binding_receipt(
+            authority.as_str(),
+            did.clone(),
+            &version_id,
+            key_log_head.clone(),
+        );
+        receipt.account_subject =
+            crate::handlers::arkret::account_subject(&audience, user.id).unwrap();
+        receipt.control_key_digest = control_key_digest.clone();
+        receipt.registration_anchor_digest =
+            arkret_wire::Hash::new(arkret_canonical::canonical_sha256(&anchor).unwrap()).unwrap();
+        receipt.issued_at = state.clock.now();
+        receipt.proof.created_at = receipt.issued_at;
+        receipt.proof.verification_method =
+            arkret_wire::DidUrl::new(format!("{authority}#account-authority")).unwrap();
+        receipt.proof.payload_digest = receipt.canonical_payload_digest().unwrap();
+        receipt.proof.jws = arkret_signatures::sign_ed25519_detached_jws(
+            &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
+                &state.keyring.account_authority_seed().unwrap(),
+            ),
+            &receipt.canonical_proof_binding_bytes().unwrap(),
+        )
+        .unwrap();
+        receipt.validate_shape().unwrap();
+        let input = coauth_data::user::VerifiedPrincipalDidBindingInput {
+            audience_id: audience.clone(),
+            principal_id: principal_id.clone(),
+            key_log_head: key_log_head.clone(),
+            verified_did: did.clone(),
+            verified_version_id: version_id.clone(),
+            binding_receipt_digest: arkret_wire::Hash::new(
+                arkret_canonical::canonical_sha256(&receipt).unwrap(),
+            )
+            .unwrap(),
+            binding_receipt: receipt,
+            accepted_id: audience.clone(),
+            binding_version: 1,
+            account_id: coauth_storage_postgres::test_utils::account_id(
+                principal_id.as_str(),
+                audience.as_str(),
+            ),
+            principal_control_realm_id:
+                coauth_storage_postgres::test_utils::principal_control_realm_id(),
+        };
+        let resolution = crate::services::did_resolver::DidResolution {
+            document: serde_json::from_value(verified.log.head_state).unwrap(),
+            source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
+            verified_local_binding: false,
+            key_log_head: Some(key_log_head),
+            method_evidence: serde_json::json!({}),
+            closed_method_evidence: Some(
+                arkret_models_identity::IdentityMethodEvidence::DidWebvh {
+                    version_id: arkret_wire::NonEmptyString::new(version_id).unwrap(),
+                    control_key_digest,
+                },
+            ),
+            identity_fact_rejection: None,
+        };
+        state.did_resolver_service_override = Some(std::sync::Arc::new(NativeAdminResolver {
+            base: state.did_resolver_service_override.clone().unwrap(),
+            resolution,
+        }));
+        let mut rng = state.rng();
         let mut repo = state.repository().await.unwrap();
         let binding = repo
             .principal_did()
-            .get_by_principal_id(admin_did)
+            .add_verified(&mut rng, state.clock.as_ref(), &user, input)
             .await
-            .unwrap()
-            .expect("admin principal binding should be seeded");
-        let did = binding.verified_did.to_string();
-
-        // The approval proof is signed by the test keyring's Ed25519 key
-        // under `kid = {resolvable admin DID}#key-1`, so the pinned document must
-        // advertise that method with the same public key.
-        let public_jwk = state
-            .keyring
-            .public_jwks()
-            .iter()
-            .find(|jwk| jwk.kid() == Some(crate::handlers::test_utils::TEST_ED25519_KEY_ID))
-            .expect("test keyring should expose its Ed25519 public key")
-            .clone();
-        let resolution = crate::services::did_resolver::DidResolution {
-            document: crate::handlers::arkret::DidDocument {
-                id: did.clone(),
-                also_known_as: Vec::new(),
-                verification_method: vec![crate::handlers::arkret::VerificationMethod {
-                    id: format!("{did}#key-1"),
-                    kind: "JsonWebKey2020".to_owned(),
-                    controller: did.clone(),
-                    public_key_jwk: Some(public_jwk),
-                    public_key_multibase: None,
-                }],
-                authentication: Vec::new(),
-                assertion_method: Vec::new(),
-                service: Vec::new(),
-                metadata: None,
-            },
-            source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
-            verified_local_binding: false,
-            key_log_head: Some(binding.key_log_head.clone()),
-            method_evidence: serde_json::json!({
-                "method": "did:webvh",
-                "history_evidence_kind": "webvh_key_log",
-                "controller_proof_verified": true,
-            }),
-            closed_method_evidence: None,
-            identity_fact_rejection: None,
-        };
-        let now = chrono::Utc::now();
-        let accepted = crate::services::did_binding::binding_from_resolution(
-            &resolution,
-            crate::services::did_binding::trust_domain_id(&state.url_builder, &state.arkret_config)
-                .unwrap(),
-            arkret_identity::DidBindingPurpose::AdminAction,
-            crate::services::did_binding::policy_digest(&state.arkret_config).unwrap(),
+            .unwrap();
+        crate::services::account_status_publication::author_and_enqueue_transition(
+            &mut repo,
+            &mut rng,
+            state.clock.as_ref(),
+            state.station_admin.as_ref(),
+            &state.keyring,
+            crate::services::station_trust::owning_station_id_for(&state.arkret_config).as_str(),
+            &user,
+            &binding,
+            arkret_models_collaboration::objects::account_status::AccountStatus::Active,
             None,
-            &crate::services::did_binding::high_risk_freshness(),
-            now,
+            state.clock.now(),
+            &state.account_status_issuer_context(),
         )
-        .expect("fixture resolution should build an authority-grade binding");
-        crate::services::did_binding::shared_verified_did_binding_store()
-            .persist(&mut repo, &accepted, now)
-            .await
-            .expect("authority acceptance should persist");
+        .await
+        .unwrap();
         repo.save().await.unwrap();
-        did
+        let multibase = arkret_canonical::ed25519_pubkey_to_did_key_multibase(&public_key);
+        NativeAdminFixture {
+            principal_id: principal_id.to_string(),
+            root_seed,
+            control_method: format!("did:key:{multibase}#{multibase}"),
+        }
     }
 
     fn sign_risk_action_approval_proof(
-        state: &TestState,
+        admin: &NativeAdminFixture,
         proposal_id: &str,
         account_id: Ulid,
         action: &str,
         ticket: Option<&str>,
         approval_note: &str,
         approved_by: &str,
-        authority_did: &str,
     ) -> String {
-        let alg = JsonWebSignatureAlg::Ed25519;
-        // Select by `kid`, not by algorithm: `seed_admin_authority_acceptance`
-        // pins `test-ed25519`'s public JWK in the fixture DID document, and the
-        // fixture keyring holds four Ed25519 keys whose order decides what
-        // `signer_for_algorithm` returns.
-        let signer = crate::handlers::test_utils::test_ed25519_private_key()
-            .signing_key_for_alg(&alg)
-            .expect("the fixture Ed25519 key signs Ed25519");
-        let header = JsonWebSignatureHeader::new(alg).with_kid(format!("{authority_did}#key-1"));
-        let header_b64 = Base64UrlUnpadded::encode_string(&serde_json::to_vec(&header).unwrap());
         let payload = super::risk_action::risk_action_approval_transcript_bytes(
             proposal_id,
             account_id,
@@ -1277,16 +1405,10 @@ mod tests {
             approved_by,
         )
         .unwrap();
-        let payload_b64 = Base64UrlUnpadded::encode_string(&payload);
-        let signing_input = format!("{header_b64}.{payload_b64}");
-        let mut rng = state.rng();
-        let raw_sig: coauth_jose::jwa::Signature = signer
-            .try_sign_with_rng(&mut rng, signing_input.as_bytes())
-            .unwrap();
-        let raw_sig: Box<[u8]> = raw_sig.into();
-        format!(
-            "{header_b64}..{}",
-            Base64UrlUnpadded::encode_string(raw_sig.as_ref())
+        crate::arkret_key_bridge::sdk_detached_jws_for_test(
+            &admin.root_seed,
+            &admin.control_method,
+            &payload,
         )
     }
 }

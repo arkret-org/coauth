@@ -49,6 +49,19 @@ pub fn sdk_signing_key_from_seed_bytes(seed: &[u8; 32]) -> SdkSigningKey {
     SdkSigningKey::from_bytes(seed)
 }
 
+/// Signs the SDK detached-JWS transcript with an exact protected key identifier.
+/// Test callers keep the generation-specific signing trait inside this bridge.
+#[cfg(test)]
+pub(crate) fn sdk_detached_jws_for_test(seed: &[u8; 32], key_id: &str, payload: &[u8]) -> String {
+    use ed25519_dalek_3::Signer as _;
+
+    let input =
+        arkret_signatures::ed25519_detached_jws_signing_input(payload, Some(key_id)).unwrap();
+    let signature = sdk_signing_key_from_seed_bytes(seed).sign(input.as_bytes());
+    arkret_signatures::ed25519_detached_jws_from_signature(&signature.to_bytes(), Some(key_id))
+        .unwrap()
+}
+
 /// Builds an SDK-generation verifying key from a raw 32-byte compressed
 /// Ed25519 public key.
 ///
@@ -218,10 +231,28 @@ mod tests {
             &coauth_jose::jwa::AsymmetricSigningKey::from(jose_key.clone()),
         )
         .unwrap();
-        let expected = "eyJhbGciOiJFZDI1NTE5In0.eyJoZWxsbyI6IndvcmxkIn0.Ej-oArFyOk_XWxZfzRahiYEqpEnR9NbT8wmFnrsGptqo2o9r01-Jt90JCoJUHRvGY6n-NtvpcxWLzaXi0z27BA";
+        use ed25519_dalek_3::Signer as _;
+
+        let canonical = arkret_canonical::canonical_json_bytes(&payload).unwrap();
+        let header =
+            arkret_canonical::canonical_json_bytes(&serde_json::json!({"alg": "Ed25519"})).unwrap();
+        let signing_input = format!(
+            "{}.{}",
+            arkret_canonical::base64url_encode(header),
+            arkret_canonical::base64url_encode(&canonical),
+        );
+        let expected_signature = sdk_key.sign(signing_input.as_bytes()).to_bytes();
+        assert_eq!(
+            hex::encode(expected_signature),
+            "123fa802b1723a4fd75b165fcd16a189812aa449d1f4d6d3f309859ebb06a6daa8da8f6bd35f89b7dd090a82541d1bc663a9fe36dbe973158bcda5e2d33dbb04"
+        );
+        let expected = format!(
+            "{}.{}",
+            signing_input,
+            arkret_canonical::base64url_encode(expected_signature)
+        );
         assert_eq!(jwt.as_str(), expected);
         let parts: Vec<_> = expected.split('.').collect();
-        let canonical = arkret_canonical::canonical_json_bytes(&payload).unwrap();
         let detached = arkret_signatures::sign_ed25519_detached_jws(&sdk_key, &canonical).unwrap();
         assert_eq!(detached, format!("{}..{}", parts[0], parts[2]));
         jwt.verify::<_, ed25519_dalek::Signature>(&jose_key.verifying_key())

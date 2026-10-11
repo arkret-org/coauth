@@ -54,6 +54,7 @@ COPY ./arkret-rust-sdk/ /arkret-rust-sdk
 COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
+COPY ./floria/ /floria
 
 # cargo-chef computes a recipe keyed by workspace manifests so frontend
 # dependency compilation can be reused when Rust sources change.
@@ -70,6 +71,7 @@ COPY ./arkret-rust-sdk/ /arkret-rust-sdk
 COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
+COPY ./floria/ /floria
 
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
@@ -145,6 +147,7 @@ COPY ./arkret-rust-sdk/ /arkret-rust-sdk
 COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
+COPY ./floria/ /floria
 
 # cargo-chef keeps the dependency build layer keyed to Cargo manifests so
 # source-only changes can reuse compiled dependencies and downloaded crates.
@@ -164,6 +167,7 @@ COPY ./arkret-rust-sdk/ /arkret-rust-sdk
 COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
+COPY ./floria/ /floria
 
 RUN --network=default \
   --mount=type=cache,id=builder-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \

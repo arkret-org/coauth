@@ -26,7 +26,7 @@ on:
 env:
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
   CARGO_TERM_COLOR: always
-  COAUTH_CONFORMANCE_REF: 11999aad62ec292f36101410d9d5b761d44903ff
+  OPENID_CONFORMANCE_REF: 11999aad62ec292f36101410d9d5b761d44903ff
 
 concurrency:
   group: oidc-conformance-${{ github.ref }}
@@ -68,6 +68,7 @@ jobs:
           bash .ci/checkout-sibling.sh coland ../coland
           bash .ci/checkout-sibling.sh cotest ../cotest
           bash .ci/checkout-sibling.sh garth ../garth
+          bash .ci/checkout-sibling.sh floria ../floria
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
@@ -101,7 +102,7 @@ jobs:
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           repository: openid-certification/conformance-suite
-          ref: ${{ env.COAUTH_CONFORMANCE_REF }}
+          ref: ${{ env.OPENID_CONFORMANCE_REF }}
           path: official-oidf-suite
 
       - name: Test the public evidence credential boundary
@@ -109,7 +110,7 @@ jobs:
 
       - name: Apply the literal metadata member regression fix
         run: |
-          test "$(git -C official-oidf-suite rev-parse HEAD)" = "$COAUTH_CONFORMANCE_REF"
+          test "$(git -C official-oidf-suite rev-parse HEAD)" = "$OPENID_CONFORMANCE_REF"
           git -C official-oidf-suite apply --check "$GITHUB_WORKSPACE/conformance/official-suite-literal-metadata.patch"
           git -C official-oidf-suite apply "$GITHUB_WORKSPACE/conformance/official-suite-literal-metadata.patch"
 

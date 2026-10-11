@@ -126,3 +126,45 @@ bc38c69c8f5c3ee7621abd84e74ac1d9a7970a9f:config.dev.yaml:private-key:93
 
 # Published configuration/curl documentation example; synthetic client/key fixture, not an active deployment credential.
 3a975e6b92b18ae23cb81ee3d243a6ad29966f95:docs/en/reference/configuration.md:private-key:202
+
+# Public SHA256 of the exact tracked Rust source; independently recomputed from its Git blob.
+1c5b20e3cbc36d0fa6f4e7e1244ebb4e3fee7e2c:artifacts/r06-jose/2026-10-11/results.json:generic-api-key:5
+
+# Inline cfg(test) signature-convergence JWT from the published fixed [42; 32] seed and fixed JSON; not a deployment credential.
+1c5b20e3cbc36d0fa6f4e7e1244ebb4e3fee7e2c:crates/backend/src/arkret_key_bridge.rs:jwt:221
+
+# Public source_heads.coauth Git commit identity, verified as a commit object.
+994446bd7c6d84a00481a046341d1040af8d81f3:artifacts/r06-account-handoff/2026-10-11/results.json:generic-api-key:141
+
+# Public acceptance.source_heads.coauth Git commit identity, verified as a commit object.
+994446bd7c6d84a00481a046341d1040af8d81f3:artifacts/r06-account-handoff/2026-10-11/results.json:generic-api-key:200
+
+# Reviewed upstream R06 acceptance provenance metadata (2026-10-11).
+# Exact historical matches only; keep all rules and the full history scan.
+# Public source_heads/coauth Git commit ID; verified as a Git commit object, not an API credential.
+01c88364bbef042079a98fbc52d0a8e83c604440:artifacts/r06-journey/2026-10-11/results.json:generic-api-key:13
+# Public source_heads/coauth Git commit ID; verified as a Git commit object, not an API credential.
+19055483d1b8f9247b2344a06546c3b14d11d3f4:artifacts/r06-aead/2026-10-11/results.json:generic-api-key:80
+# Public acceptance source SHA-256; independently matches the named committed source bytes, not key material.
+eace86bf7723fa82e48224aab768b997fcef840b:artifacts/r06-first-creation/2026-10-11/results.json:generic-api-key:62
+# Public acceptance source SHA-256; independently matches the named committed source bytes, not key material.
+eace86bf7723fa82e48224aab768b997fcef840b:artifacts/r06-first-creation/2026-10-11/results.json:generic-api-key:79
+# Public acceptance logs provenance SHA-256 metadata, not credential bytes; original log digest was not recomputed here.
+eace86bf7723fa82e48224aab768b997fcef840b:artifacts/r06-first-creation/2026-10-11/results.json:generic-api-key:94
+# Public acceptance logs provenance SHA-256 metadata, not credential bytes; original log digest was not recomputed here.
+eace86bf7723fa82e48224aab768b997fcef840b:artifacts/r06-first-creation/2026-10-11/results.json:generic-api-key:95
+# Public acceptance source SHA-256; independently matches the named committed source bytes, not key material.
+6894449ca50171d72efb997718bfbe640bf33b81:artifacts/r06-aead/2026-10-11/results.json:generic-api-key:43
+# Public acceptance source SHA-256; independently matches the named committed source bytes, not key material.
+6894449ca50171d72efb997718bfbe640bf33b81:artifacts/r06-aead/2026-10-11/results.json:generic-api-key:45
+
+# Reviewed public SHA256 source, lock and log digests in the R06 validation artifact.
+# Each exception is restricted to its committed artifact line; no credential values are allowed.
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:180
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:208
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:219
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:239
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:250
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:273
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:304
+62747a2358ba3f3a689c6991e492532bf1304afc:artifacts/r06-vertical/2026-10-11/results.json:generic-api-key:305

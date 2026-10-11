@@ -68,7 +68,8 @@ if [[ "${1:-}" == "--business" ]]; then
     fi
     if (( custom_coauth )); then
         [[ -n "${selected_coauth_bin}" && "${coauth_argument_pending}" == 0 ]] || { echo "-CoauthBin requires a binary path" >&2; exit 2; }
-        export COAUTH_INTEGRATION_COAUTH_BIN="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "${selected_coauth_bin}")"
+        COAUTH_INTEGRATION_COAUTH_BIN="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "${selected_coauth_bin}")"
+        export COAUTH_INTEGRATION_COAUTH_BIN
     fi
     cargo build --manifest-path "${REPO_ROOT}/Cargo.toml" -p coauth-backend --example integration-approval -j "${CARGO_BUILD_JOBS}"
     if (( custom_coauth == 0 )); then
