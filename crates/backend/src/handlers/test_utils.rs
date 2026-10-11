@@ -851,8 +851,6 @@ impl TestState {
     ///
     /// Panics when the binding cannot be persisted.
     pub async fn seed_principal_binding(&self, user: &coauth_data::User, label: &str) -> String {
-        use coauth_data::user::PrincipalDidRepository as _;
-
         let (principal_id, key_log_head) =
             coauth_storage_postgres::test_utils::principal_binding_test_material(label);
         // Account-status publication requires the binding to have been accepted
@@ -864,12 +862,26 @@ impl TestState {
             .as_ref()
             .account_status_destination()
             .unwrap();
-        let mut input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
+        let input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
             &account_authority_did,
             audience.as_str(),
             principal_id.clone(),
             key_log_head,
         );
+        self.seed_accepted_principal_binding(user, input).await
+    }
+
+    /// Retain an accepted registration binding with its exact public PCR coordinates.
+    pub async fn seed_accepted_principal_binding(
+        &self,
+        user: &coauth_data::User,
+        mut input: coauth_data::user::VerifiedPrincipalDidBindingInput,
+    ) -> String {
+        use coauth_data::user::PrincipalDidRepository as _;
+        let principal_id = input.principal_id.to_string();
+        let audience = input.audience_id.clone();
+        let account_authority_did =
+            crate::services::station_trust::owning_station_did_for(&self.arkret_config).to_string();
         // This fixture's own designated AA key, method and original receipt
         // must all agree with its accepted issuer document.
         input.binding_receipt.account_subject =
@@ -948,6 +960,16 @@ impl TestState {
             &self.keyring.account_authority_seed().unwrap(),
         )
         .unwrap();
+        self.configure_status_issuer_original(&prepared, endpoint)
+    }
+
+    /// Configure the original registered Station shared with the Coland fixture.
+    pub fn configure_status_issuer_original(
+        &mut self,
+        prepared: &arkret_signatures::webvh::PreparedInception,
+        endpoint: url::Url,
+    ) -> arkret_wire::DidCoreId {
+        self.clock = Arc::new(MockClock::new(chrono::Utc::now()));
         self.arkret_config.runtime_owning_station_identity =
             coauth_config::RuntimeOwningStationIdentity::fixture(&prepared.did);
         self.arkret_config.stations[0].endpoint = endpoint.clone();

@@ -141,6 +141,11 @@ vergen-gitcl = { workspace = true }
 
 [dev-dependencies]
 arkret-crypto = { path = "../../../arkret-rust-sdk/crates/crypto", features = ["identity-root"] }
+coland-test-support = { path = "../../../coland/crates/test-support" }
+coland-http = { path = "../../../coland/crates/http", features = ["test-support"] }
+coland-services = { path = "../../../coland/crates/services", features = ["test-support"] }
+coland-storage = { path = "../../../coland/crates/storage" }
+coland-storage-postgres = { path = "../../../coland/crates/storage-postgres", features = ["test-support"] }
 syn = { workspace = true, features = ["full", "visit"] }
 cotest-test-support = { path = "../../../cotest/crates/test-support" }
 arkret-wire = { workspace = true, features = ["test-support"] }
