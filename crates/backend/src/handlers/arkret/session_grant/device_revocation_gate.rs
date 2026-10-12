@@ -343,6 +343,7 @@ mod tests {
     /// call the origin Station unauthenticated.
     #[test]
     fn internal_channel_without_a_configured_credential_fails_closed() {
+        crate::handlers::test_utils::setup();
         let endpoint = url::Url::parse("https://station.example/").expect("test endpoint");
         let http_client = crate::reqwest_client();
         // `InternalAuthorityChannel` is deliberately not `Debug` (it holds a
@@ -373,6 +374,7 @@ mod tests {
     /// channel was opened to.
     #[test]
     fn private_response_for_another_station_is_rejected() {
+        crate::handlers::test_utils::setup();
         let endpoint = url::Url::parse("https://station.example/").expect("test endpoint");
         let http_client = crate::reqwest_client();
         let channel = channel_to(&endpoint, &http_client, "ak:did_core:web:station.example");

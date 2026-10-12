@@ -1518,12 +1518,25 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             "agent_key_authorization_ref".to_owned(),
             serde_json::json!(authorization_event_id),
         ),
+        ("realm_ids".to_owned(), serde_json::json!([])),
+        ("strand_ids".to_owned(), serde_json::json!([])),
         (
             "resources".to_owned(),
             serde_json::json!({
-                "realm_refs": ["ak:realm:team"],
+                "realm_ids": [],
+                "strand_ids": [],
             }),
         ),
+        (
+            "constraints".to_owned(),
+            serde_json::json!({
+                "allowed_tracks": [],
+                "allowed_data_labels": [],
+                "allowed_endpoints": [],
+            }),
+        ),
+        ("capability_grant_refs".to_owned(), serde_json::json!([])),
+        ("policy_refs".to_owned(), serde_json::json!([])),
     ]);
     let issuance_seed = SessionGrantIssuanceSeed::new(
         arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x41; 32]).to_string(),
@@ -1567,10 +1580,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     );
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
-    // `proof_kind` and `scope_details` ride the signed grant payload; the
-    // wire introspection grant record omits them (spec
-    // SessionGrantValidationMetadata is additionalProperties:false without
-    // these members), so they are asserted here rather than on the response.
+    // The signed grant binds proof_kind and the complete immutable Agent scope.
+    // Authenticated introspection preserves scope_details; proof_kind stays private.
     assert_eq!(raw_payload["proof_kind"], "agent_key_proof");
     assert_eq!(
         raw_payload["scope_details"],
@@ -1672,9 +1683,9 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             "verification_method": "did:web:agent.example#runtime-key",
         })
     );
-    // `proof_kind`/`scope_details` were asserted on the signed payload above:
-    // the spec introspection grant record (additionalProperties:false) omits
-    // them, and `freshness_state` is likewise absent from the wire record.
+    // The issuer-ledger scope survives the authenticated metadata round-trip.
+    assert_eq!(body["grant"]["scope_details"], raw_payload["scope_details"]);
+    // proof_kind and freshness_state remain absent from the wire record.
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
     assert_eq!(
         body["grant"]["cnf_jkt"],

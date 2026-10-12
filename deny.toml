@@ -52,6 +52,18 @@ allow = [
     "Zlib",
 ]
 
+# Bundled libpq used by the Coland PostgreSQL test adapter retains PostgreSQL's
+# permissive license; do not allow that license for unrelated dependencies.
+[[licenses.exceptions]]
+name = "pq-src"
+allow = ["PostgreSQL"]
+
+# Mozilla's redistributed TLS root data uses CDLA-Permissive-2.0. This applies
+# only to webpki-roots; HTTP clients continue to use Rustls.
+[[licenses.exceptions]]
+name = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
+
 # ring's license is a bit unusual, so we need to clarify it
 [[licenses.clarify]]
 name = "ring"
@@ -63,8 +75,8 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 
 [bans]
 deny = [
-    # We should never depend on openssl — use rustls instead.
-    # Exception for the webauthn-rs 0.5.x subtree only — remove once upstream
+    # HTTP clients must use Rustls rather than OpenSSL/native-tls.
+    # Exception for the webauthn-rs 0.5.x subtree — remove once upstream
     # drops openssl (tracking: webauthn-rs RustCrypto migration).
     # `wrappers` lists the only crates allowed to depend on the banned crate
     # directly; any other dependent still fails the check.
@@ -76,6 +88,9 @@ deny = [
         "openssl",
         "webauthn-attestation-ca",
         "webauthn-rs-core",
+        # Bundled libpq's TLS backend, reached through the Coland PostgreSQL
+        # test adapter. Disabling this feature would remove PostgreSQL TLS.
+        "pq-src",
     ] },
     { name = "native-tls" },
     # Guard against the legacy `time 0.1` line (RUSTSEC-2020-0071 era). This

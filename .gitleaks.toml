@@ -29,6 +29,8 @@ paths = [
 ]
 
 regexes = [
+    # The exact public crate name is dependency data, never a credential.
+    '''^libcrux-sha3$''',
     # Placeholder values used in config.example.yaml / docs.
     '''\$\{[A-Z0-9_]+\}''',
     # Obvious test markers.
