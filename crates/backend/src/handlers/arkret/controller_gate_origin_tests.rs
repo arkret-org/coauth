@@ -256,6 +256,7 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
     let governance_before = origin_cut(&governance_pool).await;
     let peer = coland_services::authority_commit::AuthenticatedPeerContext {
         source_service_id: fixture.station.clone(),
+        replay_receipt: None,
     };
     let request = arkret_models_collaboration::authority_commit::PeerAuthorityForwardEventRequest {
         branch:
