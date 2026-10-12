@@ -975,13 +975,7 @@ async fn extract_kickoff_dpop(
         depot,
         &url_builder,
     )
-    .map_err(|error| {
-        ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::SIGNATURE_INVALID,
-            format!("reason_code=proof_invalid; invalid grant-binding DPoP proof: {error}"),
-        )
-    })
+    .map_err(|error| grant_proof_invalid(format!("invalid grant-binding DPoP proof: {error}")))
 }
 
 fn require_agent_key_proof_dpop_binding(
@@ -995,6 +989,34 @@ fn require_agent_key_proof_dpop_binding(
         )
     })?;
     Ok(binding)
+}
+
+fn grant_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
+    ArkretRouteError::CodedDetailed {
+        status: StatusCode::UNAUTHORIZED,
+        code: arkret_wire::ErrorCode::SIGNATURE_INVALID,
+        message: message.into(),
+        details: vec![(
+            "reason_code",
+            serde_json::Value::String(arkret_wire::ReasonCode::PROOF_INVALID.to_owned()),
+        )],
+    }
+}
+
+fn agent_session_rejection(
+    rejection: crate::handlers::account::agents::AgentAuthRejection,
+) -> ArkretRouteError {
+    match rejection.reason_code() {
+        Some(reason) => ArkretRouteError::CodedDetailed {
+            status: rejection.http_status(),
+            code: rejection.code(),
+            message: rejection.code().to_owned(),
+            details: vec![("reason_code", serde_json::Value::String(reason.to_owned()))],
+        },
+        None => {
+            ArkretRouteError::coded(rejection.http_status(), rejection.code(), rejection.code())
+        }
+    }
 }
 
 fn verify_agent_body_dpop(
@@ -1011,18 +1033,10 @@ fn verify_agent_body_dpop(
         now,
         None,
     )
-    .map_err(|error| {
-        ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::SIGNATURE_INVALID,
-            format!("reason_code=proof_invalid; invalid initial holder proof: {error}"),
-        )
-    })?;
+    .map_err(|error| grant_proof_invalid(format!("invalid initial holder proof: {error}")))?;
     if verified.jkt != holder_jkt {
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::SIGNATURE_INVALID,
-            "reason_code=proof_invalid; initial and current holder keys differ",
+        return Err(grant_proof_invalid(
+            "initial and current holder keys differ",
         ));
     }
     Ok(verified)
@@ -1039,10 +1053,8 @@ async fn consume_agent_replay_dpop(depot: &Depot, jti: &str) -> Result<(), Arkre
         .await?
     {
         repo.cancel().await.ok();
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::SIGNATURE_INVALID,
-            "reason_code=proof_invalid; agent HTTP DPoP JTI was already consumed",
+        return Err(grant_proof_invalid(
+            "agent HTTP DPoP JTI was already consumed",
         ));
     }
     repo.save().await?;
@@ -1073,17 +1085,7 @@ async fn validate_agent_before_reservation(
         target.as_str(),
         clock.now(),
     )?;
-    let reject = |rejection: crate::handlers::account::agents::AgentAuthRejection| {
-        ArkretRouteError::coded(
-            rejection.http_status(),
-            rejection.code(),
-            format!(
-                "reason_code={}; {}",
-                rejection.reason_code().unwrap_or(rejection.code()),
-                rejection.code()
-            ),
-        )
-    };
+    let reject = agent_session_rejection;
     let view = enforce_authoritative_agent_lifecycle(
         &depot.http_client()?,
         &config,
@@ -1176,15 +1178,7 @@ async fn issue_agent_key_proof_session_grant(
         Ok(view) => view,
         Err(rejection) => {
             repo.cancel().await.ok();
-            let message = match rejection.reason_code() {
-                Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
-                None => rejection.code().to_owned(),
-            };
-            return Err(ArkretRouteError::coded(
-                rejection.http_status(),
-                rejection.code(),
-                message,
-            ));
+            return Err(agent_session_rejection(rejection));
         }
     };
     let mut authorization = match validate_agent_session_proof(
@@ -1202,15 +1196,7 @@ async fn issue_agent_key_proof_session_grant(
         Ok(authorization) => authorization,
         Err(AgentSessionProofError::Rejection(rejection)) => {
             repo.cancel().await.ok();
-            let status = rejection.http_status();
-            // Surface the machine-readable reason next to the registry code
-            // (key-management §3.6.1: the runtime must be able to tell
-            // `agent_key_authorization_expired` apart from `proof_invalid`).
-            let message = match rejection.reason_code() {
-                Some(reason) => format!("reason_code={reason}; {}", rejection.code()),
-                None => rejection.code().to_owned(),
-            };
-            return Err(ArkretRouteError::coded(status, rejection.code(), message));
+            return Err(agent_session_rejection(rejection));
         }
         Err(AgentSessionProofError::HumanApprovalRequired(approval)) => {
             repo.cancel().await.ok();
@@ -1226,9 +1212,7 @@ async fn issue_agent_key_proof_session_grant(
         &authorization.controller_principal_id,
     )
     .await
-    .map_err(|rejection| {
-        ArkretRouteError::coded(rejection.http_status(), rejection.code(), rejection.code())
-    })?;
+    .map_err(agent_session_rejection)?;
     authorization
         .scope_details
         .insert("participations".to_owned(), participation);
@@ -1348,11 +1332,7 @@ async fn issue_agent_key_proof_session_grant(
                 .await?;
             if !inserted {
                 repo.cancel().await.ok();
-                return Err(ArkretRouteError::coded(
-                    StatusCode::UNAUTHORIZED,
-                    arkret_wire::ErrorCode::SIGNATURE_INVALID,
-                    "reason_code=proof_invalid; agent DPoP JTI was already consumed",
-                ));
+                return Err(grant_proof_invalid("agent DPoP JTI was already consumed"));
             }
             if body_dpop.claims.jti != dpop_binding.jti
                 && !repo
@@ -1364,10 +1344,8 @@ async fn issue_agent_key_proof_session_grant(
                     .await?
             {
                 repo.cancel().await.ok();
-                return Err(ArkretRouteError::coded(
-                    StatusCode::UNAUTHORIZED,
-                    arkret_wire::ErrorCode::SIGNATURE_INVALID,
-                    "reason_code=proof_invalid; initial holder DPoP was already consumed",
+                return Err(grant_proof_invalid(
+                    "initial holder DPoP was already consumed",
                 ));
             }
             repo.save().await?;
@@ -1544,7 +1522,8 @@ mod tests {
 
     fn assert_coded(error: ArkretRouteError, expected_status: StatusCode, expected_code: &str) {
         match error {
-            ArkretRouteError::Coded { status, code, .. } => {
+            ArkretRouteError::Coded { status, code, .. }
+            | ArkretRouteError::CodedDetailed { status, code, .. } => {
                 assert_eq!(status, expected_status);
                 assert_eq!(code, expected_code);
             }

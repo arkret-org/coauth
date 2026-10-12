@@ -1407,11 +1407,14 @@ pub(super) async fn fetch_authoritative_agent_view(
                 ..
             } => AgentAuthRejection::ProofInvalid,
             crate::services::peer_protocol_client::PeerProtocolClientError::Status {
-                status: 412,
+                status: 409 | 412,
                 problem: Some(problem),
-            } if problem
-                .detail
-                .contains(arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING) =>
+            } if problem.code() == arkret_wire::ErrorCode::FAILED_PRECONDITION
+                && problem
+                    .extensions
+                    .get("reason_code")
+                    .and_then(Value::as_str)
+                    == Some(arkret_wire::ReasonCode::ACCOUNTABILITY_GRANT_MISSING) =>
             {
                 AgentAuthRejection::AccountabilityGrantMissing
             }
