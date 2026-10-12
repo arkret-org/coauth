@@ -87,6 +87,7 @@ fn introspection_grant_record(
         cnf_jkt,
         credential_class: parsed_payload.credential_class,
         holder_binding: parsed_payload.holder_binding,
+        scope_details: parsed_payload.scope_details,
     };
     record.validate().map_err(|error| {
         ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(format!(
