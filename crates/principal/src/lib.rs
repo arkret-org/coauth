@@ -9,6 +9,68 @@ use std::sync::Arc;
 
 pub use self::registry::ConnectorRegistry;
 
+/// Process-only refusal from the configured authenticated Station operation.
+/// Carries registered status/code only; private response detail is never retained
+/// in an issuer retry job. This is not a new wire result or authorization proof.
+#[derive(Clone, Copy, Debug)]
+pub struct PrincipalAgentKeyPairRefusal {
+    status: u16,
+    code: arkret_wire::ErrorCode,
+    had_prior_ambiguous_result: bool,
+}
+
+impl PrincipalAgentKeyPairRefusal {
+    pub fn from_problem(
+        status: u16,
+        problem: &arkret_wire::Problem,
+        had_prior_ambiguous_result: bool,
+    ) -> Option<Self> {
+        if !(400..500).contains(&status) || matches!(status, 408 | 429) || problem.status != status
+        {
+            return None;
+        }
+        let code = problem.error_code()?;
+        if problem.problem_type != code.type_uri()
+            || (status != code.http_status()
+                && !code
+                    .descriptor()
+                    .http_status_by_context
+                    .iter()
+                    .any(|(_, registered)| *registered == status))
+        {
+            return None;
+        }
+        Some(Self {
+            status,
+            code,
+            had_prior_ambiguous_result,
+        })
+    }
+
+    pub fn had_prior_ambiguous_result(self) -> bool {
+        self.had_prior_ambiguous_result
+    }
+
+    pub fn status(self) -> u16 {
+        self.status
+    }
+    pub fn code(self) -> arkret_wire::ErrorCode {
+        self.code
+    }
+}
+
+impl std::fmt::Display for PrincipalAgentKeyPairRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Station refused Agent pairing: {} {}",
+            self.status,
+            self.code.as_str()
+        )
+    }
+}
+impl std::error::Error for PrincipalAgentKeyPairRefusal {}
+
 #[derive(Debug)]
 pub struct ConnectorAccountProfile {
     pub displayname: Option<String>,

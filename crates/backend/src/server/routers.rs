@@ -155,10 +155,15 @@ fn account_api_subrouters() -> (Router, Router) {
     let arkret_router = Router::with_path("/_arkret")
         .hoop(public_oidc_browser_cors())
         .hoop(arkret_route_boundary)
+        .hoop(arkret::reject_third_party_invite_url_credentials)
         .hoop(crate::server::arkret_operation_selector_middleware)
         // Account Authority is a Station capability. This deployment-private
         // process does not publish a role-local Describe or service-resolution
         // endpoint; the owning Station advertises the Account Authority URL.
+        .push(Router::with_path("open/third-party-invites/provision").options(oidc_preflight_handler).post(arkret::provision_third_party_invite))
+        .push(Router::with_path("open/third-party-invites/activate").options(oidc_preflight_handler).post(arkret::activate_third_party_invite))
+        .push(Router::with_path("open/third-party-invites/status").options(oidc_preflight_handler).post(arkret::third_party_invite_status))
+        .push(Router::with_path("open/third-party-invites/present").options(oidc_preflight_handler).post(arkret::present_third_party_invite))
         .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
         .push(Router::with_path("root/identity/document").get(arkret::identity_document))
         // Protocol surface for DPoP-bound session-grant rotation. The grant is
@@ -568,6 +573,10 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         "/_arkret/root/identity/resolve" | "/_arkret/peer/account-status/resolve" => Some("POST"),
         "/_arkret/gate/account/onboarding" => Some("GET, OPTIONS"),
         "/_arkret/gate/account/authentication-handoffs"
+        | "/_arkret/open/third-party-invites/provision"
+        | "/_arkret/open/third-party-invites/activate"
+        | "/_arkret/open/third-party-invites/status"
+        | "/_arkret/open/third-party-invites/present"
         | "/_arkret/open/device-pairing/requests"
         | "/_arkret/gate/account/device-pairing/finalizations"
         | "/_arkret/gate/account/device-pair"

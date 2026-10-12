@@ -511,6 +511,8 @@ pub async fn refresh_session_grant(
             &mut rng,
             &*clock,
             &authoritative_agent,
+            &depot.encrypter()?,
+            &arkret_config,
             &prior_payload,
             &agent_request.grant_jwt,
             agent_request,
@@ -585,7 +587,13 @@ pub async fn refresh_session_grant(
         .map_err(|rejection| {
             ArkretRouteError::coded(rejection.http_status(), rejection.code(), rejection.code())
         })?;
-        scope_details.insert("participations".to_owned(), participation);
+        crate::handlers::account::agents::apply_agent_participation_overlay(
+            &mut scope_details,
+            participation,
+        )
+        .map_err(|rejection| {
+            ArkretRouteError::coded(rejection.http_status(), rejection.code(), rejection.code())
+        })?;
         let session_public_key = serde_json::to_string(&verification.public_jwk)?;
         let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
         let new_material = mint_agent_session_grant(

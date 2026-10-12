@@ -630,3 +630,470 @@ fn authorize_event_rejects_raw_key_substitution_even_with_a_valid_controller_sha
         .is_err()
     );
 }
+
+/// Storage/consumer fixture only: it does not manufacture a Station acceptance.
+fn custody_fixture() -> (
+    coauth_data::agent_key::AgentKeyPairCustody,
+    coauth_data::agent_key::AgentKeyAuthorization,
+) {
+    let mut event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
+    let draft_scope = AgentKeyAuthorizePayload::try_from(&event)
+        .unwrap()
+        .agent_key_scope;
+    let actions =
+        arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(&draft_scope.actions)
+            .unwrap();
+    event.payload.get_mut("agent_key_scope").unwrap()["actions"] = json!(actions);
+    event.producer_proof = None;
+    let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
+        event,
+        arkret_canonical::DigestSuite::Sha256,
+    )
+    .unwrap();
+    arkret_signatures::sign_event(
+        &mut authored,
+        &controller_signer(),
+        arkret_signatures::SignEventOptions::new().with_created_at(test_now()),
+    )
+    .unwrap();
+    let event = authored.into_event();
+    let payload = AgentKeyAuthorizePayload::try_from(&event).unwrap();
+    let mut request: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
+        serde_json::from_value(json!({
+            "pairing_request_id": PAIRING_REQUEST_ID,
+            "approval_request_id": "agent_runtime_approval:01999999-0000-7000-8000-00000000feed",
+            "requested_scope_disclosure": {
+                "schema": "ak.schema.agent_requested_scope_disclosure.v1",
+                "request_id": "ak:request:01999999-0000-7000-8000-00000000feed",
+                "agent_id": AGENT, "controller_principal_id": CONTROLLER,
+                "requested_scope": payload.agent_key_scope,
+                "verifier_id": AUDIENCE,
+                "audience": "ak.gate.account.command.pair_agent_key.v1",
+                "challenge": PAIRING_REQUEST_ID,
+                "issued_at": "2026-07-06T00:04:00.000Z",
+                "expires_at": "2026-07-06T00:06:00.000Z",
+                "proofs": []
+            },
+            "authorize_event": arkret_wire::EventAdmissionSubmission::new(event.clone())
+        }))
+        .unwrap();
+    let disclosure = &mut request.requested_scope_disclosure;
+    let mut proof = arkret_wire::PayloadProof {
+        kind: "detached_jws".to_owned(),
+        verification_method: arkret_wire::DidUrl::new(CONTROLLER_VM).unwrap(),
+        payload_digest: disclosure.payload_digest().unwrap(),
+        created_at: disclosure.issued_at,
+        domain: None,
+        audience: None,
+        proof_purpose: None,
+        jws: String::new(),
+    };
+    proof.jws =
+        arkret_signatures::Ed25519DetachedJwsSigner::from_seed(CONTROLLER_KEY_SEED, CONTROLLER_VM)
+            .sign_detached_jws(&disclosure.canonical_proof_binding_bytes(&proof).unwrap());
+    disclosure.proofs.push(proof);
+    disclosure.validate().unwrap();
+    let digest = arkret_canonical::canonical_sha256(&request).unwrap();
+    let custody = coauth_data::agent_key::AgentKeyPairCustody {
+        request,
+        station_id: AUDIENCE.parse().unwrap(),
+        station_name: "owning".to_owned(),
+        request_digest: digest.clone(),
+        station_outcome: None,
+    };
+    let authorization = coauth_data::agent_key::AgentKeyAuthorization {
+        id: coauth_data::Ulid::generate(),
+        authorized_event_id: event.event_id.to_string(),
+        agent_id: AGENT.to_owned(),
+        key_id: payload.key_id.to_string(),
+        verification_method: VM.to_owned(),
+        public_key: valid_public_key(),
+        accountable_principal_id: CONTROLLER.parse().unwrap(),
+        agent_key_scope: serde_json::to_string(&payload.agent_key_scope).unwrap(),
+        audience: vec![AUDIENCE.to_owned()],
+        issued_at: payload.issued_at,
+        expires_at: payload.expires_at,
+        pairing_request_id: PAIRING_REQUEST_ID.to_owned(),
+        request_canonical_digest: payload
+            .approval_evidence
+            .request_canonical_digest
+            .unwrap()
+            .to_string(),
+        revoked_at: None,
+        revoked_reason: None,
+        quarantined_at: None,
+        quarantine_reason: None,
+        raw_payload_digest: digest,
+        coland_fanout_state: AccountabilityGrantFanoutState::Queued,
+        coland_fanout_idempotency_key: event.event_id.to_string(),
+        coland_fanout_payload: Value::Null,
+        coland_fanout_attempt: 0,
+        coland_fanout_next_retry_at: None,
+        coland_fanout_dead_letter_reason: None,
+        created_at: test_now(),
+        updated_at: test_now(),
+    };
+    (custody, authorization)
+}
+
+#[test]
+fn delegated_pairing_custody_encrypts_private_body_scope_and_actual_outcome() {
+    let (mut custody, mut authorization) = custody_fixture();
+    let encrypter = coauth_keyring::Encrypter::new(&[37; 32]);
+    let sealed = custody.seal(&encrypter).unwrap();
+    assert!(sealed.is_string());
+    assert!(!sealed.as_str().unwrap().contains("requested_scope"));
+    assert!(!sealed.as_str().unwrap().contains(CONTROLLER));
+    authorization.coland_fanout_payload = sealed;
+    authorization.agent_key_scope = custody.sealed_key_scope(&encrypter).unwrap();
+    assert!(!authorization.agent_key_scope.contains("actions"));
+    let reopened = coauth_data::agent_key::AgentKeyPairCustody::open(
+        &authorization.coland_fanout_payload,
+        &encrypter,
+    )
+    .unwrap();
+    reopened
+        .validate_for(&authorization, &custody.station_id, "owning")
+        .unwrap();
+    assert_eq!(
+        arkret_canonical::canonical_json_bytes(&reopened.request).unwrap(),
+        arkret_canonical::canonical_json_bytes(&custody.request).unwrap()
+    );
+    assert!(
+        reopened.station_outcome.is_none(),
+        "pending intent is not acceptance evidence"
+    );
+    custody.station_outcome = Some(
+        arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
+            activation_state:
+                arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active,
+            authorize_event_ref: custody.request.authorize_event.event.event_id.clone(),
+        },
+    );
+    let active = coauth_data::agent_key::AgentKeyPairCustody::open(
+        &custody.seal(&encrypter).unwrap(),
+        &encrypter,
+    )
+    .unwrap();
+    assert_eq!(
+        arkret_canonical::canonical_json_bytes(&active.station_outcome).unwrap(),
+        arkret_canonical::canonical_json_bytes(&custody.station_outcome).unwrap()
+    );
+    // The internal durable job references custody; it never copies plaintext.
+    let job = AgentKeyPairCommitJob::new(
+        authorization.authorized_event_id.clone(),
+        authorization.authorized_event_id.clone(),
+        authorization.raw_payload_digest.clone(),
+        "owning".to_owned(),
+    );
+    let job_value = serde_json::to_value(job).unwrap();
+    assert!(job_value.get("body").is_none());
+    assert!(!job_value.to_string().contains("requested_scope"));
+}
+
+#[test]
+fn delegated_pairing_custody_rejects_wrong_key_plaintext_and_row_transplant() {
+    let (custody, authorization) = custody_fixture();
+    let encrypter = coauth_keyring::Encrypter::new(&[37; 32]);
+    let sealed = custody.seal(&encrypter).unwrap();
+    assert!(
+        coauth_data::agent_key::AgentKeyPairCustody::open(
+            &sealed,
+            &coauth_keyring::Encrypter::new(&[38; 32])
+        )
+        .is_err()
+    );
+    assert!(
+        coauth_data::agent_key::AgentKeyPairCustody::open(
+            &serde_json::to_value(&custody).unwrap(),
+            &encrypter
+        )
+        .is_err()
+    );
+    assert!(
+        custody
+            .validate_for(
+                &authorization,
+                &"ak:did_core:web:other.example".parse().unwrap(),
+                "owning"
+            )
+            .is_err()
+    );
+    assert!(
+        custody
+            .validate_for(&authorization, &custody.station_id, "other")
+            .is_err()
+    );
+    let mut moved = authorization.clone();
+    moved.raw_payload_digest = format!("sha256:{}", "1".repeat(64));
+    assert!(
+        custody
+            .validate_for(&moved, &custody.station_id, "owning")
+            .is_err()
+    );
+    let mut moved = authorization.clone();
+    moved.verification_method.push_str("-other");
+    assert!(
+        custody
+            .validate_for(&moved, &custody.station_id, "owning")
+            .is_err()
+    );
+    let mut changed = custody.clone();
+    changed.request.requested_scope_disclosure.audience =
+        arkret_wire::NonEmptyString::new("other-operation").unwrap();
+    assert!(
+        changed
+            .validate_for(&authorization, &custody.station_id, "owning")
+            .is_err()
+    );
+}
+
+#[test]
+fn delegated_session_consumption_requires_exact_active_result_and_current_signer_evidence() {
+    use arkret_models_collaboration::agent_operations::{
+        AgentKeyPairActivationState, AgentKeyPairOutcome, AgentView, KeyStateCurrentSignerEvidence,
+    };
+    use arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey;
+    let (mut custody, mut authorization) = custody_fixture();
+    let encrypter = coauth_keyring::Encrypter::new(&[37; 32]);
+    custody.station_outcome = Some(AgentKeyPairOutcome {
+        activation_state: AgentKeyPairActivationState::Active,
+        authorize_event_ref: custody.request.authorize_event.event.event_id.clone(),
+    });
+    authorization.coland_fanout_payload = custody.seal(&encrypter).unwrap();
+    authorization.agent_key_scope = custody.sealed_key_scope(&encrypter).unwrap();
+    let key =
+        AgentAuthorizedSigningKey::from_event(&custody.request.authorize_event.event).unwrap();
+    let evidence = arkret_models_identity::build_agent_signer_evidence(
+        AGENT.parse().unwrap(),
+        arkret_wire::DidUrl::new(VM).unwrap(),
+        serde_json::from_value(json!({
+            "kty":"OKP", "crv":"Ed25519", "x":runtime_public_key_b64()
+        }))
+        .unwrap(),
+        arkret_wire::RealmCommitId::from_digest([17; 32]),
+        test_now(),
+    )
+    .unwrap();
+    let evidence_ref = evidence.signer_evidence_ref().unwrap();
+    let mut key_state = authoritative_key_state();
+    key_state.requested_scope = custody
+        .request
+        .requested_scope_disclosure
+        .requested_scope
+        .clone();
+    key_state.active_authorizations = vec![
+        serde_json::from_value(json!({
+            "key_id":"runtime-key-1", "verification_method":VM,
+            "authorized_event_ref":authorization.authorized_event_id
+        }))
+        .unwrap(),
+    ];
+    key_state.authorized_event_ref = Some(custody.request.authorize_event.event.event_id.clone());
+    key_state.authorized_verification_method = Some(arkret_wire::DidUrl::new(VM).unwrap());
+    key_state.authorized_public_key_digest = Some(key.public_key_digest);
+    key_state.signer_resolution_evidence_ref = Some(evidence_ref.clone());
+    key_state.current_signer_evidence = Some(KeyStateCurrentSignerEvidence {
+        signer_resolution_evidence_ref: evidence_ref,
+        authenticated_signer_evidence: evidence,
+    });
+    let view: AgentView = serde_json::from_value(json!({
+        "agent": {"agent_id":AGENT,"slug":"fixture",
+            "lifecycle":"active","readiness":{"state":"ready","blockers":[]},"presence":{"state":"unknown",
+                "expires_at":"2026-07-06T00:06:00.000Z",
+                "refresh_after":"2026-07-06T00:05:30.000Z"}},
+        "grants":[], "key_state": key_state
+    }))
+    .unwrap();
+    let config = coauth_config::ArkretConfig {
+        runtime_owning_station_identity: coauth_config::RuntimeOwningStationIdentity::fixture(
+            "did:web:coland.local",
+        ),
+        stations: vec![coauth_config::StationConfig {
+            name: "owning".to_owned(),
+            endpoint: "https://coland.local/".parse().unwrap(),
+            internal_authority_shared_secret: None,
+            embedded_webvh_registration_bearer: None,
+            trust_domain: None,
+        }],
+        ..Default::default()
+    };
+    let scopes = custody
+        .request
+        .requested_scope_disclosure
+        .requested_scope
+        .actions
+        .clone();
+    let consume = |row: &coauth_data::agent_key::AgentKeyAuthorization, current: &AgentView| {
+        super::super::session_proof::validate_authoritative_agent_session_evidence(
+            row,
+            current,
+            &scopes,
+            &encrypter,
+            &config,
+            test_now(),
+        )
+    };
+    assert!(
+        consume(&authorization, &view).is_ok(),
+        "{}",
+        consume(&authorization, &view).unwrap_err().code(),
+    );
+    assert!(
+        super::super::session_proof::validate_authoritative_agent_session_evidence(
+            &authorization,
+            &view,
+            &["ak.self.committed_event.read.scan.v1".to_owned()],
+            &encrypter,
+            &config,
+            test_now(),
+        )
+        .is_err(),
+        "an incomplete runtime session ceiling must still reject"
+    );
+    let mut changed = view.clone();
+    changed.key_state.as_mut().unwrap().current_signer_evidence = None;
+    assert!(consume(&authorization, &changed).is_err());
+    let mut changed = view.clone();
+    changed
+        .key_state
+        .as_mut()
+        .unwrap()
+        .current_signer_evidence
+        .as_mut()
+        .unwrap()
+        .authenticated_signer_evidence
+        .public_key_jwk =
+        serde_json::from_value(json!({"kty":"OKP","crv":"Ed25519","x":"wrong-key"})).unwrap();
+    assert!(consume(&authorization, &changed).is_err());
+    let mut pending = custody.clone();
+    pending.station_outcome = None;
+    let mut pending_row = authorization.clone();
+    pending_row.coland_fanout_payload = pending.seal(&encrypter).unwrap();
+    assert!(
+        consume(&pending_row, &view).is_err(),
+        "ciphertext/digest alone are not active acceptance"
+    );
+    let mut changed = view.clone();
+    changed
+        .key_state
+        .as_mut()
+        .unwrap()
+        .active_authorizations
+        .clear();
+    assert!(consume(&authorization, &changed).is_err());
+    let mut changed = view.clone();
+    changed
+        .key_state
+        .as_mut()
+        .unwrap()
+        .controller_account_id
+        .station_id = "ak:did_core:web:other.example".parse().unwrap();
+    assert!(consume(&authorization, &changed).is_err());
+    let mut changed = view.clone();
+    changed
+        .key_state
+        .as_mut()
+        .unwrap()
+        .principal_control_realm_id = "ak:realm:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
+        .parse()
+        .unwrap();
+    assert!(consume(&authorization, &changed).is_err());
+    let mut changed = view.clone();
+    changed
+        .key_state
+        .as_mut()
+        .unwrap()
+        .controller_authorization_ref =
+        arkret_wire::DidUrl::new("did:web:agent.example#different-controller").unwrap();
+    assert!(consume(&authorization, &changed).is_err());
+    let mut changed = view.clone();
+    changed
+        .key_state
+        .as_mut()
+        .unwrap()
+        .requested_scope
+        .resources
+        .push(
+            serde_json::from_value(json!({
+                "kind":"realm",
+                "realm_id":"ak:realm:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB"
+            }))
+            .unwrap(),
+        );
+    assert!(consume(&authorization, &changed).is_err());
+    assert!(
+        super::super::session_proof::reject_additional_session_disclosure(Some(
+            &custody.request.requested_scope_disclosure
+        ))
+        .is_err()
+    );
+    assert!(super::super::session_proof::reject_additional_session_disclosure(None).is_ok());
+}
+
+#[test]
+fn delegated_initial_refusal_requires_a_registered_nontransient_station_problem() {
+    let classify = |status, problem: Option<arkret_wire::Problem>, ambiguous| {
+        let refusal = coauth_principal::PrincipalAgentKeyPairRefusal::from_problem(
+            status,
+            problem.as_ref()?,
+            ambiguous,
+        )?;
+        definitive_initial_pairing_refusal(
+            &anyhow::Error::new(refusal).context("authenticated owning Station command"),
+        )
+    };
+    let problem = arkret_wire::Problem::new("param_invalid", 400, "private detail");
+    let refusal = classify(400, Some(problem.clone()), false).unwrap();
+    assert!(matches!(
+        refusal,
+        ArkretRouteError::Coded {
+            status: StatusCode::BAD_REQUEST,
+            code: "param_invalid",
+            ..
+        }
+    ));
+    assert!(
+        classify(400, Some(problem), true).is_none(),
+        "a previous ambiguous attempt forbids rollback"
+    );
+    for (status, code) in [
+        (503, "revision_unavailable"),
+        (429, "rate_limited"),
+        (400, "not_registered"),
+    ] {
+        assert!(
+            classify(
+                status,
+                Some(arkret_wire::Problem::new(code, status, "private detail")),
+                false
+            )
+            .is_none()
+        );
+    }
+    assert!(classify(400, None, false).is_none());
+    assert!(
+        classify(
+            400,
+            Some(arkret_wire::Problem::new(
+                "param_invalid",
+                403,
+                "private detail"
+            )),
+            false
+        )
+        .is_none()
+    );
+    let mut bare = arkret_wire::Problem::new("param_invalid", 400, "private detail");
+    bare.problem_type = "param_invalid".to_owned();
+    assert!(
+        classify(400, Some(bare), false).is_none(),
+        "bare code is not a registered Problem URI"
+    );
+    let transport = anyhow::Error::new(
+        crate::services::peer_protocol_client::PeerProtocolClientError::Http(
+            "response lost".to_owned(),
+        ),
+    );
+    assert!(definitive_initial_pairing_refusal(&transport).is_none());
+}

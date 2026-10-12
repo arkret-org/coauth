@@ -262,16 +262,35 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         request: &AgentKeyPairRequestBody,
         idempotency_key: &str,
-    ) -> Result<AgentKeyPairOutcome, PeerProtocolClientError> {
+    ) -> Result<AgentKeyPairOutcome, anyhow::Error> {
         let url = self.join_absolute("/_arkret/gate/account/agent-key-pair")?;
-        self.post_json(
-            "gate_account_pair_agent_key",
-            url,
-            ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
-            request,
-            Some(idempotency_key),
-        )
-        .await
+        let response = self
+            .post_json_response(
+                "gate_account_pair_agent_key",
+                url,
+                ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
+                request,
+                Some(idempotency_key),
+            )
+            .await?;
+        let ambiguous = response
+            .extensions()
+            .get::<outbound_http::OutboundAttemptHistory>()
+            .map_or(true, |history| history.had_prior_ambiguous_result);
+        parse_json_response(response).await.map_err(|error| {
+            if let PeerProtocolClientError::Status {
+                status,
+                problem: Some(problem),
+            } = &error
+            {
+                if let Some(refusal) = coauth_principal::PrincipalAgentKeyPairRefusal::from_problem(
+                    *status, problem, ambiguous,
+                ) {
+                    return anyhow::Error::new(refusal);
+                }
+            }
+            anyhow::Error::new(error)
+        })
     }
 
     /// Resolve the nonce-bound current authority chain from the exact owning
@@ -318,6 +337,23 @@ impl<'a> PeerProtocolClient<'a> {
         T: Serialize,
         R: serde::de::DeserializeOwned,
     {
+        let response = self
+            .post_json_response(policy_name, url, operation_id, body, idempotency_key)
+            .await?;
+        parse_json_response(response).await
+    }
+
+    async fn post_json_response<T>(
+        &self,
+        policy_name: &'static str,
+        url: Url,
+        operation_id: &str,
+        body: &T,
+        idempotency_key: Option<&str>,
+    ) -> Result<reqwest::Response, PeerProtocolClientError>
+    where
+        T: Serialize,
+    {
         let body_bytes = canonical_json_bytes(body)
             .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
         let signed = self.signed_request(
@@ -345,7 +381,7 @@ impl<'a> PeerProtocolClient<'a> {
         .await
         .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
 
-        parse_json_response(response).await
+        Ok(response)
     }
 
     async fn get_json<R>(

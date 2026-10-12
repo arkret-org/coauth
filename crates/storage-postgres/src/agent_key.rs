@@ -104,6 +104,162 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn definitive_pairing_refusal_rolls_back_event_reservation_and_retry_obligation() {
+        use coauth_data::queue::{AgentKeyPairCommitJob, QueueJobRepositoryExt as _};
+        let pool = crate::test_utils::setup_test_pool()
+            .await
+            .expect("real DATABASE_URL is required for the refusal rollback regression");
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let mut repo = factory.create().await.unwrap();
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(0xa94e);
+        let label = unique_label("pair-refusal");
+        let mut params = authorization(
+            &label,
+            "AQ4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4O",
+            &clock,
+        );
+        let event = params.authorized_event_id.clone();
+        params.coland_fanout_payload =
+            serde_json::Value::String("unqualified-ciphertext".to_owned());
+        repo.agent_key_authorization()
+            .add(&mut rng, &clock, params.clone())
+            .await
+            .unwrap();
+        repo.queue_job()
+            .schedule_job(
+                &mut rng,
+                &clock,
+                AgentKeyPairCommitJob::new(
+                    event.clone(),
+                    event.clone(),
+                    params.raw_payload_digest.clone(),
+                    "owning".to_owned(),
+                ),
+            )
+            .await
+            .unwrap();
+        // The original first-pair handler takes this cancellation path only
+        // after a structured definitive owning-Station refusal.
+        repo.cancel().await.unwrap();
+        let mut repo = factory.create().await.unwrap();
+        assert!(
+            repo.agent_key_authorization()
+                .lookup_by_event_id(&event)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        repo.cancel().await.unwrap();
+        let mut connection = pool.get().await.unwrap();
+        let queued: i64 = crate::schema::queue_jobs::table
+            .filter(crate::schema::queue_jobs::queue_name.eq("principal-agent-key-pair-commit"))
+            .count()
+            .get_result(&mut *connection)
+            .await
+            .unwrap();
+        assert_eq!(
+            queued, 0,
+            "refused intent must not leave a retry obligation"
+        );
+        drop(connection);
+        let mut corrected = params;
+        corrected.raw_payload_digest = format!("sha256:{}", "d".repeat(64));
+        corrected.coland_fanout_payload =
+            serde_json::Value::String("corrected-ciphertext".to_owned());
+        let mut repo = factory.create().await.unwrap();
+        let row = repo
+            .agent_key_authorization()
+            .add(&mut rng, &clock, corrected.clone())
+            .await
+            .expect("corrected proof bytes must not collide with a refused local reservation");
+        assert_eq!(row.raw_payload_digest, corrected.raw_payload_digest);
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn encrypted_pairing_custody_keeps_active_outcome_when_a_late_pending_response_arrives() {
+        use arkret_models_collaboration::agent_operations::AgentKeyPairActivationState;
+        let pool = crate::test_utils::setup_test_pool()
+            .await
+            .expect("real DATABASE_URL is required for the pairing custody regression");
+        let mut repo = PgRepositoryFactory::new(pool.clone())
+            .create()
+            .await
+            .unwrap();
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(0xa93e);
+        let mut params = authorization(
+            &unique_label("pair-custody"),
+            "AQ4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4O",
+            &clock,
+        );
+        let event = params.authorized_event_id.clone();
+        // The repository transports opaque AEAD custody; only the issuer/worker
+        // holding its original Encrypter may inspect these bytes.
+        params.coland_fanout_payload = serde_json::Value::String("pending-ciphertext".to_owned());
+        params.agent_key_scope = "scope-ciphertext".to_owned();
+        repo.agent_key_authorization()
+            .add(&mut rng, &clock, params)
+            .await
+            .unwrap();
+        let active = serde_json::Value::String("active-ciphertext".to_owned());
+        assert!(
+            repo.agent_key_authorization()
+                .update_pairing_custody(
+                    &clock,
+                    &event,
+                    active.clone(),
+                    AgentKeyPairActivationState::Active
+                )
+                .await
+                .unwrap()
+        );
+        assert!(
+            repo.agent_key_authorization()
+                .mark_fanout_delivered_and_revoke(&clock, &event, &[], "unused")
+                .await
+                .unwrap()
+        );
+        assert!(
+            repo.agent_key_authorization()
+                .update_pairing_custody(
+                    &clock,
+                    &event,
+                    serde_json::Value::String("late-pending-ciphertext".to_owned()),
+                    AgentKeyPairActivationState::AwaitingSourceCommit
+                )
+                .await
+                .unwrap()
+        );
+        let row = repo
+            .agent_key_authorization()
+            .lookup_by_event_id(&event)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.coland_fanout_payload, active);
+        assert_eq!(row.agent_key_scope, "scope-ciphertext");
+        assert_eq!(
+            row.coland_fanout_state,
+            AccountabilityGrantFanoutState::Delivered
+        );
+        assert!(
+            !repo
+                .agent_key_authorization()
+                .update_pairing_custody(
+                    &clock,
+                    &event,
+                    serde_json::json!({"plaintext":true}),
+                    AgentKeyPairActivationState::Active
+                )
+                .await
+                .unwrap()
+        );
+        repo.cancel().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn proof_challenge_consumption_rejects_replay() {
         let Some(pool) = crate::test_utils::setup_test_pool().await else {
             return;
@@ -666,6 +822,47 @@ impl AgentKeyAuthorizationRepository for PgAgentKeyAuthorizationRepository<'_> {
             .await?;
         }
         Ok(true)
+    }
+
+    async fn update_pairing_custody(
+        &mut self,
+        clock: &dyn Clock,
+        authorized_event_id: &str,
+        encrypted_custody: serde_json::Value,
+        activation: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState,
+    ) -> Result<bool, Self::Error> {
+        if !encrypted_custody.is_string() {
+            return Ok(false);
+        }
+        // Serialize reconciliation with competing responses. A late pending
+        // response cannot erase an already retained active Station outcome.
+        let current = agent_key_authorizations::table
+            .filter(agent_key_authorizations::authorized_event_id.eq(authorized_event_id))
+            .filter(agent_key_authorizations::quarantined_at.is_null())
+            .select(AgentKeyAuthorizationRow::as_select())
+            .for_update()
+            .first::<AgentKeyAuthorizationRow>(self.conn)
+            .await
+            .optional()?;
+        let Some(current) = current else {
+            return Ok(false);
+        };
+        if current.coland_fanout_state == AccountabilityGrantFanoutState::Delivered.as_str()
+            && activation != arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active {
+            return Ok(true);
+        }
+        let affected = diesel::update(
+            agent_key_authorizations::table
+                .filter(agent_key_authorizations::authorized_event_id.eq(authorized_event_id))
+                .filter(agent_key_authorizations::quarantined_at.is_null()),
+        )
+        .set((
+            agent_key_authorizations::coland_fanout_payload.eq(encrypted_custody),
+            agent_key_authorizations::updated_at.eq(clock.now()),
+        ))
+        .execute(self.conn)
+        .await?;
+        Ok(affected == 1)
     }
 
     #[tracing::instrument(

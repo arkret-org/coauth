@@ -47,6 +47,94 @@ async fn rate_limited_error_fixture() -> Result<(), ArkretRouteError> {
     Err(ArkretRouteError::rate_limited("slow down", 59_728))
 }
 
+#[salvo::handler]
+async fn invite_present_negative_fixture(
+    req: &mut salvo::Request,
+    res: &mut salvo::Response,
+) -> Result<(), ArkretRouteError> {
+    let error = if req.query::<String>("failure").as_deref() == Some("rate_limited") {
+        ArkretRouteError::rate_limited("invitation rate exceeded", 60_000)
+    } else if req.query::<String>("failure").as_deref() == Some("unsupported_join_rule") {
+        third_party_invite::present_guard_failure(coland_storage::PersistenceError::Conflict(
+            "unsupported_join_rule: private gate detail".into(),
+        ))
+    } else {
+        ArkretRouteError::coded(
+            StatusCode::NOT_FOUND,
+            "not_found",
+            "private rejection detail",
+        )
+    };
+    third_party_invite::render_present_result(Err(error), res)
+}
+
+#[tokio::test]
+async fn third_party_invite_present_negative_rendering_is_byte_identical_with_distinct_trace_ids() {
+    let service = salvo::Service::new(
+        Router::with_path("present-negative")
+            .hoop(crate::server::arkret_request_id_middleware)
+            .post(invite_present_negative_fixture),
+    );
+    let mut bodies = Vec::new();
+    for _ in 0..3 {
+        let request_id = arkret_identifiers::new_prefixed_uuid7("ak:request:");
+        let mut response = TestClient::post("http://127.0.0.1:8698/present-negative")
+            .add_header(
+                crate::server::ARKRET_REQUEST_ID_HEADER,
+                request_id.clone(),
+                true,
+            )
+            .send(&service)
+            .await;
+        assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
+        assert_eq!(
+            response
+                .headers()
+                .get(crate::server::ARKRET_REQUEST_ID_HEADER)
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            request_id,
+        );
+        let body = response.take_string().await.unwrap();
+        let problem: arkret_wire::problem_details::Problem = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            problem.problem_type,
+            "https://arkret.org/problems/not_found"
+        );
+        assert!(problem.instance.is_none());
+        assert!(!body.contains("private rejection detail"));
+        bodies.push(body);
+    }
+    assert!(bodies.windows(2).all(|pair| pair[0] == pair[1]));
+
+    let mut response =
+        TestClient::post("http://127.0.0.1:8698/present-negative?failure=rate_limited")
+            .send(&service)
+            .await;
+    assert_eq!(response.status_code, Some(StatusCode::TOO_MANY_REQUESTS));
+    let body: serde_json::Value =
+        serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+    assert_eq!(body["type"], "https://arkret.org/problems/rate_limited");
+    assert_eq!(body["retry_after_ms"], 60_000);
+    assert!(body["instance"].as_str().is_some());
+
+    let mut response =
+        TestClient::post("http://127.0.0.1:8698/present-negative?failure=unsupported_join_rule")
+            .send(&service)
+            .await;
+    assert_eq!(response.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+    let text = response.take_string().await.unwrap();
+    let body: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(
+        body["type"],
+        "https://arkret.org/problems/unsupported_join_rule"
+    );
+    assert!(body.get("reason_code").is_none());
+    assert!(body.get("details").is_none());
+    assert!(!text.contains("private gate detail"));
+}
+
 #[test]
 fn internal_error_details_are_development_only() {
     let error = std::io::Error::other("database exploded");
@@ -1169,9 +1257,9 @@ async fn session_grant_http_list_and_filter_work() {
 #[tokio::test]
 async fn session_grant_http_introspection_returns_minimal_metadata() {
     setup();
-    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-        return;
-    };
+    let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+        .await
+        .expect("real isolated PostgreSQL required for introspection scope closure");
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let (_browser_session, grant, material, session_key) =
         seed_persisted_session_grant(&mut state).await;
@@ -1206,6 +1294,20 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["grant"]["audience_id"], grant.audience_id.as_str());
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
+    assert!(body["grant"].get("scope_details").is_none());
+    let human_roundtrip: SessionGrantValidationOutcome =
+        serde_json::from_value(body.clone()).expect("closed human introspection metadata");
+    assert!(
+        human_roundtrip
+            .grant
+            .as_ref()
+            .unwrap()
+            .scope_details
+            .is_none()
+    );
+    let mut invalid_human = body.clone();
+    invalid_human["grant"]["scope_details"] = serde_json::json!({});
+    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(invalid_human).is_err());
     // Server-to-server introspection MUST expose session_public_key so the
     // Station can verify RFC 9421 PoP presentations (SPEC-CR-001).
     assert_eq!(
@@ -1432,9 +1534,9 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
 #[tokio::test]
 async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     setup();
-    let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-        return;
-    };
+    let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+        .await
+        .expect("real isolated PostgreSQL required for introspection scope closure");
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
     let bearer = "agent-session-grant-introspection";
     state.arkret_config = ArkretConfig {
@@ -1509,7 +1611,11 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     // The issuing authorization ref rides the signed payload's
     // `scope_details`; introspection's use-time gate re-reads the row by it.
     let authorization_event_id = "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK";
-    let scope_details = serde_json::Map::from_iter([
+    let realm_id = arkret_wire::RealmId::from_event_id(&arkret_wire::EventId::from_digest(
+        arkret_canonical::DigestSuite::Sha256,
+        [73; 32],
+    ));
+    let mut scope_details = serde_json::Map::from_iter([
         (
             "controller_principal_id".to_owned(),
             serde_json::json!("ak:did_core:web:alice.example"),
@@ -1518,26 +1624,34 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             "agent_key_authorization_ref".to_owned(),
             serde_json::json!(authorization_event_id),
         ),
-        ("realm_ids".to_owned(), serde_json::json!([])),
+        ("realm_ids".to_owned(), serde_json::json!([realm_id])),
         ("strand_ids".to_owned(), serde_json::json!([])),
-        (
-            "resources".to_owned(),
-            serde_json::json!({
-                "realm_ids": [],
-                "strand_ids": [],
-            }),
-        ),
         (
             "constraints".to_owned(),
             serde_json::json!({
-                "allowed_tracks": [],
-                "allowed_data_labels": [],
-                "allowed_endpoints": [],
+                "allowed_tracks":["messages"],
+                "allowed_data_labels":[],
+                "allowed_endpoints":[],
             }),
         ),
         ("capability_grant_refs".to_owned(), serde_json::json!([])),
         ("policy_refs".to_owned(), serde_json::json!([])),
+        (
+            "resources".to_owned(),
+            serde_json::json!({
+                "realm_ids": [realm_id], "strand_ids": [],
+            }),
+        ),
     ]);
+    // Exercise the exact owner-overlay materializer used by issue and refresh
+    // before persisting the real issuer JWT and invoking HTTP introspection.
+    crate::handlers::account::agents::apply_agent_participation_overlay(
+        &mut scope_details,
+        serde_json::json!([]),
+    )
+    .unwrap();
+    assert_eq!(scope_details["participations"], serde_json::json!([]));
+    assert!(!scope_details.contains_key("participation"));
     let issuance_seed = SessionGrantIssuanceSeed::new(
         arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x41; 32]).to_string(),
         "agent-test-session",
@@ -1580,8 +1694,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
     );
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
-    // The signed grant binds proof_kind and the complete immutable Agent scope.
-    // Authenticated introspection preserves scope_details; proof_kind stays private.
+    // Proof kind stays in the signed claims; the registered introspection
+    // metadata must retain the exact signed resource/constraint overlay.
     assert_eq!(raw_payload["proof_kind"], "agent_key_proof");
     assert_eq!(
         raw_payload["scope_details"],
@@ -1683,9 +1797,17 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
             "verification_method": "did:web:agent.example#runtime-key",
         })
     );
-    // The issuer-ledger scope survives the authenticated metadata round-trip.
     assert_eq!(body["grant"]["scope_details"], raw_payload["scope_details"]);
-    // proof_kind and freshness_state remain absent from the wire record.
+    assert_eq!(
+        body["grant"]["scope_details"]["resources"]["realm_ids"],
+        serde_json::json!([realm_id])
+    );
+    assert_eq!(
+        body["grant"]["scope_details"]["constraints"]["allowed_tracks"],
+        serde_json::json!(["messages"])
+    );
+    // No caller overlay or mutable key-authorization row may widen the
+    // immutable issuer claims; no unregistered freshness field is added.
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
     assert_eq!(
         body["grant"]["cnf_jkt"],
@@ -1701,8 +1823,64 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         serde_json::from_str::<serde_json::Value>(&session_public_key).unwrap()
     );
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
-    serde_json::from_value::<SessionGrantValidationOutcome>(body)
+    let roundtrip: SessionGrantValidationOutcome = serde_json::from_value(body.clone())
         .expect("agent introspection response must satisfy the shared closed wire model");
+    assert_eq!(
+        roundtrip.grant.as_ref().unwrap().scope_details.as_ref(),
+        Some(&scope_details)
+    );
+    let mut singular = body.clone();
+    let singular_scope = singular["grant"]["scope_details"].as_object_mut().unwrap();
+    let entries = singular_scope.remove("participations").unwrap();
+    singular_scope.insert("participation".to_owned(), entries);
+    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(singular).is_err());
+    let encoded = serde_json::to_value(&roundtrip).unwrap();
+    assert_eq!(
+        encoded["grant"]["scope_details"],
+        raw_payload["scope_details"]
+    );
+    for missing in [
+        "scope_details",
+        "resources",
+        "constraints",
+        "agent_key_authorization_ref",
+    ] {
+        let mut invalid = body.clone();
+        if missing == "scope_details" {
+            invalid["grant"].as_object_mut().unwrap().remove(missing);
+        } else {
+            invalid["grant"]["scope_details"]
+                .as_object_mut()
+                .unwrap()
+                .remove(missing);
+        }
+        assert!(
+            serde_json::from_value::<SessionGrantValidationOutcome>(invalid).is_err(),
+            "Agent introspection must reject missing {missing}"
+        );
+    }
+    let mut invalid = body.clone();
+    invalid["grant"]["scope_details"]["resources"]["unregistered_resource"] =
+        serde_json::json!(true);
+    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(invalid).is_err());
+    let mut legacy_resources = body.clone();
+    let resources = legacy_resources["grant"]["scope_details"]["resources"]
+        .as_object_mut()
+        .unwrap();
+    let realms = resources.remove("realm_ids").unwrap();
+    resources.insert("realm_refs".to_owned(), realms);
+    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(legacy_resources).is_err());
+    let mut legacy_constraints = body.clone();
+    let constraints = legacy_constraints["grant"]["scope_details"]["constraints"]
+        .as_object_mut()
+        .unwrap();
+    let labels = constraints.remove("allowed_data_labels").unwrap();
+    constraints.insert("allowed_data_classes".to_owned(), labels);
+    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(legacy_constraints).is_err());
+    let mut invalid = body;
+    invalid["grant"]["scope_details"]["constraints"]["unregistered_constraint"] =
+        serde_json::json!(true);
+    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(invalid).is_err());
 }
 
 /// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing

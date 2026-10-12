@@ -558,6 +558,14 @@ async fn send_traced(
     .await
 }
 
+/// Process-only attempt provenance attached to the final local response.
+/// Earlier transport errors or retried statuses do not prove a command was
+/// never accepted. This marker never becomes an HTTP header or wire member.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct OutboundAttemptHistory {
+    pub(crate) had_prior_ambiguous_result: bool,
+}
+
 pub(crate) async fn send_with_policy<F>(
     policy: OutboundRequestPolicy,
     build_request: F,
@@ -568,12 +576,14 @@ where
     let max_attempts = policy.max_attempts();
     let mut schedule = RetrySchedule::from_policy(policy.retry)
         .with_jitter(policy.retry.jitter_ratio(), retry_jitter_seed());
+    let mut had_prior_ambiguous_result = false;
     for attempt in 1..max_attempts {
         let result = build_request().timeout(policy.timeout).send_traced().await;
         match result {
-            Ok(response) => {
+            Ok(mut response) => {
                 let status = response.status();
                 if retryable_status(status) {
+                    had_prior_ambiguous_result = true;
                     record_retry(
                         policy,
                         attempt,
@@ -588,9 +598,13 @@ where
                 if !status.is_success() {
                     record_terminal_error(policy, "http_status", Some(i64::from(status.as_u16())));
                 }
+                response.extensions_mut().insert(OutboundAttemptHistory {
+                    had_prior_ambiguous_result,
+                });
                 return Ok(response);
             }
             Err(error) if retryable_error(&error) => {
+                had_prior_ambiguous_result = true;
                 record_retry(policy, attempt, reqwest_error_type(&error), None);
                 sleep(schedule.next_delay()).await;
             }
@@ -603,7 +617,10 @@ where
 
     let result = build_request().timeout(policy.timeout).send_traced().await;
     match result {
-        Ok(response) => {
+        Ok(mut response) => {
+            response.extensions_mut().insert(OutboundAttemptHistory {
+                had_prior_ambiguous_result,
+            });
             if !response.status().is_success() {
                 record_terminal_error(
                     policy,
@@ -754,9 +771,9 @@ mod tests {
     use tokio::net::TcpListener;
 
     use super::{
-        DESCRIBE_MAX_BYTES, EgressGuard, OutboundRequestPolicy, egress_guard,
-        principal_trust_policy, reqwest_client_builder, retry_after_hint, send_with_policy,
-        server_trusted_loopback_https_hosts, telemetry_url,
+        DESCRIBE_MAX_BYTES, EgressGuard, OutboundAttemptHistory, OutboundRequestPolicy,
+        egress_guard, principal_trust_policy, reqwest_client_builder, retry_after_hint,
+        send_with_policy, server_trusted_loopback_https_hosts, telemetry_url,
     };
 
     #[test]
@@ -929,6 +946,63 @@ mod tests {
 
         assert!(err.is_timeout(), "expected timeout, got {err}");
         assert_eq!(attempts.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn delegated_transport_history_preserves_ambiguity_before_a_final_refusal() {
+        install_crypto_provider();
+        for first_status in [400, 503] {
+            let (url, attempts) = spawn_http_server(move |attempt| async move {
+                let status = if attempt == 1 { first_status } else { 400 };
+                format!("HTTP/1.1 {status} test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            })
+            .await;
+            let client = reqwest::Client::new();
+            let policy = OutboundRequestPolicy::new("test", "pairing_attempt_history")
+                .with_timeout(Duration::from_secs(1))
+                .with_max_attempts(2)
+                .with_retry(arkret_retry::RetryPolicy::none());
+            let response = send_with_policy(policy, || client.post(url.clone()))
+                .await
+                .unwrap();
+            assert_eq!(response.status().as_u16(), 400);
+            assert_eq!(
+                attempts.load(Ordering::SeqCst),
+                if first_status == 400 { 1 } else { 2 }
+            );
+            assert_eq!(
+                response
+                    .extensions()
+                    .get::<OutboundAttemptHistory>()
+                    .unwrap()
+                    .had_prior_ambiguous_result,
+                first_status == 503
+            );
+        }
+        let (url, attempts) = spawn_http_server(move |attempt| async move {
+            if attempt == 1 {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
+            "HTTP/1.1 400 test\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_owned()
+        })
+        .await;
+        let client = reqwest::Client::new();
+        let policy = OutboundRequestPolicy::new("test", "pairing_timeout_history")
+            .with_timeout(Duration::from_millis(20))
+            .with_max_attempts(2)
+            .with_retry(arkret_retry::RetryPolicy::none());
+        let response = send_with_policy(policy, || client.post(url.clone()))
+            .await
+            .unwrap();
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(response.status().as_u16(), 400);
+        assert!(
+            response
+                .extensions()
+                .get::<OutboundAttemptHistory>()
+                .unwrap()
+                .had_prior_ambiguous_result
+        );
     }
 
     #[tokio::test]

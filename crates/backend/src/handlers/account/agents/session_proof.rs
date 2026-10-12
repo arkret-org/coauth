@@ -92,6 +92,23 @@ pub async fn fetch_agent_participation_overlay(
         .map_err(|_| AgentAuthRejection::PolicyUnavailable)
 }
 
+/// Preserve the authenticated owner observation under the sole registered
+/// Agent scope member used by both issuance and refresh.
+pub(crate) fn apply_agent_participation_overlay(
+    details: &mut serde_json::Map<String, serde_json::Value>,
+    participation: serde_json::Value,
+) -> Result<(), AgentAuthRejection> {
+    let entries: Vec<
+        arkret_models_collaboration::governance::agent_participation::AgentParticipationEntry,
+    > = serde_json::from_value(participation.clone())
+        .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+    if entries.iter().any(|entry| entry.validate().is_err()) {
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    }
+    details.insert("participations".to_owned(), participation);
+    Ok(())
+}
+
 /// Outcome of validating an `agent_key_proof` session-grant request.
 pub struct AgentSessionAuthorization {
     /// Agent principal DID the proof authenticated.
@@ -122,6 +139,8 @@ pub async fn validate_agent_session_refresh_proof<R>(
     rng: &mut (dyn rand_core::RngCore + Send),
     clock: &dyn coauth_data::Clock,
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
+    encrypter: &coauth_keyring::Encrypter,
+    arkret_config: &ArkretConfig,
     prior_claims: &arkret_models_identity::SignedSessionGrantClaims,
     prior_grant_jwt: &str,
     request: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRefreshRequest,
@@ -195,6 +214,9 @@ where
         &authorization,
         authoritative_agent,
         &prior_claims.scopes,
+        encrypter,
+        arkret_config,
+        now,
     )?;
 
     let expected_digest = agent_session_refresh_request_digest(
@@ -284,16 +306,30 @@ struct AgentScopeRequestInput {
 /// `controller_status` reports whether the accountable controller is
 /// deactivated/suspended (resolved by the caller from the local user record or
 /// coland introspection) so a deactivated controller fails closed.
+pub(super) fn reject_additional_session_disclosure(
+    disclosure: Option<&arkret_models_collaboration::agent_scope::AgentRequestedScopeDisclosure>,
+) -> Result<(), AgentAuthRejection> {
+    if disclosure.is_some() {
+        // This issuance consumes a qualified delegated Station fact. A new
+        // verifier-bound presentation would need its own once-only controller
+        // challenge/verification flow; it is never silently ignored/reused.
+        return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
+    }
+    Ok(())
+}
+
 pub async fn validate_agent_session_proof(
     repo: &mut coauth_data::BoxRepository,
     rng: &mut (dyn rand_core::RngCore + Send),
     clock: &dyn coauth_data::Clock,
     url_builder: &coauth_data::UrlBuilder,
     arkret_config: &ArkretConfig,
+    encrypter: &coauth_keyring::Encrypter,
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
     body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
     consume_challenge: bool,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
+    reject_additional_session_disclosure(body.requested_scope_disclosure.as_ref())?;
     let now = clock.now();
     let proof = &body.proof;
 
@@ -375,10 +411,13 @@ pub async fn validate_agent_session_proof(
         tracing::warn!(agent_id, verification_method, authorization_ref, audience_id = %proof.audience_id, "agent_key_proof rejected: authorization binding mismatch");
         return Err(error.into());
     }
-    validate_authoritative_agent_session_evidence(
+    let agent_key_scope = validate_authoritative_agent_session_evidence(
         &authorization,
         authoritative_agent,
         &body.requested_scope,
+        encrypter,
+        arkret_config,
+        now,
     )?;
     // Verify the SDK-owned closed proof transcript directly. Reconstructing a
     // parallel shape here previously omitted `proof_kind`, so conforming
@@ -493,7 +532,7 @@ pub async fn validate_agent_session_proof(
         .map(|snapshot| snapshot.data.as_json());
 
     let effective_scope = intersect_agent_session_scope(
-        authorization.agent_key_scope.as_str(),
+        &agent_key_scope,
         &body.requested_scope,
         &scope_request,
         &capability_scope,
@@ -505,8 +544,6 @@ pub async fn validate_agent_session_proof(
         tracing::warn!(
             agent_id,
             rejection_reason_code = error.code(),
-            requested_scope = ?body.requested_scope,
-            agent_key_scope = %authorization.agent_key_scope,
             "agent_key_proof rejected: effective scope intersection failed"
         );
     })?;
@@ -587,23 +624,57 @@ fn validate_agent_key_authorization_binding(
     Ok(())
 }
 
-fn validate_authoritative_agent_session_evidence(
+pub(super) fn validate_authoritative_agent_session_evidence(
     authorization: &coauth_data::agent_key::AgentKeyAuthorization,
     view: &arkret_models_collaboration::agent_operations::AgentView,
     session_scope: &[String],
-) -> Result<(), AgentAuthRejection> {
+    encrypter: &coauth_keyring::Encrypter,
+    arkret_config: &ArkretConfig,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<String, AgentAuthRejection> {
     let key_state = view
         .key_state
         .as_ref()
         .ok_or(AgentAuthRejection::PolicyUnavailable)?;
 
-    // A delivered pair request is verifier-private evidence that the
-    // Station validated the controller-signed disclosure against the
-    // accepted-at Agent DID commitment. Re-bind that cached evidence to the
-    // current authoritative projection before every session issuance.
-    let paired_request: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
-        serde_json::from_value(authorization.coland_fanout_payload.clone())
-            .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    // The original verifier presentation stays inside the authenticated
+    // delegate's intent. AEAD retains the exact request and its actual Station
+    // result; it never becomes a new issuer-verifier presentation.
+    let custody = coauth_data::agent_key::AgentKeyPairCustody::open(
+        &authorization.coland_fanout_payload,
+        encrypter,
+    )
+    .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    let station = arkret_config
+        .owning_station()
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    custody
+        .validate_for(
+            authorization,
+            &crate::services::station_trust::owning_station_id_for(arkret_config),
+            &station.name,
+        )
+        .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    if custody.station_outcome.as_ref().is_none_or(|outcome|
+        outcome.activation_state != arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active) {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    // This whole KeyState is fetched over the configured authenticated Station
+    // operation. Its current signer evidence carries that Station's current
+    // authority_commit_id; KeyState exposes no independent current Commit id.
+    // Coauth binds the original intent/PCR/controller and exact delivered
+    // evidence, rather than claiming to re-verify a Commit or making resolved_at
+    // into acceptance qualification. A later current cut need not equal the
+    // original pairing Commit.
+    key_state
+        .validate_signer_evidence_delivery()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let evidence = &key_state
+        .current_signer_evidence
+        .as_ref()
+        .ok_or(AgentAuthRejection::ProofInvalid)?
+        .authenticated_signer_evidence;
+    let paired_request = &custody.request;
     let controller_account_id = paired_request
         .authorize_event
         .event
@@ -614,6 +685,13 @@ fn validate_authoritative_agent_session_evidence(
     if view.agent.agent_id.as_str() != authorization.agent_id
         || key_state.agent_id.as_str() != authorization.agent_id
         || &key_state.controller_account_id != controller_account_id
+        || paired_request.authorize_event.event.realm_id != key_state.principal_control_realm_id
+        || paired_request
+            .authorize_event
+            .event
+            .authorization_ref
+            .as_deref()
+            != Some(key_state.controller_authorization_ref.as_str())
         || controller_account_id.principal_id.as_str()
             != authorization.accountable_principal_id.as_str()
         || !key_state.active_authorizations.iter().any(|active| {
@@ -645,14 +723,59 @@ fn validate_authoritative_agent_session_evidence(
         return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
     }
 
-    let key_actions = parse_agent_key_scope_actions(&authorization.agent_key_scope)?
+    let retained_scope_digest =
+        arkret_models_collaboration::agent_scope::agent_requested_scope_digest(
+            &disclosure.agent_id,
+            &disclosure.controller_principal_id,
+            &disclosure.requested_scope,
+        )
+        .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    let current_scope_digest =
+        arkret_models_collaboration::agent_scope::agent_requested_scope_digest(
+            &key_state.agent_id,
+            &key_state.controller_account_id.principal_id,
+            &key_state.requested_scope,
+        )
+        .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    if retained_scope_digest != current_scope_digest {
+        return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
+    }
+    let jwk = evidence.public_key_jwk.as_map();
+    if evidence.signer_kind != arkret_models_identity::authenticated_signer_resolution_evidence::AuthenticatedSignerKind::Agent
+        || evidence.subject_id.as_str() != authorization.agent_id
+        || evidence.verification_method.as_str() != authorization.verification_method
+        || evidence.resolved_at > now
+        || jwk.get("kty").and_then(Value::as_str) != Some("OKP")
+        || jwk.get("crv").and_then(Value::as_str) != Some("Ed25519")
+        || jwk.get("x").and_then(Value::as_str) != Some(authorized_key.public_key.key.as_str())
+        || key_state.authorized_event_ref.as_ref().is_none_or(|r| r.as_str() != authorization.authorized_event_id)
+        || key_state.authorized_verification_method.as_ref().is_none_or(|r| r.as_str() != authorization.verification_method)
+        || key_state.authorized_public_key_digest.as_ref() != Some(&authorized_key.public_key_digest)
+    { return Err(AgentAuthRejection::ProofInvalid); }
+    let scope_bytes = encrypter
+        .decrypt_string(&authorization.agent_key_scope)
+        .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    let scope: arkret_models_collaboration::events_payloads::agent::AgentKeyScope =
+        serde_json::from_slice(&scope_bytes)
+            .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    let payload =
+        arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload::try_from(
+            &paired_request.authorize_event.event,
+        )
+        .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
+    if scope != payload.agent_key_scope {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    let scope_json = serde_json::to_string(&scope).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let key_actions = parse_agent_key_scope_actions(&scope_json)?
         .into_iter()
         .collect::<Vec<_>>();
     validate_agent_runtime_session_scope_layers(
         &key_state.requested_scope.actions,
         &key_actions,
         session_scope,
-    )
+    )?;
+    Ok(scope_json)
 }
 
 fn validate_registered_agent_scope_actions(
@@ -763,6 +886,21 @@ struct EffectiveAgentSessionScope {
     allowed_endpoints: Vec<String>,
     capability_grant_refs: Vec<String>,
     policy_refs: Vec<String>,
+}
+
+fn materialize_agent_session_constraints(
+    scope: &EffectiveAgentSessionScope,
+) -> Result<Value, AgentAuthRejection> {
+    let mut constraints = serde_json::json!({
+        "allowed_tracks": scope.allowed_tracks,
+        "allowed_data_labels": scope.allowed_data_labels,
+        "allowed_endpoints": scope.allowed_endpoints,
+    });
+    if !scope.strand_ids.is_empty() {
+        constraints["allowed_strand_ids"] = serde_json::to_value(&scope.strand_ids)
+            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    }
+    Ok(constraints)
 }
 
 fn materialize_agent_scope_details(
@@ -1736,6 +1874,81 @@ mod tests {
             policy_refs: set(&["policy:2026-06-19"]),
             ..AgentSessionRealmPolicy::default()
         }
+    }
+
+    #[test]
+    fn canonical_data_labels_materialize_only_the_capability_policy_intersection() {
+        let mut capability = capability_scope(&["ak.message.create"]);
+        capability.realm_ids = Some(set(&["realm-a"]));
+        capability.allowed_data_labels = Some(set(&["public", "confidential"]));
+        let data = serde_json::json!({
+            "allowed_actions":["ak.message.create"],
+            "allowed_realm_ids":["realm-a"],
+            "constraints":{"allowed_data_labels":["public", "restricted"]}
+        });
+        let policy = AgentSessionRealmPolicy::from_policy_data(&data)
+            .expect("canonical policy label ceiling");
+        let request = AgentScopeRequestInput {
+            realm_ids: vec!["realm-a".to_owned()],
+            ..AgentScopeRequestInput::default()
+        };
+        let effective = intersect_agent_session_scope(
+            &canonical_agent_key_scope(),
+            &["ak.message.create".to_owned()],
+            &request,
+            &capability,
+            Some(&policy),
+            Some(&data),
+            "did:example:agent",
+        )
+        .expect("only the common data label is issuable");
+        assert_eq!(effective.allowed_data_labels, vec!["public"]);
+        let constraints = materialize_agent_session_constraints(&effective).unwrap();
+        assert_eq!(
+            constraints["allowed_data_labels"],
+            serde_json::json!(["public"])
+        );
+        assert!(constraints.get("allowed_data_classes").is_none());
+        assert!(constraints.get("allowed_strand_ids").is_none());
+    }
+
+    #[test]
+    fn canonical_data_labels_reject_disjoint_or_missing_authority_ceilings() {
+        assert_eq!(
+            materialize_optional_constraint(Some(&set(&["public"])), Some(&set(&["restricted"])))
+                .unwrap_err(),
+            AgentAuthRejection::PolicyViolation
+        );
+        assert_eq!(
+            materialize_optional_constraint(Some(&set(&["public"])), None).unwrap_err(),
+            AgentAuthRejection::PolicyUnavailable
+        );
+        assert_eq!(
+            materialize_optional_constraint(None, Some(&set(&["public"]))).unwrap_err(),
+            AgentAuthRejection::CapabilityDenied
+        );
+    }
+
+    #[test]
+    fn canonical_data_labels_keep_the_exact_strand_constraint_in_the_issuer_materializer() {
+        let scope = EffectiveAgentSessionScope {
+            granted_scope: vec![],
+            realm_ids: vec!["realm-a".to_owned()],
+            strand_ids: vec!["strand-a".to_owned()],
+            allowed_tracks: vec!["messages".to_owned()],
+            allowed_data_labels: vec!["public".to_owned()],
+            allowed_endpoints: vec!["ak.self.events.command.submit.v1".to_owned()],
+            capability_grant_refs: vec![],
+            policy_refs: vec![],
+        };
+        assert_eq!(
+            materialize_agent_session_constraints(&scope).unwrap(),
+            serde_json::json!({
+                "allowed_tracks":["messages"], "allowed_data_labels":["public"],
+                "allowed_endpoints":["ak.self.events.command.submit.v1"],
+                "allowed_strand_ids":["strand-a"]
+            })
+        );
     }
 
     fn agent_key_authorization(

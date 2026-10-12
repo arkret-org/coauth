@@ -65,6 +65,7 @@ struct State {
     principal_connection: Arc<dyn ConnectorAdmin>,
     urls: UrlBuilder,
     site_cfg: SiteConfig,
+    encrypter: coauth_keyring::Encrypter,
 }
 
 impl State {
@@ -77,6 +78,7 @@ impl State {
         principal: impl ConnectorAdmin + 'static,
         urls: UrlBuilder,
         site_cfg: SiteConfig,
+        encrypter: coauth_keyring::Encrypter,
     ) -> Self {
         Self {
             repo_factory,
@@ -86,6 +88,7 @@ impl State {
             principal_connection: Arc::new(principal),
             urls,
             site_cfg,
+            encrypter,
         }
     }
 
@@ -123,6 +126,10 @@ impl State {
 
     pub fn url_builder(&self) -> &UrlBuilder {
         &self.urls
+    }
+
+    pub fn encrypter(&self) -> &coauth_keyring::Encrypter {
+        &self.encrypter
     }
 
     pub fn site_config(&self) -> &SiteConfig {
@@ -342,6 +349,7 @@ pub async fn init(
     principal: impl ConnectorAdmin + 'static,
     url_builder: UrlBuilder,
     site_config: &SiteConfig,
+    encrypter: coauth_keyring::Encrypter,
     cancellation_token: CancellationToken,
 ) -> Result<QueueWorker, QueueRunnerError> {
     let shared = State::new(
@@ -352,6 +360,7 @@ pub async fn init(
         principal,
         url_builder,
         site_config.clone(),
+        encrypter,
     );
 
     let mut worker = QueueWorker::new(shared, cancellation_token).await?;
@@ -376,6 +385,7 @@ pub async fn init_and_run(
     principal: impl ConnectorAdmin + 'static,
     url_builder: UrlBuilder,
     site_config: &SiteConfig,
+    encrypter: coauth_keyring::Encrypter,
     cancellation_token: CancellationToken,
     task_tracker: &TaskTracker,
 ) -> Result<(), QueueRunnerError> {
@@ -387,6 +397,7 @@ pub async fn init_and_run(
         principal,
         url_builder,
         site_config,
+        encrypter,
         cancellation_token,
     )
     .await?;

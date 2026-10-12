@@ -19,6 +19,7 @@ pub use error_matrix::{
     enforce_paused_revocation_freshness, enforce_verification_method_binding,
 };
 pub use key_pair::post_agent_key_pair;
+pub(crate) use session_proof::apply_agent_participation_overlay;
 pub use session_proof::{
     AGENT_SESSION_MAX_TTL, AgentSessionAuthorization, AgentSessionProofError,
     enforce_authoritative_agent_lifecycle, enforce_authoritative_pairing_handle,

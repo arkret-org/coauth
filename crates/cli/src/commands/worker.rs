@@ -75,6 +75,7 @@ impl Options {
             .await
             .context("could not load runtime keys from the configured KeyStore")?;
         let keyring = runtime_secrets.keyring();
+        let encrypter = runtime_secrets.encrypter();
         coauth_backend::services::station_trust::preflight_and_spawn(
             PgRepositoryFactory::new(db_pool.clone()),
             app_cfg.arkret.clone(),
@@ -105,6 +106,7 @@ impl Options {
             principal_conn,
             urls,
             &site_cfg,
+            encrypter,
             lifecycle.soft_shutdown_token(),
             lifecycle.task_tracker(),
         )

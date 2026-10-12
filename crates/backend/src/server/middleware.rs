@@ -149,6 +149,21 @@ fn otel_url_scheme(req: &Request) -> &'static str {
         })
 }
 
+// URL credential rejection must not itself copy credentials into telemetry.
+fn telemetry_path(path: &str) -> &str {
+    const FAMILY: &str = "/_arkret/open/third-party-invites";
+    if let Some(rest) = path.strip_prefix(&format!("{FAMILY}/")) {
+        return match rest.split('/').next() {
+            Some("provision") => "/_arkret/open/third-party-invites/provision",
+            Some("activate") => "/_arkret/open/third-party-invites/activate",
+            Some("status") => "/_arkret/open/third-party-invites/status",
+            Some("present") => "/_arkret/open/third-party-invites/present",
+            _ => FAMILY,
+        };
+    }
+    path
+}
+
 /// Middleware for logging responses
 #[handler]
 pub async fn log_response_middleware(
@@ -160,7 +175,7 @@ pub async fn log_response_middleware(
     let user_agent: Option<UserAgent> = req.headers().typed_get();
     let user_agent_str = user_agent.as_ref().map_or("-", |u| u.as_str());
     let method = otel_http_method(req.method());
-    let path = req.uri().path().to_owned();
+    let path = telemetry_path(req.uri().path()).to_owned();
     let version = otel_net_protocol_version(req.version());
 
     ctrl.call_next(req, depot, res).await;
@@ -192,7 +207,7 @@ pub async fn tracing_middleware(
     ctrl: &mut FlowCtrl,
 ) {
     let method = otel_http_method(req.method());
-    let path = req.uri().path().to_owned();
+    let path = telemetry_path(req.uri().path()).to_owned();
     let version = otel_net_protocol_version(req.version());
     let scheme = otel_url_scheme(req);
 
@@ -202,7 +217,15 @@ pub async fn tracing_middleware(
         .and_then(|ua| ua.to_str().ok())
         .map(String::from);
 
-    let query = req.uri().query().map(String::from);
+    let query = if req
+        .uri()
+        .path()
+        .starts_with("/_arkret/open/third-party-invites/")
+    {
+        None
+    } else {
+        req.uri().query().map(String::from)
+    };
 
     let span = tracing::info_span!(
         "http.server.request",
@@ -261,7 +284,7 @@ pub async fn sentry_middleware(
     res: &mut Response,
     ctrl: &mut FlowCtrl,
 ) {
-    let path = req.uri().path().to_owned();
+    let path = telemetry_path(req.uri().path()).to_owned();
     let method = otel_http_method(req.method());
 
     sentry::configure_scope(|scope| {

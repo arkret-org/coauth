@@ -193,11 +193,39 @@ impl Options {
                 station_admin.clone(),
                 url_builder.clone(),
                 &site_config,
+                encrypter.clone(),
                 shutdown.soft_shutdown_token(),
                 shutdown.task_tracker(),
             )
             .await?;
         }
+
+        let third_party_invite_provider = if arkret_config.third_party_invite_provider.is_some() {
+            anyhow::ensure!(
+                !self.no_worker,
+                "IVS delegation requires its durable delivery worker"
+            );
+            let notifications =
+                notification_center_from_config(&config.email, &config.sms, &templates)?;
+            let mailer = notifications
+                .email()
+                .cloned()
+                .context("IVS delegation requires an email transport")?;
+            let provider =
+                coauth_backend::services::third_party_invite::ThirdPartyInviteRuntime::connect(
+                    PgRepositoryFactory::new(pool.clone()),
+                    encrypter.clone(),
+                    arkret_config.clone(),
+                    mailer,
+                )
+                .await?;
+            shutdown
+                .task_tracker()
+                .spawn(provider.clone().run(shutdown.soft_shutdown_token()));
+            Some(provider)
+        } else {
+            None
+        };
 
         let mut listeners_config = config.http.listeners.clone();
         if let Some(metrics_listener) = metrics_listener_from_env()? {
@@ -286,6 +314,7 @@ impl Options {
                 keyring,
                 cookie_manager,
                 encrypter,
+                third_party_invite_provider,
                 url_builder,
                 station_admin,
                 connector_registry,

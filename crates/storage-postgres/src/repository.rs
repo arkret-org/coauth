@@ -70,6 +70,7 @@ use crate::queue::worker::PgQueueWorkerRepository;
 use crate::recovery_authority::PgRecoveryAuthorityRepository;
 use crate::station_trust::PgStationTrustRepository;
 use crate::telemetry::DB_CLIENT_CONNECTIONS_CREATE_TIME_HISTOGRAM;
+use crate::third_party_invite::PgThirdPartyInviteRepository;
 use crate::upstream_oauth::{
     PgUpstreamOAuthLinkRepository, PgUpstreamOAuthProviderRepository,
     PgUpstreamOAuthSessionRepository,
@@ -245,6 +246,7 @@ macro_rules! pg_repository_access {
 pg_repository_access! {
     account: AccountRepository => PgAccountRepository,
     account_handoff: AccountHandoffRepository => PgAccountHandoffRepository,
+    third_party_invite: coauth_data::storage::third_party_invite::ThirdPartyInviteRepository => PgThirdPartyInviteRepository,
     account_status_ledger: AccountStatusLedgerRepository => PgAccountStatusLedgerRepository,
     accountability_grant: AccountabilityGrantRepository => PgAccountabilityGrantRepository,
     agent_key_authorization: AgentKeyAuthorizationRepository => PgAgentKeyAuthorizationRepository,

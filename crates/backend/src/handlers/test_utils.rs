@@ -572,6 +572,7 @@ impl TestState {
             station_admin.clone(),
             url_builder.clone(),
             &site_config,
+            encrypter.clone(),
             shutdown_token.child_token(),
         )
         .await

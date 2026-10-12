@@ -2025,6 +2025,7 @@ dependencies = [
 name = "coauth-data"
 version = "0.3.0"
 dependencies = [
+ "arkret-canonical",
  "arkret-identifiers",
  "arkret-locale",
  "arkret-models-collaboration",
@@ -2037,6 +2038,7 @@ dependencies = [
  "coauth-email-types",
  "coauth-iana",
  "coauth-jose",
+ "coauth-keyring",
  "coauth-oauth-types",
  "crc",
  "futures-util",
@@ -2315,6 +2317,7 @@ dependencies = [
  "chrono",
  "coauth-data",
  "coauth-i18n",
+ "coauth-keyring",
  "coauth-messaging",
  "coauth-oauth-types",
  "coauth-principal",
@@ -2482,6 +2485,7 @@ dependencies = [
  "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-models-identity",
+ "arkret-models-integration",
  "arkret-policy",
  "arkret-schema",
  "arkret-signatures",
@@ -2560,6 +2564,7 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "chrono",
+ "coland-domain",
  "coland-storage",
  "deadpool 0.13.0",
  "diesel",
@@ -2923,6 +2928,7 @@ dependencies = [
  "chrono",
  "ed25519-dalek 3.0.0",
  "garth",
+ "getrandom 0.4.3",
  "hex",
  "reqwest 0.13.4",
  "serde",

@@ -140,6 +140,16 @@ repository_impl! {
             revoked_reason: &str,
         ) -> Result<bool, Self::Error>;
 
+        /// Replace only the encrypted private custody after the configured Station
+        /// returns the exact authenticated outcome. No independent activation vote.
+        async fn update_pairing_custody(
+            &mut self,
+            clock: &dyn Clock,
+            authorized_event_id: &str,
+            encrypted_custody: serde_json::Value,
+            activation: arkret_models_collaboration::agent_operations::AgentKeyPairActivationState,
+        ) -> Result<bool, Self::Error>;
+
         /// Atomically consume an agent-key-proof challenge. Returns `true` when
         /// this call won the single-use insert (the proof has not been seen before
         /// within its replay window); `false` when the challenge was already
