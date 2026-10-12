@@ -1231,7 +1231,7 @@ async fn issue_agent_key_proof_session_grant(
     })?;
     authorization
         .scope_details
-        .insert("participation".to_owned(), participation);
+        .insert("participations".to_owned(), participation);
 
     // Controller lifecycle gate: a deactivated / suspended controller fails
     // closed (AKP-0008 §4.6). Resolve the controller's local user record when

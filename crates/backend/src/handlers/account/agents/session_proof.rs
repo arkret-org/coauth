@@ -511,61 +511,12 @@ pub async fn validate_agent_session_proof(
         );
     })?;
 
-    let mut constraints = serde_json::json!({
-        "allowed_tracks": effective_scope.allowed_tracks,
-        "allowed_data_classes": effective_scope.allowed_data_classes,
-        "allowed_endpoints": effective_scope.allowed_endpoints,
-    });
-    if !effective_scope.strand_ids.is_empty() {
-        constraints["allowed_strand_ids"] = serde_json::to_value(&effective_scope.strand_ids)
-            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    }
-
-    let mut scope_details = serde_json::Map::from_iter([
-        (
-            "controller_principal_id".to_owned(),
-            serde_json::json!(&controller_principal_id),
-        ),
-        // Issuing key authorization, retained so introspection can fail the
-        // grant closed at use time once the key is revoked (pause /
-        // deactivate / superseded_by_repairing) instead of letting the token
-        // live out its natural TTL (key-management §3.6.1).
-        (
-            "agent_key_authorization_ref".to_owned(),
-            serde_json::json!(authorization_ref),
-        ),
-        (
-            "realm_ids".to_owned(),
-            serde_json::json!(&effective_scope.realm_ids),
-        ),
-        (
-            "strand_ids".to_owned(),
-            serde_json::json!(&effective_scope.strand_ids),
-        ),
-        (
-            "resources".to_owned(),
-            serde_json::json!({
-                "realm_refs": &effective_scope.realm_ids,
-                "strand_refs": &effective_scope.strand_ids,
-            }),
-        ),
-        ("constraints".to_owned(), constraints),
-        (
-            "capability_grant_refs".to_owned(),
-            serde_json::json!(&effective_scope.capability_grant_refs),
-        ),
-        (
-            "policy_refs".to_owned(),
-            serde_json::json!(&effective_scope.policy_refs),
-        ),
-    ]);
-    if !scope_request.participation.is_empty() {
-        scope_details.insert(
-            "participation".to_owned(),
-            serde_json::to_value(&scope_request.participation)
-                .map_err(|_| AgentAuthRejection::ProofInvalid)?,
-        );
-    }
+    let scope_details = materialize_agent_scope_details(
+        controller_principal_id.as_str(),
+        authorization_ref,
+        &effective_scope,
+        &scope_request.participation,
+    )?;
 
     // TTL: cap to the spec ceiling (≤ 15 min), never wider than the
     // (human-oriented) configured grant TTL.
@@ -773,7 +724,7 @@ struct AgentSessionCapabilityScope {
     realm_ids: Option<BTreeSet<String>>,
     strand_ids: Option<BTreeSet<String>>,
     allowed_tracks: Option<BTreeSet<String>>,
-    allowed_data_classes: Option<BTreeSet<String>>,
+    allowed_data_labels: Option<BTreeSet<String>>,
     allowed_endpoints: Option<BTreeSet<String>>,
     grant_refs: BTreeSet<String>,
 }
@@ -784,7 +735,7 @@ struct AgentSessionRealmPolicy {
     realm_ids: Option<BTreeSet<String>>,
     strand_ids: Option<BTreeSet<String>>,
     allowed_tracks: Option<BTreeSet<String>>,
-    allowed_data_classes: Option<BTreeSet<String>>,
+    allowed_data_labels: Option<BTreeSet<String>>,
     allowed_endpoints: Option<BTreeSet<String>>,
     policy_refs: BTreeSet<String>,
 }
@@ -808,10 +759,74 @@ struct EffectiveAgentSessionScope {
     realm_ids: Vec<String>,
     strand_ids: Vec<String>,
     allowed_tracks: Vec<String>,
-    allowed_data_classes: Vec<String>,
+    allowed_data_labels: Vec<String>,
     allowed_endpoints: Vec<String>,
     capability_grant_refs: Vec<String>,
     policy_refs: Vec<String>,
+}
+
+fn materialize_agent_scope_details(
+    controller_principal_id: &str,
+    authorization_ref: &str,
+    effective_scope: &EffectiveAgentSessionScope,
+    participations: &[arkret_models_collaboration::governance::agent_participation::AgentParticipationEntry],
+) -> Result<serde_json::Map<String, Value>, AgentAuthRejection> {
+    let mut constraints = serde_json::json!({
+        "allowed_tracks": effective_scope.allowed_tracks,
+        "allowed_data_labels": effective_scope.allowed_data_labels,
+        "allowed_endpoints": effective_scope.allowed_endpoints,
+    });
+    if !effective_scope.strand_ids.is_empty() {
+        constraints["allowed_strand_ids"] = serde_json::to_value(&effective_scope.strand_ids)
+            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    }
+
+    let mut scope_details = serde_json::Map::from_iter([
+        (
+            "controller_principal_id".to_owned(),
+            serde_json::json!(controller_principal_id),
+        ),
+        // Issuing key authorization, retained so introspection can fail the
+        // grant closed at use time once the key is revoked (pause /
+        // deactivate / superseded_by_repairing) instead of letting the token
+        // live out its natural TTL (key-management §3.6.1).
+        (
+            "agent_key_authorization_ref".to_owned(),
+            serde_json::json!(authorization_ref),
+        ),
+        (
+            "realm_ids".to_owned(),
+            serde_json::json!(&effective_scope.realm_ids),
+        ),
+        (
+            "strand_ids".to_owned(),
+            serde_json::json!(&effective_scope.strand_ids),
+        ),
+        (
+            "resources".to_owned(),
+            serde_json::json!({
+                "realm_ids": &effective_scope.realm_ids,
+                "strand_ids": &effective_scope.strand_ids,
+            }),
+        ),
+        ("constraints".to_owned(), constraints),
+        (
+            "capability_grant_refs".to_owned(),
+            serde_json::json!(&effective_scope.capability_grant_refs),
+        ),
+        (
+            "policy_refs".to_owned(),
+            serde_json::json!(&effective_scope.policy_refs),
+        ),
+    ]);
+    if !participations.is_empty() {
+        scope_details.insert(
+            "participations".to_owned(),
+            serde_json::to_value(&participations).map_err(|_| AgentAuthRejection::ProofInvalid)?,
+        );
+    }
+
+    Ok(scope_details)
 }
 
 fn intersect_agent_session_scope(
@@ -871,12 +886,12 @@ fn intersect_agent_session_scope(
         realm_ids,
         strand_ids,
         allowed_tracks,
-        allowed_data_classes,
+        allowed_data_labels,
         allowed_endpoints,
         policy_refs,
     ) = if resource_scoped {
         let policy = realm_policy.ok_or(AgentAuthRejection::PolicyUnavailable)?;
-        let (realm_ids, strand_ids, allowed_tracks, allowed_data_classes, allowed_endpoints) =
+        let (realm_ids, strand_ids, allowed_tracks, allowed_data_labels, allowed_endpoints) =
             if content_resource_scoped {
                 let realm_ids = materialize_optional_selector(
                     &scope_request.realm_ids,
@@ -903,8 +918,8 @@ fn intersect_agent_session_scope(
                         policy.allowed_tracks.as_ref(),
                     )?,
                     materialize_optional_constraint(
-                        capability_scope.allowed_data_classes.as_ref(),
-                        policy.allowed_data_classes.as_ref(),
+                        capability_scope.allowed_data_labels.as_ref(),
+                        policy.allowed_data_labels.as_ref(),
                     )?,
                     materialize_optional_constraint(
                         capability_scope.allowed_endpoints.as_ref(),
@@ -926,7 +941,7 @@ fn intersect_agent_session_scope(
                         policy.allowed_tracks.as_ref(),
                     )?,
                     policy
-                        .allowed_data_classes
+                        .allowed_data_labels
                         .as_ref()
                         .map(|values| values.iter().cloned().collect())
                         .unwrap_or_default(),
@@ -950,7 +965,7 @@ fn intersect_agent_session_scope(
             realm_ids,
             strand_ids,
             allowed_tracks,
-            allowed_data_classes,
+            allowed_data_labels,
             allowed_endpoints,
             policy.policy_refs.iter().cloned().collect(),
         )
@@ -980,7 +995,7 @@ fn intersect_agent_session_scope(
         realm_ids,
         strand_ids,
         allowed_tracks,
-        allowed_data_classes,
+        allowed_data_labels,
         allowed_endpoints,
         capability_grant_refs: capability_scope.grant_refs.iter().cloned().collect(),
         policy_refs,
@@ -1250,8 +1265,8 @@ fn merge_policy_projection(projection: &Value, policy: &mut AgentSessionRealmPol
         read_string_set(projection, &["allowed_tracks"]),
     );
     found |= merge_optional_set(
-        &mut policy.allowed_data_classes,
-        read_string_set(projection, &["allowed_data_classes"]),
+        &mut policy.allowed_data_labels,
+        read_string_set(projection, &["allowed_data_labels"]),
     );
     found |= merge_optional_set(
         &mut policy.allowed_endpoints,
@@ -1267,8 +1282,8 @@ fn merge_policy_projection(projection: &Value, policy: &mut AgentSessionRealmPol
             read_string_set(constraints, &["allowed_tracks"]),
         );
         found |= merge_optional_set(
-            &mut policy.allowed_data_classes,
-            read_string_set(constraints, &["allowed_data_classes"]),
+            &mut policy.allowed_data_labels,
+            read_string_set(constraints, &["allowed_data_labels"]),
         );
         found |= merge_optional_set(
             &mut policy.allowed_endpoints,
@@ -1479,6 +1494,65 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+
+    #[test]
+    fn issued_agent_scope_details_are_consumed_without_losing_ceilings() {
+        use arkret_models_collaboration::session_grants::SessionGrantValidationMetadata;
+        let authorization_ref = "ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        let scope = EffectiveAgentSessionScope {
+            granted_scope: vec!["ak.self.committed_event.read.scan.v1".to_owned()],
+            realm_ids: vec!["ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa".to_owned()],
+            strand_ids: Vec::new(),
+            allowed_tracks: vec!["discussion".to_owned()],
+            allowed_data_labels: vec!["private".to_owned()],
+            allowed_endpoints: vec!["https://service.example/_arkret".to_owned()],
+            capability_grant_refs: vec!["capability-grant".to_owned()],
+            policy_refs: vec!["policy".to_owned()],
+        };
+        let details = materialize_agent_scope_details(
+            "ak:did_core:web:controller.example",
+            authorization_ref,
+            &scope,
+            &[],
+        )
+        .unwrap();
+        let grant = serde_json::json!({
+            "id": "ak:session_grant:Af0GheZX08ev4L1fQoFdngIpe5c_9Lk7SQqfN4jztzDW",
+            "issuer_id": "ak:did_core:web:account-authority.example",
+            "account_id": {"principal_id":"ak:did_core:web:agent.example", "station_id":"ak:did_core:web:service.example"},
+            "audience_id":"ak:did_core:web:service.example",
+            "scopes":scope.granted_scope,
+            "expires_at":"2026-10-12T12:04:00.000Z",
+            "revocation_ref":"org.arkret.coauth.session_grant:1",
+            "session_public_key":r#"{"crv":"Ed25519","kty":"OKP","x":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+            "cnf_jkt":"holder-thumbprint",
+            "credential_class":"standard",
+            "holder_binding":{"kind":"agent_runtime","agent_id":"ak:did_core:web:agent.example", "agent_key_authorization_ref":authorization_ref,"verification_method":"did:web:agent.example#runtime"},
+            "scope_details":details,
+        });
+        let consumed: SessionGrantValidationMetadata =
+            serde_json::from_value(grant.clone()).unwrap();
+        assert_eq!(serde_json::to_value(consumed).unwrap(), grant);
+        assert_eq!(
+            grant["scope_details"]["resources"]["realm_ids"],
+            serde_json::json!(scope.realm_ids)
+        );
+        assert_eq!(
+            grant["scope_details"]["constraints"]["allowed_data_labels"],
+            serde_json::json!(scope.allowed_data_labels)
+        );
+        for (container, current, obsolete) in [
+            ("resources", "realm_ids", "realm_refs"),
+            ("resources", "strand_ids", "strand_refs"),
+            ("constraints", "allowed_data_labels", "allowed_data_classes"),
+        ] {
+            let mut invalid = grant.clone();
+            let object = invalid["scope_details"][container].as_object_mut().unwrap();
+            let ceiling = object.remove(current).unwrap();
+            object.insert(obsolete.to_owned(), ceiling);
+            assert!(serde_json::from_value::<SessionGrantValidationMetadata>(invalid).is_err());
+        }
+    }
 
     fn test_account_authority_keyring() -> coauth_keyring::Keyring {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(71);
