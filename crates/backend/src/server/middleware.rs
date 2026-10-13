@@ -637,7 +637,11 @@ mod tests {
         assert_eq!(missing.status_code, Some(StatusCode::BAD_REQUEST));
 
         let unknown = TestClient::get("http://local/_arkret/describe")
-            .add_header("Arkret-Operation", "ak.server.read.describe.v9", true)
+            .add_header(
+                "Arkret-Operation",
+                "ak.server.read.unregistered_describe.v1",
+                true,
+            )
             .send(&service)
             .await;
         assert_eq!(unknown.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));

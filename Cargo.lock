@@ -1782,6 +1782,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-identifiers",
+ "arkret-wire",
  "camino",
  "chrono",
  "clap",
@@ -2928,6 +2929,7 @@ dependencies = [
  "chrono",
  "ed25519-dalek 3.0.0",
  "garth",
+ "getrandom 0.4.3",
  "hex",
  "reqwest 0.13.4",
  "serde",

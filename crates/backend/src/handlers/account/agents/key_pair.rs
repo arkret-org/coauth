@@ -336,7 +336,7 @@ pub async fn post_agent_key_pair(
     )?;
     let expected_approval =
         arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
-            "ak.gate.account.command.pair_agent_key.v1",
+            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
             &authoritative_key_state.controller_account_id.principal_id,
             &agent_id,
             &body.pairing_request_id,
@@ -359,7 +359,8 @@ pub async fn post_agent_key_pair(
         || disclosure.controller_principal_id
             != authoritative_key_state.controller_account_id.principal_id
         || disclosure.requested_scope != authoritative_key_state.requested_scope
-        || disclosure.audience.as_str() != "ak.gate.account.command.pair_agent_key.v1"
+        || disclosure.audience.as_str()
+            != arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1
         || disclosure.request_id.as_str()
             != format!(
                 "ak:request:{}",

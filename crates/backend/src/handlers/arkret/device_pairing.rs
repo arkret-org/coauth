@@ -1172,7 +1172,7 @@ pub async fn claim_device_pairing_code(
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
 
     let intent_digest = Hash::new(arkret_canonical::canonical_sha256(&serde_json::json!({
-        "operation_id": "ak.gate.account.read.claim_device_pairing_code.v1",
+        "operation_id": arkret_wire::ServiceOperationId::GATE_ACCOUNT_READ_CLAIM_DEVICE_PAIRING_CODE_V1,
         "account_id": &authenticated.account_id,
         "device_id": &authenticated.device_id,
         "request": &body,

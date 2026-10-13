@@ -23,6 +23,7 @@ cedar = ["coauth-backend/cedar"]
 [dependencies]
 anyhow = { workspace = true }
 arkret-identifiers = { workspace = true }
+arkret-wire = { workspace = true }
 camino = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
