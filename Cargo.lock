@@ -2565,6 +2565,7 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "chrono",
+ "coland-domain",
  "coland-storage",
  "deadpool 0.13.0",
  "diesel",
