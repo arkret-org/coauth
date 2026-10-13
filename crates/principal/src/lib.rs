@@ -596,6 +596,12 @@ where
         self.as_admin().account_id()
     }
 
+    fn account_status_destination(
+        &self,
+    ) -> Result<(String, arkret_wire::DidCoreId), anyhow::Error> {
+        self.as_admin().account_status_destination()
+    }
+
     async fn verify_token(&self, token: &str) -> Result<bool, anyhow::Error> {
         self.as_admin().verify_token(token).await
     }
