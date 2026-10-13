@@ -423,6 +423,9 @@ zxcvbn = "3.1.1"
 
 # A few profile opt-level tweaks to make the test suite run faster.
 [profile.dev.package]
+# Full type debug information exceeds MSVC's COFF archive offset capacity for
+# this dependency. Keep source/line backtraces without the oversized type data.
+coland-storage-postgres.debug = "line-tables-only"
 argon2.opt-level = 3
 bcrypt.opt-level = 3
 block-buffer.opt-level = 3
