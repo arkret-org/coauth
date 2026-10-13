@@ -18,7 +18,7 @@ use coauth_data::{
     UrlBuilder, User,
 };
 use coauth_keyring::Keyring;
-use diesel::sql_types::{BigInt, Nullable, Text, Timestamptz};
+use diesel::sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz};
 use diesel_async::RunQueryDsl as _;
 use ed25519_dalek::Signer as _;
 use hyper::{Request, StatusCode};
@@ -125,6 +125,40 @@ async fn persisted_state(state: &TestState, challenge_id: &str, did: &Did) -> (b
     .await
     .unwrap();
     (challenge.consumed_at.is_some(), bindings.count)
+}
+
+async fn trust_and_auth_state(state: &TestState) -> serde_json::Value {
+    #[derive(diesel::QueryableByName)]
+    struct Rows {
+        #[diesel(sql_type = Jsonb)]
+        value: serde_json::Value,
+    }
+    let mut connection = state.repository_factory.pool().get().await.unwrap();
+    let mut rows = serde_json::Map::new();
+    for table in [
+        "verified_did_bindings",
+        "principal_did_bindings",
+        "did_binding_challenges",
+        "identity_binding_challenges",
+        "oauth_session_grant_operations",
+        "oauth_session_grants",
+        "account_handoff_grants",
+        "agent_session_proof_replay",
+        "accountability_grants",
+    ] {
+        let statement = format!(
+            "SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text), '[]'::jsonb) AS value FROM public.{table} r"
+        );
+        rows.insert(
+            table.to_owned(),
+            diesel::sql_query(statement)
+                .get_result::<Rows>(&mut *connection)
+                .await
+                .unwrap()
+                .value,
+        );
+    }
+    serde_json::Value::Object(rows)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -279,6 +313,7 @@ async fn exercise_handler(
         base: crate::services::did_resolver::default_did_resolver_service(&state.arkret_config),
         resolution,
     }));
+    let before = trust_and_auth_state(state).await;
     let response = state
         .request(
             Request::post(format!("/_coauth/admin/accounts/{}/dids", account.id))
@@ -292,6 +327,11 @@ async fn exercise_handler(
         )
         .await;
     if expect_denied {
+        assert_eq!(
+            trust_and_auth_state(state).await,
+            before,
+            "a rejected formal proof changed trust, challenge, grant or authentication state"
+        );
         response.assert_status(StatusCode::BAD_REQUEST);
         assert!(
             response.body().contains("test_signing_material_denied"),
