@@ -2070,3 +2070,26 @@ ALTER TABLE ONLY public.webauthn_ceremonies
 
 ALTER TABLE ONLY public.user_session_authentications
     ADD CONSTRAINT user_session_authentications_webauthn_credential_id_fkey FOREIGN KEY (webauthn_credential_id) REFERENCES public.webauthn_credentials(id) ON DELETE SET NULL;
+
+-- Provider-local custody. This is not an Invite current-result table.
+CREATE TABLE third_party_invite_private (
+    handle_digest TEXT PRIMARY KEY,
+    issuer_digest TEXT NOT NULL,
+    request_id TEXT NOT NULL,
+    intent_digest TEXT NOT NULL,
+    realm_digest TEXT NOT NULL,
+    encrypted_record TEXT NOT NULL,
+    token_selector TEXT UNIQUE,
+    state TEXT NOT NULL CHECK (state IN ('provisioned','activated','consumed','expired','revoked')),
+    expires_at TIMESTAMPTZ NOT NULL,
+    activation_expires_at TIMESTAMPTZ NOT NULL,
+    deliver_after TIMESTAMPTZ,
+    UNIQUE (issuer_digest, request_id)
+);
+CREATE INDEX third_party_invite_due ON third_party_invite_private (deliver_after);
+CREATE TABLE third_party_invite_rate (
+    bucket TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    attempts BIGINT NOT NULL,
+    PRIMARY KEY (bucket, window_start)
+);

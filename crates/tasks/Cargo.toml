@@ -18,6 +18,7 @@ arkret-wire = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 coauth-data = { workspace = true }
+coauth-keyring = { workspace = true }
 coauth-i18n = { workspace = true }
 coauth-messaging = { workspace = true }
 coauth-oauth-types = { workspace = true }

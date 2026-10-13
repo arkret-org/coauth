@@ -122,7 +122,10 @@ async fn check_arkret_server_describe(http: &reqwest::Client, public_base_url: &
 
     match http
         .get(url.as_str())
-        .header("Arkret-Operation", "ak.server.read.describe.v1")
+        .header(
+            "Arkret-Operation",
+            arkret_wire::ServiceOperationId::SERVER_READ_DESCRIBE_V1,
+        )
         .send()
         .await
     {

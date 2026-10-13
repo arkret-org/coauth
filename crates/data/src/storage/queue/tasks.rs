@@ -1,5 +1,4 @@
 use arkret_models_collaboration::account_lifecycle::AccountStatusPublicationRequestBody;
-use arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody;
 use arkret_wire::Hash;
 use chrono::{DateTime, Utc};
 use coauth_data::{BrowserSession, Session, User, UserRecoverySession};
@@ -191,7 +190,6 @@ pub struct AgentKeyPairCommitJob {
     authorized_event_id: String,
     request_digest: String,
     station_name: String,
-    body: AgentKeyPairRequestBody,
 }
 
 impl AgentKeyPairCommitJob {
@@ -202,14 +200,12 @@ impl AgentKeyPairCommitJob {
         authorized_event_id: String,
         request_digest: String,
         station_name: String,
-        body: AgentKeyPairRequestBody,
     ) -> Self {
         Self {
             idempotency_key,
             authorized_event_id,
             request_digest,
             station_name,
-            body,
         }
     }
 
@@ -236,12 +232,6 @@ impl AgentKeyPairCommitJob {
     /// the pre-commit Agent lookup.
     pub fn station_name(&self) -> &str {
         &self.station_name
-    }
-
-    /// Exact standard operation request received from the client.
-    #[must_use]
-    pub fn body(&self) -> &AgentKeyPairRequestBody {
-        &self.body
     }
 }
 

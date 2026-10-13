@@ -326,6 +326,9 @@ impl TrustVerificationError {
 /// trust enrollment or to confirm an existing pin.
 #[derive(Debug, Clone)]
 pub struct VerifiedStationIdentity {
+    /// The exact current method document used to verify this resolution.
+    /// Reusing it avoids mixing an older service pin with a second fetch.
+    pub current_document: arkret_models_identity::DidDocument,
     /// Stable service core id (the pin).
     pub service_id: DidCoreId,
     /// Service DID verified against its WebVH history.
@@ -587,6 +590,7 @@ pub async fn verify_station_identity(
         .map_err(|error| TrustVerificationError::EndpointBinding(error.to_string()))?;
 
     Ok(VerifiedStationIdentity {
+        current_document: current.document,
         service_id,
         did: commitment.did,
         method_history_head: commitment.method_history_head,

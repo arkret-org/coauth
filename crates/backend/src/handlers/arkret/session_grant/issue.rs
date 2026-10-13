@@ -1100,6 +1100,7 @@ async fn validate_agent_before_reservation(
         &*clock,
         &urls,
         &config,
+        &depot.encrypter()?,
         &view,
         body,
         false,
@@ -1187,6 +1188,7 @@ async fn issue_agent_key_proof_session_grant(
         &*clock,
         &url_builder,
         &arkret_config,
+        &depot.encrypter()?,
         &authoritative_agent,
         body,
         true,
@@ -1213,9 +1215,11 @@ async fn issue_agent_key_proof_session_grant(
     )
     .await
     .map_err(agent_session_rejection)?;
-    authorization
-        .scope_details
-        .insert("participations".to_owned(), participation);
+    crate::handlers::account::agents::apply_agent_participation_overlay(
+        &mut authorization.scope_details,
+        participation,
+    )
+    .map_err(agent_session_rejection)?;
 
     // Controller lifecycle gate: a deactivated / suspended controller fails
     // closed (AKP-0008 §4.6). Resolve the controller's local user record when

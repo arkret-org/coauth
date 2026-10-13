@@ -1782,6 +1782,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arkret-identifiers",
+ "arkret-wire",
  "camino",
  "chrono",
  "clap",
@@ -2025,6 +2026,7 @@ dependencies = [
 name = "coauth-data"
 version = "0.3.0"
 dependencies = [
+ "arkret-canonical",
  "arkret-identifiers",
  "arkret-locale",
  "arkret-models-collaboration",
@@ -2037,6 +2039,7 @@ dependencies = [
  "coauth-email-types",
  "coauth-iana",
  "coauth-jose",
+ "coauth-keyring",
  "coauth-oauth-types",
  "crc",
  "futures-util",
@@ -2315,6 +2318,7 @@ dependencies = [
  "chrono",
  "coauth-data",
  "coauth-i18n",
+ "coauth-keyring",
  "coauth-messaging",
  "coauth-oauth-types",
  "coauth-principal",

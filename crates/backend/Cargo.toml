@@ -115,6 +115,8 @@ sha2 = { workspace = true }
 signature = { workspace = true }
 socket2 = { workspace = true }
 coland-contracts = { workspace = true }
+coland-storage = { path = "../../../coland/crates/storage" }
+coland-storage-postgres = { path = "../../../coland/crates/storage-postgres" }
 subtle = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }
@@ -144,7 +146,6 @@ arkret-crypto = { path = "../../../arkret-rust-sdk/crates/crypto", features = ["
 coland-test-support = { path = "../../../coland/crates/test-support" }
 coland-http = { path = "../../../coland/crates/http", features = ["test-support"] }
 coland-services = { path = "../../../coland/crates/services", features = ["test-support"] }
-coland-storage = { path = "../../../coland/crates/storage" }
 coland-storage-postgres = { path = "../../../coland/crates/storage-postgres", features = ["test-support"] }
 syn = { workspace = true, features = ["full", "visit"] }
 cotest-test-support = { path = "../../../cotest/crates/test-support" }

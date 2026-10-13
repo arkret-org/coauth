@@ -49,6 +49,9 @@ pub struct AppState {
     pub keyring: Keyring,
     pub cookie_manager: CookieManager,
     pub encrypter: Encrypter,
+    /// Explicitly delegated IVS custody/delivery runtime, absent by default.
+    pub third_party_invite_provider:
+        Option<Arc<crate::services::third_party_invite::ThirdPartyInviteRuntime>>,
     pub url_builder: UrlBuilder,
     pub station_admin: Arc<dyn ConnectorAdmin>,
     pub connector_registry: ConnectorRegistry,
@@ -189,6 +192,9 @@ pub async fn inject_app_state(
 
     // Inject all components into depot with their type names as keys
     depot.insert("pg_pool", state.repository_factory.pool().clone());
+    if let Some(provider) = &state.third_party_invite_provider {
+        depot.insert("third_party_invite_provider", provider.clone());
+    }
     depot.insert(
         "box_repository_factory",
         state.repository_factory.clone().boxed(),

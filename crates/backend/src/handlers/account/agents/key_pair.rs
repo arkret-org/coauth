@@ -11,6 +11,7 @@
 //! Station activates the frozen candidate after its authorize Event is
 //! committed to the Agent-PCR Realm stream; polling only observes this
 //! transition.
+#[cfg(test)]
 use std::collections::BTreeMap;
 
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
@@ -62,6 +63,7 @@ pub async fn post_agent_key_pair(
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let keyring = depot.keyring()?;
+    let encrypter = depot.encrypter()?;
 
     let body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody = req
         .parse_json()
@@ -122,13 +124,32 @@ pub async fn post_agent_key_pair(
             idempotency_repo.cancel().await?;
             return Err(AppError::conflict("witness_disagreement").into());
         }
-        let stored_body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody =
-            serde_json::from_value(existing.coland_fanout_payload.clone()).map_err(|error| {
+        let existing_custody = coauth_data::agent_key::AgentKeyPairCustody::open(
+            &existing.coland_fanout_payload,
+            &encrypter,
+        )
+        .map_err(|_| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Agent pairing custody unavailable",
+            )
+        })?;
+        let station = arkret_config
+            .owning_station()
+            .ok_or_else(|| AppError::forbidden("owning Station unavailable"))?;
+        existing_custody
+            .validate_for(
+                &existing,
+                &owning_station_id_for(&arkret_config),
+                &station.name,
+            )
+            .map_err(|_| {
                 AppError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("stored Agent key-pair request is invalid: {error}"),
+                    "Agent pairing custody binding mismatch",
                 )
             })?;
+        let stored_body = existing_custody.request;
         verify_authorize_event_identity(&stored_body.authorize_event.event).map_err(|_| {
             AppError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -150,6 +171,38 @@ pub async fn post_agent_key_pair(
                         .map_err(|error| AppError::internal_box(Box::new(error)))?,
                 },
             ];
+            // Collision evidence can also carry private scope selectors. Keep
+            // both exact variants encrypted in their existing private columns.
+            let variants = variants
+                .into_iter()
+                .map(|variant| {
+                    let preimage = encrypter
+                        .encrypt_to_string(&variant.canonical_preimage)
+                        .map_err(|_| {
+                            AppError::new(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Agent collision custody encryption failed",
+                            )
+                        })?;
+                    let envelope_bytes = arkret_canonical::canonical_json_bytes(&variant.envelope)
+                        .map_err(|_| {
+                            AppError::new(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "Agent collision custody invalid",
+                            )
+                        })?;
+                    let envelope = encrypter.encrypt_to_string(&envelope_bytes).map_err(|_| {
+                        AppError::new(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Agent collision custody encryption failed",
+                        )
+                    })?;
+                    Ok(coauth_data::agent_key::AgentEventCollisionVariant {
+                        canonical_preimage: preimage.into_bytes(),
+                        envelope: serde_json::Value::String(envelope),
+                    })
+                })
+                .collect::<Result<Vec<_>, AppError>>()?;
             let clock = make_clock();
             let mut rng = make_rng();
             let quarantined = idempotency_repo
@@ -235,16 +288,18 @@ pub async fn post_agent_key_pair(
 
     let agent_id = arkret_identifiers::DidCoreId::new(agent_id.clone())
         .map_err(|error| AppError::bad_request(format!("agent_id invalid: {error}")))?;
-    // The controller-authored disclosure names the verifier this pairing is
-    // requested for. Its signature is verified further down against controller
-    // key material this service resolved, and the controller Event's approval
-    // digest binds the same value, so it is the authorization object the
-    // Authority checks - not a raw-material input it re-validates.
+    // The disclosure keeps the original Station verifier/audience. The
+    // Station verifies its signature and one-use challenge. The Authority
+    // binds the unchanged intent and consumes that authenticated result; it
+    // never treats this as an issuer-verifier presentation.
     let disclosure = &body.requested_scope_disclosure;
     disclosure
         .validate()
         .map_err(|error| AppError::bad_request(error.to_string()))?;
     let audience_id = disclosure.verifier_id.clone();
+    if audience_id != owning_station_id_for(&arkret_config) {
+        return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
+    }
     if !is_allowed_session_grant_audience(
         &url_builder,
         &arkret_config,
@@ -281,7 +336,7 @@ pub async fn post_agent_key_pair(
     )?;
     let expected_approval =
         arkret_models_collaboration::agent_operations::agent_key_pairing_request_binding_digest(
-            "ak.gate.account.command.pair_agent_key.v1",
+            arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1,
             &authoritative_key_state.controller_account_id.principal_id,
             &agent_id,
             &body.pairing_request_id,
@@ -304,7 +359,8 @@ pub async fn post_agent_key_pair(
         || disclosure.controller_principal_id
             != authoritative_key_state.controller_account_id.principal_id
         || disclosure.requested_scope != authoritative_key_state.requested_scope
-        || disclosure.audience.as_str() != "ak.gate.account.command.pair_agent_key.v1"
+        || disclosure.audience.as_str()
+            != arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_PAIR_AGENT_KEY_V1
         || disclosure.request_id.as_str()
             != format!(
                 "ak:request:{}",
@@ -319,44 +375,10 @@ pub async fn post_agent_key_pair(
     {
         return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
     }
-    // Everything above is a structural check over untrusted bytes. The
-    // controller-authored Event is only believed after its signatures
-    // verify against key material this service resolved for itself.
-    let controller_verification_methods = body
-        .authorize_event
-        .event
-        .producer_proof
-        .iter()
-        .map(|proof| proof.verification_method.as_str())
-        .chain(
-            disclosure
-                .proofs
-                .iter()
-                .map(|proof| proof.verification_method.as_str()),
-        )
-        .collect::<Vec<_>>();
-    let controller_keys = resolve_controller_signing_keys(
-        depot,
-        &authoritative_key_state.controller_account_id,
-        &controller_verification_methods,
-        now,
-    )
-    .await?;
-    verify_controller_authorize_event_proof(&body.authorize_event.event, &controller_keys)?;
-    for proof in &disclosure.proofs {
-        if proof.created_at < disclosure.issued_at || proof.created_at > disclosure.expires_at {
-            return Err(AgentAuthRejection::ProofInvalid.into_app_error().into());
-        }
-        let transcript = disclosure
-            .canonical_proof_binding_bytes(proof)
-            .map_err(|error| AppError::bad_request(error.to_string()))?;
-        verify_requested_scope_disclosure_proof(
-            &proof.jws,
-            &transcript,
-            proof.verification_method.as_str(),
-            &controller_keys.material(proof.verification_method.as_str())?,
-        )?;
-    }
+    // The configured Station is the sole owner of these pairing facts. The
+    // unchanged request is delegated below over the authenticated canonical
+    // operation. Never resolve controller keys or verify this presentation a
+    // second time at the issuer. The binding/current checks above remain.
     super::session_proof::validate_agent_runtime_key_scope_layers(
         &authoritative_key_state.requested_scope.actions,
         &authorize_event.payload.agent_key_scope.actions,
@@ -364,8 +386,8 @@ pub async fn post_agent_key_pair(
     .map_err(AgentAuthRejection::into_app_error)?;
     let mut repo = depot.repo().await?;
 
-    // `pair_agent_key` validates the current Station pairing handle
-    // above and the controller-signed authorization here. Accountability-grant
+    // `pair_agent_key` binds the current Station pairing handle above and
+    // delegates the unchanged controller authorization. Accountability-grant
     // issuance is a precondition of the aggregate `provision` operation, not
     // an operation-specific precondition of runtime-key pairing. In
     // particular, Coauth's local grant table is not the protocol truth source
@@ -392,12 +414,27 @@ pub async fn post_agent_key_pair(
         .await?;
     let service_id = owning_station_id_for(&arkret_config);
 
-    let raw_payload_digest = request_digest;
-    let fanout_payload =
-        serde_json::to_value(&body).map_err(|error| AppError::internal_box(Box::new(error)))?;
+    let raw_payload_digest = request_digest.clone();
+    let custody = coauth_data::agent_key::AgentKeyPairCustody {
+        request: body.clone(),
+        station_id: owning_station_id_for(&arkret_config),
+        station_name: authoritative_server.name.clone(),
+        request_digest: request_digest.clone(),
+        station_outcome: None,
+    };
+    let fanout_payload = custody.seal(&encrypter).map_err(|_| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent pairing custody encryption failed",
+        )
+    })?;
     let idempotency_key = authorized_event_id.clone();
-    let agent_key_scope = serde_json::to_string(&authorize_event.payload.agent_key_scope)
-        .map_err(|err| AppError::internal_box(Box::new(err)))?;
+    let agent_key_scope = custody.sealed_key_scope(&encrypter).map_err(|_| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent scope encryption failed",
+        )
+    })?;
 
     // State-truth model (`key-management.md` §3.6.1): the Station holds the
     // single command/activation truth; this row is the Account Authority's
@@ -514,29 +551,121 @@ pub async fn post_agent_key_pair(
                 authorized_event_id.clone(),
                 raw_payload_digest.clone(),
                 authoritative_server.name.clone(),
-                body.clone(),
             ),
         )
         .await?;
-    repo.save().await?;
-
-    let outcome = commit_and_mark_agent_key_authorization(
-        depot,
-        &authorized_event_id,
-        &idempotency_key,
-        &raw_payload_digest,
-        &authoritative_server.name,
-        body,
+    // Keep the initial local reservation transactional until the sole fact
+    // owner answers. A definitive refusal must not bind an Event id to an
+    // unqualified producer/disclosure and block a corrected valid command.
+    let request = PrincipalAgentKeyPairCommitRequest::new(
+        idempotency_key.clone(),
+        raw_payload_digest.clone(),
+        authoritative_server.name.clone(),
+        body.clone(),
+    );
+    let outcome = match crate::services::principal_facade::commit_agent_key_pair_to_station(
+        &http_client,
+        &arkret_config,
+        &keyring,
+        &request,
     )
-    .await?;
-
+    .await
+    {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            if let Some(refusal) = definitive_initial_pairing_refusal(&error) {
+                repo.cancel().await?;
+                return Err(refusal);
+            }
+            // A lost response may hide a qualified accepted command. Retain
+            // only the encrypted exact intent and original retry obligation;
+            // it cannot satisfy any session acceptance gate.
+            repo.save().await?;
+            if let Some(refusal) =
+                error.downcast_ref::<coauth_principal::PrincipalAgentKeyPairRefusal>()
+            {
+                return Err(ArkretRouteError::coded(
+                    StatusCode::from_u16(refusal.status())
+                        .map_err(|error| AppError::internal_box(Box::new(error)))?,
+                    refusal.code().as_str(),
+                    "Station refused the exact Agent pairing intent; prior outcome remains ambiguous and custody is retained",
+                ));
+            }
+            return Err(AppError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Agent key-pair intent retained; authoritative result unavailable",
+            )
+            .into());
+        }
+    };
+    let mut accepted_custody = custody;
+    accepted_custody.station_outcome = Some(outcome.clone());
+    let sealed = accepted_custody.seal(&encrypter).map_err(|_| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent pairing result encryption failed",
+        )
+    })?;
+    if !repo
+        .agent_key_authorization()
+        .update_pairing_custody(
+            &*clock,
+            &authorized_event_id,
+            sealed,
+            outcome.activation_state,
+        )
+        .await?
+    {
+        return Err(AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent pairing custody reconciliation pending",
+        )
+        .into());
+    }
+    if outcome.activation_state
+        == arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
+    {
+        if !repo
+            .agent_key_authorization()
+            .mark_fanout_delivered_and_revoke(
+                &*clock,
+                &authorized_event_id,
+                &pairing_superseded_event_refs(&body)?,
+                arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING,
+            )
+            .await?
+        {
+            return Err(AppError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "Station accepted the Agent key; local reconciliation pending",
+            )
+            .into());
+        }
+    }
+    repo.save().await?;
     Ok(Json(outcome))
+}
+
+/// Only a structured, registered Station refusal establishes a definite
+/// initial failure. Transport errors, malformed/unregistered responses and
+/// transient timeouts/rate limits stay ambiguous; never infer from detail text.
+fn definitive_initial_pairing_refusal(error: &anyhow::Error) -> Option<ArkretRouteError> {
+    let refusal = error.downcast_ref::<coauth_principal::PrincipalAgentKeyPairRefusal>()?;
+    if refusal.had_prior_ambiguous_result() {
+        return None;
+    }
+    Some(ArkretRouteError::coded(
+        StatusCode::from_u16(refusal.status()).ok()?,
+        refusal.code().as_str(),
+        "The owning Station refused this Agent pairing intent",
+    ))
 }
 
 /// Verify the controller's requested-scope proof through the SDK's canonical
 /// detached-JWS carrier. Shape-only parsing plus raw-signature verification
 /// would accept protected headers outside the Arkret v1 profile (for example a
 /// non-Ed25519 `alg`, an attached payload, or unsupported extensions).
+#[cfg(test)]
 fn verify_requested_scope_disclosure_proof(
     detached_jws: &str,
     transcript: &[u8],
@@ -835,11 +964,13 @@ fn ensure_authorize_event_has_controller_signature(
 /// boolean. The request body may name
 /// *which* published method signed, but it may never supply the key that
 /// checks the signature.
+#[cfg(test)]
 struct ControllerSigningKeys {
     document: arkret_models_identity::DidDocument,
     accepted_device_material: BTreeMap<String, arkret_signatures::PublicKeyMaterial>,
 }
 
+#[cfg(test)]
 impl ControllerSigningKeys {
     /// Published key material for one controller verification method.
     ///
@@ -872,144 +1003,7 @@ impl ControllerSigningKeys {
 /// it wants accepted. The document itself comes from the same
 /// freshness-bounded authority path the other controller gates use, so key
 /// rotation and deactivation reach this endpoint the way they reach them.
-async fn resolve_controller_signing_keys(
-    depot: &Depot,
-    controller_account_id: &arkret_wire::AccountId,
-    verification_methods: &[&str],
-    now: DateTime<Utc>,
-) -> Result<ControllerSigningKeys, AppError> {
-    let arkret_config = depot.arkret_config()?;
-    let mut repo = depot.repo().await?;
-    let binding = repo
-        .principal_did()
-        .get_by_principal_id_and_audience(
-            controller_account_id.principal_id.as_str(),
-            controller_account_id.station_id.as_str(),
-        )
-        .await?
-        .filter(|binding| &binding.account_id == controller_account_id)
-        .ok_or_else(|| {
-            tracing::debug!(
-                controller = %controller_account_id.principal_id,
-                "Agent pairing controller has no accepted principal DID binding"
-            );
-            AgentAuthRejection::ProofInvalid.into_app_error()
-        })?;
-    let authority = crate::services::did_binding::authority_document(
-        &depot.http_client()?,
-        &depot.url_builder()?,
-        &arkret_config,
-        &depot.keyring()?,
-        &mut repo,
-        depot.did_resolver_service()?.as_ref(),
-        depot.verified_did_binding_store()?.as_ref(),
-        binding.verified_did.as_str(),
-        arkret_identity::DidBindingPurpose::Controller,
-        crate::services::did_binding::controller_freshness(),
-        now,
-    )
-    .await
-    .map_err(|error| {
-        tracing::warn!(%error, "controller DID resolution for Agent key pairing failed");
-        AgentAuthRejection::PolicyUnavailable.into_app_error()
-    })?;
-    let document = authority.accepted.document().clone();
-    let controller_did = binding.verified_did.as_str();
-    let mut method_devices = BTreeMap::new();
-    for method in verification_methods {
-        if verification_method_controller(method) != controller_did {
-            return Err(AgentAuthRejection::ProofInvalid.into_app_error());
-        }
-        let device = method
-            .rsplit_once('#')
-            .map(|(_, fragment)| fragment)
-            .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
-        let device_id = arkret_identifiers::DeviceId::new(device.to_owned())
-            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-        method_devices.insert((*method).to_owned(), device_id);
-    }
-
-    let station = controller_station_for_pairing(
-        &arkret_config,
-        crate::services::station_trust::shared(),
-        &controller_account_id.station_id,
-    )?;
-    let bearer = station
-        .embedded_webvh_registration_bearer
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            AppError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "controller Station device signing-key directory bearer is not configured",
-            )
-        })?;
-    let mut directory_url = station.endpoint.clone();
-    directory_url.set_path("/_coland/gate/account/device-signing-keys/query");
-    directory_url.set_query(None);
-    directory_url.set_fragment(None);
-    let query = coland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryQueryRequestBody {
-        principal_id: controller_account_id.principal_id.clone(),
-        device_ids: method_devices.values().cloned().collect(),
-    };
-    let query_bytes = arkret_canonical::canonical_json_bytes(&query)
-        .map_err(|error| AppError::internal_box(Box::new(error)))?;
-    let response = depot
-        .http_client()?
-        .post(directory_url)
-        .bearer_auth(bearer)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body(query_bytes)
-        .send()
-        .await
-        .map_err(|error| AppError::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
-    if !response.status().is_success() {
-        return Err(AppError::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "controller Station device signing-key directory rejected the request",
-        ));
-    }
-    let directory: coland_contracts::admin::device_signing_directory::DeviceSigningKeyDirectoryOutcome =
-        response
-            .json()
-            .await
-            .map_err(|error| AppError::new(StatusCode::SERVICE_UNAVAILABLE, error.to_string()))?;
-    if directory.principal_id != controller_account_id.principal_id {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
-    }
-    let mut accepted_device_material = BTreeMap::new();
-    for (method, device_id) in method_devices {
-        let device = directory
-            .devices
-            .iter()
-            .find(|candidate| {
-                candidate.device_id == device_id
-                    && matches!(
-                        candidate.device_status,
-                        arkret_models_crypto::DeviceStatus::Active
-                    )
-            })
-            .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
-        let multibase = device
-            .device_signing_key_did
-            .strip_prefix("did:key:")
-            .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
-        let public_key = arkret_canonical::decode_ed25519_multibase(multibase)
-            .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-        accepted_device_material.insert(
-            method,
-            arkret_signatures::PublicKeyMaterial::Ed25519Raw {
-                bytes: public_key.to_vec(),
-            },
-        );
-    }
-    repo.save().await?;
-    Ok(ControllerSigningKeys {
-        document,
-        accepted_device_material,
-    })
-}
-
+#[cfg(test)]
 fn controller_station_for_pairing<'a>(
     config: &'a coauth_config::ArkretConfig,
     resolver: &crate::services::station_trust::StationTrustResolver,
@@ -1035,6 +1029,7 @@ fn controller_station_for_pairing<'a>(
 /// The signed transcript is the proof binding object, not the raw Event bytes;
 /// the SDK verifier builds it from the proof plus `actor_id` and re-derives the
 /// covered `event_digest` from the canonical preimage passed in here. Requiring
+#[cfg(test)]
 fn verify_controller_authorize_event_proof(
     event: &arkret_wire::Event,
     controller_keys: &ControllerSigningKeys,
@@ -1121,13 +1116,75 @@ async fn commit_and_mark_agent_key_authorization(
         )
     })?;
 
+    if outcome.authorize_event_ref.as_str() != authorized_event_id {
+        return Err(AppError::new(
+            StatusCode::BAD_GATEWAY,
+            "Station pairing outcome authorization binding mismatch",
+        ));
+    }
+    let encrypter = depot.encrypter()?;
+    let clock = make_clock();
+    let mut repo = depot.repo().await?;
+    let authorization = repo
+        .agent_key_authorization()
+        .lookup_by_event_id(authorized_event_id)
+        .await?
+        .ok_or_else(|| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Agent pairing custody missing",
+            )
+        })?;
+    let mut custody = coauth_data::agent_key::AgentKeyPairCustody::open(
+        &authorization.coland_fanout_payload,
+        &encrypter,
+    )
+    .map_err(|_| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent pairing custody unavailable",
+        )
+    })?;
+    custody
+        .validate_for(
+            &authorization,
+            &owning_station_id_for(&arkret_config),
+            station_name,
+        )
+        .map_err(|_| {
+            AppError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Agent pairing custody binding mismatch",
+            )
+        })?;
+    custody.station_outcome = Some(outcome.clone());
+    let sealed = custody.seal(&encrypter).map_err(|_| {
+        AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent pairing result encryption failed",
+        )
+    })?;
+    if !repo
+        .agent_key_authorization()
+        .update_pairing_custody(
+            &*clock,
+            authorized_event_id,
+            sealed,
+            outcome.activation_state,
+        )
+        .await?
+    {
+        return Err(AppError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Agent pairing custody reconciliation pending",
+        ));
+    }
     if outcome.activation_state
         != arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
     {
+        repo.save().await?;
         return Ok(outcome);
     }
-    let clock = make_clock();
-    let mut repo = depot.repo().await?;
     let updated = repo
         .agent_key_authorization()
         .mark_fanout_delivered_and_revoke(

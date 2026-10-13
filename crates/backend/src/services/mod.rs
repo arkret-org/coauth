@@ -23,6 +23,7 @@ pub mod risk_action_proposals;
 pub mod risk_action_state;
 pub mod session_grant;
 pub mod station_trust;
+pub mod third_party_invite;
 pub(crate) mod upstream_link;
 pub mod upstream_oidc;
 pub mod upstream_oidc_mapping;
