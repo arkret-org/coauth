@@ -159,8 +159,7 @@ pub use self::circle_capability::{
 pub use self::clock::{Clock, SystemClock};
 pub use self::collaboration_capability::{
     COLLABORATION_CAPABILITY_ACTIONS, CollaborationCapabilityGrant,
-    CollaborationCapabilityGrantRepository, CollaborationCapabilityRevokeFanout,
-    NewCollaborationCapabilityGrant, collaboration_action_requires_approval,
+    CollaborationCapabilityGrantRepository, collaboration_action_requires_approval,
     is_collaboration_capability_action,
 };
 pub use self::did_binding::{

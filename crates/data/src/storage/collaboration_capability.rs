@@ -1,77 +1,19 @@
-//! Collaboration capability grant repository.
+//! Read-only access to the retained collaboration capability review records.
+//!
+//! These local records are not accepted Realm authorization evidence. New
+//! grants and revocations must use principal-signed protocol Events.
 
-use arkret_identifiers::DidCoreId;
-use chrono::{DateTime, Utc};
-use coauth_data::Clock;
-use coauth_data::collaboration_capability::{CapabilityActionId, CollaborationCapabilityGrant};
-use rand_core::RngCore;
+use coauth_data::collaboration_capability::CollaborationCapabilityGrant;
 
 use crate::repository_impl;
 
-/// Parameters used to create a durable collaboration capability grant.
-#[derive(Debug, Clone)]
-pub struct NewCollaborationCapabilityGrant {
-    /// Standard protocol grant id that coland will materialize.
-    pub capability_grant_id: String,
-    /// Standard `ak.capability.grant` event id for reducer ingestion.
-    pub grant_event_id: String,
-    /// Subject (account or DID) that receives the grant.
-    pub subject: String,
-    /// Realm the grant is scoped to.
-    pub realm_id: String,
-    /// Capability action authorized by this grant.
-    pub action: CapabilityActionId,
-    /// Optional expiry. Required by validation for high-risk actions.
-    pub expires_at: Option<DateTime<Utc>>,
-    /// Approval evidence binding for high-risk actions.
-    pub approval_evidence_ref: Option<String>,
-    /// Admin/service actor that created the grant.
-    pub granted_by: DidCoreId,
-    /// Canonical digest of the queued fan-out payload.
-    pub grant_raw_payload_digest: String,
-    /// Idempotency key used for coland fan-out.
-    pub grant_fanout_idempotency_key: String,
-}
-
-/// Parameters recorded when revocation queues a standard revoke event.
-#[derive(Debug, Clone)]
-pub struct CollaborationCapabilityRevokeFanout {
-    /// Standard `ak.capability.revoke` event id.
-    pub revoke_event_id: String,
-}
-
 repository_impl! {
-    /// Repository for durable collaboration capability grants.
+    /// Read-only repository for local collaboration capability review records.
     pub trait CollaborationCapabilityGrantRepository {
         /// Backend error type.
         type Error;
 
-        /// Insert a new non-revoked grant.
-        async fn add(
-            &mut self,
-            rng: &mut (dyn RngCore + Send),
-            clock: &dyn Clock,
-            params: NewCollaborationCapabilityGrant,
-        ) -> Result<CollaborationCapabilityGrant, Self::Error>;
-
-        /// List all non-revoked grants.
+        /// List all non-revoked local review records.
         async fn list_active(&mut self) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
-
-        /// List non-revoked grants for an exact subject/realm/action triple.
-        async fn list_active_for_subject_action(
-            &mut self,
-            subject: &str,
-            realm_id: &str,
-            action: CapabilityActionId,
-        ) -> Result<Vec<CollaborationCapabilityGrant>, Self::Error>;
-
-        /// Revoke an active grant by row id. Returns `None` when the grant is
-        /// absent or already revoked.
-        async fn revoke_by_id(
-            &mut self,
-            clock: &dyn Clock,
-            grant_id: &str,
-            fanout: CollaborationCapabilityRevokeFanout,
-        ) -> Result<Option<CollaborationCapabilityGrant>, Self::Error>;
     }
 }

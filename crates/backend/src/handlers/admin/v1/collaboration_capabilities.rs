@@ -19,9 +19,10 @@
 //! holds no such key; bridging that gap here would make coauth a signing oracle
 //! for the control plane.
 //!
+//! The local review records are not accepted Realm authorization evidence.
 //! The review surfaces stay because they need no key. See the arkret-work task
-//! `2026-08-08-collaboration-capability-review-source.md` for repointing them
-//! at coland's authoritative capability projection.
+//! `tasks/impl-backlog/collaboration-capability-review-source.md` for the product
+//! identity and permission prerequisites to use the standard accepted read API.
 
 use coauth_admin_types::collaboration_capability_admin::{
     CollaborationCapabilityGrant, ListCollaborationCapabilityGrantsOutcome,
