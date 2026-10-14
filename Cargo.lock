@@ -123,15 +123,15 @@ dependencies = [
 
 [[package]]
 name = "alloc-no-stdlib"
-version = "2.0.4"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
+checksum = "c2fb6cfd47bf496ff64095c20eaba0c201404ee38714d4142fcfa1dc334fcc7a"
 
 [[package]]
 name = "alloc-stdlib"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94fb8275041c72129eb51b7d0322c29b8387a0386127718b096429201a5d6ece"
+checksum = "0b5c1865780388bfa186411ab5f247819487fc4864c6e9c3106611fa347586e1"
 dependencies = [
  "alloc-no-stdlib",
 ]
@@ -331,7 +331,7 @@ dependencies = [
  "arkret-models-crypto",
  "arkret-signatures",
  "arkret-wire",
- "bip39",
+ "bip39 3.0.0",
  "chacha20poly1305 0.11.0",
  "chrono",
  "ed25519-dalek 3.0.0",
@@ -1149,6 +1149,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bip39"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4559bb9225f8401dcea601cf8dc9ed81ea0dadd9cf7755fdefdd93ef7961e19e"
+dependencies = [
+ "bitcoin_hashes",
+ "serde",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1328,9 +1339,9 @@ dependencies = [
 
 [[package]]
 name = "brotli"
-version = "8.0.2"
+version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd8b9603c7aa97359dbd97ecf258968c95f3adddd6db2f7e7a5bef101c84560"
+checksum = "f8b851b75c23ca7873623d612fe49bd1989aeb03d08fb9432187eb253d3d4c6b"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -1339,9 +1350,9 @@ dependencies = [
 
 [[package]]
 name = "brotli-decompressor"
-version = "5.0.0"
+version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "874bb8112abecc98cbd6d81ea4fa7e94fb9449648c93cc89aa40c81c24d7de03"
+checksum = "941cd9bd4ddab83cb46fa5a2d428f1c857b24ac78cb876cf7beb710840934bd7"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -1925,14 +1936,14 @@ dependencies = [
  "minijinja",
  "minijinja-contrib",
  "opendal",
- "opentelemetry",
- "opentelemetry-http",
+ "opentelemetry 0.32.0",
+ "opentelemetry-http 0.32.0",
  "opentelemetry-instrumentation-process",
  "opentelemetry-instrumentation-tokio",
  "opentelemetry-otlp",
  "opentelemetry-prometheus",
  "opentelemetry-resource-detectors",
- "opentelemetry-semantic-conventions",
+ "opentelemetry-semantic-conventions 0.32.1",
  "opentelemetry-stdout",
  "opentelemetry_sdk",
  "p256 0.13.2",
@@ -2046,7 +2057,7 @@ dependencies = [
  "crc",
  "futures-util",
  "language-tags",
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "regex",
@@ -2291,8 +2302,8 @@ dependencies = [
  "futures-util",
  "hex",
  "ipnetwork",
- "opentelemetry",
- "opentelemetry-semantic-conventions",
+ "opentelemetry 0.32.0",
+ "opentelemetry-semantic-conventions 0.32.1",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "serde",
@@ -2329,8 +2340,8 @@ dependencies = [
  "cron",
  "diesel",
  "diesel-async",
- "opentelemetry",
- "opentelemetry-semantic-conventions",
+ "opentelemetry 0.32.0",
+ "opentelemetry-semantic-conventions 0.32.1",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "serde",
@@ -2926,7 +2937,7 @@ dependencies = [
  "arkret-test-kit",
  "arkret-wire",
  "base64 0.23.1",
- "bip39",
+ "bip39 2.2.2",
  "chrono",
  "ed25519-dalek 3.0.0",
  "garth",
@@ -6191,9 +6202,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.56.0"
+version = "0.58.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6a806f80c1f5560431009ce5ec29b59d38f950e0cd7db5f1b8925e6d8104e21"
+checksum = "f622c574a29fb3034a0a90645afee194dfedc75fc124228801b6e77041075bd1"
 dependencies = [
  "ahash 0.8.12",
  "bytecount",
@@ -6219,18 +6230,18 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.56.0"
+version = "0.58.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb862addfa7782108933abcf842fe25334523a9df5b89ea4d9620e3dd7b42181"
+checksum = "a968fffd387b2ab005bf00c1851f5d26e90df05b6f7ad609ed0d620033cca5e7"
 dependencies = [
  "regex-syntax",
 ]
 
 [[package]]
 name = "jsonschema-value"
-version = "0.56.0"
+version = "0.58.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a05cd404c5ff6e2731dbbf7e290a27417750acfb59e329560a1d0af384c93fb0"
+checksum = "39b7670345e5ce87371339d13705dbb9276b7e3e934bbe1efa2c6734a1f65a96"
 dependencies = [
  "ahash 0.8.12",
  "bytecount",
@@ -7743,9 +7754,9 @@ dependencies = [
 
 [[package]]
 name = "openmls"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6b08d90fc020cb5354d5f08ca17711b84c82e2bcc7331753fd94f000d99a8c8"
+checksum = "88ea97f8931047590bda498a9502e8fe6c9bb2bb04547a9a463618783481e0ec"
 dependencies = [
  "getrandom 0.4.3",
  "log",
@@ -7897,6 +7908,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c1f1a6ac9c875a4941e4c7c085b61e8f4daa326de03b4701768c3491a6ad9ee"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "js-sys",
+ "pin-project-lite",
+ "thiserror 2.0.20",
+]
+
+[[package]]
 name = "opentelemetry-http"
 version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7905,8 +7929,20 @@ dependencies = [
  "async-trait",
  "bytes",
  "http",
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "reqwest 0.13.4",
+]
+
+[[package]]
+name = "opentelemetry-http"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "302249bd8ee804789faaa7b5b2cbf79bc61cb864714079c644e3828af5b7e811"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "http",
+ "opentelemetry 0.33.1",
 ]
 
 [[package]]
@@ -7915,8 +7951,8 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "065d9891eac9d4089f2c61872a43236029496c3642f62706ddbe71e96f6e00be"
 dependencies = [
- "opentelemetry",
- "opentelemetry-semantic-conventions",
+ "opentelemetry 0.32.0",
+ "opentelemetry-semantic-conventions 0.32.1",
  "procfs",
 ]
 
@@ -7926,7 +7962,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aac2efa77dc2389d53fc00e53074a8117f53b1bd5ab92b0cd8bf7625156dc49f"
 dependencies = [
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "tokio",
 ]
 
@@ -7937,8 +7973,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9966929966d17620d7c316c643ba62631826e10021409357772d5eea84f62c35"
 dependencies = [
  "http",
- "opentelemetry",
- "opentelemetry-http",
+ "opentelemetry 0.32.0",
+ "opentelemetry-http 0.32.0",
  "opentelemetry-proto",
  "opentelemetry_sdk",
  "prost",
@@ -7952,7 +7988,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c0359983e7f79cf33c9abd89e5d7ddf67c46c419d0148598022d70e70c01aba"
 dependencies = [
  "once_cell",
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "opentelemetry_sdk",
  "prometheus",
  "tracing",
@@ -7964,7 +8000,7 @@ version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56d658ba1faf63f7b9c492cfbe6e0ec365440a16132d3270c1065f7b33f1b638"
 dependencies = [
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "opentelemetry_sdk",
  "prost",
 ]
@@ -7975,8 +8011,8 @@ version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90ca3c069db41e9a9319dc075cf05aac4841d7c174995270223f1f16ad2eab18"
 dependencies = [
- "opentelemetry",
- "opentelemetry-semantic-conventions",
+ "opentelemetry 0.32.0",
+ "opentelemetry-semantic-conventions 0.32.1",
  "opentelemetry_sdk",
 ]
 
@@ -7987,13 +8023,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c913ac17a6c451661ee255f4625d143e51647ae78ebd969b75e41c4442f4fe47"
 
 [[package]]
+name = "opentelemetry-semantic-conventions"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a3cf639fefd3e852869114f9925b578da6dd8e99281a2089bb0e773ead46962"
+
+[[package]]
 name = "opentelemetry-stdout"
 version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1b1c6a247d79091f0062a5f4bd058589525cf987a8d4c169440d9c1be72f0ad"
 dependencies = [
  "chrono",
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "opentelemetry_sdk",
 ]
 
@@ -8006,7 +8048,7 @@ dependencies = [
  "futures-channel",
  "futures-executor",
  "futures-util",
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "percent-encoding",
  "portable-atomic",
  "rand 0.9.4",
@@ -8533,9 +8575,9 @@ dependencies = [
 
 [[package]]
 name = "precis-core"
-version = "0.1.11"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c2e7b31f132e0c6f8682cfb7bf4a5340dbe925b7986618d0826a56dfe0c8e56"
+checksum = "57026eb21aa532dc7d5b29ddc666e89965d145445ceac3194483c9e094b897be"
 dependencies = [
  "precis-tools",
  "ucd-parse",
@@ -8544,11 +8586,10 @@ dependencies = [
 
 [[package]]
 name = "precis-profiles"
-version = "0.1.13"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31e2768890a47af73a032af9f0cedbddce3c9d06cf8de201d5b8f2436ded7674"
+checksum = "53ed6b19435958c029101ce63ae26e010973fcc79aaddfda5b3afa7102602ab4"
 dependencies = [
- "lazy_static",
  "precis-core",
  "precis-tools",
  "unicode-normalization",
@@ -8556,11 +8597,10 @@ dependencies = [
 
 [[package]]
 name = "precis-tools"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cc1eb2d5887ac7bfd2c0b745764db89edb84b856e4214e204ef48ef96d10c4a"
+checksum = "4ade9e98ddb189f367494f1fa0a966a8d0d38f9a3eec4aef0f5ec035a7e0963d"
 dependencies = [
- "lazy_static",
  "regex",
  "ucd-parse",
 ]
@@ -9112,9 +9152,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.56.0"
+version = "0.58.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3b4a92fac7e28c27de3ad26df2ecb9e652f227b258e845af034052e5b22c96c"
+checksum = "558f3855529c0a7e78a48e409fa653456e55f1b167eab4109c16a255b7727e3f"
 dependencies = [
  "ahash 0.8.12",
  "fluent-uri",
@@ -9617,12 +9657,13 @@ dependencies = [
 
 [[package]]
 name = "salvo"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbc3f5a326bd3d31c4d794c4a333fd40d930ab20509247d4fa33da2a646fec0a"
+checksum = "5195b16bb9086c424f32fea95fc4e57617f68b494cd419c4839f36c4e52a6432"
 dependencies = [
  "salvo-cors",
  "salvo-oapi",
+ "salvo-otel",
  "salvo-proxy",
  "salvo-rate-limiter",
  "salvo-serve-static",
@@ -9632,9 +9673,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-cors"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78c4aba5c51f2838d376a90bc2837d25ecbe2e8af519f2c8312c2702daf47dfa"
+checksum = "7ce280b73f367ec1f363b5f34252f059ee0d1f28386afac1f253bce1b50dc1a3"
 dependencies = [
  "bytes",
  "salvo_core",
@@ -9643,9 +9684,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-oapi"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb93599148e6f51334a40fc7e4611400b48834b1ef3a3b9fb1a53121b771b44a"
+checksum = "ebcc93544364bd6565b4af675649b87c0dd80b16f7a6bb48c4da2426648358fd"
 dependencies = [
  "anyhow",
  "base64 0.23.1",
@@ -9678,9 +9719,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-oapi-macros"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53fb3afc3d6cc525ab788a7f20c12cd3c5b86f756e61e1da094753f4318a5b16"
+checksum = "0912f9eb1cb4d677d369030c59254720737250206af4b3d6094e0febc8883a1c"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -9691,10 +9732,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "salvo-proxy"
-version = "0.96.0"
+name = "salvo-otel"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3ec040f38bdd376d12ef1ade9dac58b439a472d4dbd082af1a64c92507107cc"
+checksum = "6d7239cbdad4c542d0a4ff4142b6af8c4637f44b7f405a31b132a456a6e5afc7"
+dependencies = [
+ "opentelemetry 0.33.1",
+ "opentelemetry-http 0.33.1",
+ "opentelemetry-semantic-conventions 0.33.1",
+ "percent-encoding",
+ "salvo_core",
+ "tracing",
+]
+
+[[package]]
+name = "salvo-proxy"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "878d6a044129b8f5749e6c1fb0e53ce462d7011422287bf1766b396210cb1940"
 dependencies = [
  "fastrand",
  "futures-util",
@@ -9711,9 +9766,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-rate-limiter"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a65d4457e498941819260a106a1ce4eb4ed51bfe1ae79f090e4ac741950b296"
+checksum = "f69e3fc0d174e3c4f8097dba85162869e9afec2bf19b4a487730944cdf2aba4b"
 dependencies = [
  "moka",
  "salvo_core",
@@ -9725,9 +9780,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-serde-util"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca4a9aef5702a80c257eb37fe5786ba5a5a878a95b22e773733c6fcb02edbc2b"
+checksum = "98e7a3a7921b22fb7916b7b2a2dad21f2a9119b1935276c355e8b22341413d8c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9736,9 +9791,9 @@ dependencies = [
 
 [[package]]
 name = "salvo-serve-static"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b23e5b743596f9cbf3b6a11a26d12a96da954817b894e087bad3086012b7ad96"
+checksum = "23c5126955a1692b4c61aad7bab5a5d9114889c152033705460eb63b97e7edaa"
 dependencies = [
  "hex",
  "mime",
@@ -9756,9 +9811,9 @@ dependencies = [
 
 [[package]]
 name = "salvo_core"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4340704901e2af677533df4d8b1b3e5bd9a737f6709d5cd2a0b553232ff94265"
+checksum = "e750d044c19994e42efd60f66ff502892dccf9e54eec50d63f4be4ca618e8a5a"
 dependencies = [
  "arc-swap",
  "async-trait",
@@ -9808,9 +9863,9 @@ dependencies = [
 
 [[package]]
 name = "salvo_extra"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28340259e7995136dbbf19f4081dd090592cd4484450098eb2934d9f9f88d26d"
+checksum = "47b24484004640d521b656205eb5e7729698ca157a28b8738c2ebc493effa92b"
 dependencies = [
  "base64 0.23.1",
  "etag",
@@ -9830,9 +9885,9 @@ dependencies = [
 
 [[package]]
 name = "salvo_macros"
-version = "0.96.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0612c6b3c3cfa9ef85bc5cfbf421c9f71be49bdd471af1a03c9ca55e8d4b5d1e"
+checksum = "0b7644c99267dd8a97d97a00ad1358c6d597db764354fe6c7679105af62d1f7c"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -11323,7 +11378,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "adbc64cba7137545b8044cb1fe9814f7aacf3c6b5f9b45be8bb5db538befdb26"
 dependencies = [
  "js-sys",
- "opentelemetry",
+ "opentelemetry 0.32.0",
  "tracing",
  "tracing-core",
  "tracing-subscriber",
@@ -12707,27 +12762,27 @@ checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
 
 [[package]]
 name = "zstd"
-version = "0.13.3"
+version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
+checksum = "057cfd910cfac363a0ada849592624b4c9ff2e10bef504c3433810d78ed96f93"
 dependencies = [
  "zstd-safe",
 ]
 
 [[package]]
 name = "zstd-safe"
-version = "7.2.4"
+version = "8.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f49c4d5f0abb602a93fb8736af2a4f4dd9512e36f7f570d66e65ff867ed3b9d"
+checksum = "bdd44c6a7284e91f3717755b24315a302edd9153a01f753c3cba3d765e8eafac"
 dependencies = [
  "zstd-sys",
 ]
 
 [[package]]
 name = "zstd-sys"
-version = "2.0.16+zstd.1.5.7"
+version = "2.1.1+zstd.1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+checksum = "aeec9eaf2dffbbd09201e23bd0ffcbaa33bb8e9266a10734fd7ed90a85eca078"
 dependencies = [
  "cc",
  "pkg-config",
