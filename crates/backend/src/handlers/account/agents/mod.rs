@@ -27,5 +27,5 @@ pub use session_proof::{
 };
 pub(crate) use session_proof::{
     apply_agent_participation_overlay, resolve_retained_agent_pairing,
-    validate_authoritative_agent_session_evidence,
+    revalidate_content_session_scope, validate_authoritative_agent_session_evidence,
 };

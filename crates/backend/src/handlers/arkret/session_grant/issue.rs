@@ -1104,6 +1104,7 @@ async fn validate_agent_before_reservation(
         &view,
         body,
         false,
+        &depot.http_client()?,
     )
     .await
     {
@@ -1192,10 +1193,18 @@ async fn issue_agent_key_proof_session_grant(
         &authoritative_agent,
         body,
         true,
+        &http_client,
     )
     .await
     {
-        Ok(authorization) => authorization,
+        Ok(Some(authorization)) => authorization,
+        Ok(None) => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "fresh Agent issuance omitted its qualified scope",
+            ));
+        }
         Err(AgentSessionProofError::Rejection(rejection)) => {
             repo.cancel().await.ok();
             return Err(agent_session_rejection(rejection));

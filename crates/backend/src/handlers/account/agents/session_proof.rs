@@ -331,7 +331,8 @@ pub async fn validate_agent_session_proof(
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
     body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
     consume_challenge: bool,
-) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
+    http_client: &reqwest::Client,
+) -> Result<Option<AgentSessionAuthorization>, AgentSessionProofError> {
     reject_additional_session_disclosure(body.requested_scope_disclosure.as_ref())?;
     let now = clock.now();
     let proof = &body.proof;
@@ -471,6 +472,12 @@ pub async fn validate_agent_session_proof(
         }
     }
 
+    // Completed issuance reads its original issuer-ledger ceiling. Replaying
+    // an authenticated intent never recomputes content authority or mints.
+    if !consume_challenge {
+        return Ok(None);
+    }
+
     // Parse the `agent_scope_request` overlay. An `act_on_behalf` participation
     // selection routes to the human-approval path (§4.10).
     let scope_request = AgentScopeRequestInput {
@@ -529,22 +536,35 @@ pub async fn validate_agent_session_proof(
         .as_ref()
         .map(|snapshot| snapshot.data.as_json());
 
-    let effective_scope = intersect_agent_session_scope(
-        &agent_key_scope,
-        &body.requested_scope,
-        &scope_request,
-        &capability_scope,
-        realm_policy.as_ref(),
-        policy_data,
-        agent_id,
-    )
-    .inspect_err(|error| {
-        tracing::warn!(
+    let effective_scope = if scope_request_has_resource_selectors(&scope_request) {
+        station_content_scope(
+            http_client,
+            arkret_config,
+            authoritative_agent,
+            &body.requested_scope,
+            body.agent_scope_request.clone(),
+            body.canonical_request_digest()
+                .map_err(|_| AgentAuthRejection::ProofInvalid)?,
+        )
+        .await?
+    } else {
+        intersect_agent_session_scope(
+            &agent_key_scope,
+            &body.requested_scope,
+            &scope_request,
+            &capability_scope,
+            realm_policy.as_ref(),
+            policy_data,
             agent_id,
-            rejection_reason_code = error.code(),
-            "agent_key_proof rejected: effective scope intersection failed"
-        );
-    })?;
+        )
+        .inspect_err(|error| {
+            tracing::warn!(
+                agent_id,
+                rejection_reason_code = error.code(),
+                "agent_key_proof rejected: effective scope intersection failed"
+            );
+        })?
+    };
 
     let scope_details = materialize_agent_scope_details(
         controller_principal_id.as_str(),
@@ -562,13 +582,13 @@ pub async fn validate_agent_session_proof(
         AGENT_SESSION_MAX_TTL
     };
 
-    Ok(AgentSessionAuthorization {
+    Ok(Some(AgentSessionAuthorization {
         agent_id: body.principal_id.clone(),
         controller_principal_id,
         granted_scope: effective_scope.granted_scope,
         scope_details,
         ttl,
-    })
+    }))
 }
 
 fn canonical_session_grant_request_digest_without_signature(
@@ -1116,6 +1136,137 @@ fn materialize_agent_scope_details(
     }
 
     Ok(scope_details)
+}
+
+/// The owning Station supplies source qualification; local provider policy
+/// storage is never a replica of Realm membership, grants or governance.
+async fn station_content_scope(
+    http: &reqwest::Client,
+    config: &ArkretConfig,
+    view: &arkret_models_collaboration::agent_operations::AgentView,
+    requested_scope: &[String],
+    resource_scope: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+    intent_digest: arkret_identifiers::Hash,
+) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
+    use coland_contracts::agent_session_authority::{
+        AGENT_SESSION_AUTHORITY_PATH, AgentSessionAuthorityOutcome, AgentSessionAuthorityRequest,
+    };
+
+    use crate::services::peer_protocol_client::InternalAuthorityChannel;
+    let source = view
+        .key_state
+        .as_ref()
+        .and_then(|state| state.current_key_authorization.as_ref())
+        .and_then(|source| source.reducer_input())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let payload =
+        arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload::try_from(
+            source,
+        )
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let agent = source
+        .actor_id
+        .as_account_id()
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let controller = source
+        .executed_by
+        .as_ref()
+        .and_then(arkret_wire::ActorId::as_account_id)
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let request = AgentSessionAuthorityRequest {
+        agent_account_id: agent.clone(),
+        controller_account_id: controller.clone(),
+        agent_key_authorization_ref: source.event_id.clone(),
+        verification_method: payload.verification_method,
+        intent_digest,
+        requested_scope: requested_scope.to_vec(),
+        resource_scope,
+    };
+    let station = config
+        .owning_station()
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    let station_id = crate::services::station_trust::effective_audience_shared(station)
+        .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    if station_id != agent.station_id || station_id != controller.station_id {
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    }
+    let channel = InternalAuthorityChannel::new(
+        &station.endpoint,
+        http,
+        station.internal_authority_shared_secret(),
+        station_id,
+    )
+    .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
+    let outcome: AgentSessionAuthorityOutcome = channel
+        .post_private_json(
+            "private_agent_session_authority",
+            AGENT_SESSION_AUTHORITY_PATH,
+            &request,
+            None,
+        )
+        .await
+        .map_err(|error| {
+            tracing::warn!(%error,"owning Station Agent content source read failed");
+            AgentAuthRejection::PolicyUnavailable
+        })?;
+    if !outcome.matches_request(&request)
+        || outcome
+            .granted_scope
+            .iter()
+            .any(|action| !requested_scope.contains(action))
+    {
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    }
+    if outcome.granted_scope.is_empty() {
+        return Err(AgentAuthRejection::CapabilityDenied);
+    }
+    if outcome.strand_ids != request.resource_scope.strand_ids
+        || outcome.realm_ids != request.resource_scope.realm_ids
+    {
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    }
+    Ok(EffectiveAgentSessionScope {
+        granted_scope: outcome.granted_scope,
+        realm_ids: outcome.realm_ids.iter().map(ToString::to_string).collect(),
+        strand_ids: outcome.strand_ids.iter().map(ToString::to_string).collect(),
+        allowed_tracks: outcome.allowed_tracks,
+        allowed_data_labels: outcome.allowed_data_labels,
+        allowed_endpoints: outcome.allowed_endpoints,
+        capability_grant_refs: outcome
+            .capability_grant_refs
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        policy_refs: outcome.policy_refs,
+    })
+}
+
+pub(crate) async fn revalidate_content_session_scope(
+    http: &reqwest::Client,
+    config: &ArkretConfig,
+    view: &arkret_models_collaboration::agent_operations::AgentView,
+    scopes: &[String],
+    details: &serde_json::Map<String, Value>,
+    intent_digest: arkret_identifiers::Hash,
+) -> Result<(), AgentAuthRejection> {
+    let resources:arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest=
+        serde_json::from_value(serde_json::json!({
+            "realm_ids":details.get("realm_ids").ok_or(AgentAuthRejection::ProofInvalid)?,
+            "strand_ids":details.get("strand_ids").ok_or(AgentAuthRejection::ProofInvalid)?,
+            "track_names":details.get("constraints").and_then(|value|value.get("allowed_tracks")).ok_or(AgentAuthRejection::ProofInvalid)?,
+        })).map_err(|_|AgentAuthRejection::ProofInvalid)?;
+    if resources.realm_ids.is_empty() && resources.strand_ids.is_empty() {
+        return Ok(());
+    }
+    let current =
+        station_content_scope(http, config, view, scopes, resources, intent_digest).await?;
+    if current.granted_scope.iter().collect::<BTreeSet<_>>()
+        != scopes.iter().collect::<BTreeSet<_>>()
+    {
+        return Err(AgentAuthRejection::CapabilityDenied);
+    }
+    // Retain the predecessor's exact claims; current supply is only a gate.
+    Ok(())
 }
 
 fn intersect_agent_session_scope(

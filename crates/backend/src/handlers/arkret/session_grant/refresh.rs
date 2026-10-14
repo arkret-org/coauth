@@ -576,6 +576,18 @@ pub async fn refresh_session_grant(
         let mut scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
             refresh_proof_invalid("Agent session grant is missing its authorization scope binding")
         })?;
+        crate::handlers::account::agents::revalidate_content_session_scope(
+            &http_client,
+            &arkret_config,
+            &authoritative_agent,
+            &scopes,
+            &scope_details,
+            request_digest.clone(),
+        )
+        .await
+        .map_err(|rejection| {
+            ArkretRouteError::coded(rejection.http_status(), rejection.code(), rejection.code())
+        })?;
         let controller = authorization.accountable_principal_id.clone();
         let participation = crate::handlers::account::agents::fetch_agent_participation_overlay(
             &http_client,
