@@ -644,6 +644,13 @@ fn custody_fixture() -> (
         arkret_schema::agent_runtime_scope::complete_agent_runtime_scope(&draft_scope.actions)
             .unwrap();
     event.payload.get_mut("agent_key_scope").unwrap()["actions"] = json!(actions);
+    event.payload.get_mut("agent_key_scope").unwrap()["resources"] = json!(
+        actions
+            .iter()
+            .filter(|action| arkret_wire::ServiceOperationId::from_wire(action).is_some())
+            .map(|action| json!({"kind":"operation","operation":action}))
+            .collect::<Vec<_>>()
+    );
     event.producer_proof = None;
     let mut authored = arkret_wire::AuthoredEvent::finalize_with_digest_suite(
         event,
@@ -864,6 +871,39 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
     authorization.agent_key_scope = custody.sealed_key_scope(&encrypter).unwrap();
     let key =
         AgentAuthorizedSigningKey::from_event(&custody.request.authorize_event.event).unwrap();
+    let event = custody.request.authorize_event.event.clone();
+    let mut commit: arkret_wire::RealmCommit = serde_json::from_value(json!({
+        "commit_id": arkret_wire::RealmCommitId::from_digest([0;32]),
+        "realm_id":event.realm_id,"stream_ref":{"kind":"realm","realm_id":event.realm_id},
+        "stream_position":0,"previous_commit_ref":null,"event_ref":event.event_id,
+        "governance_generation":0,"authority_ref":event.realm_id.event_id(),"committed_at":test_now(),
+        "signature":{"context":"ak.realm_commit_signature.v1","signature_algorithm":"Ed25519",
+            "verification_method":"did:web:coland.local#service-signing-key",
+            "signed_digest":format!("sha256:{}","0".repeat(64)),"created_at":test_now(),"sig":"AA"}
+    })).unwrap();
+    let body =
+        arkret_canonical::canonical::unsigned_value(&commit, &["commit_id", "signature"]).unwrap();
+    commit.commit_id = arkret_wire::RealmCommitId::from_digest(arkret_canonical::sha256_bytes(
+        arkret_canonical::canonical_json_bytes(&body).unwrap(),
+    ));
+    let unsigned = arkret_canonical::canonical::unsigned_value(&commit, &["signature"]).unwrap();
+    let digest =
+        arkret_signatures::detached_object::detached_object_signed_digest(&unsigned).unwrap();
+    let bytes = arkret_signatures::detached_object::detached_object_signing_bytes(
+        arkret_wire::DetachedSignatureContext::RealmCommit,
+        &commit.signature.verification_method,
+        &digest,
+        test_now(),
+    )
+    .unwrap();
+    use ed25519_dalek::Signer as _;
+    commit.signature.signed_digest = digest;
+    commit.signature.sig = arkret_wire::Base64UrlString::new(Base64UrlUnpadded::encode_string(
+        &ed25519_dalek::SigningKey::from_bytes(&[17; 32])
+            .sign(&bytes)
+            .to_bytes(),
+    ))
+    .unwrap();
     let evidence = arkret_models_identity::build_agent_signer_evidence(
         AGENT.parse().unwrap(),
         arkret_wire::DidUrl::new(VM).unwrap(),
@@ -871,7 +911,7 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
             "kty":"OKP", "crv":"Ed25519", "x":runtime_public_key_b64()
         }))
         .unwrap(),
-        arkret_wire::RealmCommitId::from_digest([17; 32]),
+        commit.commit_id.clone(),
         test_now(),
     )
     .unwrap();
@@ -883,11 +923,12 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
         .requested_scope
         .clone();
     key_state.active_authorizations = vec![
-        serde_json::from_value(json!({
-            "key_id":"runtime-key-1", "verification_method":VM,
-            "authorized_event_ref":authorization.authorized_event_id
-        }))
-        .unwrap(),
+        arkret_models_collaboration::governance::agent_artifacts::AgentKeyAuthorizationState {
+            key_id: key.agent_key_id.clone(),
+            verification_method: key.verification_method.clone(),
+            authorized_event_ref: key.agent_key_authorize_event_id.clone(),
+            expires_at: key.expires_at,
+        },
     ];
     key_state.authorized_event_ref = Some(custody.request.authorize_event.event.event_id.clone());
     key_state.authorized_verification_method = Some(arkret_wire::DidUrl::new(VM).unwrap());
@@ -897,6 +938,9 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
         signer_resolution_evidence_ref: evidence_ref,
         authenticated_signer_evidence: evidence,
     });
+    key_state.current_key_authorization = Some(Box::new(arkret_wire::CommittedEventView::Full(
+        arkret_wire::CommittedEventFullView { commit, event },
+    )));
     let view: AgentView = serde_json::from_value(json!({
         "agent": {"agent_id":AGENT,"slug":"fixture",
             "lifecycle":"active","readiness":{"state":"ready","blockers":[]},"presence":{"state":"unknown",
@@ -936,8 +980,8 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
     };
     assert!(
         consume(&authorization, &view).is_ok(),
-        "{}",
-        consume(&authorization, &view).unwrap_err().code(),
+        "{:?}",
+        consume(&authorization, &view).unwrap_err(),
     );
     assert!(
         super::super::session_proof::validate_authoritative_agent_session_evidence(

@@ -197,14 +197,17 @@ where
     if authorization_ref != request.agent_key_authorization_ref.as_str() {
         return Err(AgentAuthRejection::ProofInvalid.into());
     }
-    let authorization = repo
-        .agent_key_authorization()
-        .lookup_by_event_id(authorization_ref)
-        .await
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?
-        .ok_or(AgentAuthRejection::ProofInvalid)?;
-    validate_agent_key_authorization_binding(
+    let authorization = resolve_retained_agent_pairing(
+        repo,
+        authoritative_agent,
+        authorization_ref,
+        prior_claims.account_id.principal_id.as_str(),
+        verification_method.as_str(),
+    )
+    .await?;
+    validate_current_agent_key_binding(
         &authorization,
+        authoritative_agent,
         now,
         prior_claims.account_id.principal_id.as_str(),
         verification_method.as_str(),
@@ -386,23 +389,18 @@ pub async fn validate_agent_session_proof(
     // `ak.agent.key.authorize`. Resolve it by the request's
     // `agent_key_authorization_ref` (the content-bound authorize Event id).
     let authorization_ref = body.agent_key_authorization_ref.as_str();
-    let authorization = repo
-        .agent_key_authorization()
-        .lookup_by_event_id(authorization_ref)
-        .await
-        .map_err(|_| AgentAuthRejection::ProofInvalid)?
-        .ok_or_else(|| {
-            tracing::warn!(
-                agent_id,
-                verification_method,
-                authorization_ref,
-                "agent_key_proof rejected: authorization event is absent from account authority"
-            );
-            AgentAuthRejection::ProofInvalid
-        })?;
+    let authorization = resolve_retained_agent_pairing(
+        repo,
+        authoritative_agent,
+        authorization_ref,
+        agent_id,
+        verification_method,
+    )
+    .await?;
 
-    if let Err(error) = validate_agent_key_authorization_binding(
+    if let Err(error) = validate_current_agent_key_binding(
         &authorization,
+        authoritative_agent,
         now,
         agent_id,
         verification_method,
@@ -581,6 +579,137 @@ fn canonical_session_grant_request_digest_without_signature(
         .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
 
+/// Resolve immutable qualified pairing custody for the exact current source.
+/// A replacement remains an accepted Station Event, never a fabricated row or
+/// a second pairing request in this issuer ledger.
+pub(crate) async fn resolve_retained_agent_pairing<R>(
+    repo: &mut R,
+    view: &arkret_models_collaboration::agent_operations::AgentView,
+    authorization_ref: &str,
+    agent_id: &str,
+    method: &str,
+) -> Result<coauth_data::agent_key::AgentKeyAuthorization, AgentAuthRejection>
+where
+    R: RepositoryAccess + ?Sized,
+{
+    let state = view
+        .key_state
+        .as_ref()
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    state
+        .validate_signer_evidence_delivery()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let event = state
+        .current_key_authorization
+        .as_ref()
+        .and_then(|source| source.reducer_input())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let payload =
+        arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload::try_from(
+            event,
+        )
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    if event.event_id.as_str() != authorization_ref
+        || payload.agent_id.as_str() != agent_id
+        || payload.verification_method.as_str() != method
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    if let Some(row) = repo
+        .agent_key_authorization()
+        .lookup_by_event_id(authorization_ref)
+        .await
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?
+    {
+        if row.revoked_at.is_some()
+            || row.quarantined_at.is_some()
+            || row.coland_fanout_state
+                != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
+        {
+            return Err(AgentAuthRejection::ProofInvalid);
+        }
+        return Ok(row);
+    }
+    let public_key =
+        serde_json::to_value(&payload.public_key).map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let mut candidates = repo
+        .agent_key_authorization()
+        .list_active_for_agent(agent_id)
+        .await
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?
+        .into_iter()
+        .filter(|row| {
+            row.verification_method == method
+                && row.key_id == payload.key_id.as_str()
+                && row.public_key == public_key
+                && row.accountable_principal_id == payload.accountable_principal_id
+                && row.quarantined_at.is_none()
+                && row.coland_fanout_state
+                    == coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
+        });
+    let row = candidates.next().ok_or(AgentAuthRejection::ProofInvalid)?;
+    if candidates.next().is_some() {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    Ok(row)
+}
+
+fn validate_current_agent_key_binding(
+    retained: &coauth_data::agent_key::AgentKeyAuthorization,
+    view: &arkret_models_collaboration::agent_operations::AgentView,
+    now: chrono::DateTime<chrono::Utc>,
+    agent_id: &str,
+    method: &str,
+    audience: &str,
+) -> Result<(), AgentAuthRejection> {
+    if retained.quarantined_at.is_some()
+        || retained.revoked_at.is_some()
+        || retained.coland_fanout_state
+            != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    let state = view
+        .key_state
+        .as_ref()
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    state
+        .validate_signer_evidence_delivery()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let event = state
+        .current_key_authorization
+        .as_ref()
+        .and_then(|source| source.reducer_input())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let payload =
+        arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload::try_from(
+            event,
+        )
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    if event.event_id.as_str() == retained.authorized_event_id {
+        validate_agent_key_authorization_binding(retained, now, agent_id, method, audience)?;
+    }
+    if payload.expires_at.is_some_and(|expiry| expiry <= now) {
+        return Err(AgentAuthRejection::AgentKeyAuthorizationExpired);
+    }
+    if payload.agent_id.as_str() != agent_id || payload.verification_method.as_str() != method {
+        return Err(AgentAuthRejection::VerificationMethodPrincipalMismatch);
+    }
+    if payload.issued_at > now
+        || !payload.audience.iter().any(|value| value == audience)
+        || retained.agent_id != agent_id
+        || retained.verification_method != method
+        || retained.key_id != payload.key_id.as_str()
+        || serde_json::to_value(&payload.public_key)
+            .map_err(|_| AgentAuthRejection::ProofInvalid)?
+            != retained.public_key
+        || retained.accountable_principal_id != payload.accountable_principal_id
+    {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    Ok(())
+}
+
 fn validate_agent_key_authorization_binding(
     authorization: &coauth_data::agent_key::AgentKeyAuthorization,
     now: chrono::DateTime<chrono::Utc>,
@@ -624,7 +753,7 @@ fn validate_agent_key_authorization_binding(
     Ok(())
 }
 
-pub(super) fn validate_authoritative_agent_session_evidence(
+pub(crate) fn validate_authoritative_agent_session_evidence(
     authorization: &coauth_data::agent_key::AgentKeyAuthorization,
     view: &arkret_models_collaboration::agent_operations::AgentView,
     session_scope: &[String],
@@ -636,6 +765,19 @@ pub(super) fn validate_authoritative_agent_session_evidence(
         .key_state
         .as_ref()
         .ok_or(AgentAuthRejection::PolicyUnavailable)?;
+    key_state
+        .validate_signer_evidence_delivery()
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+    let current_event = key_state
+        .current_key_authorization
+        .as_ref()
+        .and_then(|source| source.reducer_input())
+        .ok_or(AgentAuthRejection::ProofInvalid)?;
+    let current_payload =
+        arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload::try_from(
+            current_event,
+        )
+        .map_err(|_| AgentAuthRejection::ProofInvalid)?;
 
     // The original verifier presentation stays inside the authenticated
     // delegate's intent. AEAD retains the exact request and its actual Station
@@ -695,7 +837,7 @@ pub(super) fn validate_authoritative_agent_session_evidence(
         || controller_account_id.principal_id.as_str()
             != authorization.accountable_principal_id.as_str()
         || !key_state.active_authorizations.iter().any(|active| {
-            active.authorized_event_ref.as_str() == authorization.authorized_event_id
+            active.authorized_event_ref == current_event.event_id
                 && active.verification_method.as_str() == authorization.verification_method
         })
     {
@@ -708,7 +850,7 @@ pub(super) fn validate_authoritative_agent_session_evidence(
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     let authorized_key =
         arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey::from_event(
-            &paired_request.authorize_event.event,
+            current_event,
         )
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if authorized_key.agent_id.as_str() != authorization.agent_id
@@ -748,7 +890,7 @@ pub(super) fn validate_authoritative_agent_session_evidence(
         || jwk.get("kty").and_then(Value::as_str) != Some("OKP")
         || jwk.get("crv").and_then(Value::as_str) != Some("Ed25519")
         || jwk.get("x").and_then(Value::as_str) != Some(authorized_key.public_key.key.as_str())
-        || key_state.authorized_event_ref.as_ref().is_none_or(|r| r.as_str() != authorization.authorized_event_id)
+        || key_state.authorized_event_ref.as_ref() != Some(&current_event.event_id)
         || key_state.authorized_verification_method.as_ref().is_none_or(|r| r.as_str() != authorization.verification_method)
         || key_state.authorized_public_key_digest.as_ref() != Some(&authorized_key.public_key_digest)
     { return Err(AgentAuthRejection::ProofInvalid); }
@@ -765,6 +907,15 @@ pub(super) fn validate_authoritative_agent_session_evidence(
         .map_err(|_| AgentAuthRejection::AgentRequestedScopeCommitmentInvalid)?;
     if scope != payload.agent_key_scope {
         return Err(AgentAuthRejection::ProofInvalid);
+    }
+    // The original disclosure remains qualified private custody, while the
+    // current accepted Event alone determines this key's renewed ceiling.
+    let scope = current_payload.agent_key_scope;
+    if !arkret_models_collaboration::agent_scope::agent_key_scope_within_provision(
+        &key_state.requested_scope,
+        &scope,
+    ) {
+        return Err(AgentAuthRejection::AgentRequestedScopeCommitmentInvalid);
     }
     let scope_json = serde_json::to_string(&scope).map_err(|_| AgentAuthRejection::ProofInvalid)?;
     let key_actions = parse_agent_key_scope_actions(&scope_json)?

@@ -334,7 +334,7 @@ pub async fn introspect_session_grant(
             payload.proof_kind == Some(arkret_models_identity::SessionGrantProofKind::AgentKeyProof)
         });
         if is_agent_grant {
-            let lifecycle_alive =
+            let current_view =
                 crate::handlers::account::agents::enforce_authoritative_agent_lifecycle(
                     &http_client,
                     &arkret_config,
@@ -342,7 +342,7 @@ pub async fn introspect_session_grant(
                     grant.subject_id.as_str(),
                 )
                 .await
-                .is_ok();
+                .ok();
             let authorization_ref = parsed_payload.as_ref().and_then(|payload| {
                 payload
                     .scope_details
@@ -351,21 +351,35 @@ pub async fn introspect_session_grant(
                     .and_then(serde_json::Value::as_str)
                     .map(ToOwned::to_owned)
             });
-            let authorization = match authorization_ref.as_deref() {
-                Some(authorization_ref) => {
-                    repo.agent_key_authorization()
-                        .lookup_by_event_id(authorization_ref)
-                        .await?
+            let mut key_alive = false;
+            if let (Some(view), Some(reference), Some(payload)) = (
+                current_view.as_ref(),
+                authorization_ref.as_deref(),
+                parsed_payload.as_ref(),
+            ) {
+                if let Some(method) = view
+                    .key_state
+                    .as_ref()
+                    .and_then(|state| state.authorized_verification_method.as_ref())
+                {
+                    if let Ok(retained) =
+                        crate::handlers::account::agents::resolve_retained_agent_pairing(
+                            &mut repo,
+                            view,
+                            reference,
+                            grant.subject_id.as_str(),
+                            method.as_str(),
+                        )
+                        .await
+                    {
+                        key_alive = crate::handlers::account::agents::validate_authoritative_agent_session_evidence(
+                            &retained,view,&payload.scopes,&depot.encrypter()?,&arkret_config,clock.now(),
+                        ).is_ok() && view.key_state.as_ref().and_then(|state| state.current_key_authorization.as_ref()).and_then(|source| source.reducer_input()).and_then(|event| {
+                            arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload::try_from(event).ok()
+                        }).is_some_and(|current| current.expires_at.is_none_or(|expiry| expiry > clock.now()));
+                    }
                 }
-                None => None,
-            };
-            let key_alive = lifecycle_alive
-                && authorization.as_ref().is_some_and(|authorization| {
-                    authorization.revoked_at.is_none()
-                        && authorization
-                            .expires_at
-                            .is_none_or(|expires_at| expires_at > clock.now())
-                });
+            }
             if !key_alive {
                 status = SessionGrantAdminIntrospectionStatus::Revoked;
                 active = false;
