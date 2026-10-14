@@ -6,7 +6,6 @@ use coauth_data::agent_key::AgentKeyAuthorizationRepository;
 use coauth_data::app_session::AppSessionRepository;
 use coauth_data::audit::{AuditRepository, HandleAuditRepository};
 use coauth_data::circle_capability::CircleCapabilityGrantRepository;
-use coauth_data::collaboration_capability::CollaborationCapabilityGrantRepository;
 use coauth_data::did_binding::VerifiedDidBindingRepository;
 use coauth_data::dpop_replay::DpopReplayRepository;
 use coauth_data::erasure_request::UserErasureRequestRepository;
@@ -49,7 +48,6 @@ use crate::agent_key::PgAgentKeyAuthorizationRepository;
 use crate::app_session::PgAppSessionRepository;
 use crate::audit::PgAuditRepository;
 use crate::circle_capability::PgCircleCapabilityGrantRepository;
-use crate::collaboration_capability::PgCollaborationCapabilityGrantRepository;
 use crate::did_binding::PgVerifiedDidBindingRepository;
 use crate::dpop_replay::PgDpopReplayRepository;
 use crate::erasure_request::PgUserErasureRequestRepository;
@@ -251,7 +249,6 @@ pg_repository_access! {
     accountability_grant: AccountabilityGrantRepository => PgAccountabilityGrantRepository,
     agent_key_authorization: AgentKeyAuthorizationRepository => PgAgentKeyAuthorizationRepository,
     circle_capability_grant: CircleCapabilityGrantRepository => PgCircleCapabilityGrantRepository,
-    collaboration_capability_grant: CollaborationCapabilityGrantRepository => PgCollaborationCapabilityGrantRepository,
     organization_control: OrganizationControlRepository => PgOrganizationControlRepository,
     verified_did_binding: VerifiedDidBindingRepository => PgVerifiedDidBindingRepository,
     dpop_replay: DpopReplayRepository => PgDpopReplayRepository,

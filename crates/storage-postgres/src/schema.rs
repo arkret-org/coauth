@@ -296,27 +296,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    collaboration_capability_grants (id) {
-        id -> Uuid,
-        capability_grant_id -> Text,
-        grant_event_id -> Text,
-        revoke_event_id -> Nullable<Text>,
-        subject -> Text,
-        realm_id -> Text,
-        action -> Text,
-        expires_at -> Nullable<Timestamptz>,
-        approval_evidence_ref -> Nullable<Text>,
-        granted_by -> Text,
-        granted_at -> Timestamptz,
-        revoked_at -> Nullable<Timestamptz>,
-        grant_raw_payload_digest -> Text,
-        grant_fanout_idempotency_key -> Text,
-        created_at -> Timestamptz,
-        updated_at -> Timestamptz,
-    }
-}
-
-diesel::table! {
     account_claims (id) {
         id -> Uuid,
         account_id -> Nullable<Uuid>,
@@ -1145,7 +1124,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     accountability_grants,
     accountability_subject_revocations,
     circle_capability_grants,
-    collaboration_capability_grants,
     organization_principal_controls,
     organization_delegations,
 );

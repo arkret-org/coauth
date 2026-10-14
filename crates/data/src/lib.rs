@@ -47,8 +47,6 @@ pub mod circle_capability;
 /// Clock abstraction for testability (`SystemClock` in production, mock clock
 /// in tests).
 pub mod clock;
-/// Durable collaboration capability grants.
-pub mod collaboration_capability;
 /// Durable accepted DID bindings (DID-P2-A).
 pub mod did_binding;
 /// Durable DPoP proof replay keys.
@@ -157,11 +155,6 @@ pub use self::circle_capability::{
     circle_action_requires_allowed_circle_ids, is_circle_capability_action,
 };
 pub use self::clock::{Clock, SystemClock};
-pub use self::collaboration_capability::{
-    COLLABORATION_CAPABILITY_ACTIONS, CollaborationCapabilityGrant,
-    CollaborationCapabilityGrantRepository, collaboration_action_requires_approval,
-    is_collaboration_capability_action,
-};
 pub use self::did_binding::{
     VerifiedDidBindingInvalidation, VerifiedDidBindingKeyColumns, VerifiedDidBindingRepository,
     VerifiedDidBindingRow,

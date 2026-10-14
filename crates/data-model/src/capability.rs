@@ -75,36 +75,6 @@ pub struct CircleCapabilityGrant {
     pub revoked_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    feature = "schema",
-    derive(schemars::JsonSchema, salvo::oapi::ToSchema)
-)]
-pub struct CollaborationCapabilityGrant {
-    pub id: String,
-    pub capability_grant_id: String,
-    pub grant_event_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoke_event_id: Option<String>,
-    pub subject: String,
-    pub realm_id: String,
-    #[cfg_attr(feature = "schema", schemars(with = "String"))]
-    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub action: CapabilityActionId,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub expires_at: Option<DateTime<Utc>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approval_evidence_ref: Option<String>,
-    #[cfg_attr(feature = "schema", schemars(with = "String"))]
-    #[cfg_attr(feature = "schema", salvo(schema(value_type = String)))]
-    pub granted_by: DidCoreId,
-    pub granted_at: DateTime<Utc>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub revoked_at: Option<DateTime<Utc>>,
-    pub grant_raw_payload_digest: String,
-    pub grant_fanout_idempotency_key: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

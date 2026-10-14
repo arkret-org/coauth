@@ -24,7 +24,6 @@ DROP TABLE IF EXISTS agent_key_authorizations CASCADE;
 DROP TABLE IF EXISTS agent_session_proof_replay CASCADE;
 DROP TABLE IF EXISTS admin_operation_logs CASCADE;
 DROP TABLE IF EXISTS circle_capability_grants CASCADE;
-DROP TABLE IF EXISTS collaboration_capability_grants CASCADE;
 DROP TABLE IF EXISTS organization_delegations CASCADE;
 DROP TABLE IF EXISTS organization_principal_controls CASCADE;
 DROP TABLE IF EXISTS dpop_jti_replay CASCADE;

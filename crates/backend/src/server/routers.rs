@@ -699,14 +699,10 @@ fn admin_subrouter() -> Router {
                 .post(circle_capabilities::create_handler)
                 .push(Router::with_path("{grant_id}").delete(circle_capabilities::revoke_handler)),
         )
-        // Collaboration capability grants for pin/RSVP and Realm policy facets.
+        // Registry templates only; accepted grant review belongs to the Station.
         .push(
-            Router::with_path("collaboration/capabilities")
-                .get(collaboration_capabilities::list_handler)
-                .push(
-                    Router::with_path("templates")
-                        .get(collaboration_capabilities::templates_handler),
-                ),
+            Router::with_path("collaboration/capabilities/templates")
+                .get(collaboration_capabilities::templates_handler),
         )
         // COA-ORG: organization principal control + delegation management.
         // Wire shapes are in coauth-admin-types::organization_admin + the SDK
@@ -983,5 +979,44 @@ pub(super) async fn connection_info_handler(req: &Request) -> String {
         format!("{conn_info:?}")
     } else {
         "No connection info available".to_owned()
+    }
+}
+
+#[cfg(test)]
+mod collaboration_capability_route_tests {
+    use super::*;
+    use salvo::test::ResponseExt;
+
+    #[tokio::test]
+    async fn grant_list_is_retired_and_registry_template_route_remains() {
+        let router = build_admin_router(Router::new());
+        let spec = serde_json::to_value(build_admin_openapi_doc(&router)).unwrap();
+        let paths = spec["paths"].as_object().unwrap();
+        assert!(
+            paths
+                .keys()
+                .any(|path| path.ends_with("/collaboration/capabilities/templates"))
+        );
+        assert!(
+            !paths
+                .keys()
+                .any(|path| path.ends_with("/collaboration/capabilities"))
+        );
+        let mut response =
+            salvo::test::TestClient::get("http://coauth/_coauth/admin/collaboration/capabilities")
+                .send(&salvo::Service::new(router))
+                .await;
+        assert_eq!(
+            response.status_code,
+            Some(salvo::http::StatusCode::NOT_FOUND)
+        );
+        assert!(
+            response
+                .take_string()
+                .await
+                .unwrap_or_default()
+                .find("capability_grant_id")
+                .is_none()
+        );
     }
 }

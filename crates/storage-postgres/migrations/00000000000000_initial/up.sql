@@ -319,25 +319,6 @@ CREATE TABLE public.organization_delegations (
 
 COMMENT ON TABLE public.organization_delegations IS 'Stable organization identity delegations to Account Authority / governance service principals. Backs the SDK RealmOrganizationDelegationResolver and the ak.realm.organization issuance + audit API.';
 
-CREATE TABLE public.collaboration_capability_grants (
-    id uuid NOT NULL,
-    capability_grant_id text NOT NULL,
-    grant_event_id text NOT NULL,
-    revoke_event_id text,
-    subject text NOT NULL,
-    realm_id text NOT NULL,
-    action text NOT NULL,
-    expires_at timestamp with time zone,
-    approval_evidence_ref text,
-    granted_by text NOT NULL,
-    granted_at timestamp with time zone NOT NULL,
-    revoked_at timestamp with time zone,
-    grant_raw_payload_digest text NOT NULL,
-    grant_fanout_idempotency_key text NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
 CREATE TABLE public.handle_audit_log (
     id uuid NOT NULL,
     user_id uuid,
@@ -1430,8 +1411,6 @@ ALTER TABLE ONLY public.organization_principal_controls
 ALTER TABLE ONLY public.organization_delegations
     ADD CONSTRAINT organization_delegations_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.collaboration_capability_grants
-    ADD CONSTRAINT collaboration_capability_grants_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.handle_audit_log
     ADD CONSTRAINT handle_audit_log_pkey PRIMARY KEY (id);
@@ -1741,17 +1720,11 @@ CREATE INDEX organization_delegations_org_id_idx ON public.organization_delegati
 
 CREATE INDEX organization_delegations_active_idx ON public.organization_delegations USING btree (organization_id) WHERE (revoked_at IS NULL);
 
-CREATE UNIQUE INDEX collaboration_capability_grants_active_fingerprint_idx ON public.collaboration_capability_grants USING btree (subject, realm_id, action) WHERE (revoked_at IS NULL);
 
-CREATE UNIQUE INDEX collaboration_capability_grants_capability_grant_id_idx ON public.collaboration_capability_grants USING btree (capability_grant_id);
 
-CREATE UNIQUE INDEX collaboration_capability_grants_grant_event_id_idx ON public.collaboration_capability_grants USING btree (grant_event_id);
 
-CREATE UNIQUE INDEX collaboration_capability_grants_revoke_event_id_idx ON public.collaboration_capability_grants USING btree (revoke_event_id) WHERE (revoke_event_id IS NOT NULL);
 
-CREATE INDEX collaboration_capability_grants_active_realm_subject_idx ON public.collaboration_capability_grants USING btree (realm_id, subject, granted_at) WHERE (revoked_at IS NULL);
 
-CREATE INDEX collaboration_capability_grants_revoked_idx ON public.collaboration_capability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
 CREATE INDEX handle_audit_log_event_idx ON public.handle_audit_log USING btree (event_type, created_at DESC);
 

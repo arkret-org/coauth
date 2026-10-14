@@ -481,9 +481,6 @@ pub trait ConnectorAdmin: Send + Sync {
         devices: HashSet<String>,
     ) -> Result<(), anyhow::Error>;
 
-    /// Submit a collaboration capability grant/revoke fan-out payload to the
-    /// downstream principal system.
-    ///
     /// Submit an exact authority-signed account-status publication.
     async fn submit_account_status_publication(
         &self,

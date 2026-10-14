@@ -10,7 +10,6 @@ use crate::agent_key::AgentKeyAuthorizationRepository;
 use crate::app_session::AppSessionRepository;
 use crate::audit::AuditRepository;
 use crate::circle_capability::CircleCapabilityGrantRepository;
-use crate::collaboration_capability::CollaborationCapabilityGrantRepository;
 use crate::did_binding::VerifiedDidBindingRepository;
 use crate::dpop_replay::DpopReplayRepository;
 use crate::erasure_request::UserErasureRequestRepository;
@@ -224,9 +223,6 @@ repository_access! {
 
     /// Get a [`CircleCapabilityGrantRepository`].
     circle_capability_grant: CircleCapabilityGrantRepository,
-
-    /// Get a [`CollaborationCapabilityGrantRepository`].
-    collaboration_capability_grant: CollaborationCapabilityGrantRepository,
 
     /// Get an [`OrganizationControlRepository`].
     organization_control: OrganizationControlRepository,

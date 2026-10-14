@@ -118,7 +118,6 @@ pub mod audit;
 /// Circle capability grant repositories.
 pub mod circle_capability;
 /// Collaboration capability grant repositories.
-pub mod collaboration_capability;
 /// Durable accepted DID binding repositories (DID-P2-A).
 pub mod did_binding;
 /// DPoP proof replay repositories.
