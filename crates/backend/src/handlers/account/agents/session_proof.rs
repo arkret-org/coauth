@@ -285,10 +285,8 @@ impl From<AgentAuthRejection> for AgentSessionProofError {
     }
 }
 
-/// `agent_scope_request` overlay (AKP-0008 §4.6). `participation[]` is the
-/// participation-aware extension; an `act_on_behalf` selection routes to the
-/// human-approval path (act-on-behalf is default-disabled and requires fresh
-/// controller approval, §4.10).
+/// Narrowing selectors. Actual participation is separately supplied by the
+/// authenticated owning Station, never selected by the runtime request.
 #[derive(Debug, Clone, Default, Deserialize)]
 struct AgentScopeRequestInput {
     #[serde(default)]
@@ -332,7 +330,7 @@ pub async fn validate_agent_session_proof(
     body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
     consume_challenge: bool,
     http_client: &reqwest::Client,
-) -> Result<Option<AgentSessionAuthorization>, AgentSessionProofError> {
+) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
     reject_additional_session_disclosure(body.requested_scope_disclosure.as_ref())?;
     let now = clock.now();
     let proof = &body.proof;
@@ -472,14 +470,8 @@ pub async fn validate_agent_session_proof(
         }
     }
 
-    // Completed issuance reads its original issuer-ledger ceiling. Replaying
-    // an authenticated intent never recomputes content authority or mints.
-    if !consume_challenge {
-        return Ok(None);
-    }
-
-    // Parse the `agent_scope_request` overlay. An `act_on_behalf` participation
-    // selection routes to the human-approval path (§4.10).
+    // Fresh preflight also qualifies content before its reservation commits.
+    // Completed issuance replay returns from the issuer ledger before this validator.
     let scope_request = AgentScopeRequestInput {
         realm_ids: body
             .agent_scope_request
@@ -501,19 +493,6 @@ pub async fn validate_agent_session_proof(
             .collect(),
         participation: Vec::new(),
     };
-
-    let requests_act_on_behalf = scope_request
-        .participation
-        .iter()
-        .any(|entry| entry.selection.act_on_behalf);
-    if requests_act_on_behalf {
-        // Opaque UUIDv7 artifact id (AKP-0008 §4.6); the controller resolves it
-        // out-of-band, the agent runtime never renders a UI for it.
-        let approval_request_id = new_prefixed_uuid7("");
-        let details = arkret_wire::AgentHumanApprovalProblem::new(approval_request_id)
-            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-        return Err(AgentSessionProofError::HumanApprovalRequired(details));
-    }
 
     let controller_principal_id = authorization.accountable_principal_id.clone();
     // The controller-authored accountability Event is validated by the
@@ -537,7 +516,7 @@ pub async fn validate_agent_session_proof(
         .map(|snapshot| snapshot.data.as_json());
 
     let effective_scope = if scope_request_has_resource_selectors(&scope_request) {
-        station_content_scope(
+        let (source_request, outcome) = station_content_authority(
             http_client,
             arkret_config,
             authoritative_agent,
@@ -545,9 +524,37 @@ pub async fn validate_agent_session_proof(
             body.agent_scope_request.clone(),
             body.canonical_request_digest()
                 .map_err(|_| AgentAuthRejection::ProofInvalid)?,
+            body.approval_evidence_refs.as_deref().unwrap_or(&[]),
         )
-        .await?
+        .await?;
+        if outcome.approval_required {
+            if !outcome.matches_request(&source_request)
+                || body.approval_evidence_refs.is_some()
+                || !outcome.granted_scope.is_empty()
+                || !outcome.realm_ids.is_empty()
+                || !outcome.strand_ids.is_empty()
+                || !outcome.allowed_tracks.is_empty()
+                || !outcome.allowed_data_labels.is_empty()
+                || !outcome.allowed_endpoints.is_empty()
+                || !outcome.capability_grant_refs.is_empty()
+                || !outcome.policy_refs.is_empty()
+            {
+                return Err(AgentAuthRejection::PolicyUnavailable.into());
+            }
+            if consume_challenge {
+                // A source change after durable reservation is a refusal, never
+                // a new approval request attached to that reserved operation.
+                return Err(AgentAuthRejection::CapabilityDenied.into());
+            }
+            let details = arkret_wire::AgentHumanApprovalProblem::new(new_prefixed_uuid7(""))
+                .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+            return Err(AgentSessionProofError::HumanApprovalRequired(details));
+        }
+        qualify_station_content_scope(outcome, &source_request)?
     } else {
+        if body.approval_evidence_refs.is_some() {
+            return Err(AgentAuthRejection::CapabilityDenied.into());
+        }
         intersect_agent_session_scope(
             &agent_key_scope,
             &body.requested_scope,
@@ -582,13 +589,13 @@ pub async fn validate_agent_session_proof(
         AGENT_SESSION_MAX_TTL
     };
 
-    Ok(Some(AgentSessionAuthorization {
+    Ok(AgentSessionAuthorization {
         agent_id: body.principal_id.clone(),
         controller_principal_id,
         granted_scope: effective_scope.granted_scope,
         scope_details,
         ttl,
-    }))
+    })
 }
 
 fn canonical_session_grant_request_digest_without_signature(
@@ -1140,14 +1147,21 @@ fn materialize_agent_scope_details(
 
 /// The owning Station supplies source qualification; local provider policy
 /// storage is never a replica of Realm membership, grants or governance.
-async fn station_content_scope(
+async fn station_content_authority(
     http: &reqwest::Client,
     config: &ArkretConfig,
     view: &arkret_models_collaboration::agent_operations::AgentView,
     requested_scope: &[String],
     resource_scope: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
     intent_digest: arkret_identifiers::Hash,
-) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
+    approval_evidence_refs: &[arkret_identifiers::EventId],
+) -> Result<
+    (
+        coland_contracts::agent_session_authority::AgentSessionAuthorityRequest,
+        coland_contracts::agent_session_authority::AgentSessionAuthorityOutcome,
+    ),
+    AgentAuthRejection,
+> {
     use coland_contracts::agent_session_authority::{
         AGENT_SESSION_AUTHORITY_PATH, AgentSessionAuthorityOutcome, AgentSessionAuthorityRequest,
     };
@@ -1181,6 +1195,7 @@ async fn station_content_scope(
         intent_digest,
         requested_scope: requested_scope.to_vec(),
         resource_scope,
+        approval_evidence_refs: approval_evidence_refs.to_vec(),
     };
     let station = config
         .owning_station()
@@ -1209,6 +1224,27 @@ async fn station_content_scope(
             tracing::warn!(%error,"owning Station Agent content source read failed");
             AgentAuthRejection::PolicyUnavailable
         })?;
+    Ok((request, outcome))
+}
+
+async fn station_content_scope(
+    http: &reqwest::Client,
+    config: &ArkretConfig,
+    view: &arkret_models_collaboration::agent_operations::AgentView,
+    requested_scope: &[String],
+    resource_scope: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+    intent_digest: arkret_identifiers::Hash,
+) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
+    let (request, outcome) = station_content_authority(
+        http,
+        config,
+        view,
+        requested_scope,
+        resource_scope,
+        intent_digest,
+        &[],
+    )
+    .await?;
     qualify_station_content_scope(outcome, &request)
 }
 
@@ -1217,7 +1253,8 @@ fn qualify_station_content_scope(
     request: &coland_contracts::agent_session_authority::AgentSessionAuthorityRequest,
 ) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
     let requested_scope = &request.requested_scope;
-    if !outcome.matches_request(request)
+    if outcome.approval_required
+        || !outcome.matches_request(request)
         || outcome
             .granted_scope
             .iter()
@@ -1977,9 +2014,11 @@ mod tests {
             "verification_method":"did:web:agent.example#runtime-1",
             "intent_digest":format!("sha256:{}", "a".repeat(64)),
             "requested_scope":["ak.event.read"],
+            "approval_evidence_refs":[],
             "resource_scope":{"realm_ids":["ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa"],"strand_ids":[],"track_names":[]}
         })).unwrap();
         let outcome = AgentSessionAuthorityOutcome {
+            approval_required: false,
             binding: request.clone(),
             granted_scope: request.requested_scope.clone(),
             realm_ids: request.resource_scope.realm_ids.clone(),
@@ -2998,6 +3037,7 @@ mod tests {
             principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example")
                 .unwrap(),
             requested_scope: vec!["ak.message.create".to_owned()],
+            approval_evidence_refs: None,
             requested_scope_disclosure: None,
             agent_key_authorization_ref: arkret_identifiers::EventId::new(
                 "ak:event:AQoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoK",

@@ -1197,14 +1197,7 @@ async fn issue_agent_key_proof_session_grant(
     )
     .await
     {
-        Ok(Some(authorization)) => authorization,
-        Ok(None) => {
-            return Err(ArkretRouteError::coded(
-                StatusCode::SERVICE_UNAVAILABLE,
-                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                "fresh Agent issuance omitted its qualified scope",
-            ));
-        }
+        Ok(authorization) => authorization,
         Err(AgentSessionProofError::Rejection(rejection)) => {
             repo.cancel().await.ok();
             return Err(agent_session_rejection(rejection));
