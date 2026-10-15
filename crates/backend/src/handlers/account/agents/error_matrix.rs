@@ -92,10 +92,12 @@ pub enum AgentAuthRejection {
     /// `capability_denied` — an active Realm capability grant did not cover
     /// the requested agent session content action or resource selector.
     CapabilityDenied,
-    /// `policy_violation` — Realm policy rejected the requested agent session
+    /// A current policy refusal uses universal `capability_denied` for session
+    /// operations. Realm policy rejected the requested agent session
     /// scope or narrowed it to an empty effective set.
     PolicyViolation,
-    /// `policy_unavailable` — coauth could not obtain an authoritative Realm
+    /// Missing dependency evidence uses universal `service_unavailable` for
+    /// session operations. Coauth could not obtain an authoritative Realm
     /// policy projection for a resource-scoped agent session grant.
     PolicyUnavailable,
 }
@@ -120,8 +122,8 @@ impl AgentAuthRejection {
             // this canonical string (see operations↔error mapping §0.8).
             Self::AccountabilityGrantMissing => arkret_wire::ErrorCode::FAILED_PRECONDITION,
             Self::CapabilityDenied => arkret_wire::ErrorCode::CAPABILITY_DENIED,
-            Self::PolicyViolation => arkret_wire::ErrorCode::POLICY_VIOLATION,
-            Self::PolicyUnavailable => arkret_wire::ErrorCode::POLICY_UNAVAILABLE,
+            Self::PolicyViolation => arkret_wire::ErrorCode::CAPABILITY_DENIED,
+            Self::PolicyUnavailable => arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
         }
     }
 
