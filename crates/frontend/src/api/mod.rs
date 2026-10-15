@@ -32,6 +32,12 @@ pub async fn api_get<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, Stri
 
     let response = client
         .get(&url)
+        .timeout(std::time::Duration::from_secs(
+            match path.split('?').next().unwrap_or(path) {
+                "/account/auth/providers" | "/self/viewer" | "/site-config" => 5,
+                _ => 15,
+            },
+        ))
         .send()
         .await
         .map_err(|e| format!("API request failed: {e}"))?;
@@ -56,6 +62,7 @@ pub async fn api_post<T: for<'de> Deserialize<'de>>(
 
     let response = client
         .post(&url)
+        .timeout(std::time::Duration::from_secs(60))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
@@ -79,6 +86,7 @@ pub async fn api_put<T: for<'de> Deserialize<'de>>(path: &str, body: Value) -> R
 
     let response = client
         .put(&url)
+        .timeout(std::time::Duration::from_secs(60))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
@@ -102,6 +110,7 @@ pub async fn api_patch<T: for<'de> Deserialize<'de>>(path: &str, body: Value) ->
 
     let response = client
         .patch(&url)
+        .timeout(std::time::Duration::from_secs(60))
         .header("Content-Type", "application/json")
         .json(&body)
         .send()
@@ -125,6 +134,7 @@ pub async fn api_delete<T: for<'de> Deserialize<'de>>(path: &str) -> Result<T, S
 
     let response = client
         .delete(&url)
+        .timeout(std::time::Duration::from_secs(60))
         .send()
         .await
         .map_err(|e| format!("API request failed: {e}"))?;

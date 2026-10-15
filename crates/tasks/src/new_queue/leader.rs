@@ -135,11 +135,7 @@ pub(super) async fn run_leader_duties(
     let clock = state.clock();
     let mut rng = state.rng();
 
-    let conn = state
-        .pool()
-        .get()
-        .await
-        .map_err(|e| QueueRunnerError::Pool(Box::new(e)))?;
+    let conn = coauth_storage_postgres::pool::get_connection(state.pool()).await?;
     let mut repo = PgRepository::new(conn);
 
     let lock_key = advisory_lock_key("leader-duties");

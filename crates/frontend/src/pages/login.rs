@@ -128,7 +128,7 @@ fn account_matches_login_hint(account: &CurrentAccountInfo, login_hint: &str) ->
 
 #[component]
 pub fn Login() -> Element {
-    let providers_data = use_resource(|| async {
+    let mut providers_data = use_resource(|| async {
         let query = current_query_string();
         let path = if query.is_empty() {
             "/account/auth/providers".to_owned()
@@ -150,6 +150,7 @@ pub fn Login() -> Element {
         Some(Err(e)) => rsx! {
             Layout {
                 LoginFormBasic { error_msg: Some(e.clone()) }
+                button { class: "btn btn-secondary", onclick: move |_| providers_data.restart(), "Try again" }
             }
         },
         None => rsx! {
@@ -163,6 +164,9 @@ pub fn Login() -> Element {
 #[component]
 fn LoginFormBasic(error_msg: Option<String>) -> Element {
     rsx! {
+        if let Some(message) = error_msg {
+            div { class: "alert alert-critical", role: "alert", "{message}" }
+        }
         LoginForm {
             providers: ProvidersOutcome {
                 providers: vec![],

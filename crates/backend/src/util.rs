@@ -38,9 +38,15 @@ fn cleanup_pooled_postgres_connection() -> DieselPoolHook<AsyncPgConnection> {
             // Pooled sessions must be reset before reuse. `ROLLBACK` clears any
             // leaked transaction, and `pg_advisory_unlock_all()` clears leader
             // locks that are session-scoped.
-            conn.batch_execute("ROLLBACK; SELECT pg_advisory_unlock_all();")
-                .await
-                .map_err(|error| DieselPoolHookError::Backend(AsyncPoolError::QueryError(error)))?;
+            tokio::time::timeout(
+                Duration::from_secs(5),
+                conn.batch_execute("ROLLBACK; SELECT pg_advisory_unlock_all();"),
+            )
+            .await
+            .map_err(|_| {
+                DieselPoolHookError::Message("PostgreSQL session cleanup timed out".into())
+            })?
+            .map_err(|error| DieselPoolHookError::Backend(AsyncPoolError::QueryError(error)))?;
 
             Ok(())
         })
@@ -517,9 +523,13 @@ pub async fn diesel_pool_from_config(
     let url = database_url_from_config(config)?;
     let mut manager_config = ManagerConfig::<AsyncPgConnection>::default();
     manager_config.custom_setup = Box::new(|url| {
-        Box::pin(
-            async move { retry_transport_connection(|| AsyncPgConnection::establish(url)).await },
-        )
+        Box::pin(async move {
+            let mut conn = retry_transport_connection(|| AsyncPgConnection::establish(url)).await?;
+            coauth_storage_postgres::pool::configure_connection(&mut conn)
+                .await
+                .map_err(diesel::ConnectionError::CouldntSetupConfiguration)?;
+            Ok(conn)
+        })
     });
     let manager =
         AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_config(url, manager_config);

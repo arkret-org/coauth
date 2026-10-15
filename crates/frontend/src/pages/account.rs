@@ -34,7 +34,7 @@ fn SidebarExternalLink(href: String, children: Element) -> Element {
 
 #[component]
 pub fn AccountPage() -> Element {
-    let data =
+    let mut data =
         use_resource(|| async { crate::api::api_get::<ViewerOutcome>("/self/viewer").await });
     let binding = data.read();
 
@@ -145,7 +145,8 @@ pub fn AccountPage() -> Element {
         }
         Some(Err(e)) => rsx! {
             Layout {
-                div { class: "alert alert-critical", "{e}" }
+                div { class: "alert alert-critical", role: "alert", "{e}" }
+                button { class: "btn btn-secondary", onclick: move |_| data.restart(), "Try again" }
             }
         },
         None => rsx! { LoadingScreen {} },

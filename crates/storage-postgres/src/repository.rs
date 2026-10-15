@@ -112,20 +112,25 @@ impl PgRepositoryFactory {
 impl RepositoryFactory for PgRepositoryFactory {
     async fn create(&self) -> Result<BoxRepository, RepositoryError> {
         let start = std::time::Instant::now();
-        let conn = self.pool.get().await.map_err(|e| {
-            RepositoryError::from_error(DatabaseError::Pool {
-                source: Box::new(e),
-            })
-        })?;
+        let conn = crate::pool::get_connection(&self.pool)
+            .await
+            .map_err(RepositoryError::from_error)?;
 
         let mut repo = PgRepository::new(conn);
         // Start a transaction so that all operations within one request are
         // atomic. The transaction is committed by `save()` or rolled back by
         // `cancel()` / on drop.
-        diesel::sql_query("BEGIN")
-            .execute(repo.connection())
-            .await
-            .map_err(|e| RepositoryError::from_error(DatabaseError::from(e)))?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            diesel::sql_query("BEGIN").execute(repo.connection()),
+        )
+        .await
+        .map_err(|source| {
+            RepositoryError::from_error(DatabaseError::Pool {
+                source: Box::new(source),
+            })
+        })?
+        .map_err(|e| RepositoryError::from_error(DatabaseError::from(e)))?;
 
         let repo = repo.boxed();
 

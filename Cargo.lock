@@ -2304,6 +2304,7 @@ dependencies = [
  "coauth-jose",
  "coauth-oauth-types",
  "crc",
+ "deadpool 0.13.0",
  "diesel",
  "diesel-async",
  "diesel_migrations",

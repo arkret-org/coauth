@@ -57,6 +57,7 @@ url = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
+deadpool = { workspace = true }
 arkret-signatures = { workspace = true }
 # Used by the `arkret_key_bridge` source-scan guard, which walks this
 # crate's `src/` tree; the workspace clippy config disallows

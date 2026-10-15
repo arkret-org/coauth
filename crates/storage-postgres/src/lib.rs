@@ -101,6 +101,8 @@ pub mod oauth;
 pub mod organization_control;
 /// PostgreSQL personal access repositories.
 pub mod personal;
+/// Pooled connection and query deadlines.
+pub mod pool;
 /// PostgreSQL queue repositories.
 pub mod queue;
 /// PostgreSQL recovery-completion grant issuance repository.

@@ -44,3 +44,6 @@ ulid = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+coauth-storage-postgres = { workspace = true, features = ["test-support"] }
