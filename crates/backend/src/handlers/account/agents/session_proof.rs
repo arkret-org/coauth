@@ -1209,7 +1209,15 @@ async fn station_content_scope(
             tracing::warn!(%error,"owning Station Agent content source read failed");
             AgentAuthRejection::PolicyUnavailable
         })?;
-    if !outcome.matches_request(&request)
+    qualify_station_content_scope(outcome, &request)
+}
+
+fn qualify_station_content_scope(
+    outcome: coland_contracts::agent_session_authority::AgentSessionAuthorityOutcome,
+    request: &coland_contracts::agent_session_authority::AgentSessionAuthorityRequest,
+) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
+    let requested_scope = &request.requested_scope;
+    if !outcome.matches_request(request)
         || outcome
             .granted_scope
             .iter()
@@ -1220,8 +1228,20 @@ async fn station_content_scope(
     if outcome.granted_scope.is_empty() {
         return Err(AgentAuthRejection::CapabilityDenied);
     }
+    if outcome.granted_scope.iter().collect::<BTreeSet<_>>().len() != outcome.granted_scope.len() {
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    }
     if outcome.strand_ids != request.resource_scope.strand_ids
         || outcome.realm_ids != request.resource_scope.realm_ids
+        || outcome.allowed_tracks
+            != request
+                .resource_scope
+                .track_names
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        || !outcome.allowed_data_labels.is_empty()
+        || !outcome.allowed_endpoints.is_empty()
     {
         return Err(AgentAuthRejection::PolicyUnavailable);
     }
@@ -1256,7 +1276,14 @@ pub(crate) async fn revalidate_content_session_scope(
             "track_names":details.get("constraints").and_then(|value|value.get("allowed_tracks")).ok_or(AgentAuthRejection::ProofInvalid)?,
         })).map_err(|_|AgentAuthRejection::ProofInvalid)?;
     if resources.realm_ids.is_empty() && resources.strand_ids.is_empty() {
-        return Ok(());
+        return if scopes
+            .iter()
+            .all(|scope| service_surface_scope_token(scope))
+        {
+            Ok(())
+        } else {
+            Err(AgentAuthRejection::CapabilityDenied)
+        };
     }
     let current =
         station_content_scope(http, config, view, scopes, resources, intent_digest).await?;
@@ -1937,6 +1964,53 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+
+    #[test]
+    fn authenticated_content_source_keeps_empty_grant_refs_and_exact_intent_binding() {
+        use coland_contracts::agent_session_authority::{
+            AgentSessionAuthorityOutcome, AgentSessionAuthorityRequest,
+        };
+        let request: AgentSessionAuthorityRequest = serde_json::from_value(serde_json::json!({
+            "agent_account_id":{"principal_id":"ak:did_core:web:agent.example","station_id":"ak:did_core:web:station.example"},
+            "controller_account_id":{"principal_id":"ak:did_core:web:controller.example","station_id":"ak:did_core:web:station.example"},
+            "agent_key_authorization_ref":"ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "verification_method":"did:web:agent.example#runtime-1",
+            "intent_digest":format!("sha256:{}", "a".repeat(64)),
+            "requested_scope":["ak.event.read"],
+            "resource_scope":{"realm_ids":["ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa"],"strand_ids":[],"track_names":[]}
+        })).unwrap();
+        let outcome = AgentSessionAuthorityOutcome {
+            binding: request.clone(),
+            granted_scope: request.requested_scope.clone(),
+            realm_ids: request.resource_scope.realm_ids.clone(),
+            strand_ids: Vec::new(),
+            allowed_tracks: Vec::new(),
+            allowed_data_labels: Vec::new(),
+            allowed_endpoints: Vec::new(),
+            capability_grant_refs: Vec::new(),
+            policy_refs: Vec::new(),
+        };
+        let scope = qualify_station_content_scope(outcome.clone(), &request).unwrap();
+        assert_eq!(scope.granted_scope, request.requested_scope);
+        assert!(scope.capability_grant_refs.is_empty());
+        assert!(scope.policy_refs.is_empty());
+        let mut wrong = outcome.clone();
+        wrong.binding.intent_digest =
+            arkret_identifiers::Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap();
+        assert!(qualify_station_content_scope(wrong, &request).is_err());
+        let mut wrong = outcome.clone();
+        wrong.granted_scope.push("ak.message.create".to_owned());
+        assert!(qualify_station_content_scope(wrong, &request).is_err());
+        let mut wrong = outcome.clone();
+        wrong.allowed_tracks.push("discussion".to_owned());
+        assert!(qualify_station_content_scope(wrong, &request).is_err());
+        let mut wrong = outcome.clone();
+        wrong.realm_ids.clear();
+        assert!(qualify_station_content_scope(wrong, &request).is_err());
+        let mut wrong = outcome;
+        wrong.granted_scope.push("ak.event.read".to_owned());
+        assert!(qualify_station_content_scope(wrong, &request).is_err());
+    }
 
     #[test]
     fn issued_agent_scope_details_are_consumed_without_losing_ceilings() {
