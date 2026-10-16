@@ -556,30 +556,31 @@ mod tests {
             },
             stream_position: 2,
         };
-        let fact = arkret_models_collaboration::authority_commit::HumanHistoricalSignerFact {
-            event_id: event.event_id.clone(),
-            actor,
-            device_id: device,
-            verification_method: vm,
-            key: arkret_models_identity::ResolvedSignerKey {
-                public_key_b64u: arkret_wire::Base64UrlString::new(
-                    arkret_canonical::base64url_encode(
-                        crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&device_seed)
-                            .verifying_key()
-                            .as_bytes(),
-                    ),
-                )
-                .unwrap(),
-                revision: arkret_wire::CurrentRevision {
-                    commit_id: authorization_ref.commit_id.clone(),
-                    stream_position: authorization_ref.stream_position,
+        let fact =
+            arkret_models_collaboration::authority_commit::AccountDeviceHistoricalSignerFact {
+                event_id: event.event_id.clone(),
+                actor,
+                device_id: device,
+                verification_method: vm,
+                key: arkret_models_identity::ResolvedSignerKey {
+                    public_key_b64u: arkret_wire::Base64UrlString::new(
+                        arkret_canonical::base64url_encode(
+                            crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&device_seed)
+                                .verifying_key()
+                                .as_bytes(),
+                        ),
+                    )
+                    .unwrap(),
+                    revision: arkret_wire::CurrentRevision {
+                        commit_id: authorization_ref.commit_id.clone(),
+                        stream_position: authorization_ref.stream_position,
+                    },
+                    authorization_ref,
+                    governance_generation: 0,
                 },
-                authorization_ref,
-                governance_generation: 0,
-            },
-            accepted_at: at,
-        };
-        arkret_identity::account_device_signer_evidence::verify_historical_human_event_signature(
+                accepted_at: at,
+            };
+        arkret_identity::account_device_signer_evidence::verify_historical_account_device_event_signature(
             &event,
             &fact,
             arkret_canonical::DigestSuite::Sha256,
@@ -738,7 +739,7 @@ mod tests {
         .unwrap();
         delivery.invite_event = authored.into_event();
         fact.event_id = delivery.invite_event.event_id.clone();
-        arkret_identity::account_device_signer_evidence::verify_historical_human_event_signature(
+        arkret_identity::account_device_signer_evidence::verify_historical_account_device_event_signature(
             &delivery.invite_event,
             fact,
             arkret_canonical::DigestSuite::Sha256,
