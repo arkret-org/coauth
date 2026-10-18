@@ -264,6 +264,7 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
         event_submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
         mls_genesis_material: None,
         producer_device_evidence: None,
+        producer_managed_provenance: None,
         producer_agent_evidence: Some(evidence.clone()),
     };
     let mut tampered = request.clone();
