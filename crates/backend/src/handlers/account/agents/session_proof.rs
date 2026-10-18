@@ -606,6 +606,24 @@ fn canonical_session_grant_request_digest_without_signature(
         .map_err(|_| AgentAuthRejection::ProofInvalid)
 }
 
+/// Classify the original pairing's delivery before using its private custody.
+fn require_retained_pairing_delivery(
+    state: &coauth_data::accountability::AccountabilityGrantFanoutState,
+    revoked: bool,
+    quarantined: bool,
+) -> Result<(), AgentAuthRejection> {
+    if revoked || quarantined {
+        return Err(AgentAuthRejection::ProofInvalid);
+    }
+    if *state != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered {
+        // Station activation can precede the issuer's durable reconciliation.
+        // This known original intent remains unavailable until delivery; it is
+        // neither a bad holder signature nor usable authorization custody.
+        return Err(AgentAuthRejection::PolicyUnavailable);
+    }
+    Ok(())
+}
+
 /// Resolve immutable qualified pairing custody for the exact current source.
 /// A replacement remains an accepted Station Event, never a fabricated row or
 /// a second pairing request in this issuer ledger.
@@ -648,18 +666,16 @@ where
         .await
         .map_err(|_| AgentAuthRejection::ProofInvalid)?
     {
-        if row.revoked_at.is_some()
-            || row.quarantined_at.is_some()
-            || row.coland_fanout_state
-                != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
-        {
-            return Err(AgentAuthRejection::ProofInvalid);
-        }
+        require_retained_pairing_delivery(
+            &row.coland_fanout_state,
+            row.revoked_at.is_some(),
+            row.quarantined_at.is_some(),
+        )?;
         return Ok(row);
     }
     let public_key =
         serde_json::to_value(&payload.public_key).map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    let mut candidates = repo
+    let candidates = repo
         .agent_key_authorization()
         .list_active_for_agent(agent_id)
         .await
@@ -671,11 +687,22 @@ where
                 && row.public_key == public_key
                 && row.accountable_principal_id == payload.accountable_principal_id
                 && row.quarantined_at.is_none()
-                && row.coland_fanout_state
-                    == coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
-        });
-    let row = candidates.next().ok_or(AgentAuthRejection::ProofInvalid)?;
-    if candidates.next().is_some() {
+        })
+        .collect::<Vec<_>>();
+    let awaiting_delivery = candidates.iter().any(|row| {
+        row.coland_fanout_state
+            != coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
+    });
+    let mut delivered = candidates.into_iter().filter(|row| {
+        row.coland_fanout_state
+            == coauth_data::accountability::AccountabilityGrantFanoutState::Delivered
+    });
+    let row = delivered.next().ok_or(if awaiting_delivery {
+        AgentAuthRejection::PolicyUnavailable
+    } else {
+        AgentAuthRejection::ProofInvalid
+    })?;
+    if delivered.next().is_some() {
         return Err(AgentAuthRejection::ProofInvalid);
     }
     Ok(row)
@@ -2001,6 +2028,30 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     use super::*;
+
+    #[test]
+    fn pending_pairing_is_a_registered_dependency_refusal_not_a_bad_signature() {
+        use coauth_data::accountability::AccountabilityGrantFanoutState as Delivery;
+        for state in [Delivery::Queued, Delivery::DeadLettered] {
+            let error = require_retained_pairing_delivery(&state, false, false)
+                .expect_err("undelivered custody never authorizes a session");
+            assert_eq!(error.http_status(), http::StatusCode::SERVICE_UNAVAILABLE);
+            assert_eq!(error.code(), arkret_wire::ErrorCode::SERVICE_UNAVAILABLE);
+        }
+        for state in [
+            Delivery::Queued,
+            Delivery::Delivered,
+            Delivery::DeadLettered,
+        ] {
+            for (revoked, quarantined) in [(true, false), (false, true), (true, true)] {
+                let error = require_retained_pairing_delivery(&state, revoked, quarantined)
+                    .expect_err("terminal custody is never a retryable authorization source");
+                assert_eq!(error.http_status(), http::StatusCode::UNAUTHORIZED);
+                assert_eq!(error.code(), arkret_wire::ErrorCode::SIGNATURE_INVALID);
+            }
+        }
+        assert!(require_retained_pairing_delivery(&Delivery::Delivered, false, false).is_ok());
+    }
 
     #[test]
     fn authenticated_content_source_keeps_empty_grant_refs_and_exact_intent_binding() {
