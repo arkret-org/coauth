@@ -217,9 +217,6 @@ pub struct DevicePairingAdmissionRecord {
     pub canonical_request_bytes: Vec<u8>,
     pub authorize_event_bytes: Vec<u8>,
     pub authorize_event_id: arkret_identifiers::EventId,
-    pub target_station_id: arkret_identifiers::DidCoreId,
-    pub target_authority_generation: u64,
-    pub target_stream_head: arkret_wire::CommitStreamHead,
     pub recorded_commit_bytes: Option<Vec<u8>>,
     pub recorded_commit_digest: Option<arkret_identifiers::Hash>,
     pub terminal_outcome_bytes: Option<Vec<u8>>,
@@ -236,9 +233,6 @@ pub struct NewDevicePairingAdmission {
     pub canonical_request_bytes: Vec<u8>,
     pub authorize_event_bytes: Vec<u8>,
     pub authorize_event_id: arkret_identifiers::EventId,
-    pub target_station_id: arkret_identifiers::DidCoreId,
-    pub target_authority_generation: u64,
-    pub target_stream_head: arkret_wire::CommitStreamHead,
 }
 
 #[derive(Clone, Debug)]

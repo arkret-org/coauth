@@ -284,7 +284,8 @@ pub async fn issue_recovery_completion_grant_endpoint(
         request.canonical_request_digest.clone(),
         clock.now(),
     )
-    .await?;
+    .await
+    .map_err(recovery_completion_device_refusal)?;
     if device_binding != expected_device_binding {
         return Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
@@ -816,4 +817,60 @@ fn indeterminate_replay() -> ArkretRouteError {
         arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
         "recovery completion issuance is fenced without an exact replayable outcome",
     )
+}
+
+// A verified completion attestation already proves this exact replacement was
+// accepted. Losing its current binding is a fence of that known authorization,
+// not the unknown-device case used by ordinary returning-device issuance.
+fn recovery_completion_device_refusal(error: ArkretRouteError) -> ArkretRouteError {
+    match error {
+        ArkretRouteError::Coded {
+            code: arkret_wire::ErrorCode::DEVICE_UNAUTHORIZED,
+            ..
+        } => ArkretRouteError::coded(
+            StatusCode::CONFLICT,
+            arkret_wire::ErrorCode::DEVICE_GENERATION_FENCED,
+            "accepted recovery replacement is no longer current",
+        ),
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepted_replacement_without_a_current_binding_is_generation_fenced() {
+        let error = recovery_completion_device_refusal(ArkretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::DEVICE_UNAUTHORIZED,
+            "no current binding",
+        ));
+        assert!(matches!(
+            error,
+            ArkretRouteError::Coded {
+                status: StatusCode::CONFLICT,
+                code: arkret_wire::ErrorCode::DEVICE_GENERATION_FENCED,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn unavailable_current_binding_does_not_become_a_device_refusal() {
+        let error = recovery_completion_device_refusal(ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+            "native gate unavailable",
+        ));
+        assert!(matches!(
+            error,
+            ArkretRouteError::Coded {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code: arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+                ..
+            }
+        ));
+    }
 }

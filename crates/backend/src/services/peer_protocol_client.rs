@@ -23,8 +23,7 @@ use arkret_signatures::http_signature::{
     sign_http_message_for_scenario,
 };
 use arkret_wire::{
-    AuthorityBundleRequest, Did, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN,
-    RealmAuthorityBundle, ServiceOperationId,
+    Did, HEADER_DESTINATION_TRUST_DOMAIN, HEADER_SOURCE_TRUST_DOMAIN, ServiceOperationId,
 };
 use coauth_keyring::Keyring;
 use serde::Serialize;
@@ -291,32 +290,6 @@ impl<'a> PeerProtocolClient<'a> {
             }
             anyhow::Error::new(error)
         })
-    }
-
-    /// Resolve the nonce-bound current authority chain from the exact owning
-    /// Station before freezing an external-effect request. The response is
-    /// only a carrier here; callers must run the SDK cryptographic verifier.
-    pub async fn get_realm_authority_bundle(
-        &self,
-        request: &AuthorityBundleRequest,
-    ) -> Result<RealmAuthorityBundle, PeerProtocolClientError> {
-        request
-            .validate()
-            .map_err(|error| PeerProtocolClientError::Canonical(error.to_string()))?;
-        let url = self.join_absolute("/_arkret/open/realm-authority/bundle")?;
-        let outcome: RealmAuthorityBundle = self
-            .post_json(
-                "open_realm_authority_bundle",
-                url,
-                ServiceOperationId::OPEN_REALM_AUTHORITY_READ_BUNDLE_V1,
-                request,
-                None,
-            )
-            .await?;
-        outcome
-            .validate_for_request(request, chrono::Utc::now())
-            .map_err(|error| PeerProtocolClientError::Response(error.to_string()))?;
-        Ok(outcome)
     }
 
     fn join_absolute(&self, path: &str) -> Result<Url, PeerProtocolClientError> {

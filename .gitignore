@@ -41,3 +41,6 @@ conformance/test-config.yaml.raw
 # they are review scratch, never source.
 *.pending-snap
 *.snap.new
+
+# Local verification evidence and build metadata.
+/artifacts/

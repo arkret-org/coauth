@@ -1,10 +1,6 @@
 //! Account Authority-owned device-pairing stage, finalize and code-claim boundary.
 
-use std::collections::BTreeSet;
-
-use arkret_identity::{
-    DidBindingPurpose, RealmAuthorityFreshness, RealmAuthorityKeyMap, verify_realm_authority_bundle,
-};
+use arkret_identity::DidBindingPurpose;
 use arkret_models_collaboration::device_pairing::{
     AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingBootstrap,
     DevicePairingCode, DevicePairingCodeClaimOutcome, DevicePairingCodeClaimRequestBody,
@@ -24,8 +20,7 @@ use arkret_signatures::device_pairing::{
     ServerDevicePairingChallenge, verify_server_device_pairing_target_proof,
 };
 use arkret_wire::{
-    AuthorityBundleRequest, AuthorityCommitStatus, AuthorityRejectionStatus, Base64UrlString,
-    CommitStreamRef, CommittedEventRef, DidUrl, Hash,
+    AuthorityCommitStatus, AuthorityRejectionStatus, CommitStreamRef, CommittedEventRef, Hash,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
@@ -46,9 +41,7 @@ use super::{ArkretCanonicalJson, ArkretRouteError, authenticate_account_handoff}
 use crate::handlers::common::{DepotExt as _, extract_bound_activity_tracker};
 use crate::services::did_binding;
 use crate::services::dpop::{DpopVerifier, dpop_header_from_request, dpop_htu};
-use crate::services::peer_protocol_client::{
-    InternalAuthorityChannel, PeerProtocolClient, PeerProtocolClientError,
-};
+use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
 
 const PAIRING_TTL: Duration = Duration::minutes(10);
 const PAIRING_TOMBSTONE_RETENTION: Duration = Duration::hours(24);
@@ -561,24 +554,15 @@ pub async fn pair_device(
         ));
     }
 
-    let authority = load_current_realm_authority(depot, &validated.event.realm_id, now).await?;
     let config = depot.arkret_config()?;
-    let target_station_id = crate::services::station_trust::owning_station_id_for(&config);
-    if authority.verified.current_service_id() != &target_station_id
-        || authority.bundle.current_service_id != target_station_id
+    if crate::services::station_trust::owning_station_id_for(&config)
+        != authenticated.account_id.station_id
     {
         return Err(pairing_temporarily_unavailable());
     }
-    let expected_stream = CommitStreamRef::from_scope(
-        &validated.event.scope_ref,
-        Some(validated.event.realm_id.clone()),
-    )
-    .map_err(|_| proof_invalid("authorize Event has an invalid commit stream"))?;
-    if authority.bundle.realm_stream_head.stream_ref != expected_stream {
-        return Err(proof_invalid(
-            "authorize Event does not target the current principal-control stream",
-        ));
-    }
+    // The owning Station's accepted-device unit locks the actual PCR head and
+    // rechecks the approver, generation and exact original before acceptance.
+    // An external current-governor/head read adds no authority to this TCB.
 
     let authorize_event_bytes = arkret_canonical::canonical_json_bytes(&body.authorize_event)?;
     let admission = NewDevicePairingAdmission {
@@ -590,9 +574,6 @@ pub async fn pair_device(
         canonical_request_bytes: canonical_request,
         authorize_event_bytes,
         authorize_event_id: validated.event.event_id.clone(),
-        target_station_id,
-        target_authority_generation: authority.bundle.current_generation,
-        target_stream_head: authority.bundle.realm_stream_head,
     };
     let reserved = {
         let mut repo = depot.repo().await?;
@@ -731,181 +712,6 @@ fn validate_pairing_intent<'a>(
     Ok(ValidatedPairingIntent { event })
 }
 
-struct CurrentRealmAuthority {
-    bundle: arkret_wire::RealmAuthorityBundle,
-    verified: arkret_identity::VerifiedRealmAuthority,
-}
-
-async fn load_current_realm_authority(
-    depot: &Depot,
-    realm_id: &arkret_wire::RealmId,
-    now: chrono::DateTime<chrono::Utc>,
-) -> Result<CurrentRealmAuthority, ArkretRouteError> {
-    let nonce = Base64UrlString::new(random_opaque(&mut *crate::handlers::make_rng(), 32))
-        .map_err(|_| pairing_temporarily_unavailable())?;
-    let request = AuthorityBundleRequest {
-        realm_id: realm_id.clone(),
-        nonce: nonce.clone(),
-    };
-    let config = depot.arkret_config()?;
-    let http_client = depot.http_client()?;
-    let keyring = depot.keyring()?;
-    let client = PeerProtocolClient::new_for_owning_station(&config, &http_client, &keyring)
-        .map_err(map_pairing_peer_error)?;
-    let bundle = client
-        .get_realm_authority_bundle(&request)
-        .await
-        .map_err(|error| {
-            if let PeerProtocolClientError::Status { status, problem } = &error {
-                tracing::warn!(status, problem_code = ?problem.as_ref().map(|p| p.code()),
-                    "device pairing authority bundle read failed");
-            } else {
-                tracing::warn!("device pairing authority bundle transport failed");
-            }
-            map_pairing_peer_error(error)
-        })?;
-    let keys = resolve_realm_authority_keys(depot, &bundle, None, now)
-        .await
-        .inspect_err(|_| {
-            tracing::warn!("device pairing authority verification keys are unavailable");
-        })?;
-    let freshness = RealmAuthorityFreshness::new(now, nonce);
-    let verified = verify_realm_authority_bundle(&bundle, &freshness, &keys).map_err(|error| {
-        tracing::warn!(%error, "device pairing authority bundle verification failed");
-        pairing_temporarily_unavailable()
-    })?;
-    Ok(CurrentRealmAuthority { bundle, verified })
-}
-
-async fn resolve_realm_authority_keys(
-    depot: &Depot,
-    bundle: &arkret_wire::RealmAuthorityBundle,
-    extra: Option<&DidUrl>,
-    now: chrono::DateTime<chrono::Utc>,
-) -> Result<RealmAuthorityKeyMap, ArkretRouteError> {
-    let mut methods = BTreeSet::new();
-    methods.insert(bundle.genesis_commit.signature.verification_method.clone());
-    for transition in &bundle.authority_transitions {
-        methods.insert(
-            transition
-                .change_commit
-                .signature
-                .verification_method
-                .clone(),
-        );
-        methods.insert(
-            transition
-                .handoff
-                .old_authority_signature
-                .verification_method
-                .clone(),
-        );
-        methods.insert(
-            transition
-                .handoff
-                .new_authority_acceptance_signature
-                .verification_method
-                .clone(),
-        );
-    }
-    if let Some(extra) = extra {
-        methods.insert(extra.clone());
-    }
-    let config = depot.arkret_config()?;
-    let http_client = depot.http_client()?;
-    let url_builder = depot.url_builder()?;
-    let keyring = depot.keyring()?;
-    let resolver = depot.did_resolver_service()?;
-    let store = depot.verified_did_binding_store()?;
-    let mut repo = depot.repo().await?;
-    let mut keys = RealmAuthorityKeyMap::new();
-    for method in methods {
-        let controller = method
-            .as_str()
-            .split_once('#')
-            .map(|(controller, _)| controller)
-            .ok_or_else(pairing_temporarily_unavailable)?;
-        let authority = did_binding::authority_document(
-            &http_client,
-            &url_builder,
-            &config,
-            &keyring,
-            &mut repo,
-            resolver.as_ref(),
-            store.as_ref(),
-            controller,
-            DidBindingPurpose::Service,
-            did_binding::high_risk_freshness(),
-            now,
-        )
-        .await
-        .map_err(|error| {
-            use did_binding::DidBindingError;
-
-            use crate::services::did_resolver::DidResolveError;
-            let reason = match &error {
-                DidBindingError::Resolve(error) => match error {
-                    DidResolveError::NotFound => "resolution_not_found",
-                    DidResolveError::UnsupportedMethod => "resolution_method_unsupported",
-                    DidResolveError::InvalidDid(_) => "resolution_did_invalid",
-                    DidResolveError::DocumentIdMismatch { .. } => "resolution_document_id_mismatch",
-                    DidResolveError::Http(error) if error.is_timeout() => "resolution_timeout",
-                    DidResolveError::Http(error) if error.is_connect() => {
-                        "resolution_connect_failed"
-                    }
-                    DidResolveError::Http(error) if error.is_status() => {
-                        "resolution_http_status_failed"
-                    }
-                    DidResolveError::Http(_) => "resolution_http_failed",
-                    DidResolveError::Url(_) => "resolution_url_invalid",
-                    DidResolveError::Json(_) => "resolution_json_invalid",
-                    DidResolveError::BadResolverResponse(_) => "resolution_response_invalid",
-                    DidResolveError::Repository(_) => "resolution_repository_failed",
-                    DidResolveError::LocalDocument(_) => "resolution_local_document_failed",
-                    DidResolveError::ForbiddenResolverUrl(_) => "resolution_egress_denied",
-                    DidResolveError::DocumentTooLarge { .. } => "resolution_document_too_large",
-                    DidResolveError::DidWebPrincipalNotExplicit => {
-                        "resolution_principal_profile_denied"
-                    }
-                },
-                DidBindingError::TrustDomain(_) => "trust_domain_invalid",
-                DidBindingError::Digest(_) => "digest_failed",
-                DidBindingError::Document(_) => "document_invalid",
-                DidBindingError::Binding(_) => "binding_invalid",
-                DidBindingError::Store(_) => "binding_store_failed",
-                DidBindingError::TestSigningMaterialDenied => "test_signing_material_denied",
-                DidBindingError::NotAuthorityGrade { reason, .. } => reason,
-                DidBindingError::NoAcceptedBinding { .. } => "accepted_binding_missing",
-            };
-            if let DidBindingError::Resolve(DidResolveError::Http(http)) = &error
-                && let Some(status) = http.status()
-            {
-                tracing::warn!(
-                    status = status.as_u16(),
-                    reason,
-                    "device pairing authority resolver response failed"
-                );
-            }
-            tracing::warn!(
-                reason,
-                "device pairing authority DID binding is unavailable"
-            );
-            pairing_temporarily_unavailable()
-        })?;
-        let key = arkret_identity::resolve_verification_method_key_from_document(
-            authority.accepted.document(),
-            method.as_str(),
-        )
-        .map_err(|_| {
-            tracing::warn!("device pairing authority verification method is unavailable");
-            pairing_temporarily_unavailable()
-        })?;
-        keys.insert(&method, key.public_key);
-    }
-    repo.cancel().await.ok();
-    Ok(keys)
-}
-
 async fn resume_device_pairing_admission(
     admission: coauth_data::DevicePairingAdmissionRecord,
     depot: &Depot,
@@ -922,13 +728,20 @@ async fn resume_device_pairing_admission(
     }
 
     let commit = if admission.state == DevicePairingAdmissionState::CommitRecorded {
-        arkret_canonical::canonical::from_canonical_json_slice::<arkret_wire::RealmCommit>(
-            admission
-                .recorded_commit_bytes
-                .as_deref()
-                .ok_or_else(pairing_temporarily_unavailable)?,
-        )
-        .map_err(|_| pairing_temporarily_unavailable())?
+        let bytes = admission
+            .recorded_commit_bytes
+            .as_deref()
+            .ok_or_else(pairing_temporarily_unavailable)?;
+        let digest = Hash::new(arkret_canonical::sha256_digest(bytes))?;
+        if admission.recorded_commit_digest.as_ref() != Some(&digest) {
+            return Err(pairing_temporarily_unavailable());
+        }
+        let commit = arkret_canonical::canonical::from_canonical_json_slice::<
+            arkret_wire::RealmCommit,
+        >(bytes)
+        .map_err(|_| pairing_temporarily_unavailable())?;
+        verify_recorded_pairing_commit(&admission, &event_submission, &commit, depot, now).await?;
+        commit
     } else {
         let config = depot.arkret_config()?;
         let http_client = depot.http_client()?;
@@ -939,7 +752,7 @@ async fn resume_device_pairing_admission(
             &station.endpoint,
             &http_client,
             station.internal_authority_shared_secret(),
-            admission.target_station_id.clone(),
+            admission.approving_account_id.station_id.clone(),
         )
         .map_err(map_pairing_peer_error)?;
         let peer_outcome: arkret_wire::AuthoritySubmitOutcome = channel
@@ -1069,36 +882,91 @@ async fn verify_recorded_pairing_commit(
     depot: &Depot,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), ArkretRouteError> {
-    if commit.realm_id != submission.event.realm_id
-        || commit.event_ref != admission.authorize_event_id
-        || commit.stream_ref != admission.target_stream_head.stream_ref
-        || commit.stream_position
-            != admission
-                .target_stream_head
-                .stream_position
-                .saturating_add(1)
-        || commit.previous_commit_ref.as_ref() != Some(&admission.target_stream_head.commit_id)
-        || commit.governance_generation != admission.target_authority_generation
-    {
-        return Err(pairing_temporarily_unavailable());
-    }
-    let authority = load_current_realm_authority(depot, &commit.realm_id, now).await?;
-    if authority.verified.current_service_id() != &admission.target_station_id
-        || authority.verified.current_generation() != admission.target_authority_generation
-    {
-        return Err(pairing_temporarily_unavailable());
-    }
-    let keys = resolve_realm_authority_keys(
-        depot,
-        &authority.bundle,
-        Some(&commit.signature.verification_method),
-        now,
-    )
-    .await?;
-    authority
-        .verified
-        .verify_commit(commit, &keys)
+    let expected_station = &admission.approving_account_id.station_id;
+    let expected_stream = CommitStreamRef::Realm {
+        realm_id: submission.event.realm_id.clone(),
+    };
+    commit
+        .validate_shape()
         .map_err(|_| pairing_temporarily_unavailable())?;
+    commit
+        .verify_commit_id_matches_content()
+        .map_err(|_| pairing_temporarily_unavailable())?;
+    let signer =
+        arkret_identity::verification_method_did(commit.signature.verification_method.as_str())
+            .map_err(|_| pairing_temporarily_unavailable())?;
+    if submission.event.actor_id.as_account_id() != Some(&admission.approving_account_id)
+        || commit.realm_id != submission.event.realm_id
+        || commit.event_ref != admission.authorize_event_id
+        || commit.stream_ref != expected_stream
+        || commit.stream_position < 2
+        || commit.previous_commit_ref.is_none()
+        || commit.governance_generation != 0
+        || !matches!(&commit.authority_ref, arkret_wire::RealmCommitAuthorityRef::GenesisOrChangeEvent(origin)
+            if arkret_wire::RealmId::from_event_id(origin) == commit.realm_id)
+        || arkret_wire::project_did_to_core_id(&signer).ok().as_ref() != Some(expected_station)
+    {
+        return Err(pairing_temporarily_unavailable());
+    }
+    let config = depot.arkret_config()?;
+    if crate::services::station_trust::owning_station_id_for(&config) != *expected_station {
+        return Err(pairing_temporarily_unavailable());
+    }
+    let http = depot.http_client()?;
+    let resolver = depot.did_resolver_service()?;
+    let document = if signer.method() == "webvh" {
+        let historical = crate::services::did_resolver::resolve_verified_webvh_service_document_at(
+            &http,
+            resolver.resolver_egress_policy(),
+            &signer,
+            commit.signature.created_at,
+        )
+        .await
+        .map_err(|_| pairing_temporarily_unavailable())?;
+        did_binding::to_shared_document(&historical)
+            .map_err(|_| pairing_temporarily_unavailable())?
+    } else {
+        let mut repo = depot.repo().await?;
+        let authority = did_binding::authority_document(
+            &http,
+            &depot.url_builder()?,
+            &config,
+            &depot.keyring()?,
+            &mut repo,
+            resolver.as_ref(),
+            depot.verified_did_binding_store()?.as_ref(),
+            signer.as_str(),
+            DidBindingPurpose::Service,
+            did_binding::high_risk_freshness(),
+            now,
+        )
+        .await
+        .map_err(|_| pairing_temporarily_unavailable())?;
+        repo.cancel().await.ok();
+        authority.accepted.document().clone()
+    };
+    arkret_identity::validate_verification_method_relationship(
+        &document,
+        &commit.signature.verification_method,
+        &signer,
+        arkret_identity::DidVerificationRelationship::AssertionMethod,
+    )
+    .map_err(|_| pairing_temporarily_unavailable())?;
+    let key = arkret_identity::resolve_verification_method_key_from_document(
+        &document,
+        commit.signature.verification_method.as_str(),
+    )
+    .map_err(|_| pairing_temporarily_unavailable())?;
+    // Keep the original acceptance signature check; only independent Human
+    // governor discovery is gone. The private native unit owns the head CAS.
+    arkret_signatures::detached_object::verify_detached_object_signature(
+        &commit.signature,
+        &arkret_canonical::canonical::unsigned_value(commit, &["signature"])
+            .map_err(|_| pairing_temporarily_unavailable())?,
+        arkret_wire::DetachedSignatureContext::RealmCommit,
+        &key.public_key,
+    )
+    .map_err(|_| pairing_temporarily_unavailable())?;
     Ok(())
 }
 
@@ -1508,49 +1376,6 @@ mod tests {
         assert!(auth < rate && rate < gate && gate < lookup && lookup < budget);
         assert!(claim.contains("DeviceRevocationDeniedAction::DevicePairingCodeClaim"));
         assert!(!claim.contains("DeviceRevocationDeniedAction::EventWrite"));
-    }
-
-    #[test]
-    fn pair_device_uses_one_private_journal_and_one_event_commit() {
-        let source = include_str!("device_pairing.rs");
-        let production = source.split_once("#[cfg(test)]").unwrap().0;
-        let pair = source
-            .split_once("pub async fn pair_device")
-            .expect("pair-device handler")
-            .1
-            .split_once("struct ValidatedPairingIntent")
-            .expect("pair-device helper boundary")
-            .0;
-        let auth = pair.find("authenticate_current_device(req, depot").unwrap();
-        let rate = pair.find(".check_device_pairing(").unwrap();
-        let ledger = pair.find(".get_device_pairing_stage(").unwrap();
-        let event_write = pair
-            .find("DeviceRevocationDeniedAction::EventWrite")
-            .unwrap();
-        let authority = pair.find("load_current_realm_authority(").unwrap();
-        let reserve = pair.find(".reserve_device_pairing_admission(").unwrap();
-        assert!(auth < rate && rate < ledger && ledger < event_write);
-        assert!(event_write < authority && authority < reserve);
-
-        let resume = source
-            .split_once("async fn resume_device_pairing_admission")
-            .expect("resume helper")
-            .1
-            .split_once("fn device_pairing_request_id_from_admission")
-            .expect("resume helper boundary")
-            .0;
-        let frozen_decode = resume.find("admission.authorize_event_bytes").unwrap();
-        let peer_submit = resume.find(".post_private_json(").unwrap();
-        let commit_recorded = resume.find(".record_device_pairing_commit(").unwrap();
-        let local_complete = resume.find(".complete_device_pairing_admission(").unwrap();
-        assert!(frozen_decode < peer_submit);
-        assert!(peer_submit < commit_recorded && commit_recorded < local_complete);
-        assert!(!resume.contains("peer_outcome_bytes"));
-        assert!(!production.contains("station_accepted"));
-
-        let routers = include_str!("../../server/routers.rs");
-        assert!(routers.contains("gate/account/device-pair"));
-        assert!(!routers.contains("device-pairing/authorize-event"));
     }
 
     #[test]

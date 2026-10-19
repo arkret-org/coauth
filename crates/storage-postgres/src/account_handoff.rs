@@ -667,12 +667,6 @@ struct DevicePairingPendingRow {
     admission_authorize_event_bytes: Option<Vec<u8>>,
     #[diesel(sql_type = Nullable<Text>)]
     admission_authorize_event_id: Option<String>,
-    #[diesel(sql_type = Nullable<Text>)]
-    admission_target_station_id: Option<String>,
-    #[diesel(sql_type = Nullable<BigInt>)]
-    admission_target_authority_generation: Option<i64>,
-    #[diesel(sql_type = Nullable<Jsonb>)]
-    admission_target_stream_head: Option<serde_json::Value>,
     #[diesel(sql_type = Nullable<Bytea>)]
     admission_recorded_commit_bytes: Option<Vec<u8>>,
     #[diesel(sql_type = Nullable<Text>)]
@@ -748,10 +742,6 @@ fn device_pairing_pending_from_row(
                 "completed" => DevicePairingAdmissionState::Completed,
                 _ => return Err(DatabaseError::invalid_operation()),
             };
-            let generation = row
-                .admission_target_authority_generation
-                .and_then(|value| u64::try_from(value).ok())
-                .ok_or_else(DatabaseError::invalid_operation)?;
             Some(DevicePairingAdmissionRecord {
                 state,
                 approving_account_id: serde_json::from_value(
@@ -774,15 +764,6 @@ fn device_pairing_pending_from_row(
                     .ok_or_else(DatabaseError::invalid_operation)?,
                 authorize_event_id: arkret_identifiers::EventId::new(
                     row.admission_authorize_event_id
-                        .ok_or_else(DatabaseError::invalid_operation)?,
-                )?,
-                target_station_id: arkret_identifiers::DidCoreId::new(
-                    row.admission_target_station_id
-                        .ok_or_else(DatabaseError::invalid_operation)?,
-                )?,
-                target_authority_generation: generation,
-                target_stream_head: serde_json::from_value(
-                    row.admission_target_stream_head
                         .ok_or_else(DatabaseError::invalid_operation)?,
                 )?,
                 recorded_commit_bytes: row.admission_recorded_commit_bytes,
@@ -1800,7 +1781,6 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              target_proof, finalize_request_digest, finalize_outcome, admission_state, \
              admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
              admission_request_bytes, admission_authorize_event_bytes, admission_authorize_event_id, \
-             admission_target_station_id, admission_target_authority_generation, admission_target_stream_head, \
              admission_recorded_commit_bytes, admission_recorded_commit_digest, \
              admission_terminal_outcome_bytes, authorized_device_id, authorized_event_ref, expires_at \
              FROM device_pairing_pending WHERE device_pairing_request_id = $1",
@@ -1823,7 +1803,6 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              target_proof, finalize_request_digest, finalize_outcome, admission_state, \
              admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
              admission_request_bytes, admission_authorize_event_bytes, admission_authorize_event_id, \
-             admission_target_station_id, admission_target_authority_generation, admission_target_stream_head, \
              admission_recorded_commit_bytes, admission_recorded_commit_digest, \
              admission_terminal_outcome_bytes, authorized_device_id, authorized_event_ref, expires_at \
              FROM device_pairing_pending WHERE pairing_code = $1 AND retained_until > $2 FOR UPDATE",
@@ -1932,7 +1911,6 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              target_proof, finalize_request_digest, finalize_outcome, admission_state, \
              admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
              admission_request_bytes, admission_authorize_event_bytes, admission_authorize_event_id, \
-             admission_target_station_id, admission_target_authority_generation, admission_target_stream_head, \
              admission_recorded_commit_bytes, admission_recorded_commit_digest, \
              admission_terminal_outcome_bytes, authorized_device_id, authorized_event_ref, expires_at \
              FROM device_pairing_pending WHERE device_pairing_request_id = $1 FOR UPDATE",
@@ -2063,18 +2041,14 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
             return Ok(DevicePairingAdmissionReserve::NotFound);
         }
 
-        let generation = i64::try_from(input.target_authority_generation)
-            .map_err(|_| DatabaseError::invalid_operation())?;
         let updated = diesel::sql_query(
             "UPDATE device_pairing_pending SET \
              admission_state='submission_pending', admission_approving_account_id=$1, \
              admission_approving_device_id=$2, admission_request_digest=$3, \
              admission_request_bytes=$4, admission_authorize_event_bytes=$5, \
-             admission_authorize_event_id=$6, admission_target_station_id=$7, \
-             admission_target_authority_generation=$8, admission_target_stream_head=$9, \
-             admission_submission_started_at=$10 \
-             WHERE device_pairing_request_id=$11 AND pairing_code=$12 \
-             AND state='ready_for_claim' AND account_id=$1 AND expires_at>$10 \
+             admission_authorize_event_id=$6, admission_submission_started_at=$7 \
+             WHERE device_pairing_request_id=$8 AND pairing_code=$9 \
+             AND state='ready_for_claim' AND account_id=$1 AND expires_at>$7 \
              AND admission_state IS NULL",
         )
         .bind::<Jsonb, _>(serde_json::to_value(&input.approving_account_id)?)
@@ -2083,9 +2057,6 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
         .bind::<Bytea, _>(&input.canonical_request_bytes)
         .bind::<Bytea, _>(&input.authorize_event_bytes)
         .bind::<Text, _>(input.authorize_event_id.as_str())
-        .bind::<Text, _>(input.target_station_id.as_str())
-        .bind::<BigInt, _>(generation)
-        .bind::<Jsonb, _>(serde_json::to_value(&input.target_stream_head)?)
         .bind::<Timestamptz, _>(now)
         .bind::<Text, _>(input.device_pairing_request_id.as_str())
         .bind::<Text, _>(input.pairing_code.as_str())
@@ -2252,8 +2223,7 @@ impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
              admission_approving_account_id=NULL, admission_approving_device_id=NULL, \
              admission_request_digest=NULL, admission_request_bytes=NULL, \
              admission_authorize_event_bytes=NULL, admission_authorize_event_id=NULL, \
-             admission_target_station_id=NULL, admission_target_authority_generation=NULL, \
-             admission_target_stream_head=NULL, admission_submission_started_at=NULL \
+             admission_submission_started_at=NULL \
              WHERE device_pairing_request_id=$1 AND admission_state='submission_pending' \
              AND admission_request_digest=$2",
         )

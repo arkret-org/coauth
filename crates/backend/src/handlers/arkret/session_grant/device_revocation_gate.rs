@@ -74,6 +74,8 @@ pub(crate) async fn acquire_private_current_device_binding(
     now: DateTime<Utc>,
 ) -> Result<SessionGrantDeviceBinding, ArkretRouteError> {
     let config = depot.arkret_config()?;
+    // Human PCR governance is permanently bound to this full Account Station.
+    // Endpoint and key deployment changes cannot introduce another governor.
     // The origin Station of this exact account is selected from explicit
     // deployment configuration only (`service-http-binding.md` §2.2.3): a
     // configured entry whose configured identity equals the account's
@@ -435,5 +437,37 @@ mod tests {
                 ..
             }
         ));
+    }
+    #[test]
+    fn same_station_endpoint_update_retains_the_exact_account_device_binding() {
+        crate::handlers::test_utils::setup();
+        let old_endpoint = "https://old-deployment.example/".parse().unwrap();
+        let new_endpoint = "https://new-deployment.example/".parse().unwrap();
+        let client = crate::reqwest_client();
+        let response = allow_response("ak:did_core:web:station.example");
+        let request = PrivateCurrentDeviceRequest {
+            account_id: response.account_id.clone(),
+            device_id: response.device_id.clone(),
+            expected_device_authorize_event_id: response.authorization_event_id.clone(),
+            expected_device_generation_ref: response.device_generation_ref,
+            action_class: response.action_class,
+            intent_digest: response.intent_digest.clone(),
+            accepted_device_possession_proof: None,
+            requested_at: response.linearized_at,
+        };
+        for endpoint in [&old_endpoint, &new_endpoint] {
+            let channel = channel_to(endpoint, &client, "ak:did_core:web:station.example");
+            validate_private_response(&channel, &request, &response, response.linearized_at)
+                .unwrap();
+        }
+        let foreign = channel_to(
+            &new_endpoint,
+            &client,
+            "ak:did_core:web:foreign-governor.example",
+        );
+        assert!(
+            validate_private_response(&foreign, &request, &response, response.linearized_at)
+                .is_err()
+        );
     }
 }
