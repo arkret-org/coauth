@@ -58,11 +58,15 @@ fn lifecycle_proof_required(message: impl Into<String>) -> ArkretRouteError {
 }
 
 fn lifecycle_proof_invalid(message: impl Into<String>) -> ArkretRouteError {
-    ArkretRouteError::coded(
-        StatusCode::UNAUTHORIZED,
-        arkret_wire::ReasonCode::PROOF_INVALID,
-        format!("reason_code=proof_invalid; {}", message.into()),
-    )
+    ArkretRouteError::CodedDetailed {
+        status: StatusCode::UNAUTHORIZED,
+        code: arkret_wire::ErrorCode::SIGNATURE_INVALID,
+        message: message.into(),
+        details: vec![(
+            "reason_code",
+            serde_json::json!(arkret_wire::ReasonCode::PROOF_INVALID),
+        )],
+    }
 }
 
 fn dpop_session_grant(req: &Request) -> Result<&str, ArkretRouteError> {

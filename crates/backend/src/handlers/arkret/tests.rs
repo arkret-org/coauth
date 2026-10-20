@@ -2388,3 +2388,5 @@ fn issue_handle_claim_rejects_organization_kind_without_organization_id() {
     .expect_err("organization_handle requires its closed organization_id variant");
     assert!(error.to_string().contains("organization_id"));
 }
+
+mod session_revoke_sdk;

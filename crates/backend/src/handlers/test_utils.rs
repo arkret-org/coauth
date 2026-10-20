@@ -614,7 +614,7 @@ impl TestState {
     /// production can never silently 404/405 in these tests. Only the state
     /// injection hoop and the two `.well-known` OIDC documents (which
     /// `server::mod` mounts outside the resource builders) are test-local.
-    fn build_test_router(&self) -> Router {
+    pub(crate) fn build_test_router(&self) -> Router {
         use crate::server::routers::{
             build_account_api_routes, build_admin_routes, build_human_router, build_oauth_router,
         };
