@@ -305,8 +305,9 @@ fn delivery_failure_boundary(
 
 #[cfg(test)]
 mod private_custody_tests {
-    use super::*;
     use rand_core::SeedableRng;
+
+    use super::*;
 
     // The real private poller is tested directly, without claiming a Station
     // current/Device gate or out-of-band send. The expiry branch must not reach

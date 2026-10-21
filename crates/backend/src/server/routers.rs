@@ -984,8 +984,9 @@ pub(super) async fn connection_info_handler(req: &Request) -> String {
 
 #[cfg(test)]
 mod collaboration_capability_route_tests {
-    use super::*;
     use salvo::test::ResponseExt;
+
+    use super::*;
 
     #[tokio::test]
     async fn grant_list_is_retired_and_registry_template_route_remains() {
