@@ -339,7 +339,7 @@ CREATE TABLE public.admin_invite_review_queue (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     peer_principal_id text NOT NULL,
     target_holder_principal_id text NOT NULL,
-    consent_id text NOT NULL,
+    request_reference text NOT NULL,
     scope text NOT NULL,
     requesting_admin_localpart text,
     payload jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -347,7 +347,7 @@ CREATE TABLE public.admin_invite_review_queue (
     resolved_at timestamp with time zone,
     resolution_note text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT admin_invite_review_queue_consent_id_non_empty CHECK ((btrim(consent_id) <> ''::text)),
+    CONSTRAINT admin_invite_review_queue_request_reference_non_empty CHECK ((btrim(request_reference) <> ''::text)),
     CONSTRAINT admin_invite_review_queue_peer_principal_id_shape CHECK ((peer_principal_id LIKE 'ak:did_core:%'::text)),
     CONSTRAINT admin_invite_review_queue_scope_non_empty CHECK ((btrim(scope) <> ''::text)),
     CONSTRAINT admin_invite_review_queue_status_known CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
@@ -1747,7 +1747,7 @@ CREATE INDEX idx_identity_binding_challenges_reservation ON public.identity_bind
 
 CREATE INDEX idx_identity_binding_challenges_expiry ON public.identity_binding_challenges USING btree (expires_at) WHERE ((consumed_at IS NULL) AND (replaced_at IS NULL));
 
-CREATE INDEX admin_invite_review_queue_consent_id_idx ON public.admin_invite_review_queue USING btree (consent_id);
+CREATE INDEX admin_invite_review_queue_request_reference_idx ON public.admin_invite_review_queue USING btree (request_reference);
 
 CREATE INDEX admin_invite_review_queue_holder_principal_id_idx ON public.admin_invite_review_queue USING btree (target_holder_principal_id);
 

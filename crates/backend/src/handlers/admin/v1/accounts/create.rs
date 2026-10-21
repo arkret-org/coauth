@@ -15,11 +15,10 @@ use salvo::oapi::ToSchema;
 use salvo::prelude::*;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::warn;
 use url::Url;
 
 use super::AccountRecord;
-use crate::handlers::account::consent_result_query::{InviteGateDecision, evaluate_invite_gate};
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::UserRegistrationToken;
 use crate::handlers::admin::response::SingleOutcome;
@@ -142,27 +141,24 @@ pub struct BatchInviteRequestBody {
     consent_gate: Option<BatchInviteConsentGate>,
 }
 
-/// Inline consent-gate metadata for `BatchInviteRequestBody`.
-///
-/// Mirrors the fields on `account::invite_relay::InviteRelayRequestBody`, just
-/// without `inviter_id` / `invite_delivery` (admin batch-invite mints
-/// fresh tokens — there is no inviter-signed payload to forward).
+/// Local registration review metadata. It carries no holder permission proof;
+/// token minting and holder-side native invite admission remain independent.
 #[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct BatchInviteConsentGate {
     /// DID of the requesting peer (the admin / service issuing this
     /// batch on behalf of someone). Triggers the gate when set.
     #[schemars(with = "String")]
     pub peer_principal_id: DidCoreId,
 
-    /// Principal DID of the target holder whose consent cell governs the invite.
+    /// Principal DID recorded for the local administrator's review.
     #[schemars(with = "String")]
     pub target_holder_principal_id: DidCoreId,
 
-    /// Consent-cell identifier per spec §6.
-    pub consent_id: String,
+    /// Opaque local administrator review reference; never a native Consent selector.
+    pub request_reference: String,
 
-    /// Scope to match against the exact peer-keyed consent cell. Defaults to
-    /// `invite` (also accepting a cell whose scope is `any`).
+    /// Concrete purpose recorded for administrator review. This is not a grant.
     #[serde(default = "default_invite_scope")]
     #[schemars(with = "String")]
     pub scope: ConsentScope,
@@ -173,9 +169,8 @@ pub struct BatchInviteConsentGate {
     #[serde(default)]
     pub target_principal_url: Option<Url>,
 
-    /// Mirror of the holder's
-    /// the `ak.realm.policy_bundle` payload path `preauth.consent_required` policy bit.
-    /// Defaults to `true` (fail closed: missing / revoked consent → 422).
+    /// Local review policy. This metadata cannot prove the holder's current
+    /// Consent or policy. Defaults to requiring consent and returning 422.
     #[serde(default = "default_require_consent")]
     pub consent_required: bool,
 }
@@ -228,18 +223,16 @@ pub enum BatchInviteGateOutcome {
     /// The local minting gate allows registration-token creation. Requests
     /// without gate metadata currently take this branch.
     Allow,
-    /// Holder explicitly revoked or never granted; policy requires
-    /// consent. Caller maps to HTTP 422 + `consent_required` body.
+    /// No authenticated holder admission is available and local review policy
+    /// requires consent. Maps to HTTP 422 + `consent_required`.
     ConsentRequired,
-    /// Lookup was inconclusive and policy did not require consent.
+    /// Local review policy allows an administrator to review the request.
     /// Caller saves an administrator review row; HTTP 422.
     NeedsAdminReview,
 }
 
-/// Evaluate the local minting gate. Metadata without an exact peer Actor
-/// cannot establish holder Consent. The current implementation returns an
-/// unknown lookup rather than querying a holder from a principal-only key.
-/// This function leaves holder-side invite delivery admission unchanged.
+/// Evaluate local minting metadata without treating it as holder authority.
+/// Only recipient Station delivery admission evaluates exact-peer Consent.
 pub async fn evaluate_batch_invite_gate(
     gate: Option<&BatchInviteConsentGate>,
     arkret_config: &ArkretConfig,
@@ -249,36 +242,13 @@ pub async fn evaluate_batch_invite_gate(
         return BatchInviteGateOutcome::Allow;
     };
 
-    let principal_url = gate
-        .target_principal_url
-        .as_ref()
-        .or_else(|| arkret_config.primary_station_url());
-
-    let Some(principal_url) = principal_url else {
-        // Gate metadata supplied, but no server to query. Mirror the
-        // relay handler: when consent_required is on, fail closed; when
-        // off, require administrator review. (We never silently allow.)
-        debug!(
-            consent_id = %gate.consent_id,
-            "batch_invite consent gate: no server_name URL — falling back per consent_required",
-        );
-        return if gate.consent_required {
-            BatchInviteGateOutcome::ConsentRequired
-        } else {
-            BatchInviteGateOutcome::NeedsAdminReview
-        };
-    };
-
-    let _ = (principal_url, http_client);
-    let lookup = crate::handlers::account::consent_result_query::ConsentLookup::Unknown {
-        reason: "exact_peer_actor_required",
-    };
-
-    let decision = evaluate_invite_gate(&lookup, gate.scope, gate.consent_required);
-    match decision {
-        InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
-        InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
-        InviteGateDecision::Quarantine => BatchInviteGateOutcome::NeedsAdminReview,
+    // Local registration review metadata is not holder authorization. Only
+    // the holder Station can evaluate the exact current permission at delivery.
+    let _ = (arkret_config, http_client);
+    if gate.consent_required {
+        BatchInviteGateOutcome::ConsentRequired
+    } else {
+        BatchInviteGateOutcome::NeedsAdminReview
     }
 }
 
@@ -372,16 +342,16 @@ pub async fn batch_invite(
     let gate_outcome =
         evaluate_batch_invite_gate(params.consent_gate.as_ref(), &arkret_config, &http_client)
             .await;
-    let consent_id_for_log = params
+    let request_reference_for_log = params
         .consent_gate
         .as_ref()
-        .map(|g| g.consent_id.clone())
+        .map(|g| g.request_reference.clone())
         .unwrap_or_default();
     match gate_outcome {
         BatchInviteGateOutcome::Allow => {}
         BatchInviteGateOutcome::ConsentRequired => {
             warn!(
-                consent_id = %consent_id_for_log,
+                request_reference = %request_reference_for_log,
                 "batch_invite: consent gate rejected with consent_required",
             );
             return Err(AppError::unprocessable_entity("consent_required"));
@@ -402,7 +372,7 @@ pub async fn batch_invite(
                     .enqueue(EnqueueAdminInviteReview {
                         peer_principal_id: gate.peer_principal_id.clone(),
                         target_holder_principal_id: gate.target_holder_principal_id.clone(),
-                        consent_id: gate.consent_id.clone(),
+                        request_reference: gate.request_reference.clone(),
                         scope: gate.scope.to_string(),
                         requesting_admin_localpart: admin_user
                             .as_ref()
@@ -414,7 +384,7 @@ pub async fn batch_invite(
                     Ok(rec) => Some(rec.id),
                     Err(error) => {
                         warn!(
-                            consent_id = %consent_id_for_log,
+                            request_reference = %request_reference_for_log,
                             ?error,
                             "batch_invite: admin invite review enqueue failed; no review id available",
                         );
@@ -427,7 +397,7 @@ pub async fn batch_invite(
                 None
             };
             warn!(
-                consent_id = %consent_id_for_log,
+                request_reference = %request_reference_for_log,
                 admin_invite_review_id = ?admin_invite_review_id,
                 "batch_invite: mint request saved for administrator review",
             );
@@ -471,11 +441,11 @@ mod consent_gate_tests {
         ArkretConfig::default()
     }
 
-    fn gate_for(consent_id: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
+    fn gate_for(request_reference: &str, peer: &str, holder: &str) -> BatchInviteConsentGate {
         BatchInviteConsentGate {
             peer_principal_id: DidCoreId::new(peer).unwrap(),
             target_holder_principal_id: DidCoreId::new(holder).unwrap(),
-            consent_id: consent_id.to_owned(),
+            request_reference: request_reference.to_owned(),
             scope: ConsentScope::Invite,
             target_principal_url: None,
             consent_required: true,

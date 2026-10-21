@@ -160,10 +160,26 @@ fn account_api_subrouters() -> (Router, Router) {
         // Account Authority is a Station capability. This deployment-private
         // process does not publish a role-local Describe or service-resolution
         // endpoint; the owning Station advertises the Account Authority URL.
-        .push(Router::with_path("open/third-party-invites/provision").options(oidc_preflight_handler).post(arkret::provision_third_party_invite))
-        .push(Router::with_path("open/third-party-invites/activate").options(oidc_preflight_handler).post(arkret::activate_third_party_invite))
-        .push(Router::with_path("open/third-party-invites/status").options(oidc_preflight_handler).post(arkret::third_party_invite_status))
-        .push(Router::with_path("open/third-party-invites/present").options(oidc_preflight_handler).post(arkret::present_third_party_invite))
+        .push(
+            Router::with_path("open/third-party-invites/provision")
+                .options(oidc_preflight_handler)
+                .post(arkret::provision_third_party_invite),
+        )
+        .push(
+            Router::with_path("open/third-party-invites/activate")
+                .options(oidc_preflight_handler)
+                .post(arkret::activate_third_party_invite),
+        )
+        .push(
+            Router::with_path("open/third-party-invites/status")
+                .options(oidc_preflight_handler)
+                .post(arkret::third_party_invite_status),
+        )
+        .push(
+            Router::with_path("open/third-party-invites/present")
+                .options(oidc_preflight_handler)
+                .post(arkret::present_third_party_invite),
+        )
         .push(Router::with_path("root/identity/resolve").post(arkret::identity_resolve))
         .push(Router::with_path("root/identity/document").get(arkret::identity_document))
         // Protocol surface for DPoP-bound session-grant rotation. The grant is

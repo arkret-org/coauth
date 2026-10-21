@@ -369,7 +369,7 @@ diesel::table! {
         id -> Uuid,
         peer_principal_id -> Text,
         target_holder_principal_id -> Text,
-        consent_id -> Text,
+        request_reference -> Text,
         scope -> Text,
         requesting_admin_localpart -> Nullable<Text>,
         payload -> Jsonb,

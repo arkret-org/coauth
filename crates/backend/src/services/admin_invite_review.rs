@@ -73,7 +73,7 @@ pub struct AdminInviteReviewRecord {
     pub created_at: DateTime<Utc>,
     pub peer_principal_id: DidCoreId,
     pub target_holder_principal_id: DidCoreId,
-    pub consent_id: String,
+    pub request_reference: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
     /// Original invite review document. Its shape is independent of the
@@ -91,7 +91,7 @@ pub struct AdminInviteReviewRecord {
 pub struct EnqueueAdminInviteReview {
     pub peer_principal_id: DidCoreId,
     pub target_holder_principal_id: DidCoreId,
-    pub consent_id: String,
+    pub request_reference: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
     pub payload: Value,
@@ -142,7 +142,7 @@ struct AdminInviteReviewRow {
     #[diesel(sql_type = Text)]
     target_holder_principal_id: DidCoreId,
     #[diesel(sql_type = Text)]
-    consent_id: String,
+    request_reference: String,
     #[diesel(sql_type = Text)]
     scope: String,
     #[diesel(sql_type = Nullable<Text>)]
@@ -167,7 +167,7 @@ impl AdminInviteReviewRow {
             created_at: self.created_at,
             peer_principal_id: self.peer_principal_id,
             target_holder_principal_id: self.target_holder_principal_id,
-            consent_id: self.consent_id,
+            request_reference: self.request_reference,
             scope: self.scope,
             requesting_admin_localpart: self.requesting_admin_localpart,
             payload: self.payload,
@@ -199,7 +199,7 @@ impl PgAdminInviteReviewService {
                 id,
                 peer_principal_id,
                 target_holder_principal_id,
-                consent_id,
+                request_reference,
                 scope,
                 requesting_admin_localpart,
                 payload,
@@ -211,7 +211,7 @@ impl PgAdminInviteReviewService {
                 created_at,
                 peer_principal_id,
                 target_holder_principal_id,
-                consent_id,
+                request_reference,
                 scope,
                 requesting_admin_localpart,
                 payload,
@@ -223,7 +223,7 @@ impl PgAdminInviteReviewService {
         .bind::<DieselUuid, _>(id)
         .bind::<Text, _>(input.peer_principal_id.as_str())
         .bind::<Text, _>(input.target_holder_principal_id.as_str())
-        .bind::<Text, _>(input.consent_id)
+        .bind::<Text, _>(input.request_reference)
         .bind::<Text, _>(input.scope)
         .bind::<Nullable<Text>, _>(input.requesting_admin_localpart)
         .bind::<Jsonb, _>(input.payload)
@@ -247,7 +247,7 @@ impl PgAdminInviteReviewService {
                 created_at,
                 peer_principal_id,
                 target_holder_principal_id,
-                consent_id,
+                request_reference,
                 scope,
                 requesting_admin_localpart,
                 payload,
@@ -278,7 +278,7 @@ impl PgAdminInviteReviewService {
                 created_at,
                 peer_principal_id,
                 target_holder_principal_id,
-                consent_id,
+                request_reference,
                 scope,
                 requesting_admin_localpart,
                 payload,
@@ -322,7 +322,7 @@ impl PgAdminInviteReviewService {
                 created_at,
                 peer_principal_id,
                 target_holder_principal_id,
-                consent_id,
+                request_reference,
                 scope,
                 requesting_admin_localpart,
                 payload,
@@ -426,7 +426,7 @@ mod tests {
             created_at: Utc::now(),
             peer_principal_id: "ak:did_core:web:p".parse().unwrap(),
             target_holder_principal_id: "ak:did_core:web:h".parse().unwrap(),
-            consent_id: "c-1".into(),
+            request_reference: "c-1".into(),
             scope: "invite".into(),
             requesting_admin_localpart: None,
             payload: serde_json::json!({}),
@@ -442,7 +442,7 @@ mod tests {
         let dto = EnqueueAdminInviteReview {
             peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
             target_holder_principal_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
-            consent_id: "c-1".into(),
+            request_reference: "c-1".into(),
             scope: "invite".into(),
             requesting_admin_localpart: Some("admin".into()),
             payload: serde_json::json!({"reason": "missing-grant"}),

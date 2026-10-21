@@ -26,7 +26,7 @@ struct ReviewAuditRow {
     details: Value,
 }
 
-fn batch_body(consent_id: &str, count: u32) -> Value {
+fn batch_body(request_reference: &str, count: u32) -> Value {
     json!({
         "count": count,
         "usage_limit": 3,
@@ -34,7 +34,7 @@ fn batch_body(consent_id: &str, count: u32) -> Value {
         "consent_gate": {
             "peer_principal_id": "ak:did_core:web:issuing-admin.example",
             "target_holder_principal_id": "ak:did_core:web:recipient.example",
-            "consent_id": consent_id,
+            "request_reference": request_reference,
             "scope": "invite",
             "consent_required": false
         }
@@ -73,12 +73,12 @@ async fn admin_invite_review_enqueue_list_approve_reject_repeat_and_audit() {
     let token = state.token_with_scope("urn:coauth:admin").await;
     assert_eq!(token_count(&pool).await, 0);
 
-    for (consent_id, count) in [("review-approve", 2), ("review-reject", 4)] {
+    for (request_reference, count) in [("review-approve", 2), ("review-reject", 4)] {
         let response = state
             .request(
                 Request::post("/_coauth/admin/accounts/batch-invite")
                     .bearer(&token)
-                    .json(batch_body(consent_id, count)),
+                    .json(batch_body(request_reference, count)),
             )
             .await;
         response.assert_status(StatusCode::UNPROCESSABLE_ENTITY);
@@ -89,13 +89,13 @@ async fn admin_invite_review_enqueue_list_approve_reject_repeat_and_audit() {
     let entries = pending(&state, &token).await;
     assert_eq!(entries.len(), 2);
 
-    for (consent_id, decision, expected_status, minted_count) in [
+    for (request_reference, decision, expected_status, minted_count) in [
         ("review-approve", "approve", "approved", 2),
         ("review-reject", "reject", "rejected", 0),
     ] {
         let entry = entries
             .iter()
-            .find(|entry| entry["consent_id"] == consent_id)
+            .find(|entry| entry["request_reference"] == request_reference)
             .unwrap();
         assert_eq!(entry["status"], "pending");
         assert_eq!(

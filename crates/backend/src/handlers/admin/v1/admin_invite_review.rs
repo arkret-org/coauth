@@ -71,7 +71,7 @@ pub struct AdminInviteReviewEntry {
     #[schemars(with = "String")]
     #[salvo(schema(value_type = String))]
     pub target_holder_principal_id: DidCoreId,
-    pub consent_id: String,
+    pub request_reference: String,
     pub scope: String,
     pub requesting_admin_localpart: Option<String>,
     /// Original invitation review document; `status` only records the review
@@ -89,7 +89,7 @@ impl From<AdminInviteReviewRecord> for AdminInviteReviewEntry {
             created_at: r.created_at,
             peer_principal_id: r.peer_principal_id,
             target_holder_principal_id: r.target_holder_principal_id,
-            consent_id: r.consent_id,
+            request_reference: r.request_reference,
             scope: r.scope,
             requesting_admin_localpart: r.requesting_admin_localpart,
             payload: r.payload,
@@ -305,7 +305,7 @@ pub async fn resolve_admin_invite_review(
             "decision": op_label.split('.').next_back().unwrap_or(""),
             "peer_principal_id": &record.peer_principal_id,
             "target_holder_principal_id": &record.target_holder_principal_id,
-            "consent_id": &record.consent_id,
+            "request_reference": &record.request_reference,
             "scope": &record.scope,
             "note": body.note,
             "minted_token_count": minted_tokens.len(),
@@ -383,7 +383,7 @@ mod tests {
             created_at: now,
             peer_principal_id: DidCoreId::new("ak:did_core:web:peer").unwrap(),
             target_holder_principal_id: DidCoreId::new("ak:did_core:web:holder").unwrap(),
-            consent_id: "c-99".into(),
+            request_reference: "c-99".into(),
             scope: "invite".into(),
             requesting_admin_localpart: Some("admin1".into()),
             payload: serde_json::json!({"count": 3}),
@@ -398,7 +398,7 @@ mod tests {
             entry.target_holder_principal_id.as_str(),
             "ak:did_core:web:holder"
         );
-        assert_eq!(entry.consent_id, "c-99");
+        assert_eq!(entry.request_reference, "c-99");
         assert_eq!(entry.scope, "invite");
         assert_eq!(entry.requesting_admin_localpart.as_deref(), Some("admin1"));
         assert_eq!(entry.payload["count"], 3);

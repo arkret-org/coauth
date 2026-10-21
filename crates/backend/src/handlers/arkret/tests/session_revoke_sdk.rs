@@ -245,8 +245,8 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
     // Realm Actor or runtime, and does not exercise fresh account registration.
     let endpoint = "https://registration.example/".parse().unwrap();
     let lifecycle_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[81; 32]);
-    let inception = arkret_signatures::webvh::prepare_applet_managed_inception(
-        &arkret_signatures::webvh::AppletManagedInceptionInput {
+    let inception = arkret_signatures::webvh::prepare_realm_actor_inception(
+        &arkret_signatures::webvh::RealmActorInceptionInput {
             principal_endpoint: &endpoint,
             local_id: "revoke-sdk",
             version_time: Utc::now(),

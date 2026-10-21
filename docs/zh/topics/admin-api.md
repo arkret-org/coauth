@@ -103,6 +103,10 @@ private key 或 provider secret。Personal access token 只会在创建或重新
 原因为 `admin_invite_review_required`，不会签发注册令牌。不提供这类元数据的请求仍按
 普通流程签发；要求 Consent 而无法满足的请求仍返回 HTTP 422 和 `consent_required`。
 
+可选门禁元数据使用本地 `request_reference` 关联管理员复核，不能传原生
+`consent_id`。Coauth 不通过展示摘要或 principal-only 查询判断接收方权限；
+完整原签邀请转交到精确接收 Account 的 Station，由其按当前 peer 权限集接纳。
+
 `GET /_coauth/admin/invite-reviews` 列出发起方 Coauth 部署的
 `admin_invite_review_queue` 中的待复核记录。`POST
 /_coauth/admin/invite-reviews/{id}/resolve` 接受 `decision: "approve"` 或 `"reject"`，

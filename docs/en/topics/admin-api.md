@@ -403,6 +403,11 @@ That request returns HTTP 422 with `admin_invite_review_required` and mints no
 registration tokens. Requests without this metadata retain ordinary minting;
 consent-required failures retain HTTP 422 with `consent_required`.
 
+Optional gate metadata uses a local `request_reference` for administrator review;
+it does not accept a native `consent_id`. Coauth does not authorize a recipient
+from a display summary or principal-only lookup. It forwards the complete signed
+invite to the exact recipient Account's Station for current peer-set admission.
+
 `GET /_coauth/admin/invite-reviews` lists pending rows from the issuing Coauth
 deployment's `admin_invite_review_queue`. `POST
 /_coauth/admin/invite-reviews/{id}/resolve` accepts `decision: "approve"` or
