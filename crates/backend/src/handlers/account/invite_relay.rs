@@ -2,32 +2,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Per-recipient invite-relay handler (consent-gated forward).
-//!
-//! Before an actor (coauth admin / inkson UI / codmin operator) can deliver an
-//! invite to a target principal, coauth must consult the holder's consent
-//! result at the target Station (`coland`). The read+gate helper lives in
-//! `consent_result_query`; this handler is the call-site that uses it.
-//!
-//! ## Flow
-//!
-//! 1. The inviter signs an invite payload (out of band) and POSTs it to `POST
-//!    /_coauth/self/account/invites/relay` along with `(target_principal_url,
-//!    target_holder_principal_id, consent_id, scope)`.
-//! 2. Coauth queries the target's consent result via `consent_result_query::query_consent_result`.
-//! 3. Coauth runs `evaluate_invite_gate(...)` to translate the lookup + `consent_required` policy
-//!    bit into an `Allow / ConsentRequired / Quarantine` decision.
-//! 4. On `Allow`, coauth forwards the typed invite-delivery request to the target principal's
-//!    `/_arkret/peer/invites` endpoint and returns 200. On `ConsentRequired`, coauth returns 403
-//!    with `consent_required`. On `Quarantine`, coauth returns 202 with `quarantined`; callers
-//!    retain responsibility for deferred holder-side delivery.
-//!
-//! ## Why this is a "relay" and not an issuance
-//!
-//! Consent grants and revokes are constructed and signed by the **holder**
-//! when they accept an invite — they are separate holder-authored Events
-//! submitted by inkson, not by coauth. coauth's only responsibility here is
-//! the gate-check + forward; it never signs Events on the holder's behalf.
+//! Invite intake validates the signed destination and authenticates the requester.
+//! This context has no holder-private Consent authority, so required Consent is
+//! refused and optional Consent is deferred for review. Native holder admission
+//! remains responsible for effective exact-peer permissions.
 
 use arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody;
 use arkret_models_collaboration::governance::membership_invite::{
@@ -43,11 +21,8 @@ use tracing::{debug, warn};
 use url::Url;
 
 use super::{DepotExt, RouteError, make_clock};
-use crate::handlers::account::consent_result_query::{
-    InviteGateDecision, evaluate_invite_gate, query_consent_result,
-};
+use crate::handlers::account::consent_result_query::{InviteGateDecision, evaluate_invite_gate};
 use crate::handlers::arkret;
-use crate::services::peer_protocol_client::{PeerProtocolClient, PeerProtocolClientError};
 use crate::services::station_trust::{self, StationTrustResolver};
 
 // ── Request / response shapes ──────────────────────────────────
@@ -77,7 +52,7 @@ pub struct InviteRelayRequestBody {
     /// holder from its authenticated session.
     pub target_holder_principal_id: DidCoreId,
 
-    /// Consent-cell identifier per spec §6.
+    /// Local intake correlation; never a native Consent identifier or credential.
     pub consent_id: String,
 
     /// Scope to match against the exact peer-keyed consent cell.
@@ -166,18 +141,8 @@ fn invite_delivery_target(
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct InviteRelayHttpOutcome {
-    /// One of `forwarded`, `consent_required`, `quarantined`.
     pub status: &'static str,
-
-    /// Echo of the consent-cell decision for telemetry (`Allow`,
-    /// `ConsentRequired`, `Quarantine`).
     pub decision: &'static str,
-
-    /// On `forwarded`, set to `true` if the upstream principal accepted
-    /// the forward; `false` if the forward target was unreachable
-    /// (callers may retry).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub forwarded_ok: Option<bool>,
 }
 
 // ── Pure-ish helper (testable with wiremock) ───────────────────
@@ -186,9 +151,6 @@ pub struct InviteRelayHttpOutcome {
 /// without serialisation, so unit tests can pattern-match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelayOutcome {
-    /// Gate said `Allow`; the inner `forwarded_ok` reflects whether the
-    /// forward target accepted the POST.
-    Forwarded { forwarded_ok: bool },
     /// Gate said `ConsentRequired` — caller should map to HTTP 403.
     ConsentRequired,
     /// Gate said `Quarantine` — caller should map to HTTP 202.
@@ -200,20 +162,11 @@ pub enum RelayOutcome {
 #[must_use]
 pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, InviteRelayHttpOutcome) {
     match outcome {
-        RelayOutcome::Forwarded { forwarded_ok } => (
-            StatusCode::OK,
-            InviteRelayHttpOutcome {
-                status: "forwarded",
-                decision: "Allow",
-                forwarded_ok: Some(*forwarded_ok),
-            },
-        ),
         RelayOutcome::ConsentRequired => (
             StatusCode::FORBIDDEN,
             InviteRelayHttpOutcome {
                 status: "consent_required",
                 decision: "ConsentRequired",
-                forwarded_ok: None,
             },
         ),
         RelayOutcome::Quarantined => (
@@ -221,81 +174,35 @@ pub fn relay_outcome_to_response(outcome: &RelayOutcome) -> (StatusCode, InviteR
             InviteRelayHttpOutcome {
                 status: "quarantined",
                 decision: "Quarantine",
-                forwarded_ok: None,
             },
         ),
     }
 }
 
-/// Core relay logic: query the consent cell, gate the result, forward a typed
-/// v1 invite-delivery request on `Allow`. All I/O goes through supplied clients
-/// so tests can inject a wiremock server.
+/// Apply intake policy without probing a holder-private summary. A signed
+/// destination alone supplies no effective Consent or holder read authority.
 ///
 /// Returns `Err(RouteError::BadRequest(...))` only for client-supplied
 /// validation failures (e.g. `target_principal_url` truly missing). Gate
 /// decisions are reported via `Ok(RelayOutcome::*)`.
-pub async fn relay_invite_with(
+pub fn relay_invite_with(
     target_principal_url: Option<&Url>,
-    target_holder_principal_id: &DidCoreId,
     consent_id: &str,
     peer_principal_id: &DidCoreId,
     scope: ConsentScope,
     consent_required: bool,
-    peer_protocol_client: Option<&PeerProtocolClient<'_>>,
-    invite_delivery: Option<
-        &arkret_models_collaboration::governance::invite_addressing::InviteDeliveryRequestBody,
-    >,
-    http_client: &reqwest::Client,
 ) -> Result<RelayOutcome, RouteError> {
-    let Some(principal_url) = target_principal_url else {
+    let Some(_principal_url) = target_principal_url else {
         return Err(RouteError::BadRequest("config_required".into()));
     };
 
-    let lookup = if let Some(delivery) = invite_delivery {
-        let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
-            actor_id: delivery.invite_event.actor_id.clone(),
-        };
-        query_consent_result(
-            Some(principal_url),
-            target_holder_principal_id,
-            consent_id,
-            &peer,
-            scope,
-            http_client,
-        )
-        .await
-    } else {
-        crate::handlers::account::consent_result_query::ConsentLookup::Unknown {
-            reason: "exact_peer_actor_required",
-        }
-    };
-
-    let decision = evaluate_invite_gate(&lookup, scope, consent_required);
+    let decision = evaluate_invite_gate(consent_required);
     debug!(
         ?decision,
         consent_id, peer_principal_id = %peer_principal_id, scope = %scope, "invite-relay gate decision"
     );
 
     match decision {
-        InviteGateDecision::Allow => {
-            // Gate-only mode lets callers verify consent without asking
-            // coauth to deliver the invite.
-            let Some(client) = peer_protocol_client else {
-                return Ok(RelayOutcome::Forwarded { forwarded_ok: true });
-            };
-            let Some(delivery) = invite_delivery else {
-                return Ok(RelayOutcome::Forwarded { forwarded_ok: true });
-            };
-
-            let forwarded_ok = match client.post_invite_delivery(delivery).await {
-                Ok(_) => true,
-                Err(error) => {
-                    warn!(?error, "invite forward: peer invite delivery failed");
-                    false
-                }
-            };
-            Ok(RelayOutcome::Forwarded { forwarded_ok })
-        }
         InviteGateDecision::ConsentRequired => Ok(RelayOutcome::ConsentRequired),
         InviteGateDecision::Quarantine => Ok(RelayOutcome::Quarantined),
     }
@@ -321,13 +228,10 @@ pub async fn post_invite_relay(
     }
 
     let arkret_config = depot.arkret_config()?;
-    let http_client = depot.http_client()?;
-    let keyring = depot.keyring()?;
-    let url_builder = depot.url_builder()?;
 
     // ── Authentication + authorization ─────────────────────────────
-    // This endpoint drives a signed, coauth-DID-attested outbound forward to
-    // a target Station, so it MUST NOT be reachable anonymously
+    // This endpoint records an authenticated invite intake, so it MUST NOT
+    // be reachable anonymously
     // (the `/_coauth` parent router only mounts CORS). Mirror the standard
     // `self/` auth pattern (`viewer`, `sessions`): require an authenticated
     // requester, then bind the relay to that identity.
@@ -366,12 +270,8 @@ pub async fn post_invite_relay(
             .or_else(|| arkret_config.primary_station_url().cloned()),
     };
 
-    // Deny-by-default for the federation hop: the relay forwards a request
-    // signed under coauth's service DID, so the destination MUST resolve to
-    // a configured trust anchor (a `stations` endpoint, an
-    // configured Station endpoint or the `identity_registry` resolver).
-    // This blocks the SSRF / signing-oracle vector where a caller supplies
-    // an arbitrary `target_principal_url`.
+    // Bind the deferred intake to the already verified destination. Review
+    // must not acquire a different caller-supplied outbound target.
     if let Some(target) = principal_url.as_ref()
         && !arkret_config.is_trusted_outbound_target(target)
     {
@@ -382,46 +282,13 @@ pub async fn post_invite_relay(
         return Err(RouteError::BadRequest("untrusted_principal_url".into()));
     }
 
-    let service_id = crate::services::station_trust::owning_station_id_for(&arkret_config);
-    let trust_domain = arkret_identifiers::TrustDomainId::new(arkret::trust_domain_for(
-        &url_builder,
-        &arkret_config,
-    ))
-    .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    let destination_id = match params.invite_delivery.as_ref() {
-        Some(delivery) => delivery.invite_address.account_id.station_id.clone(),
-        None => service_id.clone(),
-    };
-    let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-        source_id: service_id,
-        destination_id,
-    };
-    let peer_client = match PeerProtocolClient::new(
-        principal_url.as_ref(),
-        &http_client,
-        &keyring,
-        crate::services::station_trust::owning_station_did_for(&arkret_config),
-        identity,
-        trust_domain.clone(),
-        trust_domain,
-    ) {
-        Ok(client) => Some(client),
-        Err(PeerProtocolClientError::BaseUrlNotConfigured) => None,
-        Err(error) => return Err(RouteError::Internal(Box::new(error))),
-    };
-
     let outcome = relay_invite_with(
         principal_url.as_ref(),
-        &params.target_holder_principal_id,
         &params.consent_id,
         &params.inviter_id,
         params.scope,
         params.consent_required,
-        peer_client.as_ref(),
-        params.invite_delivery.as_ref(),
-        &http_client,
-    )
-    .await?;
+    )?;
 
     let (status, body) = relay_outcome_to_response(&outcome);
     res.status_code(status);
@@ -433,8 +300,7 @@ pub async fn post_invite_relay(
 
 #[cfg(test)]
 mod tests {
-    use wiremock::matchers::{method, path_regex, query_param};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::MockServer;
 
     use super::*;
     use crate::handlers::test_utils::setup;
@@ -449,32 +315,6 @@ mod tests {
 
     fn principal_url() -> Url {
         Url::parse("https://station.example/").unwrap()
-    }
-
-    fn test_keyring() -> coauth_keyring::Keyring {
-        use coauth_keyring::{JsonWebKey, JsonWebKeySet, PrivateKey};
-        use rand_chacha::rand_core::SeedableRng as _;
-        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(9);
-        let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid(coauth_keyring::ACCOUNT_AUTHORITY_KEY_ID);
-        coauth_keyring::Keyring::new(JsonWebKeySet::new(vec![key]))
-    }
-
-    fn peer_identity() -> arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-        let service_id =
-            arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example".to_owned()).unwrap();
-        arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
-            source_id: service_id.clone(),
-            destination_id: service_id,
-        }
-    }
-
-    fn source_did() -> arkret_identifiers::Did {
-        arkret_identifiers::Did::new("did:web:auth.example".to_owned()).unwrap()
-    }
-
-    fn trust_domain() -> arkret_identifiers::TrustDomainId {
-        arkret_identifiers::TrustDomainId::new("ak:trust_domain:auth.example".to_owned()).unwrap()
     }
 
     fn service_resolution() -> arkret_models_identity::identity_resolution::ServiceResolutionCarrier
@@ -1012,94 +852,26 @@ mod tests {
         );
     }
 
-    /// The holder Station's typed `consent_view` current result for
-    /// `(peer, consent_scope)`, carrying the `revision` that names the
-    /// authority commit the result was settled at.
-    fn active_consent_view(scope: &str) -> serde_json::Value {
-        let peer = arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
-            actor_id: invite_delivery().invite_event.actor_id,
-        };
-        serde_json::json!({
-            "consent_id": "ak:consent:0198ff00-0000-7000-8000-000000000001",
-            "peer": peer,
-            "consent_scope": scope,
-            "state": "active",
-            "updated_at": "2026-05-01T00:00:00.000Z",
-            "revision": {
-                "commit_id": "ak:realm_commit:Aaurq6urq6urq6urq6urq6urq6urq6urq6urq6urq6ur",
-                "stream_position": 7,
-            },
-        })
-    }
-
-    /// Allow path: the consent result is active for the exact peer and scope → forward succeeds.
     #[tokio::test]
-    async fn relay_allows_when_consent_granted() {
+    async fn relay_with_a_signed_invite_does_not_probe_private_summaries() {
         setup();
         let server = MockServer::start().await;
-        let client = reqwest::Client::new();
-
-        // Consent-result mock: active for the exact peer and scope.
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/result$"))
-            .and(query_param(
-                "peer",
-                serde_json::to_string(
-                    &arkret_models_collaboration::events_payloads::consent::ConsentPeer::Actor {
-                        actor_id: invite_delivery().invite_event.actor_id,
-                    },
-                )
-                .unwrap(),
-            ))
-            .and(query_param("consent_scope", "invite"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(active_consent_view("invite")))
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        // Forward-target mock: 200 OK accepts the typed invite delivery.
-        Mock::given(method("POST"))
-            .and(path_regex(r"^/_arkret/peer/invites"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "status": "accepted"
-            })))
-            .expect(1)
-            .mount(&server)
-            .await;
-
         let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let keyring = test_keyring();
-        let peer = PeerProtocolClient::new(
-            Some(&base),
-            &client,
-            &keyring,
-            source_did(),
-            peer_identity(),
-            trust_domain(),
-            trust_domain(),
-        )
-        .unwrap();
-        let delivery = invite_delivery();
-
-        let outcome = relay_invite_with(
-            Some(&base),
-            &core_id("ak:did_core:web:holder"),
-            "c-allow",
-            &core_id("ak:did_core:web:inviter"),
-            ConsentScope::Invite,
-            true,
-            Some(&peer),
-            Some(&delivery),
-            &client,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(outcome, RelayOutcome::Forwarded { forwarded_ok: true });
-        let (status, body) = relay_outcome_to_response(&outcome);
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(body.status, "forwarded");
-        assert_eq!(body.forwarded_ok, Some(true));
+        for (required, expected) in [
+            (true, RelayOutcome::ConsentRequired),
+            (false, RelayOutcome::Quarantined),
+        ] {
+            let outcome = relay_invite_with(
+                Some(&base),
+                "private-intake-reference",
+                &core_id("ak:did_core:web:inviter"),
+                ConsentScope::Invite,
+                required,
+            )
+            .unwrap();
+            assert_eq!(outcome, expected);
+        }
+        assert!(server.received_requests().await.unwrap().is_empty());
     }
 
     /// A principal-only request cannot identify the exact actor variant and
@@ -1107,21 +879,15 @@ mod tests {
     #[tokio::test]
     async fn relay_requires_exact_peer_actor_when_consent_is_required() {
         setup();
-        let client = reqwest::Client::new();
         let base = principal_url();
 
         let outcome = relay_invite_with(
             Some(&base),
-            &core_id("ak:did_core:web:holder"),
             "c-missing",
             &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
-            true, // consent_required
-            None,
-            None,
-            &client,
+            true,
         )
-        .await
         .unwrap();
 
         assert_eq!(outcome, RelayOutcome::ConsentRequired);
@@ -1135,21 +901,15 @@ mod tests {
     #[tokio::test]
     async fn relay_quarantines_unknown_peer_actor_when_consent_is_not_required() {
         setup();
-        let client = reqwest::Client::new();
         let base = principal_url();
 
         let outcome = relay_invite_with(
             Some(&base),
-            &core_id("ak:did_core:web:holder"),
             "c-unknown",
             &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
-            false, // consent_required off
-            None,
-            None,
-            &client,
+            false,
         )
-        .await
         .unwrap();
 
         assert_eq!(outcome, RelayOutcome::Quarantined);
@@ -1163,95 +923,19 @@ mod tests {
     #[tokio::test]
     async fn relay_rejects_when_target_principal_url_missing() {
         setup();
-        let client = reqwest::Client::new();
 
         let err = relay_invite_with(
-            None, // no URL
-            &core_id("ak:did_core:web:holder"),
+            None,
             "c-x",
             &core_id("ak:did_core:web:inviter"),
             ConsentScope::Invite,
             true,
-            None,
-            None,
-            &client,
         )
-        .await
         .expect_err("expected BadRequest");
 
         match err {
             RouteError::BadRequest(msg) => assert_eq!(msg, "config_required"),
             other => panic!("expected BadRequest, got {other:?}"),
         }
-    }
-
-    /// Allow path but the forward target is unreachable (500) → outcome
-    /// is still `Forwarded`, but with `forwarded_ok=false` so the caller
-    /// can retry. Status is 200 (gate passed); failure is in the body.
-    #[tokio::test]
-    async fn relay_reports_forward_failure_as_forwarded_ok_false() {
-        setup();
-        let server = MockServer::start().await;
-        let client = reqwest::Client::new();
-
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/result$"))
-            .and(query_param("consent_scope", "invite"))
-            .respond_with(ResponseTemplate::new(404))
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        Mock::given(method("GET"))
-            .and(path_regex(r"^/_arkret/self/consent/result$"))
-            .and(query_param("consent_scope", "any"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(active_consent_view("any")))
-            .expect(1)
-            .mount(&server)
-            .await;
-
-        Mock::given(method("POST"))
-            .and(path_regex(r"^/_arkret/peer/invites"))
-            .respond_with(ResponseTemplate::new(503))
-            .mount(&server)
-            .await;
-
-        let base = Url::parse(&format!("{}/", server.uri())).unwrap();
-        let keyring = test_keyring();
-        let peer = PeerProtocolClient::new(
-            Some(&base),
-            &client,
-            &keyring,
-            source_did(),
-            peer_identity(),
-            trust_domain(),
-            trust_domain(),
-        )
-        .unwrap();
-        let delivery = invite_delivery();
-
-        let outcome = relay_invite_with(
-            Some(&base),
-            &core_id("ak:did_core:web:holder"),
-            "c-allow",
-            &core_id("ak:did_core:web:inviter"),
-            ConsentScope::Invite,
-            true,
-            Some(&peer),
-            Some(&delivery),
-            &client,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            outcome,
-            RelayOutcome::Forwarded {
-                forwarded_ok: false
-            }
-        );
-        let (status, body) = relay_outcome_to_response(&outcome);
-        assert_eq!(status, StatusCode::OK);
-        assert_eq!(body.forwarded_ok, Some(false));
     }
 }

@@ -158,11 +158,10 @@ pub struct BatchInviteConsentGate {
     #[schemars(with = "String")]
     pub target_holder_principal_id: DidCoreId,
 
-    /// Consent-cell identifier per spec §6.
+    /// Local review correlation; never a native Consent identifier or credential.
     pub consent_id: String,
 
-    /// Scope to match against the exact peer-keyed consent cell. Defaults to
-    /// `invite` (also accepting a cell whose scope is `any`).
+    /// Concrete scope recorded in the local review request; defaults to invite.
     #[serde(default = "default_invite_scope")]
     #[schemars(with = "String")]
     pub scope: ConsentScope,
@@ -270,13 +269,8 @@ pub async fn evaluate_batch_invite_gate(
     };
 
     let _ = (principal_url, http_client);
-    let lookup = crate::handlers::account::consent_result_query::ConsentLookup::Unknown {
-        reason: "exact_peer_actor_required",
-    };
-
-    let decision = evaluate_invite_gate(&lookup, gate.scope, gate.consent_required);
+    let decision = evaluate_invite_gate(gate.consent_required);
     match decision {
-        InviteGateDecision::Allow => BatchInviteGateOutcome::Allow,
         InviteGateDecision::ConsentRequired => BatchInviteGateOutcome::ConsentRequired,
         InviteGateDecision::Quarantine => BatchInviteGateOutcome::NeedsAdminReview,
     }
