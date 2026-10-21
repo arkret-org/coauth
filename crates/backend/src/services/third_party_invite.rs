@@ -82,6 +82,7 @@ pub(crate) struct Custody {
     pub state: ThirdPartyInviteProvisioningState,
     pub delivery_state: Option<ThirdPartyInviteDeliveryState>,
     pub delivery_attempts: u32,
+    pub delivery_may_have_succeeded: bool,
     pub failed_lookup_attempts: u32,
     pub token_mac: String,
     /// Salted target digest remains only in encrypted provider audit custody.
@@ -321,6 +322,7 @@ pub(crate) async fn provision_verified(
         state: ThirdPartyInviteProvisioningState::Provisioned,
         delivery_state: None,
         delivery_attempts: 0,
+        delivery_may_have_succeeded: false,
         failed_lookup_attempts: 0,
         secrets: Some(SecretMaterial {
             token,

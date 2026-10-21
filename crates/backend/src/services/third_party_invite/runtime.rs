@@ -230,7 +230,7 @@ impl ThirdPartyInviteRuntime {
             )
             .await;
 
-            c.delivery_attempts += 1;
+            record_delivery_outcome(&mut c, &sent);
             if !matches!(sent, Ok(Ok(_))) {
                 let (failure_class, provider_status) = delivery_failure_boundary(&sent);
                 // Never format provider errors: they may contain the target,
@@ -239,16 +239,9 @@ impl ThirdPartyInviteRuntime {
                     failure_class,
                     provider_status,
                     attempt = c.delivery_attempts,
-                    "IVS delivery transport refused; original retry schedule retained"
+                    "IVS delivery transport did not confirm success; original retry schedule retained"
                 );
             }
-            c.delivery_state = Some(if matches!(sent, Ok(Ok(_))) {
-                ThirdPartyInviteDeliveryState::Delivered
-            } else if c.delivery_attempts >= 3 {
-                ThirdPartyInviteDeliveryState::Failed
-            } else {
-                ThirdPartyInviteDeliveryState::Queued
-            });
         }
         if Utc::now() >= c.public.expires_at {
             c.state = ThirdPartyInviteProvisioningState::Expired;
@@ -263,17 +256,54 @@ impl ThirdPartyInviteRuntime {
                 },
             ),
         );
-        if c.state == ThirdPartyInviteProvisioningState::Activated
-            && c.delivery_state == Some(ThirdPartyInviteDeliveryState::Failed)
-        {
-            // No Realm mutation. The authorized writer decides send_failed.
-            c.state = ThirdPartyInviteProvisioningState::Revoked;
-            c.secrets = None;
-        }
         update(&mut repo, row, &c, &self.encrypter).await?;
         repo.save().await?;
         guard.finish().await.map_err(|_| InviteError::Internal)?;
         Ok(())
+    }
+}
+
+fn record_delivery_outcome(
+    custody: &mut Custody,
+    result: &Result<
+        Result<coauth_messaging::email::SendResult, coauth_messaging::email::MailerError>,
+        tokio::time::error::Elapsed,
+    >,
+) {
+    custody.delivery_attempts += 1;
+    // A later definite failure cannot erase an earlier uncertain send.
+    custody.delivery_may_have_succeeded |= delivery_outcome_uncertain(result);
+    custody.delivery_state = Some(if matches!(result, Ok(Ok(_))) {
+        ThirdPartyInviteDeliveryState::Delivered
+    } else if custody.delivery_attempts >= 3 {
+        ThirdPartyInviteDeliveryState::Failed
+    } else {
+        ThirdPartyInviteDeliveryState::Queued
+    });
+    if custody.delivery_state == Some(ThirdPartyInviteDeliveryState::Failed) {
+        // Exhaustion abandons only private delivery. Stop retries and destroy
+        // recovery material without asserting any shared Invite revocation.
+        custody.secrets = None;
+    }
+}
+
+fn delivery_outcome_uncertain(
+    result: &Result<
+        Result<coauth_messaging::email::SendResult, coauth_messaging::email::MailerError>,
+        tokio::time::error::Elapsed,
+    >,
+) -> bool {
+    use coauth_messaging::email::{EmailTransportError, MailerError};
+    match result {
+        Err(_) => true,
+        Ok(Err(MailerError::Transport(EmailTransportError::Http(error)))) => !error.is_connect(),
+        Ok(Err(MailerError::Transport(EmailTransportError::ProviderError { status, .. }))) => {
+            *status >= 500
+        }
+        Ok(Err(MailerError::Transport(
+            EmailTransportError::Smtp(_) | EmailTransportError::Sendmail(_),
+        ))) => true,
+        _ => false,
     }
 }
 
@@ -488,6 +518,113 @@ mod private_custody_tests {
     }
 
     #[tokio::test]
+    async fn delivery_exhaustion_keeps_activation_and_scrubs_cold_retry_material() {
+        let db = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .unwrap();
+        let factory = PgRepositoryFactory::new(db.clone());
+        let encrypter = Encrypter::new(&[0x47; 32]);
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(93304);
+        let (request, did) = super::super::tests::request(ThirdPartyInviteOobKind::OfflineToken);
+        let mut repo = factory.create().await.unwrap();
+        let public = provision_verified(
+            &mut repo,
+            &encrypter,
+            &mut rng,
+            &request,
+            &did,
+            "uncertain-delivery",
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+        let command = super::super::tests::ledger_activation(&public, &did, 98);
+        let activation = activate_verified(&mut repo, &encrypter, &command, Utc::now())
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+        let key = digest(public.provisioning_id.as_str());
+        let timeout = tokio::time::timeout(
+            std::time::Duration::ZERO,
+            std::future::pending::<
+                Result<coauth_messaging::email::SendResult, coauth_messaging::email::MailerError>,
+            >(),
+        )
+        .await;
+        let definite_failure = Ok(Err(coauth_messaging::email::MailerError::Transport(
+            coauth_messaging::email::EmailTransportError::ProviderError {
+                status: 400,
+                code: None,
+                body: String::new(),
+                retryable: false,
+            },
+        )));
+        let mut frozen_secret = None;
+        let mut old_selector = None;
+        for attempt in 1..=3 {
+            let mut repo = factory.create().await.unwrap();
+            let row = repo.third_party_invite().find(&key).await.unwrap().unwrap();
+            let mut custody = decrypt(&row, &encrypter).unwrap();
+            let secret = custody.secrets.as_ref().unwrap();
+            let original = serde_json::to_value(secret).unwrap();
+            assert!(frozen_secret.get_or_insert(original.clone()) == &original);
+            old_selector.get_or_insert(row.token_selector.clone().unwrap());
+            record_delivery_outcome(
+                &mut custody,
+                if attempt == 1 {
+                    &timeout
+                } else {
+                    &definite_failure
+                },
+            );
+            assert!(custody.state == ThirdPartyInviteProvisioningState::Activated);
+            assert!(custody.activation.as_ref() == Some(&activation));
+            assert!(custody.public == public && custody.delivery_may_have_succeeded);
+            assert_eq!(custody.delivery_attempts, attempt);
+            if attempt < 3 {
+                assert!(custody.delivery_state == Some(ThirdPartyInviteDeliveryState::Queued));
+                assert!(
+                    serde_json::to_value(custody.secrets.as_ref().unwrap()).unwrap() == original
+                );
+            }
+            update(&mut repo, row, &custody, &encrypter).await.unwrap();
+            repo.save().await.unwrap();
+        }
+        let mut cold = factory.create().await.unwrap();
+        let row = cold.third_party_invite().find(&key).await.unwrap().unwrap();
+        let custody = decrypt(&row, &encrypter).unwrap();
+        assert!(custody.state == ThirdPartyInviteProvisioningState::Activated);
+        assert!(custody.delivery_state == Some(ThirdPartyInviteDeliveryState::Failed));
+        assert!(
+            custody.secrets.is_none()
+                && row.token_selector.is_none()
+                && row.deliver_after.is_none()
+        );
+        assert!(
+            cold.third_party_invite()
+                .find_token(old_selector.as_ref().unwrap())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            cold.third_party_invite()
+                .due(Utc::now())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        let replay = activate_verified(&mut cold, &encrypter, &command, Utc::now())
+            .await
+            .unwrap();
+        assert!(replay == activation);
+        let row = cold.third_party_invite().find(&key).await.unwrap().unwrap();
+        assert!(decrypt(&row, &encrypter).unwrap().secrets.is_none());
+        assert!(row.deliver_after.is_none());
+        cold.save().await.unwrap();
+    }
+
+    #[tokio::test]
     async fn actual_poller_expires_unbound_invites_and_scrubs_cold_custody() {
         Box::pin(expired_worker_scrubs_real_minted_custody(false)).await;
     }
@@ -495,5 +632,37 @@ mod private_custody_tests {
     #[tokio::test]
     async fn actual_poller_expires_activated_invites_and_scrubs_cold_custody() {
         Box::pin(expired_worker_scrubs_real_minted_custody(true)).await;
+    }
+}
+
+#[cfg(test)]
+mod delivery_outcome_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn timeout_and_provider_ambiguity_are_distinct_from_definite_failure() {
+        use coauth_messaging::email::{EmailTransportError, MailerError, SendResult};
+        let timeout = tokio::time::timeout(
+            std::time::Duration::ZERO,
+            std::future::pending::<Result<SendResult, MailerError>>(),
+        )
+        .await;
+        assert!(delivery_outcome_uncertain(&timeout));
+        let provider = |status| {
+            Ok(Err(MailerError::Transport(
+                EmailTransportError::ProviderError {
+                    status,
+                    code: None,
+                    body: "private response must never enter diagnostics".into(),
+                    retryable: true,
+                },
+            )))
+        };
+        assert!(delivery_outcome_uncertain(&provider(503)));
+        assert!(!delivery_outcome_uncertain(&provider(400)));
+        assert_eq!(
+            delivery_failure_boundary(&provider(503)),
+            ("provider_status", 503)
+        );
     }
 }
