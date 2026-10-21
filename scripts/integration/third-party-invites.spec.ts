@@ -505,10 +505,10 @@ test("TP4 all six failure classes are indistinguishable and rejected bindings do
     failureRecipient = failedValue.recipient;
     await deliveryFailure(request, failureRecipient, true);
     const failedBinding = await accepted(owner, failedValue);
-    await ok(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/activate`, { data: failedBinding.request }), "refused transport fixture activation");
+    const failedActivation = await ok(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/activate`, { data: failedBinding.request }), "refused transport fixture activation");
     // This is a private failed gateway attempt, not successful OOB delivery.
     const refusedCode = await attemptedCode(request, failureRecipient);
-    unavailable.push({ failureClass: "send_failed", realmId: failedRealm.realmId, token: refusedCode });
+    unavailable.push({ failureClass: "delivery_exhausted", realmId: failedRealm.realmId, token: refusedCode });
 
     delegate = await user("uniform-delegate");
     const delegatedRealm = await realm(owner, delegate);
@@ -528,7 +528,7 @@ test("TP4 all six failure classes are indistinguishable and rejected bindings do
     await owner.bridge.submitTypedEvent({ handoffId: owner.handoffId, realmId: delegatedRealm.realmId,
       kind: "ak.capability.revoke", payload: { grant_id: grantId,
         expected_revision: { commit_id: grantCommit.commit_id, stream_position: grantCommit.stream_position } } });
-    unavailable.push({ failureClass: "revoked_by_capability_loss", realmId: delegatedRealm.realmId, token: delegatedCode });
+    unavailable.push({ failureClass: "current_capability_lost", realmId: delegatedRealm.realmId, token: delegatedCode });
 
     for (const cause of ["inviter_left", "revoked"] as const) {
       const target = await realm(owner);
@@ -542,7 +542,7 @@ test("TP4 all six failure classes are indistinguishable and rejected bindings do
         kind: "ak.invite.revoke", payload: { invite_id: evidence.inviteId, previous_state: "pending", target_state: "revoked" } });
       else await owner.bridge.submitTypedEvent({ handoffId: owner.handoffId, realmId: target.realmId,
         kind: "ak.member.state", payload: { member_id: { kind: "account", account_id: owner.founded.accountId }, membership: "leave" } });
-      unavailable.push({ failureClass: cause === "inviter_left" ? "revoked_by_inviter_left" : "revoked", realmId: target.realmId, token: code });
+      unavailable.push({ failureClass: cause === "inviter_left" ? "current_inviter_left" : "revoked", realmId: target.realmId, token: code });
     }
 
     const lookupRealm = await realm(owner);
@@ -559,7 +559,7 @@ test("TP4 all six failure classes are indistinguishable and rejected bindings do
     const invalidated = await ok(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/status`, {
       data: { provisioning_id: lookupValue.output.provisioning_id } }), "three actual failures invalidate lookup custody");
     expect(invalidated.provisioning_state).toBe("revoked");
-    unavailable.push({ failureClass: "invalidated_by_rate_limit", realmId: lookupRealm.realmId, token: lookupCode });
+    unavailable.push({ failureClass: "lookup_exhausted", realmId: lookupRealm.realmId, token: lookupCode });
 
     await expect.poll(async () => {
       const state = await ok(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/status`, {
@@ -569,9 +569,19 @@ test("TP4 all six failure classes are indistinguishable and rejected bindings do
     const attempts = await mailbox(request, failureRecipient);
     expect(attempts.length).toBe(3);
     expect(attempts.every(m => m.delivery_status === "failed"), "refused transport must not claim delivery").toBe(true);
-    await owner.bridge.submitTypedEvent({ handoffId: owner.handoffId, realmId: failedRealm.realmId,
-      kind: "ak.invite.revoke", payload: { invite_id: failedBinding.inviteId, previous_state: "pending",
-        target_state: "send_failed", reason: "delivery transport refused" } });
+    const exhausted = await ok(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/status`, {
+      data: { provisioning_id: failedValue.output.provisioning_id } }), "private delivery exhaustion preserves activation");
+    expect(exhausted.provisioning_state).toBe("activated");
+    expect(exhausted.invite_id).toBe(failedBinding.inviteId);
+    expect(exhausted.activated_at).toBe(failedActivation.activated_at);
+    const replayedActivation = await ok(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/activate`, {
+      data: failedBinding.request }), "exact exhausted activation replay");
+    expect(replayedActivation.activated_at).toBe(failedActivation.activated_at);
+    const afterReplay = await ok(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/status`, {
+      data: { provisioning_id: failedValue.output.provisioning_id } }), "exhausted replay does not restore delivery");
+    expect(afterReplay.provisioning_state).toBe("activated");
+    expect(afterReplay.delivery_state).toBe("failed");
+    expect(afterReplay.delivery_attempt_count).toBe(3);
     await sleep(61_000);
     for (let group = 0; group < 2; group++) {
       if (group > 0) await sleep(61_000);
@@ -606,10 +616,10 @@ test("TP4 all six failure classes are indistinguishable and rejected bindings do
       contentType: "application/json",
     });
     expect(unavailable.map(value => value.failureClass)).toEqual([
-      "expired", "send_failed", "revoked_by_capability_loss", "revoked_by_inviter_left", "revoked", "invalidated_by_rate_limit",
+      "expired", "delivery_exhausted", "current_capability_lost", "current_inviter_left", "revoked", "lookup_exhausted",
     ]);
     expect(failures.length).toBe(9);
-    expect(failures.every(value => value === failures[0]), "six normative terminal classes and malformed bindings must match byte-for-byte").toBe(true);
+    expect(failures.every(value => value === failures[0]), "six unavailable classes and malformed bindings must match byte-for-byte").toBe(true);
     expect(Math.max(...timings) - Math.min(...timings), "all negative timing classes must stay within 50ms").toBeLessThanOrEqual(50);
   } finally {
     try { if (failureRecipient) await deliveryFailure(request, failureRecipient, false); }
