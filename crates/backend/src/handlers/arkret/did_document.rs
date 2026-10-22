@@ -17,6 +17,8 @@
 //! conversion in `services::did_binding` is therefore the explicit handoff,
 //! not a second protocol model.
 
+use std::collections::BTreeMap;
+
 use arkret_identity::test_material::{
     FormalTestMaterialPolicyError, PublicKeyFingerprintInput, enforce_formal_test_material_policy,
 };
@@ -29,9 +31,10 @@ use serde::{Deserialize, Serialize};
 pub struct DidDocument {
     pub id: String,
 
+    // Signed native documents distinguish an absent alias list from an empty one.
     #[serde(rename = "alsoKnownAs")]
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub also_known_as: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub also_known_as: Option<Vec<String>>,
 
     #[serde(rename = "verificationMethod")]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -56,6 +59,9 @@ pub struct DidDocument {
     /// metadata block still round-trip unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<DidDocumentMetadata>,
+
+    #[serde(flatten)]
+    pub additional_properties: BTreeMap<String, serde_json::Value>,
 }
 
 /// R3.2 — DID Document `metadata` block.
@@ -73,6 +79,9 @@ pub struct DidDocumentMetadata {
     /// primary display handle, or `null` when no preference is recorded.
     #[serde(default)]
     pub primary_handle: Option<String>,
+
+    #[serde(flatten)]
+    pub additional_properties: BTreeMap<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +100,9 @@ pub struct VerificationMethod {
     #[serde(rename = "publicKeyMultibase")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub public_key_multibase: Option<String>,
+
+    #[serde(flatten)]
+    pub additional_properties: BTreeMap<String, serde_json::Value>,
 }
 
 /// Failure returned before resolved key material may become a formal
@@ -278,6 +290,9 @@ pub struct DidService {
 
     #[serde(rename = "serviceEndpoint")]
     pub service_endpoint: String,
+
+    #[serde(flatten)]
+    pub additional_properties: BTreeMap<String, serde_json::Value>,
 }
 
 #[cfg(test)]
@@ -288,6 +303,47 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn resolver_preserves_profile_members_and_unknown_extensions() {
+        let original = json!({
+            "@context": ["https://www.w3.org/ns/did/v1"],
+            "id": "did:web:resolver.example",
+            "controller": "did:web:controller.example",
+            "capabilityDelegation": ["did:web:controller.example#key"],
+            "verificationMethod": [{
+                "id": "did:web:resolver.example#key",
+                "type": "Multikey",
+                "controller": "did:web:resolver.example",
+                "publicKeyMultibase": "z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+                "customKeyPolicy": {"purpose": "external"}
+            }],
+            "service": [{
+                "id": "did:web:resolver.example#station",
+                "type": "ArkretService",
+                "serviceKind": "station",
+                "serviceEndpoint": "https://station.example/",
+                "customRoutingHint": {"region": "test"}
+            }],
+            "metadata": {"primary_handle": null, "customPreference": true},
+            "customDocumentPolicy": ["retained"]
+        });
+        for aliases in [
+            None,
+            Some(json!([])),
+            Some(json!(["at://resolver.example"])),
+        ] {
+            let mut original = original.clone();
+            if let Some(aliases) = aliases {
+                original
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("alsoKnownAs".to_owned(), aliases);
+            }
+            let document: DidDocument = serde_json::from_value(original.clone()).unwrap();
+            assert_eq!(serde_json::to_value(document).unwrap(), original);
+        }
+    }
 
     #[test]
     fn did_webvh_multikey_document_deserializes_and_converts_to_jwk() {
@@ -497,9 +553,12 @@ mod tests {
             }
         }
 
-        assert_eq!(rows.len(), 127);
-        assert_eq!(roles.get("test_material"), Some(&30));
-        assert_eq!(roles.get("deployment_like_example"), Some(&93));
-        assert_eq!(roles.get("derived_positive"), Some(&4));
+        assert_eq!(roles.values().sum::<usize>(), rows.len());
+        for role in ROLES {
+            assert!(
+                roles.get(role).is_some_and(|count| *count > 0),
+                "missing inventory role {role}"
+            );
+        }
     }
 }

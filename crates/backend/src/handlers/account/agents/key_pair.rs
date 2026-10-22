@@ -624,8 +624,7 @@ pub async fn post_agent_key_pair(
     }
     if outcome.activation_state
         == arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active
-    {
-        if !repo
+        && !repo
             .agent_key_authorization()
             .mark_fanout_delivered_and_revoke(
                 &*clock,
@@ -634,13 +633,12 @@ pub async fn post_agent_key_pair(
                 arkret_wire::ReasonCode::SUPERSEDED_BY_REPAIRING,
             )
             .await?
-        {
-            return Err(AppError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "Station accepted the Agent key; local reconciliation pending",
-            )
-            .into());
-        }
+    {
+        return Err(AppError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Station accepted the Agent key; local reconciliation pending",
+        )
+        .into());
     }
     repo.save().await?;
     Ok(Json(outcome))

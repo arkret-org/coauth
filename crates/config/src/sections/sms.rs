@@ -211,8 +211,9 @@ impl ConfigurationSection for SmsConfig {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::result_large_err)]
-    use figment::providers::{Format, Yaml};
+    use figment::providers::Format;
     use figment::{Figment, Jail};
+    use serde_saphyr::figment::Yaml;
 
     use super::*;
 

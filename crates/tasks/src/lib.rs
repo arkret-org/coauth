@@ -70,6 +70,10 @@ struct State {
 
 impl State {
     /// Build a new `State` from its constituent parts.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "The task composition root receives each independent runtime service explicitly."
+    )]
     pub fn new(
         repo_factory: PgRepositoryFactory,
         db_url: String,

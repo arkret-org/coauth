@@ -49,7 +49,7 @@ salvo = { workspace = true }
 sentry = { workspace = true }
 sentry-tracing = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml_ng = { workspace = true }
+serde-saphyr = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-appender = { workspace = true }

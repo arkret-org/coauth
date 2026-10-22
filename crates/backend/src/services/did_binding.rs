@@ -1059,12 +1059,13 @@ pub(crate) fn test_resolution(
     DidResolution {
         document: CoauthDidDocument {
             id: did.to_owned(),
-            also_known_as: Vec::new(),
+            also_known_as: None,
             verification_method: Vec::new(),
             authentication: Vec::new(),
             assertion_method: Vec::new(),
             service: Vec::new(),
             metadata: None,
+            additional_properties: std::collections::BTreeMap::new(),
         },
         source,
         verified_local_binding: false,

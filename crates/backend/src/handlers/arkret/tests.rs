@@ -1532,7 +1532,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
 }
 
 #[tokio::test]
-async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
+async fn session_grant_http_introspection_rejects_agent_without_current_authority() {
     setup();
     let pool = coauth_storage_postgres::test_utils::setup_test_pool()
         .await
@@ -1702,8 +1702,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         serde_json::Value::Object(scope_details.clone())
     );
     let mut repo = state.repository().await.unwrap();
-    // Seed the key authorization the use-time gate re-reads by event id; the
-    // gate only requires the row to exist, unrevoked and unexpired.
+    // A persisted unrevoked row cannot replace the Station's accepted current
+    // key authority. The HTTP fixture deliberately reports a not-ready Agent.
     repo.agent_key_authorization()
         .add(
             &mut rng,
@@ -1775,8 +1775,8 @@ async fn session_grant_http_introspection_accepts_persisted_agent_grant() {
         .await;
     response.assert_status(StatusCode::OK);
     let body: serde_json::Value = response.json();
-    assert_eq!(body["active"], true, "{body}");
-    assert_eq!(body["status"], "active");
+    assert_eq!(body["active"], false, "{body}");
+    assert_eq!(body["status"], "revoked");
     assert_eq!(body["proof_required"], false);
     assert_eq!(
         body["grant"]["account_id"]["principal_id"],

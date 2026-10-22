@@ -356,29 +356,25 @@ pub async fn introspect_session_grant(
                 current_view.as_ref(),
                 authorization_ref.as_deref(),
                 parsed_payload.as_ref(),
-            ) {
-                if let Some(method) = view
-                    .key_state
-                    .as_ref()
-                    .and_then(|state| state.authorized_verification_method.as_ref())
-                {
-                    if let Ok(retained) =
-                        crate::handlers::account::agents::resolve_retained_agent_pairing(
-                            &mut repo,
-                            view,
-                            reference,
-                            grant.subject_id.as_str(),
-                            method.as_str(),
-                        )
-                        .await
-                    {
-                        key_alive = crate::handlers::account::agents::validate_authoritative_agent_session_evidence(
+            ) && let Some(method) = view
+                .key_state
+                .as_ref()
+                .and_then(|state| state.authorized_verification_method.as_ref())
+                && let Ok(retained) =
+                    crate::handlers::account::agents::resolve_retained_agent_pairing(
+                        &mut repo,
+                        view,
+                        reference,
+                        grant.subject_id.as_str(),
+                        method.as_str(),
+                    )
+                    .await
+            {
+                key_alive = crate::handlers::account::agents::validate_authoritative_agent_session_evidence(
                             &retained,view,&payload.scopes,&depot.encrypter()?,&arkret_config,clock.now(),
                         ).is_ok() && view.key_state.as_ref().and_then(|state| state.current_key_authorization.as_ref()).and_then(|source| source.reducer_input()).and_then(|event| {
                             arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload::try_from(event).ok()
                         }).is_some_and(|current| current.expires_at.is_none_or(|expiry| expiry > clock.now()));
-                    }
-                }
             }
             if !key_alive {
                 status = SessionGrantAdminIntrospectionStatus::Revoked;

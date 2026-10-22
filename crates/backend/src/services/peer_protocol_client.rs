@@ -275,18 +275,17 @@ impl<'a> PeerProtocolClient<'a> {
         let ambiguous = response
             .extensions()
             .get::<outbound_http::OutboundAttemptHistory>()
-            .map_or(true, |history| history.had_prior_ambiguous_result);
+            .is_none_or(|history| history.had_prior_ambiguous_result);
         parse_json_response(response).await.map_err(|error| {
             if let PeerProtocolClientError::Status {
                 status,
                 problem: Some(problem),
             } = &error
-            {
-                if let Some(refusal) = coauth_principal::PrincipalAgentKeyPairRefusal::from_problem(
+                && let Some(refusal) = coauth_principal::PrincipalAgentKeyPairRefusal::from_problem(
                     *status, problem, ambiguous,
-                ) {
-                    return anyhow::Error::new(refusal);
-                }
+                )
+            {
+                return anyhow::Error::new(refusal);
             }
             anyhow::Error::new(error)
         })

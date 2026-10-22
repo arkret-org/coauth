@@ -284,7 +284,7 @@ async fn exercise_handler(
     let resolution = DidResolution {
         document: DidDocument {
             id: did.to_string(),
-            also_known_as: Vec::new(),
+            also_known_as: None,
             verification_method: vec![VerificationMethod {
                 id: method.to_string(),
                 kind: "JsonWebKey2020".to_owned(),
@@ -293,11 +293,13 @@ async fn exercise_handler(
                     "kty": "OKP", "crv": "Ed25519", "x": arkret_canonical::base64url_encode(public_key)
                 })).unwrap()),
                 public_key_multibase: None,
+                additional_properties: std::collections::BTreeMap::new(),
             }],
             authentication: Vec::new(),
             assertion_method: Vec::new(),
             service: Vec::new(),
             metadata: None,
+            additional_properties: std::collections::BTreeMap::new(),
         },
         source: DidResolutionSource::DelegatedResolver,
         verified_local_binding: false,

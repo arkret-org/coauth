@@ -106,6 +106,20 @@ deny = [
 multiple-versions = "deny"
 
 skip = [
+    # Cookie/JOSE/OpenMLS still require the previous RustCrypto API families.
+    # Keep these exact-version duplicates visible and remove on upstream convergence.
+    { name = "aes-gcm", version = "0.10.3" },
+    { name = "ctr", version = "0.9.2" },
+    { name = "ghash", version = "0.5.1" },
+    { name = "keccak", version = "0.1.6" },
+    { name = "pkcs8", version = "0.10.2" },
+    { name = "polyval", version = "0.6.2" },
+    { name = "rand_chacha", version = "0.9.0" },
+    { name = "sha3", version = "0.10.8" },
+    { name = "sha3", version = "0.11.0" },
+    { name = "spki", version = "0.7.3" },
+    { name = "x25519-dalek", version = "2.0.1" },
+
     # RustCrypto/JOSE and OpenMLS retain the older signing, DER and AEAD APIs;
     # SDK crypto uses the compatible new RustCrypto line. Remove each entry
     # when those upstream crates converge on the same API generation.

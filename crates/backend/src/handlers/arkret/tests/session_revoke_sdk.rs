@@ -7,7 +7,6 @@ use arkret_models_collaboration::account_lifecycle::{
     AccountLifecycleProof, AccountLifecycleProofKind, SessionRevokeRequestBody,
 };
 use arkret_wire::{DeviceId, SessionGrantId};
-use ed25519_dalek_3::Signer as _;
 use salvo::conn::Listener as _;
 
 use super::*;
@@ -162,16 +161,10 @@ fn sign_request(
     } else {
         [81; 32]
     };
-    let key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&proof_seed);
-    let header = arkret_canonical::base64url_encode(
-        arkret_canonical::canonical_json_bytes(&serde_json::json!({"alg":"Ed25519","kid":method}))
-            .unwrap(),
-    );
-    let payload = arkret_canonical::base64url_encode(proof.canonical_signing_bytes().unwrap());
-    let signature = key.sign(format!("{header}.{payload}").as_bytes());
-    proof.signature = format!(
-        "{header}..{}",
-        arkret_canonical::base64url_encode(signature.to_bytes())
+    proof.signature = crate::arkret_key_bridge::sdk_detached_jws_for_test(
+        &proof_seed,
+        method,
+        &proof.canonical_signing_bytes().unwrap(),
     );
     request.proof = Some(proof);
 }
@@ -265,7 +258,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
             .unwrap();
     let accepted_document: crate::handlers::arkret::DidDocument =
         serde_json::from_value(inception.log_entry["state"].clone()).unwrap();
-    let method = accepted_document.verification_method[0].id.to_string();
+    let method = accepted_document.verification_method[0].id.clone();
     let mut input = coauth_storage_postgres::test_utils::verified_principal_binding_input(
         "did:web:example.com",
         required_audience_for(&state.url_builder, &state.arkret_config),

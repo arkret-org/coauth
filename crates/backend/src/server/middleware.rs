@@ -553,7 +553,7 @@ pub(super) struct OpenApiYaml {
 impl OpenApiYaml {
     pub(super) fn from_doc(doc: &salvo::oapi::OpenApi) -> Self {
         Self {
-            yaml: serde_yaml_ng::to_string(doc).expect("OpenAPI document should serialize"),
+            yaml: serde_saphyr::to_string(doc).expect("OpenAPI document should serialize"),
         }
     }
 }

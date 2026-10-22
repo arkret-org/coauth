@@ -1,4 +1,5 @@
 # syntax = docker/dockerfile:1.7.1
+# Build from the repository parent with --build-context savfox=../savfox-ai/savfox.
 # Builds a minimal image with the binary only. Buildx publishes amd64 and arm64
 # variants from this Dockerfile. Frontend assets can either be built in-Docker
 # on the native builder platform or injected as a prebuilt named build context,
@@ -55,6 +56,9 @@ COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 COPY ./floria/ /floria
+COPY ./arkret-spec/ /arkret-spec
+COPY ./bridges/ /bridges
+COPY --from=savfox . /savfox-ai/savfox
 
 # cargo-chef computes a recipe keyed by workspace manifests so frontend
 # dependency compilation can be reused when Rust sources change.
@@ -72,6 +76,9 @@ COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 COPY ./floria/ /floria
+COPY ./arkret-spec/ /arkret-spec
+COPY ./bridges/ /bridges
+COPY --from=savfox . /savfox-ai/savfox
 
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
@@ -148,6 +155,9 @@ COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 COPY ./floria/ /floria
+COPY ./arkret-spec/ /arkret-spec
+COPY ./bridges/ /bridges
+COPY --from=savfox . /savfox-ai/savfox
 
 # cargo-chef keeps the dependency build layer keyed to Cargo manifests so
 # source-only changes can reuse compiled dependencies and downloaded crates.
@@ -168,6 +178,9 @@ COPY ./coland/ /coland
 COPY ./cotest/ /cotest
 COPY ./garth/ /garth
 COPY ./floria/ /floria
+COPY ./arkret-spec/ /arkret-spec
+COPY ./bridges/ /bridges
+COPY --from=savfox . /savfox-ai/savfox
 
 RUN --network=default \
   --mount=type=cache,id=builder-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \

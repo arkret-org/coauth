@@ -360,13 +360,14 @@ impl DidResolverService for DefaultDidResolverService {
             Some("key") => Ok(local_resolution(
                 DidDocument {
                     id: did.to_owned(),
-                    also_known_as: Vec::new(),
+                    also_known_as: None,
                     verification_method: Vec::new(),
                     authentication: Vec::new(),
                     assertion_method: Vec::new(),
                     service: Vec::new(),
                     // External `did:key` — coauth does not own its metadata.
                     metadata: None,
+                    additional_properties: std::collections::BTreeMap::new(),
                 },
                 DidResolutionSource::DidKey,
                 false,

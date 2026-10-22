@@ -168,7 +168,8 @@ impl ConfigurationSection for AccountConfig {
 mod tests {
     #![allow(clippy::result_large_err)]
     use figment::Figment;
-    use figment::providers::{Env, Format, Yaml};
+    use figment::providers::{Env, Format};
+    use serde_saphyr::figment::Yaml;
     use url::Url;
 
     use super::AccountConfig;

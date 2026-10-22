@@ -59,7 +59,7 @@ fn digest(byte: char) -> Hash {
 fn document_for(did: &str) -> CoauthDidDocument {
     CoauthDidDocument {
         id: did.to_owned(),
-        also_known_as: Vec::new(),
+        also_known_as: None,
         verification_method: vec![crate::handlers::arkret::VerificationMethod {
             id: format!("{did}#key-1"),
             kind: "Multikey".to_owned(),
@@ -68,11 +68,13 @@ fn document_for(did: &str) -> CoauthDidDocument {
             public_key_multibase: Some(
                 "z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH".to_owned(),
             ),
+            additional_properties: std::collections::BTreeMap::new(),
         }],
         authentication: Vec::new(),
         assertion_method: Vec::new(),
         service: Vec::new(),
         metadata: None,
+        additional_properties: std::collections::BTreeMap::new(),
     }
 }
 
@@ -107,6 +109,7 @@ fn resolution_with_ed25519_key(
             public_key_multibase: Some(arkret_canonical::ed25519_pubkey_to_did_key_multibase(
                 key.as_bytes(),
             )),
+            additional_properties: std::collections::BTreeMap::new(),
         }
     } else {
         crate::handlers::arkret::VerificationMethod {
@@ -124,6 +127,7 @@ fn resolution_with_ed25519_key(
                 .unwrap(),
             ),
             public_key_multibase: None,
+            additional_properties: std::collections::BTreeMap::new(),
         }
     };
     let mut resolution = healthy_resolution(did);
@@ -380,7 +384,7 @@ fn the_evidence_digest_binds_the_method_and_the_pinned_document() {
     );
 
     let mut other_document = healthy_resolution("did:web:alice.example");
-    other_document.document.also_known_as = vec!["at://alice.example".to_owned()];
+    other_document.document.also_known_as = Some(vec!["at://alice.example".to_owned()]);
     assert_ne!(
         base,
         evidence_digest_of(&other_document),

@@ -3,7 +3,8 @@ use std::process::ExitCode;
 use camino::Utf8PathBuf;
 use clap::Parser;
 use figment::Figment;
-use figment::providers::{Env, Format, Yaml};
+use figment::providers::{Env, Format};
+use serde_saphyr::figment::Yaml;
 
 mod config;
 mod database;

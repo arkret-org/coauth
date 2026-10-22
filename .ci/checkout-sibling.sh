@@ -18,3 +18,8 @@ rm -rf "$dest"
 auth="$(printf 'x-access-token:%s' "$token" | base64 | tr -d '\n')"
 git -c "http.${server}/.extraheader=AUTHORIZATION: basic ${auth}" \
   clone --depth 1 --branch "$ref" "${server}/${owner}/${repo}.git" "$dest"
+
+# Coland's workspace manifests also reference Bridges and the Savfox gateway.
+if [ "$repo" = coland ]; then
+  bash "$dest/.ci/checkout-build-dependencies.sh"
+fi

@@ -1114,15 +1114,7 @@ fn materialize_agent_scope_details(
     effective_scope: &EffectiveAgentSessionScope,
     participations: &[arkret_models_collaboration::governance::agent_participation::AgentParticipationEntry],
 ) -> Result<serde_json::Map<String, Value>, AgentAuthRejection> {
-    let mut constraints = serde_json::json!({
-        "allowed_tracks": effective_scope.allowed_tracks,
-        "allowed_data_labels": effective_scope.allowed_data_labels,
-        "allowed_endpoints": effective_scope.allowed_endpoints,
-    });
-    if !effective_scope.strand_ids.is_empty() {
-        constraints["allowed_strand_ids"] = serde_json::to_value(&effective_scope.strand_ids)
-            .map_err(|_| AgentAuthRejection::ProofInvalid)?;
-    }
+    let constraints = materialize_agent_session_constraints(effective_scope)?;
 
     let mut scope_details = serde_json::Map::from_iter([
         (
@@ -1165,7 +1157,7 @@ fn materialize_agent_scope_details(
     if !participations.is_empty() {
         scope_details.insert(
             "participations".to_owned(),
-            serde_json::to_value(&participations).map_err(|_| AgentAuthRejection::ProofInvalid)?,
+            serde_json::to_value(participations).map_err(|_| AgentAuthRejection::ProofInvalid)?,
         );
     }
 

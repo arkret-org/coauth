@@ -397,7 +397,7 @@ mod tests {
         let resolution = DidResolution {
             document: crate::handlers::arkret::DidDocument {
                 id: did.to_string(),
-                also_known_as: Vec::new(),
+                also_known_as: None,
                 verification_method: vec![
                     serde_json::from_value(serde_json::json!({
                         "id": verification_method,
@@ -411,6 +411,7 @@ mod tests {
                 assertion_method: Vec::new(),
                 service: Vec::new(),
                 metadata: None,
+                additional_properties: std::collections::BTreeMap::new(),
             },
             source: crate::services::did_resolver::DidResolutionSource::DelegatedResolver,
             verified_local_binding: false,

@@ -110,8 +110,13 @@ mod tests {
                 .unwrap();
         let key = arkret_canonical::decode_ed25519_multibase(&verified.log.active_update_keys[0])
             .unwrap();
+        let document = serde_json::from_value(verified.log.head_state.clone()).unwrap();
+        assert_eq!(
+            serde_json::to_value(&document).unwrap(),
+            verified.log.head_state
+        );
         DidResolution {
-            document: serde_json::from_value(verified.log.head_state).unwrap(),
+            document,
             source: DidResolutionSource::DelegatedResolver,
             verified_local_binding: false,
             key_log_head: Some(
@@ -158,15 +163,13 @@ mod tests {
         let payload = b"exact local admin transcript";
         let initial = resolution(&did, std::slice::from_ref(&inception.log_entry));
         assert!(initial.document.verification_method.is_empty());
-        assert!(
-            verify_native_approval_jws(
-                &initial,
-                &principal,
-                payload,
-                &proof(&old, &old_method, payload)
-            )
-            .is_ok()
-        );
+        verify_native_approval_jws(
+            &initial,
+            &principal,
+            payload,
+            &proof(&old, &old_method, payload),
+        )
+        .unwrap();
         let rotation =
             arkret_signatures::webvh::prepare_principal_rotation(&PrincipalRotationInput {
                 did: did.as_str(),

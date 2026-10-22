@@ -202,6 +202,8 @@ jobs:
         with:
           context: .
           file: coauth/Dockerfile
+          build-contexts: |
+            savfox=../savfox-ai/savfox
           platforms: ${{ matrix.platform }}
           pull: true
           push: ${{ github.server_url == 'https://github.com' }}

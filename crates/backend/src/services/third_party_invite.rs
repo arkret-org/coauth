@@ -120,10 +120,10 @@ fn token_mac(pepper: &[u8; 32], token: &str) -> String {
 }
 pub(crate) fn token_selector(token: &str) -> String {
     // Lookup namespace is explicit in the issued code, not inferred from length.
-    if let Some((namespace, _)) = token.split_once('_') {
-        if namespace.len() == 16 {
-            return format!("lookup:{namespace}");
-        }
+    if let Some((namespace, _)) = token.split_once('_')
+        && namespace.len() == 16
+    {
+        return format!("lookup:{namespace}");
     }
     format!("offline:{}", digest(token))
 }
@@ -165,11 +165,11 @@ pub(crate) async fn update(
     encrypter: &Encrypter,
 ) -> Result<(), InviteError> {
     row.encrypted_record = encrypt(c, encrypter)?;
-    row.state = serde_json::to_value(c.state)
+    serde_json::to_value(c.state)
         .map_err(|_| InviteError::Internal)?
         .as_str()
         .ok_or(InviteError::Internal)?
-        .to_owned();
+        .clone_into(&mut row.state);
     if c.secrets.is_none() {
         row.token_selector = None;
         row.deliver_after = None;

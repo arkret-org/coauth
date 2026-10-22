@@ -209,7 +209,7 @@ async fn terminal_intent_replay_preserves_public_ledger_without_restoring_custod
                 .await
                 .unwrap()
                 .unwrap();
-            assert!(after.encrypted_record == before.encrypted_record);
+            assert_eq!(after.encrypted_record, before.encrypted_record);
             assert!(after.token_selector.is_none());
             assert!(after.deliver_after.is_none());
             let still_terminal = decrypt(&after, &encrypter).unwrap();
@@ -477,7 +477,7 @@ async fn mint_generates_independent_32_byte_salts_and_exact_token_commitments() 
             let custody = decrypt(&row, &encrypter).unwrap();
             let secret = custody.secrets.as_ref().unwrap();
             // Boolean diagnostics avoid printing tokens, salts or private signing seeds.
-            assert!(secret.salt.len() == 32);
+            assert_eq!(secret.salt.len(), 32);
             assert!(secret.salt != [0; 32]);
             assert!(
                 previous_salts
@@ -489,10 +489,13 @@ async fn mint_generates_independent_32_byte_salts_and_exact_token_commitments() 
             actual.update(secret.salt);
             actual.update(secret.token.as_bytes());
             let expected = Hash::new(format!("sha256:{:x}", actual.finalize())).unwrap();
-            assert!(custody.public.third_party_invite.token_commitment.as_ref() == Some(&expected));
+            assert_eq!(
+                custody.public.third_party_invite.token_commitment.as_ref(),
+                Some(&expected)
+            );
             previous_salts.push(secret.salt);
             cold.cancel().await.unwrap();
         }
     }
-    assert!(previous_salts.len() == 4);
+    assert_eq!(previous_salts.len(), 4);
 }

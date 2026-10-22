@@ -106,7 +106,7 @@ pub(super) fn present_guard_failure(error: coland_storage::PersistenceError) -> 
 fn source_bucket(req: &Request) -> String {
     req.extensions()
         .get::<crate::listener::ConnectionInfo>()
-        .and_then(|info| info.client_ip())
+        .and_then(crate::listener::ConnectionInfo::client_ip)
         .map_or_else(|| "local".into(), |ip| ip.to_string())
 }
 
@@ -485,18 +485,17 @@ pub async fn reject_third_party_invite_url_credentials(
                     .third_party_invite()
                     .find_token(&custody::token_selector(&token))
                     .await;
-                if let Ok(Some(row)) = found {
-                    if let Ok(mut c) = custody::decrypt(&row, &runtime.encrypter) {
-                        if custody::matches_token(&c, &token) {
-                            c.state = ThirdPartyInviteProvisioningState::Revoked;
-                            c.secrets = None;
-                            if custody::update(&mut repo, row, &c, &runtime.encrypter)
-                                .await
-                                .is_ok()
-                            {
-                                let _ = repo.save().await;
-                            }
-                        }
+                if let Ok(Some(row)) = found
+                    && let Ok(mut c) = custody::decrypt(&row, &runtime.encrypter)
+                    && custody::matches_token(&c, &token)
+                {
+                    c.state = ThirdPartyInviteProvisioningState::Revoked;
+                    c.secrets = None;
+                    if custody::update(&mut repo, row, &c, &runtime.encrypter)
+                        .await
+                        .is_ok()
+                    {
+                        let _ = repo.save().await;
                     }
                 }
             }

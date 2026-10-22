@@ -390,7 +390,7 @@ mod pool_wait_tests {
         let clock = SystemClock::default();
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
         let mut repo = PgRepository::new(
-            coauth_storage_postgres::pool::get_connection(&pool)
+            coauth_storage_postgres::pool::get_connection(pool)
                 .await
                 .unwrap(),
         );
@@ -446,7 +446,7 @@ mod pool_wait_tests {
 
         // Processing pending tasks with a repository must return immediately.
         let mut repo = PgRepository::new(
-            coauth_storage_postgres::pool::get_connection(&pool)
+            coauth_storage_postgres::pool::get_connection(pool)
                 .await
                 .unwrap(),
         );
@@ -468,7 +468,7 @@ mod pool_wait_tests {
         .unwrap()
         .unwrap();
         assert_eq!(tracker.running_jobs(), 0);
-        let mut conn = coauth_storage_postgres::pool::get_connection(&pool)
+        let mut conn = coauth_storage_postgres::pool::get_connection(pool)
             .await
             .unwrap();
         #[derive(diesel::QueryableByName)]

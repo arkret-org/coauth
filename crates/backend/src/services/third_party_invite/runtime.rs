@@ -424,16 +424,16 @@ mod private_custody_tests {
                 .unwrap();
             let custody = decrypt(&row, &runtime.encrypter).unwrap();
             assert!(custody.secrets.is_some());
-            assert!(
-                custody.state
-                    == if activated {
-                        ThirdPartyInviteProvisioningState::Activated
-                    } else {
-                        ThirdPartyInviteProvisioningState::Provisioned
-                    }
+            assert_eq!(
+                custody.state,
+                if activated {
+                    ThirdPartyInviteProvisioningState::Activated
+                } else {
+                    ThirdPartyInviteProvisioningState::Provisioned
+                }
             );
             let old_selector = row.token_selector.clone().unwrap();
-            assert!(activated == row.deliver_after.is_some());
+            assert_eq!(activated, row.deliver_after.is_some());
             let old_ciphertext = row.encrypted_record.clone();
             drop(custody);
             before.cancel().await.unwrap();
@@ -452,14 +452,14 @@ mod private_custody_tests {
                 .await
                 .unwrap()
                 .unwrap();
-            assert!(terminal.encrypted_record != old_ciphertext);
-            assert!(terminal.state == "expired");
+            assert_ne!(terminal.encrypted_record, old_ciphertext);
+            assert_eq!(terminal.state, "expired");
             assert!(terminal.token_selector.is_none() && terminal.deliver_after.is_none());
             let cleaned = decrypt(&terminal, &runtime.encrypter).unwrap();
-            assert!(cleaned.state == ThirdPartyInviteProvisioningState::Expired);
+            assert_eq!(cleaned.state, ThirdPartyInviteProvisioningState::Expired);
             assert!(cleaned.secrets.is_none());
-            assert!(cleaned.delivery_attempts == 0);
-            assert!(cleaned.activation == original_activation);
+            assert_eq!(cleaned.delivery_attempts, 0);
+            assert_eq!(cleaned.activation, original_activation);
             assert!(
                 after
                     .third_party_invite()
@@ -491,13 +491,13 @@ mod private_custody_tests {
             )
             .await
             .unwrap();
-            assert!(replay == public);
+            assert_eq!(replay, public);
             if let Some(command) = &activation_request {
                 let replay =
                     activate_verified(&mut restarted, &runtime.encrypter, command, Utc::now())
                         .await
                         .unwrap();
-                assert!(Some(replay) == original_activation);
+                assert_eq!(Some(replay), original_activation);
             }
             let replay_row = restarted
                 .third_party_invite()
@@ -505,7 +505,7 @@ mod private_custody_tests {
                 .await
                 .unwrap()
                 .unwrap();
-            assert!(replay_row.encrypted_record == terminal.encrypted_record);
+            assert_eq!(replay_row.encrypted_record, terminal.encrypted_record);
             assert!(replay_row.token_selector.is_none() && replay_row.deliver_after.is_none());
             assert!(
                 decrypt(&replay_row, &runtime.encrypter)
@@ -567,7 +567,7 @@ mod private_custody_tests {
             let mut custody = decrypt(&row, &encrypter).unwrap();
             let secret = custody.secrets.as_ref().unwrap();
             let original = serde_json::to_value(secret).unwrap();
-            assert!(frozen_secret.get_or_insert(original.clone()) == &original);
+            assert_eq!(frozen_secret.get_or_insert(original.clone()), &original);
             old_selector.get_or_insert(row.token_selector.clone().unwrap());
             record_delivery_outcome(
                 &mut custody,
@@ -577,14 +577,18 @@ mod private_custody_tests {
                     &definite_failure
                 },
             );
-            assert!(custody.state == ThirdPartyInviteProvisioningState::Activated);
-            assert!(custody.activation.as_ref() == Some(&activation));
+            assert_eq!(custody.state, ThirdPartyInviteProvisioningState::Activated);
+            assert_eq!(custody.activation.as_ref(), Some(&activation));
             assert!(custody.public == public && custody.delivery_may_have_succeeded);
             assert_eq!(custody.delivery_attempts, attempt);
             if attempt < 3 {
-                assert!(custody.delivery_state == Some(ThirdPartyInviteDeliveryState::Queued));
-                assert!(
-                    serde_json::to_value(custody.secrets.as_ref().unwrap()).unwrap() == original
+                assert_eq!(
+                    custody.delivery_state,
+                    Some(ThirdPartyInviteDeliveryState::Queued)
+                );
+                assert_eq!(
+                    serde_json::to_value(custody.secrets.as_ref().unwrap()).unwrap(),
+                    original
                 );
             }
             update(&mut repo, row, &custody, &encrypter).await.unwrap();
@@ -593,8 +597,11 @@ mod private_custody_tests {
         let mut cold = factory.create().await.unwrap();
         let row = cold.third_party_invite().find(&key).await.unwrap().unwrap();
         let custody = decrypt(&row, &encrypter).unwrap();
-        assert!(custody.state == ThirdPartyInviteProvisioningState::Activated);
-        assert!(custody.delivery_state == Some(ThirdPartyInviteDeliveryState::Failed));
+        assert_eq!(custody.state, ThirdPartyInviteProvisioningState::Activated);
+        assert_eq!(
+            custody.delivery_state,
+            Some(ThirdPartyInviteDeliveryState::Failed)
+        );
         assert!(
             custody.secrets.is_none()
                 && row.token_selector.is_none()
@@ -617,7 +624,7 @@ mod private_custody_tests {
         let replay = activate_verified(&mut cold, &encrypter, &command, Utc::now())
             .await
             .unwrap();
-        assert!(replay == activation);
+        assert_eq!(replay, activation);
         let row = cold.third_party_invite().find(&key).await.unwrap().unwrap();
         assert!(decrypt(&row, &encrypter).unwrap().secrets.is_none());
         assert!(row.deliver_after.is_none());
