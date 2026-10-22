@@ -2449,7 +2449,6 @@ dependencies = [
  "coland-services",
  "coland-storage",
  "ed25519-dalek 3.0.0",
- "floria-contracts",
  "futures-util",
  "hex",
  "hmac 0.13.0",
@@ -4601,13 +4600,6 @@ checksum = "843fba2746e448b37e26a819579957415c8cef339bf08564fe8b7ddbd959573c"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
-]
-
-[[package]]
-name = "floria-contracts"
-version = "0.3.0"
-dependencies = [
- "serde",
 ]
 
 [[package]]
