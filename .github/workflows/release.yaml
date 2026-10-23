@@ -23,7 +23,7 @@ env:
   BUILDCACHE: ghcr.io/${{ github.repository }}/buildcache
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
