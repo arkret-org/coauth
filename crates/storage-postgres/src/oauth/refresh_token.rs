@@ -5,7 +5,7 @@ use coauth_data::{
     new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -15,14 +15,16 @@ use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthRefreshTokenRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuthRefreshTokenRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOAuthRefreshTokenRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOAuthRefreshTokenRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOAuthRefreshTokenRepository<'c, P>
+{
     /// Create a new [`PgOAuthRefreshTokenRepository`] from an active
     /// PostgreSQL connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -120,7 +122,9 @@ struct ChainRevokeResult {
 }
 
 #[async_trait]
-impl coauth_data::oauth::OAuthRefreshTokenRepository for PgOAuthRefreshTokenRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    coauth_data::oauth::OAuthRefreshTokenRepository for PgOAuthRefreshTokenRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

@@ -4,7 +4,7 @@ use coauth_data::pagination::Node;
 use coauth_data::user::{UserRegistrationTokenFilter, UserRegistrationTokenRepository};
 use coauth_data::{Clock, Page, Pagination, UserRegistrationToken, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -16,14 +16,16 @@ use crate::schema::user_registration_tokens;
 /// An implementation of
 /// [`coauth_data::user::UserRegistrationTokenRepository`] for a PostgreSQL
 /// connection
-pub struct PgUserRegistrationTokenRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserRegistrationTokenRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserRegistrationTokenRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserRegistrationTokenRepository<'c, P>
+{
     /// Create a new [`PgUserRegistrationTokenRepository`] from an active
     /// PostgreSQL connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -179,7 +181,9 @@ macro_rules! apply_token_filter {
 }
 
 #[async_trait]
-impl UserRegistrationTokenRepository for PgUserRegistrationTokenRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserRegistrationTokenRepository for PgUserRegistrationTokenRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.user_registration_token.list", skip_all, err)]

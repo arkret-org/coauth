@@ -364,7 +364,7 @@ async fn validate_recovery_handoff_request_before_reservation(
 
     let clock = crate::handlers::make_clock();
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let handoff = repo
         .account_handoff()
         .get_active_by_token(handoff_token, now)

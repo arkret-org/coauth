@@ -189,7 +189,7 @@ pub async fn get_registration(
         .map_err(|_| RouteError::BadRequest("invalid id".into()))?;
 
     let repo_factory = depot.repo_factory()?;
-    let mut repo = repo_factory.create().await?;
+    let mut repo = repo_factory.read().await?;
 
     let status = load_registration_status(&mut repo, id)
         .await

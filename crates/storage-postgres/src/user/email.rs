@@ -7,7 +7,7 @@ use coauth_data::{
     UserEmailAuthentication, UserEmailAuthenticationCode, UserEmailPatch, UserRegistration, new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use subtle::ConstantTimeEq as _;
 use ulid::Ulid;
@@ -17,14 +17,16 @@ use crate::DatabaseError;
 use crate::schema::{user_email_authentication_codes, user_email_authentications, user_emails};
 
 /// An implementation of [`UserEmailRepository`] for a PostgreSQL connection
-pub struct PgUserEmailRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserEmailRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserEmailRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserEmailRepository<'c, P>
+{
     /// Create a new [`PgUserEmailRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -143,7 +145,9 @@ struct NewUserEmailAuthenticationCode {
 }
 
 #[async_trait]
-impl UserEmailRepository for PgUserEmailRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserEmailRepository for PgUserEmailRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

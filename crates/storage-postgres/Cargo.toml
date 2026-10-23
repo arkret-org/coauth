@@ -18,6 +18,7 @@ default = []
 test-support = ["dep:arkret-signatures"]
 
 [dependencies]
+horme.workspace = true
 anyhow = { workspace = true }
 arkret-canonical = { workspace = true }
 hex = { workspace = true }

@@ -9,7 +9,7 @@ use coauth_data::circle_capability::{
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -18,14 +18,16 @@ use crate::schema::circle_capability_grants;
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`CircleCapabilityGrantRepository`].
-pub struct PgCircleCapabilityGrantRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgCircleCapabilityGrantRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgCircleCapabilityGrantRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgCircleCapabilityGrantRepository<'c, P>
+{
     /// Construct from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -88,7 +90,9 @@ struct InsertableCircleCapabilityGrant {
 }
 
 #[async_trait]
-impl CircleCapabilityGrantRepository for PgCircleCapabilityGrantRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    CircleCapabilityGrantRepository for PgCircleCapabilityGrantRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.circle_capability_grant.add", skip_all, err)]

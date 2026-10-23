@@ -3,18 +3,20 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::storage::third_party_invite::{PrivateInviteRecord, ThirdPartyInviteRepository};
 use diesel::sql_types::{BigInt, Nullable, Text, Timestamptz};
-use diesel::{OptionalExtension, QueryableByName, sql_query};
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use diesel::{QueryableByName, sql_query};
+use horme::{OptionalExtension, RunQueryDsl};
 
 use crate::DatabaseError;
 
 /// Transaction-borrowed private IVS repository.
-pub struct PgThirdPartyInviteRepository<'a> {
-    conn: &'a mut AsyncPgConnection,
+pub struct PgThirdPartyInviteRepository<'a, P = diesel_async::AsyncPgConnection> {
+    conn: &'a mut P,
 }
-impl<'a> PgThirdPartyInviteRepository<'a> {
+impl<'a, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgThirdPartyInviteRepository<'a, P>
+{
     /// Borrow the current request transaction.
-    pub fn new(conn: &'a mut AsyncPgConnection) -> Self {
+    pub fn new(conn: &'a mut P) -> Self {
         Self { conn }
     }
 }
@@ -68,7 +70,9 @@ struct Count {
 }
 
 #[async_trait]
-impl ThirdPartyInviteRepository for PgThirdPartyInviteRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    ThirdPartyInviteRepository for PgThirdPartyInviteRepository<'_, P>
+{
     type Error = DatabaseError;
     async fn lock_namespace(&mut self, namespace: &str) -> Result<(), Self::Error> {
         sql_query("SELECT pg_advisory_xact_lock(hashtextextended($1, 639331))")

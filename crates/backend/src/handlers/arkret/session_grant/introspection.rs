@@ -202,7 +202,7 @@ pub async fn introspect_session_grant(
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
     let keyring = depot.keyring()?;
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
 
     let (grant, requested_audience, presented_proof) = match body {
         SessionGrantValidationInput::ById(body) => (

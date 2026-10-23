@@ -4,8 +4,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use diesel::QueryableByName;
 use diesel::sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
+use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
-use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
+use horme::RunQueryDsl as _;
 use serde_json::Value;
 use thiserror::Error;
 use ulid::Ulid;
@@ -213,7 +214,7 @@ impl PgAccountClaimsService {
     async fn issue_inner(&self, input: IssueAccountClaim) -> anyhow::Result<AccountClaimRecord> {
         let id = Uuid::now_v7();
         let account_id = input.account_id.map(Uuid::from);
-        let mut conn = self.pool.get().await?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let rows = diesel::sql_query(
             r"
             INSERT INTO account_claims (
@@ -256,7 +257,7 @@ impl PgAccountClaimsService {
         .bind::<Jsonb, _>(input.payload)
         .bind::<Timestamptz, _>(input.issued_at)
         .bind::<Nullable<Timestamptz>, _>(input.expires_at)
-        .get_results::<AccountClaimRow>(&mut *conn)
+        .get_results::<AccountClaimRow>(&mut conn)
         .await?;
 
         rows.into_iter()
@@ -273,7 +274,7 @@ impl PgAccountClaimsService {
         let account_id = filter.account_id.map(Uuid::from);
         let status = filter.status.map(|status| status.as_str().to_owned());
         let limit = filter.limit.unwrap_or(100).clamp(1, 1000);
-        let mut conn = self.pool.get().await?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let rows = diesel::sql_query(
             r"
             SELECT
@@ -309,7 +310,7 @@ impl PgAccountClaimsService {
         .bind::<Nullable<Text>, _>(status)
         .bind::<Timestamptz, _>(now)
         .bind::<BigInt, _>(limit)
-        .get_results::<AccountClaimRow>(&mut *conn)
+        .get_results::<AccountClaimRow>(&mut conn)
         .await?;
 
         Ok(rows.into_iter().map(|row| row.into_record(now)).collect())
@@ -321,7 +322,7 @@ impl PgAccountClaimsService {
         reason: String,
         revoked_at: DateTime<Utc>,
     ) -> anyhow::Result<Option<AccountClaimRecord>> {
-        let mut conn = self.pool.get().await?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let rows = diesel::sql_query(
             r"
             UPDATE account_claims
@@ -348,7 +349,7 @@ impl PgAccountClaimsService {
         .bind::<DieselUuid, _>(Uuid::from(id))
         .bind::<Timestamptz, _>(revoked_at)
         .bind::<Text, _>(reason)
-        .get_results::<AccountClaimRow>(&mut *conn)
+        .get_results::<AccountClaimRow>(&mut conn)
         .await?;
 
         Ok(rows

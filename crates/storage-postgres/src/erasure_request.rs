@@ -7,21 +7,23 @@ use coauth_data::erasure_request::{
     NewUserErasureRequest, UserErasureRequest, UserErasureRequestRepository,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use ulid::Ulid;
 
 use crate::DatabaseError;
 use crate::schema::user_erasure_requests;
 
 /// PostgreSQL implementation of [`UserErasureRequestRepository`].
-pub struct PgUserErasureRequestRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserErasureRequestRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserErasureRequestRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserErasureRequestRepository<'c, P>
+{
     /// Construct from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -66,7 +68,9 @@ struct InsertableUserErasureRequest {
 }
 
 #[async_trait]
-impl UserErasureRequestRepository for PgUserErasureRequestRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserErasureRequestRepository for PgUserErasureRequestRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.user_erasure_request.lookup", skip_all, err)]

@@ -5,7 +5,7 @@ use coauth_storage_postgres::advisory_lock::{AdvisoryLockResult, advisory_lock_k
 use coauth_storage_postgres::{DatabaseError, PgRepository};
 use cron::Schedule;
 use diesel::sql_query;
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 
 use super::QueueRunnerError;
 use super::shared::MAX_ATTEMPTS;

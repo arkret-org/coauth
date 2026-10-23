@@ -349,11 +349,7 @@ pub(super) async fn handle_register_user(
 
     let password_manager = password_manager_from_config(&password_config).await?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     if let Some(password) = &password
         && !ignore_password_complexity

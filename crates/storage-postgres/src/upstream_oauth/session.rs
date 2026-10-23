@@ -7,7 +7,7 @@ use coauth_data::{
     UpstreamOAuthAuthorizationSessionState, UpstreamOAuthLink, UpstreamOAuthProvider, new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -17,14 +17,16 @@ use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`UpstreamOAuthSessionRepository`] for a PostgreSQL
 /// connection
-pub struct PgUpstreamOAuthSessionRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUpstreamOAuthSessionRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUpstreamOAuthSessionRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUpstreamOAuthSessionRepository<'c, P>
+{
     /// Create a new [`PgUpstreamOAuthSessionRepository`] from an active
     /// PostgreSQL connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -160,7 +162,9 @@ struct NewSession {
 }
 
 #[async_trait]
-impl UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UpstreamOAuthSessionRepository for PgUpstreamOAuthSessionRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

@@ -9,7 +9,7 @@ use coauth_data::{
     UserRegistration, UserRegistrationPassword, UserRegistrationToken, new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use ipnetwork::IpNetwork;
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -21,14 +21,16 @@ use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`UserRegistrationRepository`] for a PostgreSQL
 /// connection
-pub struct PgUserRegistrationRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserRegistrationRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserRegistrationRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserRegistrationRepository<'c, P>
+{
     /// Create a new [`PgUserRegistrationRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -136,7 +138,9 @@ struct NewUserRegistration {
 }
 
 #[async_trait]
-impl UserRegistrationRepository for PgUserRegistrationRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserRegistrationRepository for PgUserRegistrationRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

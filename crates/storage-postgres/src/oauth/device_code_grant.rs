@@ -4,7 +4,7 @@ use coauth_data::oauth::{OAuthDeviceCodeGrantParams, OAuthDeviceCodeGrantReposit
 use coauth_data::{BrowserSession, Clock, DeviceCodeGrant, DeviceCodeGrantState, Session, new_id};
 use coauth_oauth_types::scope::Scope;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use ipnetwork::IpNetwork;
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -16,14 +16,16 @@ use crate::schema::oauth_device_code_grant;
 
 /// An implementation of [`OAuthDeviceCodeGrantRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuthDeviceCodeGrantRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOAuthDeviceCodeGrantRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOAuthDeviceCodeGrantRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOAuthDeviceCodeGrantRepository<'c, P>
+{
     /// Create a new [`PgOAuthDeviceCodeGrantRepository`] from an active
     /// PostgreSQL connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -148,7 +150,9 @@ struct NewDeviceCodeGrant {
 }
 
 #[async_trait]
-impl OAuthDeviceCodeGrantRepository for PgOAuthDeviceCodeGrantRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    OAuthDeviceCodeGrantRepository for PgOAuthDeviceCodeGrantRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

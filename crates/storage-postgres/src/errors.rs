@@ -1,6 +1,15 @@
 use thiserror::Error;
 use ulid::Ulid;
 
+impl From<horme::Error> for DatabaseError {
+    fn from(error: horme::Error) -> Self {
+        match error {
+            horme::Error::Query(source) => Self::Diesel { source },
+            horme::Error::Acquire(source) => Self::Pool { source },
+        }
+    }
+}
+
 /// Generic error when interacting with the database
 #[derive(Debug, Error)]
 #[error(transparent)]

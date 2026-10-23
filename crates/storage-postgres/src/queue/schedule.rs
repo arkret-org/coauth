@@ -6,21 +6,23 @@ use chrono::{DateTime, Utc};
 use coauth_data::queue::{QueueScheduleRepository, ScheduleStatus};
 use diesel::prelude::*;
 use diesel::sql_types::{Array, Bool, Nullable, Text, Timestamptz};
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 
 use crate::DatabaseError;
 
 /// An implementation of [`QueueScheduleRepository`] for a PostgreSQL
 /// connection.
-pub struct PgQueueScheduleRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgQueueScheduleRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgQueueScheduleRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgQueueScheduleRepository<'c, P>
+{
     /// Create a new [`PgQueueScheduleRepository`] from an active PostgreSQL
     /// connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -47,7 +49,9 @@ impl From<ScheduleLookup> for ScheduleStatus {
 }
 
 #[async_trait]
-impl QueueScheduleRepository for PgQueueScheduleRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    QueueScheduleRepository for PgQueueScheduleRepository<'_, P>
+{
     type Error = DatabaseError;
 
     async fn setup(&mut self, schedules: &[&'static str]) -> Result<(), Self::Error> {

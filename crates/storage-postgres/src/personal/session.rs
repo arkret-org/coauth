@@ -10,7 +10,7 @@ use coauth_data::personal::{
 use coauth_data::{Clock, Page, Pagination, User, new_id};
 use coauth_oauth_types::scope::Scope;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -21,14 +21,16 @@ use crate::schema::{personal_access_tokens, personal_sessions};
 
 /// An implementation of [`PersonalSessionRepository`] for a PostgreSQL
 /// connection
-pub struct PgPersonalSessionRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgPersonalSessionRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgPersonalSessionRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgPersonalSessionRepository<'c, P>
+{
     /// Create a new [`PgPersonalSessionRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -212,7 +214,9 @@ fn session_with_token_select() -> (
 }
 
 #[async_trait]
-impl PersonalSessionRepository for PgPersonalSessionRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PersonalSessionRepository for PgPersonalSessionRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

@@ -29,8 +29,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use diesel::QueryableByName;
 use diesel::sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
+use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
-use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
+use horme::RunQueryDsl as _;
 use serde_json::Value;
 use thiserror::Error;
 use uuid::Uuid;
@@ -192,7 +193,7 @@ impl PgAdminInviteReviewService {
         input: EnqueueAdminInviteReview,
     ) -> anyhow::Result<AdminInviteReviewRecord> {
         let id = Uuid::now_v7();
-        let mut conn = self.pool.get().await?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let rows = diesel::sql_query(
             r"
             INSERT INTO admin_invite_review_queue (
@@ -227,7 +228,7 @@ impl PgAdminInviteReviewService {
         .bind::<Text, _>(input.scope)
         .bind::<Nullable<Text>, _>(input.requesting_admin_localpart)
         .bind::<Jsonb, _>(input.payload)
-        .get_results::<AdminInviteReviewRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut conn)
         .await?;
 
         rows.into_iter()
@@ -239,7 +240,7 @@ impl PgAdminInviteReviewService {
 
     async fn list_pending_inner(&self, limit: i64) -> anyhow::Result<Vec<AdminInviteReviewRecord>> {
         let limit = limit.clamp(1, 1000);
-        let mut conn = self.pool.get().await?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let rows = diesel::sql_query(
             r"
             SELECT
@@ -261,7 +262,7 @@ impl PgAdminInviteReviewService {
             ",
         )
         .bind::<BigInt, _>(limit)
-        .get_results::<AdminInviteReviewRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut conn)
         .await?;
 
         rows.into_iter()
@@ -270,7 +271,7 @@ impl PgAdminInviteReviewService {
     }
 
     async fn get_inner(&self, id: Uuid) -> anyhow::Result<Option<AdminInviteReviewRecord>> {
-        let mut conn = self.pool.get().await?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let rows = diesel::sql_query(
             r"
             SELECT
@@ -290,7 +291,7 @@ impl PgAdminInviteReviewService {
             ",
         )
         .bind::<DieselUuid, _>(id)
-        .get_results::<AdminInviteReviewRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut conn)
         .await?;
 
         rows.into_iter()
@@ -306,7 +307,7 @@ impl PgAdminInviteReviewService {
         note: Option<String>,
         resolved_at: DateTime<Utc>,
     ) -> anyhow::Result<Option<AdminInviteReviewRecord>> {
-        let mut conn = self.pool.get().await?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         // Only transition `pending` rows. Already-resolved rows are
         // returned as `None` so the caller can render the existing not-found outcome.
         let rows = diesel::sql_query(
@@ -335,7 +336,7 @@ impl PgAdminInviteReviewService {
         .bind::<Text, _>(new_status.as_str().to_owned())
         .bind::<Timestamptz, _>(resolved_at)
         .bind::<Nullable<Text>, _>(note)
-        .get_results::<AdminInviteReviewRow>(&mut *conn)
+        .get_results::<AdminInviteReviewRow>(&mut conn)
         .await?;
 
         rows.into_iter()

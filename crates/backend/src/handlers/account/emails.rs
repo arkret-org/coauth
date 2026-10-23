@@ -57,7 +57,7 @@ pub async fn get_email_auth(
     let ulid = NodeType::UserEmailAuthentication.extract_ulid(&id)?;
 
     let repo_factory = depot.repo_factory()?;
-    let mut repo = repo_factory.create().await?;
+    let mut repo = repo_factory.read().await?;
 
     let auth = load_email_verification_status(&mut repo, ulid)
         .await

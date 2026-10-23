@@ -76,7 +76,7 @@ async fn resolve_user(
     depot: &Depot,
     hint: &PasskeyAccountHint,
 ) -> Result<(BoxRepository, User), AppError> {
-    let mut repo = depot.repo().await.map_err(AppError::from)?;
+    let mut repo = depot.read_repo().await.map_err(AppError::from)?;
     if let Some(account_id) = trimmed(hint.account_id.as_ref()) {
         let id = parse_account_id(account_id)
             .ok_or_else(|| AppError::bad_request("invalid account_id"))?;
@@ -110,7 +110,7 @@ async fn active_session(
     req: &Request,
     depot: &Depot,
 ) -> Result<(BoxRepository, coauth_data::BrowserSession), AppError> {
-    let mut repo = depot.repo().await.map_err(AppError::from)?;
+    let mut repo = depot.read_repo().await.map_err(AppError::from)?;
     let session = extract_session_info(req, depot)
         .load_active_session(&mut repo)
         .await?

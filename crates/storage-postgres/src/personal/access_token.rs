@@ -4,7 +4,7 @@ use coauth_data::personal::session::PersonalSession;
 use coauth_data::personal::{PersonalAccessToken, PersonalAccessTokenRepository};
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use sha2::{Digest, Sha256};
 use ulid::Ulid;
@@ -15,14 +15,16 @@ use crate::schema::personal_access_tokens;
 
 /// An implementation of [`PersonalAccessTokenRepository`] for a PostgreSQL
 /// connection
-pub struct PgPersonalAccessTokenRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgPersonalAccessTokenRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgPersonalAccessTokenRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgPersonalAccessTokenRepository<'c, P>
+{
     /// Create a new [`PgPersonalAccessTokenRepository`] from an active
     /// PostgreSQL connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -62,7 +64,9 @@ struct NewPersonalAccessToken {
 }
 
 #[async_trait]
-impl PersonalAccessTokenRepository for PgPersonalAccessTokenRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PersonalAccessTokenRepository for PgPersonalAccessTokenRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

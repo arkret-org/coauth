@@ -8,7 +8,7 @@ use coauth_data::{
     new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -17,14 +17,16 @@ use crate::DatabaseError;
 use crate::schema::{handle_audit_log, user_primary_handle_preferences};
 
 /// PostgreSQL implementation of [`UserPrimaryHandlePreferenceRepository`].
-pub struct PgUserPrimaryHandlePreferenceRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserPrimaryHandlePreferenceRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserPrimaryHandlePreferenceRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserPrimaryHandlePreferenceRepository<'c, P>
+{
     /// Create a new repository from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -84,7 +86,9 @@ struct HandleClaimAuditRow {
 }
 
 #[async_trait]
-impl UserPrimaryHandlePreferenceRepository for PgUserPrimaryHandlePreferenceRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserPrimaryHandlePreferenceRepository for PgUserPrimaryHandlePreferenceRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

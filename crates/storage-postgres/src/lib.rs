@@ -1,15 +1,19 @@
 //! An implementation of the storage traits for a PostgreSQL database
 //!
-//! This backend uses [`diesel`] with [`diesel_async`] for all database access.
+//! This backend uses Diesel queries with Horme execution providers. Independent
+//! reads use `RepositoryFactory::read` and release each query's connection.
+//! `RepositoryFactory::create` keeps one explicit transaction until save/cancel;
+//! external I/O and expensive computation should precede that transaction.
 
 #![deny(clippy::future_not_send, missing_docs)]
 #![allow(clippy::module_name_repetitions, clippy::blocks_in_conditions)]
 
 use ::tracing::{info, warn};
 use diesel::sql_types::BigInt;
+use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool;
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+use horme::RunQueryDsl;
 
 diesel::define_sql_function! {
     /// SQL `lower()` function for case-insensitive text comparisons.

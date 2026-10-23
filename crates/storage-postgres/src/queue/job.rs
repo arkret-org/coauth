@@ -7,7 +7,7 @@ use coauth_data::queue::{AbandonedJob, Job, QueueJobRepository, Worker};
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel::sql_types::{Array, BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -16,15 +16,17 @@ use crate::schema::{queue_jobs, queue_schedules};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`QueueJobRepository`] for a PostgreSQL connection.
-pub struct PgQueueJobRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgQueueJobRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgQueueJobRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgQueueJobRepository<'c, P>
+{
     /// Create a new [`PgQueueJobRepository`] from an active PostgreSQL
     /// connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -142,7 +144,9 @@ struct NewScheduledJob {
 }
 
 #[async_trait]
-impl QueueJobRepository for PgQueueJobRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    QueueJobRepository for PgQueueJobRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

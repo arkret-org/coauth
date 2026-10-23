@@ -9,7 +9,7 @@ use coauth_data::{
 };
 use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use ipnetwork::IpNetwork;
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -19,14 +19,16 @@ use crate::schema::{oauth_clients, oauth_sessions, user_sessions};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthSessionRepository`] for a PostgreSQL connection
-pub struct PgOAuthSessionRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOAuthSessionRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOAuthSessionRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOAuthSessionRepository<'c, P>
+{
     /// Create a new [`PgOAuthSessionRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -202,7 +204,9 @@ macro_rules! apply_session_filter {
 }
 
 #[async_trait]
-impl OAuthSessionRepository for PgOAuthSessionRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    OAuthSessionRepository for PgOAuthSessionRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

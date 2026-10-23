@@ -8,7 +8,7 @@ use coauth_data::app_session::{
 use coauth_data::{Clock, Page, Pagination, Session, SessionState, User};
 use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -17,14 +17,16 @@ use crate::errors::DatabaseInconsistencyError;
 use crate::schema::oauth_sessions;
 
 /// An implementation of [`AppSessionRepository`] for a PostgreSQL connection
-pub struct PgAppSessionRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgAppSessionRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgAppSessionRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgAppSessionRepository<'c, P>
+{
     /// Create a new [`PgAppSessionRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -138,7 +140,9 @@ macro_rules! apply_app_session_filter {
 }
 
 #[async_trait]
-impl AppSessionRepository for PgAppSessionRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    AppSessionRepository for PgAppSessionRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.app_session.list", skip_all, err)]

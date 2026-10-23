@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::user::{PrincipalDidRepository, VerifiedPrincipalDidBindingInput};
 use coauth_data::{Clock, PrincipalDidBinding, User, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -12,13 +12,15 @@ use crate::schema::{principal_did_bindings, principal_did_owners};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`PrincipalDidRepository`].
-pub struct PgPrincipalDidRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgPrincipalDidRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgPrincipalDidRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgPrincipalDidRepository<'c, P>
+{
     /// Create a repository over an active connection.
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 
@@ -199,7 +201,9 @@ struct NewPrincipalDidBinding {
 }
 
 #[async_trait]
-impl PrincipalDidRepository for PgPrincipalDidRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PrincipalDidRepository for PgPrincipalDidRepository<'_, P>
+{
     type Error = DatabaseError;
 
     async fn get_for_user_and_audience(

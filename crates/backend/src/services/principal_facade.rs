@@ -190,7 +190,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
     async fn query_user(&self, handle: &str) -> Result<ConnectorAccountProfile, anyhow::Error> {
         let mut repo = self
             .repository_factory
-            .create()
+            .read()
             .await
             .map_err(|error| anyhow::anyhow!("acquire repository: {error}"))?;
         let user = repo
@@ -210,7 +210,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
     async fn is_handle_available(&self, handle: &str) -> Result<bool, anyhow::Error> {
         let mut repo = self
             .repository_factory
-            .create()
+            .read()
             .await
             .map_err(|error| anyhow::anyhow!("acquire repository: {error}"))?;
         let exists = repo
@@ -407,7 +407,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
             !request.account_id().trim().is_empty(),
             "account id is empty"
         );
-        let mut repo = self.repository_factory.create().await?;
+        let mut repo = self.repository_factory.read().await?;
         let resolver =
             crate::services::did_resolver::default_did_resolver_service(&self.arkret_config);
         let binding_store = crate::services::did_binding::shared_verified_did_binding_store();

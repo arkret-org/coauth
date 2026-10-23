@@ -11,8 +11,9 @@ use coauth_keyring::Encrypter;
 use coauth_storage_postgres::PgRepository;
 use coauth_storage_postgres::advisory_lock::advisory_lock_key;
 use diesel::sql_query;
+use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Object as PooledConnection;
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use horme::RunQueryDsl;
 use tracing::{error, info, info_span, warn};
 
 fn map_import_action(

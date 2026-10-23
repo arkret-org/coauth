@@ -7,7 +7,7 @@ use coauth_data::{
     User, new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -17,14 +17,16 @@ use crate::schema::{upstream_oauth_links, upstream_oauth_providers};
 
 /// An implementation of [`UpstreamOAuthLinkRepository`] for a PostgreSQL
 /// connection
-pub struct PgUpstreamOAuthLinkRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUpstreamOAuthLinkRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUpstreamOAuthLinkRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUpstreamOAuthLinkRepository<'c, P>
+{
     /// Create a new [`PgUpstreamOAuthLinkRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -75,7 +77,9 @@ struct NewLink {
 }
 
 #[async_trait]
-impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

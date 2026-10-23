@@ -5,7 +5,7 @@ use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::UserRecoveryRepository;
 use coauth_data::{Clock, UserEmail, UserRecoverySession, UserRecoveryTicket, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use ipnetwork::IpNetwork;
 use rand_core::RngCore;
 use subtle::ConstantTimeEq as _;
@@ -16,14 +16,16 @@ use crate::DatabaseError;
 use crate::schema::{user_recovery_sessions, user_recovery_tickets};
 
 /// An implementation of [`UserRecoveryRepository`] for a PostgreSQL connection
-pub struct PgUserRecoveryRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserRecoveryRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserRecoveryRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserRecoveryRepository<'c, P>
+{
     /// Create a new [`PgUserRecoveryRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -110,7 +112,9 @@ struct UuidRow {
 }
 
 #[async_trait]
-impl UserRecoveryRepository for PgUserRecoveryRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserRecoveryRepository for PgUserRecoveryRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

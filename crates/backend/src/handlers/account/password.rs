@@ -174,7 +174,7 @@ pub async fn get_recovery_ticket_status(
 
     let repo_factory = depot.repo_factory()?;
     let clock = make_clock();
-    let mut repo = repo_factory.create().await?;
+    let mut repo = repo_factory.read().await?;
 
     let Some(recovery_ticket) = repo.user_recovery().find_ticket(&ticket).await? else {
         repo.cancel().await?;

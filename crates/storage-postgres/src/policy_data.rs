@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::policy_data::PolicyDataRepository;
 use coauth_data::{Clock, PolicyData, PolicyDataDocument, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use serde_json::Value;
 use uuid::Uuid;
@@ -15,15 +15,17 @@ use crate::DatabaseError;
 use crate::schema::policy_data;
 
 /// An implementation of [`PolicyDataRepository`] for a PostgreSQL connection.
-pub struct PgPolicyDataRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgPolicyDataRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgPolicyDataRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgPolicyDataRepository<'c, P>
+{
     /// Create a new [`PgPolicyDataRepository`] from an active PostgreSQL
     /// connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -57,7 +59,9 @@ struct NewPolicyData {
 }
 
 #[async_trait]
-impl PolicyDataRepository for PgPolicyDataRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PolicyDataRepository for PgPolicyDataRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.policy_data.get", skip_all, err)]
@@ -130,7 +134,7 @@ mod tests {
     use coauth_data::clock::MockClock;
     use coauth_data::policy_data::PolicyDataRepository;
     use coauth_data::{RepositoryAccess as _, RepositoryFactory as _};
-    use diesel_async::RunQueryDsl;
+    use horme::RunQueryDsl;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
     use serde_json::json;

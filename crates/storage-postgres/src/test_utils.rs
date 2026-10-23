@@ -11,7 +11,8 @@ use std::ops::Deref;
 use coauth_data::user::VerifiedPrincipalDidBindingInput;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::pooled_connection::deadpool::Pool;
-use diesel_async::{AsyncConnection as _, AsyncPgConnection, RunQueryDsl as _};
+use diesel_async::{AsyncConnection as _, AsyncPgConnection};
+use horme::RunQueryDsl as _;
 
 /// Build a cryptographically valid WebVH principal registration anchor for
 /// storage and handler tests. Human account registration supports WebVH only.

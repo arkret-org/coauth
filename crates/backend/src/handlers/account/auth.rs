@@ -306,7 +306,7 @@ pub async fn providers(
 ) -> Result<Json<ProvidersOutcome>, RouteError> {
     let site_config = depot.site_config()?;
     let url_builder = depot.url_builder()?;
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let query: ProvidersQuery = req.parse_queries().unwrap_or_else(|err| {
         // A malformed `post_auth_action` query must not silently degrade into a
         // hint-less response with no diagnostic trail; record it at debug level.

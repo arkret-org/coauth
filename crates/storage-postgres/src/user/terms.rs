@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::user::UserTermsRepository;
 use coauth_data::{Clock, User, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 use rand_core::RngCore;
 use url::Url;
 use uuid::Uuid;
@@ -12,14 +12,16 @@ use crate::DatabaseError;
 use crate::schema::user_terms;
 
 /// An implementation of [`UserTermsRepository`] for a PostgreSQL connection
-pub struct PgUserTermsRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserTermsRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserTermsRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserTermsRepository<'c, P>
+{
     /// Create a new [`PgUserTermsRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -35,7 +37,9 @@ struct NewUserTerms {
 }
 
 #[async_trait]
-impl UserTermsRepository for PgUserTermsRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserTermsRepository for PgUserTermsRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

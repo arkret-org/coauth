@@ -638,7 +638,7 @@ pub async fn load_policy_factory_dynamic_data(
     repository_factory: &(dyn RepositoryFactory + Send + Sync),
 ) -> Result<(), anyhow::Error> {
     let mut repo = repository_factory
-        .create()
+        .read()
         .await
         .context("Failed to acquire database connection")?;
 

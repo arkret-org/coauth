@@ -9,7 +9,7 @@ use coauth_data::storage::station_trust::{
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use uuid::Uuid;
 
@@ -18,15 +18,17 @@ use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`StationTrustRepository`] for a PostgreSQL
 /// connection.
-pub struct PgStationTrustRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgStationTrustRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgStationTrustRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgStationTrustRepository<'c, P>
+{
     /// Create a new [`PgStationTrustRepository`] from an active
     /// PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -168,7 +170,9 @@ struct NewAuditRow {
 }
 
 #[async_trait]
-impl StationTrustRepository for PgStationTrustRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    StationTrustRepository for PgStationTrustRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.station_trust.find_by_endpoint", skip_all, err)]

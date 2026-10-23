@@ -74,7 +74,7 @@ pub async fn list_session_grants(
         filter = filter.active_at(clock.now());
     }
 
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let page = repo
         .oauth_session_grant()
         .list(filter, Pagination::first(100))

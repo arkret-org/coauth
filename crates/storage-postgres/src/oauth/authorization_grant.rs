@@ -9,7 +9,7 @@ use coauth_iana::oauth::PkceCodeChallengeMethod;
 use coauth_oauth_types::requests::ResponseMode;
 use coauth_oauth_types::scope::Scope;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -20,14 +20,16 @@ use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthAuthorizationGrantRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuthAuthorizationGrantRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOAuthAuthorizationGrantRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOAuthAuthorizationGrantRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOAuthAuthorizationGrantRepository<'c, P>
+{
     /// Create a new [`PgOAuthAuthorizationGrantRepository`] from an active
     /// PostgreSQL connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -183,7 +185,9 @@ struct NewAuthorizationGrant {
 }
 
 #[async_trait]
-impl OAuthAuthorizationGrantRepository for PgOAuthAuthorizationGrantRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    OAuthAuthorizationGrantRepository for PgOAuthAuthorizationGrantRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

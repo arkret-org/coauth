@@ -6,7 +6,7 @@ use coauth_data::audit::{
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use ipnetwork::IpNetwork;
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -16,14 +16,16 @@ use crate::schema::{account_security_events, admin_operation_logs};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`AuditRepository`].
-pub struct PgAuditRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgAuditRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgAuditRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgAuditRepository<'c, P>
+{
     /// Create a new [`PgAuditRepository`] from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -177,7 +179,9 @@ fn parse_security_event_type(
 // ---------------------------------------------------------------------------
 
 #[async_trait]
-impl AuditRepository for PgAuditRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync> AuditRepository
+    for PgAuditRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

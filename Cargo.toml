@@ -71,6 +71,7 @@ wildcard_imports = "allow"
 broken_intra_doc_links = "deny"
 
 [workspace.dependencies]
+horme = { version = "0.4.0", features = ["postgres"] }
 syn = "3.0"
 # The dependency list below is sorted alphabetically; per-dependency notes sit
 # directly above the entry they describe.

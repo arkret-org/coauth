@@ -22,12 +22,11 @@ use coauth_data::account_handoff::{
     PublishedDidRegisterReplay,
 };
 use coauth_data::{AccountHandoffRepository, Ulid};
-use diesel::OptionalExtension as _;
 use diesel::prelude::*;
 use diesel::sql_types::{
     Array, BigInt, Bytea, Jsonb, Nullable, SmallInt, Text, Timestamptz, Uuid as SqlUuid,
 };
-use diesel_async::{AsyncPgConnection, RunQueryDsl};
+use horme::{OptionalExtension, RunQueryDsl};
 use sha2::Digest as _;
 use uuid::Uuid;
 
@@ -94,14 +93,16 @@ fn classify_existing_did_binding_challenge(
 }
 
 /// PostgreSQL-backed account-handoff state machine.
-pub struct PgAccountHandoffRepository<'c> {
-    conn: &'c mut AsyncPgConnection,
+pub struct PgAccountHandoffRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgAccountHandoffRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgAccountHandoffRepository<'c, P>
+{
     /// Create a repository over the caller's transaction connection.
     #[must_use]
-    pub fn new(conn: &'c mut AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 
@@ -1360,7 +1361,9 @@ fn retry_after_ms(expires_at: DateTime<Utc>, now: DateTime<Utc>) -> u64 {
 }
 
 #[async_trait]
-impl AccountHandoffRepository for PgAccountHandoffRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    AccountHandoffRepository for PgAccountHandoffRepository<'_, P>
+{
     type Error = DatabaseError;
 
     async fn reserve_controller_gate_attestation(

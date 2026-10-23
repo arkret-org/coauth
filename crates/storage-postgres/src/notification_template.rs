@@ -7,7 +7,7 @@ use coauth_data::notification::{
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use uuid::Uuid;
 
@@ -15,15 +15,17 @@ use crate::DatabaseError;
 use crate::schema::notification_template_versions;
 
 /// PostgreSQL-backed notification template version repository.
-pub struct PgNotificationTemplateRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgNotificationTemplateRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgNotificationTemplateRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgNotificationTemplateRepository<'c, P>
+{
     /// Create a new [`PgNotificationTemplateRepository`] from an active
     /// PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -81,7 +83,9 @@ struct NewTemplateVersion {
 }
 
 #[async_trait]
-impl NotificationTemplateRepository for PgNotificationTemplateRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    NotificationTemplateRepository for PgNotificationTemplateRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.notification_template.list", skip_all, err)]

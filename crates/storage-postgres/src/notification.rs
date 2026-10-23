@@ -11,7 +11,7 @@ use coauth_data::{
 };
 use diesel::prelude::*;
 use diesel::sql_types::{BigInt, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use serde::de::DeserializeOwned;
 use ulid::Ulid;
@@ -24,15 +24,17 @@ use crate::schema::{
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`NotificationRepository`].
-pub struct PgNotificationRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgNotificationRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgNotificationRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgNotificationRepository<'c, P>
+{
     /// Create a new [`PgNotificationRepository`] from an active PostgreSQL
     /// connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -319,7 +321,9 @@ impl TryFrom<ReservedDeliveryRow> for NotificationDelivery {
 }
 
 #[async_trait]
-impl NotificationRepository for PgNotificationRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    NotificationRepository for PgNotificationRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(
@@ -922,7 +926,7 @@ impl NotificationRepository for PgNotificationRepository<'_> {
 }
 
 async fn persist_delivery(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     notification_delivery: &NotificationDelivery,
 ) -> Result<(), DatabaseError> {
     let rows_affected = diesel::update(

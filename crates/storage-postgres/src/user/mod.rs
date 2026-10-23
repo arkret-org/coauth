@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::user::{UserFilter, UserRepository};
 use coauth_data::{Clock, Pagination, User, UserPatch, UserProfilePatch, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -44,13 +44,15 @@ pub use self::terms::PgUserTermsRepository;
 const BOOTSTRAP_ADMIN_LOCK_ID: i64 = 0x7061_7369_6f6e_4144;
 
 /// An implementation of [`UserRepository`] for a PostgreSQL connection
-pub struct PgUserRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserRepository<'c, P>
+{
     /// Create a new [`PgUserRepository`] from an active PostgreSQL connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 
@@ -188,7 +190,9 @@ struct NewUser {
 }
 
 #[async_trait]
-impl UserRepository for PgUserRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync> UserRepository
+    for PgUserRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

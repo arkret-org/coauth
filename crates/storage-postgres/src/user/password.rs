@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use coauth_data::user::UserPasswordRepository;
 use coauth_data::{Clock, Password, User, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -12,14 +12,16 @@ use crate::schema::user_passwords;
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`UserPasswordRepository`] for a PostgreSQL connection
-pub struct PgUserPasswordRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserPasswordRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserPasswordRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserPasswordRepository<'c, P>
+{
     /// Create a new [`PgUserPasswordRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -46,7 +48,9 @@ struct NewUserPassword {
 }
 
 #[async_trait]
-impl UserPasswordRepository for PgUserPasswordRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserPasswordRepository for PgUserPasswordRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

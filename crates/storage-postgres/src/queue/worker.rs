@@ -7,7 +7,7 @@ use coauth_data::queue::{QueueWorkerRepository, ShutdownWorker, Worker};
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
 use diesel::sql_types::{Nullable, Timestamptz, Uuid as DieselUuid};
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use uuid::Uuid;
 
@@ -15,15 +15,17 @@ use crate::DatabaseError;
 use crate::schema::{queue_leader, queue_workers};
 
 /// An implementation of [`QueueWorkerRepository`] for a PostgreSQL connection.
-pub struct PgQueueWorkerRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgQueueWorkerRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgQueueWorkerRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgQueueWorkerRepository<'c, P>
+{
     /// Create a new [`PgQueueWorkerRepository`] from an active PostgreSQL
     /// connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -69,7 +71,9 @@ impl From<ShutdownWorkerRow> for ShutdownWorker {
     }
 }
 
-impl PgQueueWorkerRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgQueueWorkerRepository<'_, P>
+{
     async fn load_worker_state(
         &mut self,
         worker: &Worker,
@@ -126,7 +130,9 @@ impl PgQueueWorkerRepository<'_> {
 }
 
 #[async_trait]
-impl QueueWorkerRepository for PgQueueWorkerRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    QueueWorkerRepository for PgQueueWorkerRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

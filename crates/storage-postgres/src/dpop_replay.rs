@@ -4,20 +4,22 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use coauth_data::dpop_replay::{DpopReplayRepository, NewDpopJtiReplay};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 
 use crate::DatabaseError;
 use crate::schema::dpop_jti_replay;
 
 /// PostgreSQL implementation of [`DpopReplayRepository`].
-pub struct PgDpopReplayRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgDpopReplayRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgDpopReplayRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgDpopReplayRepository<'c, P>
+{
     /// Construct from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -32,7 +34,9 @@ struct InsertableDpopJtiReplay {
 }
 
 #[async_trait]
-impl DpopReplayRepository for PgDpopReplayRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    DpopReplayRepository for PgDpopReplayRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.dpop_replay.consume_jti", skip_all, err)]

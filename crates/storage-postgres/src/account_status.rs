@@ -4,19 +4,21 @@ use arkret_models_collaboration::account_status::AccountStatusRecord;
 use async_trait::async_trait;
 use coauth_data::{AccountStatusAppendOutcome, AccountStatusLedgerRepository, LocalAccountId};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 
 use crate::DatabaseError;
 use crate::schema::{account_status_ledger_heads, account_status_records};
 
 /// PostgreSQL-backed Account Authority issuer ledger.
-pub struct PgAccountStatusLedgerRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgAccountStatusLedgerRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgAccountStatusLedgerRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgAccountStatusLedgerRepository<'c, P>
+{
     /// Construct a ledger repository over the caller's active transaction.
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 
@@ -82,7 +84,9 @@ struct NewRecord {
 }
 
 #[async_trait]
-impl AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    AccountStatusLedgerRepository for PgAccountStatusLedgerRepository<'_, P>
+{
     type Error = DatabaseError;
 
     async fn append(
@@ -303,7 +307,7 @@ mod tests {
         RepositoryAccess as _, RepositoryFactory as _,
     };
     use diesel::{ExpressionMethods as _, QueryDsl as _};
-    use diesel_async::RunQueryDsl as _;
+    use horme::RunQueryDsl as _;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng as _;
 

@@ -16,7 +16,7 @@ pub async fn get_client(
     let ulid = NodeType::OAuthClient.extract_ulid(&id)?;
 
     let repo_factory = depot.repo_factory()?;
-    let repo = repo_factory.create().await?;
+    let repo = repo_factory.read().await?;
 
     let client = load_oauth_client(repo, ulid)
         .await

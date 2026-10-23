@@ -16,7 +16,7 @@ use coauth_data::{
 };
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_oauth_types::scope::{OPENID, Scope};
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
 

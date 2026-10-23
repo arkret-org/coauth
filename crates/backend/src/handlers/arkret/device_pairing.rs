@@ -215,7 +215,7 @@ pub async fn private_resolve_device_pairing_adapter(
         req.parse_json().await.map_err(|_| internal_not_found())?;
     let (request_id, pairing_code) = parse_device_pairing_token(body.pairing_token.as_str())?;
     let now = arkret_canonical::normalize_timestamp_canonical(crate::handlers::make_clock().now());
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let record = repo
         .account_handoff()
         .get_device_pairing_stage(&request_id)
@@ -260,7 +260,7 @@ pub async fn private_device_pairing_status_adapter(
     let body: DevicePairingStatusRequestBody =
         req.parse_json().await.map_err(|_| internal_not_found())?;
     let now = arkret_canonical::normalize_timestamp_canonical(crate::handlers::make_clock().now());
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let record = repo
         .account_handoff()
         .get_device_pairing_stage(&body.device_pairing_request_id)
@@ -926,7 +926,7 @@ async fn verify_recorded_pairing_commit(
         did_binding::to_shared_document(&historical)
             .map_err(|_| pairing_temporarily_unavailable())?
     } else {
-        let mut repo = depot.repo().await?;
+        let mut repo = depot.read_repo().await?;
         let authority = did_binding::authority_document(
             &http,
             &depot.url_builder()?,

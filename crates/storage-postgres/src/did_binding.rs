@@ -27,7 +27,7 @@ use coauth_data::did_binding::{
     VerifiedDidBindingRow,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 
 use crate::DatabaseError;
 use crate::schema::verified_did_bindings;
@@ -48,14 +48,16 @@ fn optional(value: String) -> Option<String> {
 }
 
 /// PostgreSQL implementation of [`VerifiedDidBindingRepository`].
-pub struct PgVerifiedDidBindingRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgVerifiedDidBindingRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgVerifiedDidBindingRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgVerifiedDidBindingRepository<'c, P>
+{
     /// Construct from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -106,7 +108,9 @@ struct InsertableVerifiedDidBinding {
 }
 
 #[async_trait]
-impl VerifiedDidBindingRepository for PgVerifiedDidBindingRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    VerifiedDidBindingRepository for PgVerifiedDidBindingRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.verified_did_binding.get", skip_all, err)]

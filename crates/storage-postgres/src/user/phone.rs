@@ -6,7 +6,7 @@ use coauth_data::{
     new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -15,14 +15,16 @@ use crate::DatabaseError;
 use crate::schema::{user_phone_authentication_codes, user_phone_authentications, user_phones};
 
 /// An implementation of [`UserPhoneRepository`] for a PostgreSQL connection
-pub struct PgUserPhoneRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgUserPhoneRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgUserPhoneRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgUserPhoneRepository<'c, P>
+{
     /// Create a new [`PgUserPhoneRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -126,7 +128,9 @@ struct NewUserPhoneAuthenticationCode {
 }
 
 #[async_trait]
-impl UserPhoneRepository for PgUserPhoneRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    UserPhoneRepository for PgUserPhoneRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

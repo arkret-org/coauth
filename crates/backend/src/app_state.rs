@@ -144,7 +144,7 @@ impl AppState {
 
         tokio::spawn(
             async move {
-                let mut repo = match factory.create().await {
+                let mut repo = match factory.read().await {
                     Ok(conn) => conn,
                     Err(e) => {
                         tracing::error!(

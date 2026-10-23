@@ -14,7 +14,7 @@ use coauth_data::organization_control::{
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -23,14 +23,16 @@ use crate::schema::{organization_delegations, organization_principal_controls};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`OrganizationControlRepository`].
-pub struct PgOrganizationControlRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOrganizationControlRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOrganizationControlRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOrganizationControlRepository<'c, P>
+{
     /// Construct from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -257,7 +259,9 @@ fn parse_control_scope(raw: &str) -> Option<RealmOrganizationControlScope> {
 }
 
 #[async_trait]
-impl OrganizationControlRepository for PgOrganizationControlRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    OrganizationControlRepository for PgOrganizationControlRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.organization_control.bootstrap", skip_all, err)]

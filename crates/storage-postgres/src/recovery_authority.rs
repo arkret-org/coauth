@@ -6,20 +6,22 @@ use coauth_data::recovery_authority::{
 };
 use coauth_data::storage::recovery_authority::RecoveryAuthorityRepository;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 
 use crate::DatabaseError;
 use crate::schema::recovery_completion_grant_issuances;
 
 /// PostgreSQL-backed durable replay ledger for recovery-completion grant issuance.
-pub struct PgRecoveryAuthorityRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgRecoveryAuthorityRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgRecoveryAuthorityRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgRecoveryAuthorityRepository<'c, P>
+{
     /// Creates a repository over the caller's existing transaction connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -81,7 +83,9 @@ struct InsertableRecoveryCompletionGrantIssuance {
 }
 
 #[async_trait]
-impl RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    RecoveryAuthorityRepository for PgRecoveryAuthorityRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.recovery_completion.lookup_issuance", skip_all, err)]

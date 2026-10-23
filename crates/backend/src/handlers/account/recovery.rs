@@ -144,7 +144,7 @@ pub async fn get_recovery(
         return Err(RouteError::BadRequest("recovery_disabled".into()));
     }
 
-    let mut repo = repo_factory.create().await?;
+    let mut repo = repo_factory.read().await?;
 
     let session = match load_account_recovery_session(&mut repo, id).await {
         Ok(session) => session,

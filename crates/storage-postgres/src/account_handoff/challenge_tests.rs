@@ -1,6 +1,6 @@
 use coauth_data::user::UserRepository as _;
 use coauth_data::{Clock as _, RepositoryAccess as _, RepositoryFactory as _};
-use diesel_async::SimpleAsyncConnection as _;
+use diesel_async::{AsyncPgConnection, SimpleAsyncConnection as _};
 use rand_core::SeedableRng as _;
 
 use super::*;
@@ -836,7 +836,7 @@ async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reu
     handoff.request_digest = hash('9');
     conn.batch_execute("BEGIN").await.unwrap();
     assert!(matches!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .create_with_lease(handoff.clone())
             .await
             .unwrap(),
@@ -850,7 +850,7 @@ async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reu
     assert_eq!(first.expires_at - first.issued_at, Duration::seconds(300));
     assert!(first.expires_at > handoff.expires_at);
     assert!(first.expires_at > handoff.lease_expires_at);
-    let mut storage = PgAccountHandoffRepository::new(&mut conn);
+    let mut storage = PgAccountHandoffRepository::new(&mut *conn);
     let lease = storage
         .lease_for_account(
             Uuid::from(handoff.local_account_id),
@@ -898,14 +898,14 @@ async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reu
         "{limited:?}"
     );
     assert!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .challenge_by_request(new.request_id.uuid())
             .await
             .unwrap()
             .is_none()
     );
     assert!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .challenge_by_id(&first.challenge_id, false)
             .await
             .unwrap()
@@ -914,14 +914,14 @@ async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reu
             .is_none()
     );
     // Reauthentication does not consume the old proof or make it grant-bound.
-    let grant = PgAccountHandoffRepository::new(&mut conn)
+    let grant = PgAccountHandoffRepository::new(&mut *conn)
         .handoff_by_request_uuid(handoff.request_id.uuid())
         .await
         .unwrap()
         .unwrap();
     conn.batch_execute("BEGIN").await.unwrap();
     assert!(matches!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .registration_context(
                 &grant,
                 &input.lease_id,
@@ -951,7 +951,7 @@ async fn challenge_issuance_is_independent_and_same_binding_reauthentication_reu
     handoff.lease_id = "m".repeat(24);
     conn.batch_execute("BEGIN").await.unwrap();
     assert!(matches!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .create_with_lease(handoff.clone())
             .await
             .unwrap(),
@@ -1004,13 +1004,13 @@ async fn challenge_issuance_serializes_parallel_requests_and_rechecks_lock_wait_
     );
     // Start the issuer transaction before the holder expires and keep it waiting.
     first_conn.batch_execute("BEGIN").await.unwrap();
-    PgAccountHandoffRepository::new(&mut first_conn)
+    PgAccountHandoffRepository::new(&mut *first_conn)
         .lock_lease_quota(&input.account_subject, input.audience_id.as_str())
         .await
         .unwrap();
     second_conn.batch_execute("BEGIN").await.unwrap();
     let pending = async {
-        PgAccountHandoffRepository::new(&mut second_conn)
+        PgAccountHandoffRepository::new(&mut *second_conn)
             .reserve_and_issue_challenge(input.clone())
             .await
             .unwrap()
@@ -1045,7 +1045,7 @@ async fn challenge_terminal_states_and_invalid_canonical_window_are_distinct() {
         invalid.challenge_ttl = ttl;
         conn.batch_execute("BEGIN").await.unwrap();
         assert!(
-            PgAccountHandoffRepository::new(&mut conn)
+            PgAccountHandoffRepository::new(&mut *conn)
                 .reserve_and_issue_challenge(invalid)
                 .await
                 .is_err()
@@ -1188,7 +1188,7 @@ async fn challenge_hour_budget_uses_durable_holder_scope_and_exact_window_bounda
     let clock = coauth_data::clock::SystemClock::default();
     let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     conn.batch_execute("BEGIN").await.unwrap();
-    let mut storage = PgAccountHandoffRepository::new(&mut conn);
+    let mut storage = PgAccountHandoffRepository::new(&mut *conn);
     storage
         .lock_lease_quota(&subject, "ak:did_core:webvh:zbudget")
         .await
@@ -1302,7 +1302,7 @@ async fn abandonment_checks_real_authentication_and_fences_uncertain_pcr_dispatc
     conn.batch_execute("BEGIN").await.unwrap();
     // A newer token backed by the old authentication event proves no fresh authentication.
     assert!(matches!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .abandon_identity_creation(input.clone())
             .await
             .unwrap(),
@@ -1329,7 +1329,7 @@ async fn abandonment_checks_real_authentication_and_fences_uncertain_pcr_dispatc
     .await
     .unwrap();
     assert!(matches!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .abandon_identity_creation(input.clone())
             .await
             .unwrap(),
@@ -1344,7 +1344,7 @@ async fn abandonment_checks_real_authentication_and_fences_uncertain_pcr_dispatc
     assert!(!no_orphan.present);
     conn.batch_execute("ROLLBACK").await.unwrap();
     conn.batch_execute("BEGIN").await.unwrap();
-    let outcome = match PgAccountHandoffRepository::new(&mut conn)
+    let outcome = match PgAccountHandoffRepository::new(&mut *conn)
         .abandon_identity_creation(input.clone())
         .await
         .unwrap()
@@ -1354,7 +1354,7 @@ async fn abandonment_checks_real_authentication_and_fences_uncertain_pcr_dispatc
     };
     conn.batch_execute("COMMIT").await.unwrap();
     conn.batch_execute("BEGIN").await.unwrap();
-    let replayed = PgAccountHandoffRepository::new(&mut conn)
+    let replayed = PgAccountHandoffRepository::new(&mut *conn)
         .abandon_identity_creation(input.clone())
         .await
         .unwrap();
@@ -1367,7 +1367,7 @@ async fn abandonment_checks_real_authentication_and_fences_uncertain_pcr_dispatc
     changed.request_digest = hash('c');
     conn.batch_execute("BEGIN").await.unwrap();
     assert!(matches!(
-        PgAccountHandoffRepository::new(&mut conn)
+        PgAccountHandoffRepository::new(&mut *conn)
             .abandon_identity_creation(changed)
             .await
             .unwrap(),

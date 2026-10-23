@@ -552,7 +552,7 @@ pub async fn account_onboarding_state(
         &crate::services::station_trust::owning_station_id_for(&depot.arkret_config()?),
         grant.local_account_id,
     )?;
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let creation = repo
         .account_handoff()
         .resolve_creation(&grant, observed_at)
@@ -864,7 +864,7 @@ async fn authenticate_account_handoff_inner(
 ) -> Result<(AccountHandoffGrant, VerifiedDpopProof), ArkretRouteError> {
     let token = account_handoff_authorization(req)?;
     let now = chrono::Utc::now();
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let grant = repo
         .account_handoff()
         .get_active_by_token(token, now)
@@ -909,7 +909,7 @@ async fn authenticate_account_handoff_state(
 ) -> Result<(AccountHandoffGrant, VerifiedDpopProof), ArkretRouteError> {
     let token = account_handoff_authorization(req)?;
     let now = chrono::Utc::now();
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let grant = repo
         .account_handoff()
         .get_by_token(token, now)

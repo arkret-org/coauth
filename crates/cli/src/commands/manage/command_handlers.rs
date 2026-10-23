@@ -43,11 +43,7 @@ pub(super) async fn handle_set_password(
     let pool = diesel_pool_from_config(&database_config).await?;
     let password_manager = password_manager_from_config(&passwords_config).await?;
 
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
     let user = repo
         .user()
         .find_by_handle(&handle)
@@ -90,11 +86,7 @@ pub(super) async fn handle_add_email(
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     let user = repo
         .user()
@@ -132,11 +124,7 @@ pub(super) async fn handle_promote_admin(
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     let user = repo
         .user()
@@ -160,11 +148,7 @@ pub(super) async fn handle_demote_admin(
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     let user = repo
         .user()
@@ -184,11 +168,7 @@ pub(super) async fn handle_list_admin_users(figment: &Figment) -> anyhow::Result
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     let mut cursor = Pagination::first(1000);
     let filter = UserFilter::new().can_request_admin_only();
@@ -233,11 +213,7 @@ pub(super) async fn handle_issue_registration_token(
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     // Calculate expiration time if provided
     let expires_at = expires_in.map(|seconds| clock.now() + Duration::seconds(seconds.into()));
@@ -272,11 +248,7 @@ pub(super) async fn handle_provision_all_users(figment: &Figment) -> anyhow::Res
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     // List all users via the repository
     let mut cursor = Pagination::first(1000);
@@ -311,11 +283,7 @@ pub(super) async fn handle_kill_sessions(
     let database_config =
         DatabaseConfig::extract_or_default(figment).map_err(anyhow::Error::from_boxed)?;
     let pool = diesel_pool_from_config(&database_config).await?;
-    let conn = pool
-        .get()
-        .await
-        .context("could not get connection from pool")?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(pool.clone());
 
     let user = repo
         .user()

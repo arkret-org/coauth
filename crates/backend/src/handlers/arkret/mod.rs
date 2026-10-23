@@ -387,7 +387,7 @@ pub(crate) async fn require_session_grant_caller(
     let token_type = TokenType::check(token)
         .map_err(|_| ArkretRouteError::Unauthorized("invalid bearer token".to_owned()))?;
 
-    let mut repo = depot.repo().await?;
+    let mut repo = depot.read_repo().await?;
     let scope = match token_type {
         TokenType::AccessToken => {
             let access = repo

@@ -34,9 +34,10 @@ use coauth_data::{
     RepositoryAccess, RepositoryError, RepositoryFactory, RepositoryTransaction,
 };
 use diesel_async::pooled_connection::deadpool::{Object as PooledConnection, Pool};
-use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
+use diesel_async::{AnsiTransactionManager, AsyncPgConnection, TransactionManager};
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
+use horme::GetConnection as _;
 use tracing::Instrument;
 
 use crate::DatabaseError;
@@ -110,6 +111,10 @@ impl PgRepositoryFactory {
 
 #[async_trait]
 impl RepositoryFactory for PgRepositoryFactory {
+    async fn read(&self) -> Result<BoxRepository, RepositoryError> {
+        Ok(PgRepository::from_pool(self.pool.clone()).boxed())
+    }
+
     async fn create(&self) -> Result<BoxRepository, RepositoryError> {
         let start = std::time::Instant::now();
         let conn = crate::pool::get_connection(&self.pool)
@@ -120,17 +125,14 @@ impl RepositoryFactory for PgRepositoryFactory {
         // Start a transaction so that all operations within one request are
         // atomic. The transaction is committed by `save()` or rolled back by
         // `cancel()` / on drop.
-        tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            diesel::sql_query("BEGIN").execute(repo.connection()),
-        )
-        .await
-        .map_err(|source| {
-            RepositoryError::from_error(DatabaseError::Pool {
-                source: Box::new(source),
-            })
-        })?
-        .map_err(|e| RepositoryError::from_error(DatabaseError::from(e)))?;
+        tokio::time::timeout(std::time::Duration::from_secs(5), repo.begin())
+            .await
+            .map_err(|source| {
+                RepositoryError::from_error(DatabaseError::Pool {
+                    source: Box::new(source),
+                })
+            })?
+            .map_err(RepositoryError::from_error)?;
 
         let repo = repo.boxed();
 
@@ -143,8 +145,7 @@ impl RepositoryFactory for PgRepositoryFactory {
     }
 }
 
-/// An implementation of the [`Repository`] trait backed by a diesel-async
-/// PostgreSQL connection from a deadpool pool, wrapped in a transaction.
+/// A PostgreSQL repository using query leases or an explicitly owned session.
 ///
 /// A `BEGIN` is issued when the repository is created (via
 /// [`PgRepositoryFactory::create`]). Calling [`RepositoryTransaction::save`]
@@ -153,16 +154,36 @@ impl RepositoryFactory for PgRepositoryFactory {
 /// connection is detached from the pool and closed, so PostgreSQL rolls back
 /// the transaction before another checkout can observe it.
 pub struct PgRepository {
-    conn: Option<PooledConnection<AsyncPgConnection>>,
+    conn: crate::pool::PgConnection,
+    transaction_open: bool,
 }
 
 impl PgRepository {
-    /// Create a new [`PgRepository`] from a pooled connection.
+    /// Retain a physical session, closing it on drop to release session locks.
     ///
-    /// The factory wraps the connection before issuing `BEGIN` so cancellation
-    /// during transaction creation also closes the physical connection.
+    /// This does not start a transaction. Use the factory's `create` method for
+    /// a managed transaction, or `from_pool` for ordinary autocommit queries.
     pub fn new(conn: PooledConnection<AsyncPgConnection>) -> Self {
-        Self { conn: Some(conn) }
+        Self {
+            conn: crate::pool::PgConnection::Transaction(Some(Box::new(conn))),
+            transaction_open: false,
+        }
+    }
+
+    /// Create an autocommit repository that leases only while executing SQL.
+    /// Use the factory's `create` method for a multi-operation transaction.
+    pub fn from_pool(pool: Pool<AsyncPgConnection>) -> Self {
+        Self {
+            conn: crate::pool::PgConnection::Queries(horme::Db::new(pool)),
+            transaction_open: false,
+        }
+    }
+
+    async fn begin(&mut self) -> Result<(), DatabaseError> {
+        let mut lease = self.conn.get_mut_conn().await?;
+        AnsiTransactionManager::begin_transaction(&mut *lease).await?;
+        self.transaction_open = true;
+        Ok(())
     }
 
     /// Transform the repository into a type-erased [`BoxRepository`]
@@ -177,16 +198,8 @@ impl PgRepository {
     }
 
     /// Borrow the connection for SQL while retaining its cancellation guard.
-    pub fn connection(&mut self) -> &mut AsyncPgConnection {
-        self.conn.as_mut().expect("open repository transaction")
-    }
-}
-
-impl Drop for PgRepository {
-    fn drop(&mut self) {
-        if let Some(conn) = self.conn.take() {
-            drop(PooledConnection::take(conn));
-        }
+    pub fn connection(&mut self) -> &mut crate::pool::PgConnection {
+        &mut self.conn
     }
 }
 
@@ -198,10 +211,13 @@ impl RepositoryTransaction for PgRepository {
     fn save(mut self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>> {
         let span = tracing::info_span!("db.save");
         async move {
-            diesel::sql_query("COMMIT")
-                .execute(self.connection())
-                .await?;
-            drop(self.conn.take());
+            if !self.transaction_open {
+                return Ok(());
+            }
+            let mut lease = self.conn.get_mut_conn().await?;
+            AnsiTransactionManager::commit_transaction(&mut *lease).await?;
+            drop(lease);
+            self.conn.finish();
             Ok(())
         }
         .instrument(span)
@@ -211,10 +227,13 @@ impl RepositoryTransaction for PgRepository {
     fn cancel(mut self: Box<Self>) -> BoxFuture<'static, Result<(), Self::Error>> {
         let span = tracing::info_span!("db.cancel");
         async move {
-            diesel::sql_query("ROLLBACK")
-                .execute(self.connection())
-                .await?;
-            drop(self.conn.take());
+            if !self.transaction_open {
+                return Ok(());
+            }
+            let mut lease = self.conn.get_mut_conn().await?;
+            AnsiTransactionManager::rollback_transaction(&mut *lease).await?;
+            drop(lease);
+            self.conn.finish();
             Ok(())
         }
         .instrument(span)
@@ -292,4 +311,111 @@ pg_repository_access! {
     policy_data: PolicyDataRepository => PgPolicyDataRepository,
     station_trust: coauth_data::storage::station_trust::StationTrustRepository => PgStationTrustRepository,
     notification_template: NotificationTemplateRepository => PgNotificationTemplateRepository,
+}
+
+#[cfg(test)]
+mod tests {
+    use horme::RunQueryDsl;
+
+    use super::*;
+
+    #[derive(diesel::QueryableByName)]
+    struct Count {
+        #[diesel(sql_type = diesel::sql_types::BigInt)]
+        count: i64,
+    }
+
+    #[derive(diesel::QueryableByName)]
+    struct Session {
+        #[diesel(sql_type = diesel::sql_types::Integer)]
+        pid: i32,
+    }
+
+    #[tokio::test]
+    async fn dropping_transaction_closes_session_and_releases_single_pool_slot() {
+        let manager = diesel_async::pooled_connection::AsyncDieselConnectionManager::<
+            AsyncPgConnection,
+        >::new(
+            std::env::var("DATABASE_URL").expect("isolated test database required")
+        );
+        let pool = Pool::builder(manager).max_size(1).build().unwrap();
+        let conn = crate::pool::get_connection(&pool).await.unwrap();
+        let mut repo = PgRepository::new(conn);
+        repo.begin().await.unwrap();
+        let original = diesel::sql_query("SELECT pg_backend_pid() AS pid")
+            .get_result::<Session>(repo.connection())
+            .await
+            .unwrap();
+        diesel::sql_query("SELECT pg_advisory_xact_lock(89641273)")
+            .execute(repo.connection())
+            .await
+            .unwrap();
+        drop(repo);
+        let mut db = crate::pool::queries(&pool);
+        let replacement = diesel::sql_query("SELECT pg_backend_pid() AS pid")
+            .get_result::<Session>(&mut db)
+            .await
+            .unwrap();
+        assert_ne!(original.pid, replacement.pid);
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            diesel::sql_query("SELECT pg_advisory_xact_lock(89641273)").execute(&mut db),
+        )
+        .await
+        .expect("dropping the transaction must release its database locks")
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn nested_horme_transaction_preserves_outer_rollback_and_commit() {
+        let manager = diesel_async::pooled_connection::AsyncDieselConnectionManager::<
+            AsyncPgConnection,
+        >::new(
+            std::env::var("DATABASE_URL").expect("isolated test database required")
+        );
+        let pool = Pool::builder(manager).max_size(1).build().unwrap();
+        let mut conn = crate::pool::get_connection(&pool).await.unwrap();
+        diesel::sql_query("CREATE TEMP TABLE horme_nested_probe (value INTEGER)")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        let mut repo = PgRepository::new(conn);
+        repo.begin().await.unwrap();
+        horme::transaction(repo.connection(), async |conn| {
+            diesel::sql_query("INSERT INTO horme_nested_probe VALUES (1)")
+                .execute(conn)
+                .await?;
+            Ok::<_, horme::Error>(())
+        })
+        .await
+        .unwrap();
+        Box::new(repo).cancel().await.unwrap();
+        let mut db = crate::pool::queries(&pool);
+        let count = diesel::sql_query("SELECT COUNT(*) AS count FROM horme_nested_probe")
+            .get_result::<Count>(&mut db)
+            .await
+            .unwrap();
+        assert_eq!(
+            count.count, 0,
+            "nested success must not commit the outer transaction"
+        );
+
+        let conn = crate::pool::get_connection(&pool).await.unwrap();
+        let mut repo = PgRepository::new(conn);
+        repo.begin().await.unwrap();
+        horme::transaction(repo.connection(), async |conn| {
+            diesel::sql_query("INSERT INTO horme_nested_probe VALUES (2)")
+                .execute(conn)
+                .await?;
+            Ok::<_, horme::Error>(())
+        })
+        .await
+        .unwrap();
+        Box::new(repo).save().await.unwrap();
+        let count = diesel::sql_query("SELECT COUNT(*) AS count FROM horme_nested_probe")
+            .get_result::<Count>(&mut db)
+            .await
+            .unwrap();
+        assert_eq!(count.count, 1);
+    }
 }

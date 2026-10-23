@@ -8,12 +8,13 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
+use diesel::QueryableByName;
 use diesel::sql_types::{
     Array, BigInt, Bool, Bytea, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid,
 };
-use diesel::{OptionalExtension as _, QueryableByName};
+use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
-use diesel_async::{AsyncConnection as _, AsyncPgConnection, RunQueryDsl as _};
+use horme::{OptionalExtension as _, RunQueryDsl as _};
 use thiserror::Error;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -96,6 +97,12 @@ pub enum WebauthnError {
 
     #[error("credential serialisation failed: {0}")]
     Serde(#[from] serde_json::Error),
+}
+
+impl From<horme::Error> for WebauthnError {
+    fn from(error: horme::Error) -> Self {
+        Self::Storage(anyhow::anyhow!(error))
+    }
 }
 
 impl From<diesel::result::Error> for WebauthnError {
@@ -186,21 +193,15 @@ impl PgWebauthnService {
         })
     }
 
-    async fn connection(
-        &self,
-    ) -> Result<diesel_async::pooled_connection::deadpool::Object<AsyncPgConnection>, WebauthnError>
-    {
-        self.pool
-            .get()
-            .await
-            .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))
+    fn connection(&self) -> coauth_storage_postgres::pool::PgConnection {
+        coauth_storage_postgres::pool::queries(&self.pool)
     }
 
     async fn load_credential_rows(
         &self,
         account_id: Ulid,
     ) -> Result<Vec<CredentialRow>, WebauthnError> {
-        let mut conn = self.connection().await?;
+        let mut conn = self.connection();
         diesel::sql_query(
             r"
             SELECT id, account_id, credential_id, public_key, sign_count,
@@ -212,7 +213,7 @@ impl PgWebauthnService {
             ",
         )
         .bind::<DieselUuid, _>(Uuid::from(account_id))
-        .get_results::<CredentialRow>(&mut *conn)
+        .get_results::<CredentialRow>(&mut conn)
         .await
         .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))
     }
@@ -236,11 +237,11 @@ impl PgWebauthnService {
         let id = Uuid::now_v7();
         let expires_at = now + CHALLENGE_TTL;
         let state = serde_json::to_value(state)?;
-        let mut conn = self.connection().await?;
+        let mut conn = self.connection();
 
         diesel::sql_query("DELETE FROM webauthn_ceremonies WHERE expires_at <= $1")
             .bind::<Timestamptz, _>(now)
-            .execute(&mut *conn)
+            .execute(&mut conn)
             .await
             .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
 
@@ -258,7 +259,7 @@ impl PgWebauthnService {
         .bind::<Jsonb, _>(state)
         .bind::<Timestamptz, _>(now)
         .bind::<Timestamptz, _>(expires_at)
-        .execute(&mut *conn)
+        .execute(&mut conn)
         .await
         .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
 
@@ -272,7 +273,7 @@ impl PgWebauthnService {
         binding_id: &str,
         now: DateTime<Utc>,
     ) -> Result<(Ulid, S), WebauthnError> {
-        let mut conn = self.connection().await?;
+        let mut conn = self.connection();
         let row = diesel::sql_query(
             r"
             DELETE FROM webauthn_ceremonies
@@ -287,7 +288,7 @@ impl PgWebauthnService {
         .bind::<Text, _>(kind)
         .bind::<Text, _>(binding_id)
         .bind::<Timestamptz, _>(now)
-        .get_result::<CeremonyRow>(&mut *conn)
+        .get_result::<CeremonyRow>(&mut conn)
         .await
         .optional()
         .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?
@@ -511,7 +512,7 @@ impl WebauthnService for PgWebauthnService {
             .filter(|values: &Vec<String>| !values.is_empty())
             .unwrap_or(transports);
 
-        let mut conn = self.connection().await?;
+        let mut conn = self.connection();
         let row = diesel::sql_query(
             r"
             INSERT INTO webauthn_credentials (
@@ -537,7 +538,7 @@ impl WebauthnService for PgWebauthnService {
         .bind::<Bool, _>(user_verified)
         .bind::<Nullable<Text>, _>(label)
         .bind::<Timestamptz, _>(now)
-        .get_result::<CredentialRow>(&mut *conn)
+        .get_result::<CredentialRow>(&mut conn)
         .await
         .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
 
@@ -579,15 +580,14 @@ impl WebauthnService for PgWebauthnService {
         }
         let credential_id = result.cred_id().as_ref().to_vec();
 
-        let mut conn = self.connection().await?;
-        (*conn)
-            .transaction::<_, WebauthnError, _>(async move |conn| {
-                // Lock the current credential projection before comparing the
-                // authenticator counter. Ceremony state may be older than a
-                // concurrently completed assertion, so verification against
-                // ceremony state alone is insufficient to prevent rollback.
-                let existing = diesel::sql_query(
-                    r"
+        let mut conn = self.connection();
+        horme::transaction(&mut conn, async move |conn| {
+            // Lock the current credential projection before comparing the
+            // authenticator counter. Ceremony state may be older than a
+            // concurrently completed assertion, so verification against
+            // ceremony state alone is insufficient to prevent rollback.
+            let existing = diesel::sql_query(
+                r"
                     SELECT id, account_id, credential_id, public_key, sign_count,
                            transports, label, backup_eligible, backup_state, user_verified,
                            created_at, last_used_at, revoked_at
@@ -597,30 +597,30 @@ impl WebauthnService for PgWebauthnService {
                       AND revoked_at IS NULL
                     FOR UPDATE
                     ",
-                )
-                .bind::<DieselUuid, _>(Uuid::from(account_id))
-                .bind::<Bytea, _>(credential_id.clone())
-                .get_result::<CredentialRow>(conn)
-                .await
-                .optional()
-                .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?
-                .ok_or(WebauthnError::NoChallenge(ceremony_id))?;
-                let credential_record_id = Ulid::from(existing.id);
-                let current_counter = u32::try_from(existing.sign_count).map_err(|_| {
-                    WebauthnError::Storage(anyhow::anyhow!(
-                        "stored WebAuthn signature counter is outside the u32 range"
-                    ))
-                })?;
-                if !counter_transition_is_valid(current_counter, result.counter()) {
-                    return Err(WebauthnError::CounterConflict);
-                }
-                let mut passkey: Passkey = serde_json::from_value(existing.public_key)?;
-                passkey.update_credential(&result);
-                let public_key = serde_json::to_value(&passkey)?;
-                let backup_eligible = existing.backup_eligible || result.backup_eligible();
+            )
+            .bind::<DieselUuid, _>(Uuid::from(account_id))
+            .bind::<Bytea, _>(credential_id.clone())
+            .get_result::<CredentialRow>(conn)
+            .await
+            .optional()
+            .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?
+            .ok_or(WebauthnError::NoChallenge(ceremony_id))?;
+            let credential_record_id = Ulid::from(existing.id);
+            let current_counter = u32::try_from(existing.sign_count).map_err(|_| {
+                WebauthnError::Storage(anyhow::anyhow!(
+                    "stored WebAuthn signature counter is outside the u32 range"
+                ))
+            })?;
+            if !counter_transition_is_valid(current_counter, result.counter()) {
+                return Err(WebauthnError::CounterConflict);
+            }
+            let mut passkey: Passkey = serde_json::from_value(existing.public_key)?;
+            passkey.update_credential(&result);
+            let public_key = serde_json::to_value(&passkey)?;
+            let backup_eligible = existing.backup_eligible || result.backup_eligible();
 
-                let row = diesel::sql_query(
-                    r"
+            let row = diesel::sql_query(
+                r"
                     UPDATE webauthn_credentials
                     SET public_key = $3,
                         sign_count = $4,
@@ -636,31 +636,31 @@ impl WebauthnService for PgWebauthnService {
                               transports, label, backup_eligible, backup_state, user_verified,
                               created_at, last_used_at, revoked_at
                     ",
-                )
-                .bind::<DieselUuid, _>(Uuid::from(account_id))
-                .bind::<Bytea, _>(credential_id)
-                .bind::<Jsonb, _>(public_key)
-                .bind::<BigInt, _>(i64::from(result.counter()))
-                .bind::<Bool, _>(backup_eligible)
-                .bind::<Bool, _>(result.backup_state())
-                .bind::<Bool, _>(result.user_verified())
-                .bind::<Timestamptz, _>(now)
-                .bind::<BigInt, _>(existing.sign_count)
-                .get_result::<CredentialRow>(conn)
-                .await
-                .optional()
-                .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?
-                .ok_or(WebauthnError::CounterConflict)?;
-
-                Ok(WebauthnAuthentication {
-                    account_id,
-                    credential_record_id,
-                    user_verified: row.user_verified,
-                    backup_eligible: row.backup_eligible,
-                    backup_state: row.backup_state,
-                })
-            })
+            )
+            .bind::<DieselUuid, _>(Uuid::from(account_id))
+            .bind::<Bytea, _>(credential_id)
+            .bind::<Jsonb, _>(public_key)
+            .bind::<BigInt, _>(i64::from(result.counter()))
+            .bind::<Bool, _>(backup_eligible)
+            .bind::<Bool, _>(result.backup_state())
+            .bind::<Bool, _>(result.user_verified())
+            .bind::<Timestamptz, _>(now)
+            .bind::<BigInt, _>(existing.sign_count)
+            .get_result::<CredentialRow>(conn)
             .await
+            .optional()
+            .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?
+            .ok_or(WebauthnError::CounterConflict)?;
+
+            Ok(WebauthnAuthentication {
+                account_id,
+                credential_record_id,
+                user_verified: row.user_verified,
+                backup_eligible: row.backup_eligible,
+                backup_state: row.backup_state,
+            })
+        })
+        .await
     }
 
     async fn list(&self, account_id: Ulid) -> Result<Vec<WebauthnCredentialRecord>, WebauthnError> {
@@ -678,7 +678,7 @@ impl WebauthnService for PgWebauthnService {
         label: Option<String>,
     ) -> Result<(), WebauthnError> {
         let label = normalize_label(label)?;
-        let mut conn = self.connection().await?;
+        let mut conn = self.connection();
         let affected = diesel::sql_query(
             r"
             UPDATE webauthn_credentials
@@ -689,7 +689,7 @@ impl WebauthnService for PgWebauthnService {
         .bind::<DieselUuid, _>(Uuid::from(account_id))
         .bind::<DieselUuid, _>(Uuid::from(credential_id))
         .bind::<Nullable<Text>, _>(label)
-        .execute(&mut *conn)
+        .execute(&mut conn)
         .await
         .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
         if affected == 0 {
@@ -704,55 +704,54 @@ impl WebauthnService for PgWebauthnService {
         credential_id: Ulid,
         now: DateTime<Utc>,
     ) -> Result<(), WebauthnError> {
-        let mut conn = self.connection().await?;
-        (*conn)
-            .transaction::<_, WebauthnError, _>(async move |conn| {
-                diesel::sql_query(
-                    "SELECT pg_advisory_xact_lock(
+        let mut conn = self.connection();
+        horme::transaction(&mut conn, async move |conn| {
+            diesel::sql_query(
+                "SELECT pg_advisory_xact_lock(
                             hashtextextended(CAST($1 AS text), 0)
                          )::text AS _locked",
-                )
-                .bind::<DieselUuid, _>(Uuid::from(account_id))
-                .get_result::<AdvisoryLockRow>(conn)
-                .await
-                .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
+            )
+            .bind::<DieselUuid, _>(Uuid::from(account_id))
+            .get_result::<AdvisoryLockRow>(conn)
+            .await
+            .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
 
-                let counts = diesel::sql_query(
-                    r"
+            let counts = diesel::sql_query(
+                r"
                     SELECT COUNT(*) AS active_count,
                            COUNT(*) FILTER (WHERE id = $2) AS target_count
                     FROM webauthn_credentials
                     WHERE account_id = $1 AND revoked_at IS NULL
                     ",
-                )
-                .bind::<DieselUuid, _>(Uuid::from(account_id))
-                .bind::<DieselUuid, _>(Uuid::from(credential_id))
-                .get_result::<CredentialCounts>(conn)
-                .await
-                .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
-                if counts.target_count == 0 {
-                    return Err(WebauthnError::CredentialNotFound(credential_id));
-                }
-                if counts.active_count <= 1 {
-                    return Err(WebauthnError::LastCredential);
-                }
+            )
+            .bind::<DieselUuid, _>(Uuid::from(account_id))
+            .bind::<DieselUuid, _>(Uuid::from(credential_id))
+            .get_result::<CredentialCounts>(conn)
+            .await
+            .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
+            if counts.target_count == 0 {
+                return Err(WebauthnError::CredentialNotFound(credential_id));
+            }
+            if counts.active_count <= 1 {
+                return Err(WebauthnError::LastCredential);
+            }
 
-                diesel::sql_query(
-                    r"
+            diesel::sql_query(
+                r"
                     UPDATE webauthn_credentials
                     SET revoked_at = $3
                     WHERE account_id = $1 AND id = $2 AND revoked_at IS NULL
                     ",
-                )
-                .bind::<DieselUuid, _>(Uuid::from(account_id))
-                .bind::<DieselUuid, _>(Uuid::from(credential_id))
-                .bind::<Timestamptz, _>(now)
-                .execute(conn)
-                .await
-                .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
-                Ok(())
-            })
+            )
+            .bind::<DieselUuid, _>(Uuid::from(account_id))
+            .bind::<DieselUuid, _>(Uuid::from(credential_id))
+            .bind::<Timestamptz, _>(now)
+            .execute(conn)
             .await
+            .map_err(|e| WebauthnError::Storage(anyhow::anyhow!(e)))?;
+            Ok(())
+        })
+        .await
     }
 }
 

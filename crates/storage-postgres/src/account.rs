@@ -8,7 +8,7 @@ use coauth_data::{
     AccountContactPoint, AccountIdentityBinding, ContactChannel, IdentityProviderType,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::RunQueryDsl;
 use ulid::Ulid;
 use uuid::Uuid;
 
@@ -19,15 +19,17 @@ use crate::schema::{
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL-backed [`AccountRepository`].
-pub struct PgAccountRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgAccountRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgAccountRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgAccountRepository<'c, P>
+{
     /// Create a new [`PgAccountRepository`] from an active PostgreSQL
     /// connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -93,7 +95,9 @@ impl TryFrom<AccountSecurityEventRow> for AccountSecurityEvent {
 }
 
 #[async_trait]
-impl AccountRepository for PgAccountRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync> AccountRepository
+    for PgAccountRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

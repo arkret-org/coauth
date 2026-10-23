@@ -19,7 +19,7 @@ use coauth_data::pagination::Node;
 use coauth_data::{Clock, LocalAccountId, Page, Pagination, SessionGrant, new_id};
 use coauth_oauth_types::scope::{Scope, ScopeToken};
 use diesel::prelude::*;
-use diesel_async::{AsyncConnection, RunQueryDsl};
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use serde_json::Value;
 use ulid::Ulid;
@@ -30,13 +30,15 @@ use crate::session_grant_codec::session_grant_id_from_bytes;
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`SessionGrantRepository`].
-pub struct PgOAuthSessionGrantRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOAuthSessionGrantRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOAuthSessionGrantRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOAuthSessionGrantRepository<'c, P>
+{
     /// Create a repository backed by the provided PostgreSQL connection.
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -686,7 +688,7 @@ fn owned_grant(
 }
 
 async fn load_operation_for_update(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     operation_id: Ulid,
 ) -> Result<SessionGrantOperation, DatabaseError> {
     oauth_session_grant_operations::table
@@ -702,7 +704,7 @@ async fn load_operation_for_update(
 }
 
 async fn load_grant_by_protocol_id(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     grant_id: &SessionGrantId,
 ) -> Result<Option<SessionGrant>, DatabaseError> {
     oauth_session_grants::table
@@ -717,7 +719,7 @@ async fn load_grant_by_protocol_id(
 }
 
 async fn load_grant_by_protocol_id_for_update(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     grant_id: &SessionGrantId,
 ) -> Result<Option<SessionGrant>, DatabaseError> {
     oauth_session_grants::table
@@ -865,7 +867,7 @@ mod authorization_checkpoint_tests {
 }
 
 async fn evict_operation(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     operation_id: Ulid,
 ) -> Result<SessionGrantOperation, DatabaseError> {
     diesel::update(oauth_session_grant_operations::table.find(Uuid::from(operation_id)))
@@ -890,7 +892,7 @@ async fn evict_operation(
 }
 
 async fn lock_session_grant_subject(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     issuer_id: &DidCoreId,
     subject_id: &DidCoreId,
 ) -> Result<(), DatabaseError> {
@@ -916,7 +918,7 @@ struct CommitOperationOutcome<'a> {
 }
 
 async fn commit_operation_outcome(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     commit: CommitOperationOutcome<'_>,
 ) -> Result<(), DatabaseError> {
     let CommitOperationOutcome {
@@ -1006,7 +1008,9 @@ macro_rules! apply_session_grant_filter {
 }
 
 #[async_trait]
-impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    SessionGrantRepository for PgOAuthSessionGrantRepository<'_, P>
+{
     type Error = DatabaseError;
 
     async fn lock_operation(
@@ -1205,48 +1209,46 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         if authorization.authorization_ref.trim().is_empty() {
             return Err(DatabaseError::invalid_operation());
         }
-        self.conn
-            .transaction(async |conn| {
-                let operation = load_operation_for_update(conn, operation_id).await?;
-                if now >= operation.retained_until {
-                    return evict_operation(conn, operation_id).await;
-                }
-                match operation.state {
-                    SessionGrantOperationState::Evicted => Err(DatabaseError::invalid_operation()),
-                    SessionGrantOperationState::Authorized
-                    | SessionGrantOperationState::Committed => {
-                        if authorization_matches(&operation, authorization) {
-                            Ok(operation)
-                        } else {
-                            Err(DatabaseError::invalid_operation())
-                        }
-                    }
-                    SessionGrantOperationState::Reserved => {
-                        if authorization.proof_expires_at <= now {
-                            return Err(DatabaseError::invalid_operation());
-                        }
-                        let retained_until =
-                            operation.retained_until.max(authorization.proof_expires_at);
-                        diesel::update(
-                            oauth_session_grant_operations::table.find(Uuid::from(operation_id)),
-                        )
-                        .set((
-                            oauth_session_grant_operations::state.eq("authorized"),
-                            oauth_session_grant_operations::proof_authorization_ref
-                                .eq(Some(authorization.authorization_ref)),
-                            oauth_session_grant_operations::proof_authorization_checkpoint
-                                .eq(Some(authorization.checkpoint.clone())),
-                            oauth_session_grant_operations::proof_expires_at
-                                .eq(Some(authorization.proof_expires_at)),
-                            oauth_session_grant_operations::retained_until.eq(retained_until),
-                        ))
-                        .execute(conn)
-                        .await?;
-                        load_operation_for_update(conn, operation_id).await
+        horme::transaction(self.conn, async |conn| {
+            let operation = load_operation_for_update(conn, operation_id).await?;
+            if now >= operation.retained_until {
+                return evict_operation(conn, operation_id).await;
+            }
+            match operation.state {
+                SessionGrantOperationState::Evicted => Err(DatabaseError::invalid_operation()),
+                SessionGrantOperationState::Authorized | SessionGrantOperationState::Committed => {
+                    if authorization_matches(&operation, authorization) {
+                        Ok(operation)
+                    } else {
+                        Err(DatabaseError::invalid_operation())
                     }
                 }
-            })
-            .await
+                SessionGrantOperationState::Reserved => {
+                    if authorization.proof_expires_at <= now {
+                        return Err(DatabaseError::invalid_operation());
+                    }
+                    let retained_until =
+                        operation.retained_until.max(authorization.proof_expires_at);
+                    diesel::update(
+                        oauth_session_grant_operations::table.find(Uuid::from(operation_id)),
+                    )
+                    .set((
+                        oauth_session_grant_operations::state.eq("authorized"),
+                        oauth_session_grant_operations::proof_authorization_ref
+                            .eq(Some(authorization.authorization_ref)),
+                        oauth_session_grant_operations::proof_authorization_checkpoint
+                            .eq(Some(authorization.checkpoint.clone())),
+                        oauth_session_grant_operations::proof_expires_at
+                            .eq(Some(authorization.proof_expires_at)),
+                        oauth_session_grant_operations::retained_until.eq(retained_until),
+                    ))
+                    .execute(conn)
+                    .await?;
+                    load_operation_for_update(conn, operation_id).await
+                }
+            }
+        })
+        .await
     }
 
     #[tracing::instrument(name = "db.oauth_session_grant.commit_issuance", skip_all, err)]
@@ -1262,59 +1264,58 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         validate_exact_outcome(outcome)?;
         let now = clock.now();
         let id = new_id(now, rng);
-        self.conn
-            .transaction(async move |conn| {
-                let operation = load_operation_for_update(conn, operation_id).await?;
-                if operation.state == SessionGrantOperationState::Evicted
-                    || now >= operation.retained_until
-                {
-                    return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
-                }
-                if operation
-                    .grant_expires_at
-                    .is_some_and(|expires_at| now >= expires_at)
-                {
-                    let operation = evict_operation(conn, operation_id).await?;
-                    return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
-                }
-                if operation.operation.kind() != SessionGrantOperationKind::Issue {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                if operation.state == SessionGrantOperationState::Committed {
-                    return Ok(SessionGrantCommitOutcome::Replay(operation));
-                }
-                validate_authorization(&operation, authorization, now)?;
-                validate_grant_material(&operation, &grant)?;
-                lock_session_grant_subject(conn, grant.issuer_id, grant.subject_id).await?;
-                let retained_until = operation.retained_until.max(authorization.proof_expires_at);
-                let grant_id = grant.grant_id.clone();
-                let row = new_grant_row(id, operation_id, now, &grant);
-                diesel::insert_into(oauth_session_grants::table)
-                    .values(&row)
-                    .execute(conn)
-                    .await?;
-                commit_operation_outcome(
-                    conn,
-                    CommitOperationOutcome {
-                        operation_id,
-                        authorization,
-                        outcome,
-                        target_session_grant_id: None,
-                        result_grant_id: Some(&grant_id),
-                        affected_grant_ids: &[],
-                        retained_until,
-                        committed_at: now,
-                    },
-                )
+        horme::transaction(self.conn, async move |conn| {
+            let operation = load_operation_for_update(conn, operation_id).await?;
+            if operation.state == SessionGrantOperationState::Evicted
+                || now >= operation.retained_until
+            {
+                return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
+            }
+            if operation
+                .grant_expires_at
+                .is_some_and(|expires_at| now >= expires_at)
+            {
+                let operation = evict_operation(conn, operation_id).await?;
+                return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
+            }
+            if operation.operation.kind() != SessionGrantOperationKind::Issue {
+                return Err(DatabaseError::invalid_operation());
+            }
+            if operation.state == SessionGrantOperationState::Committed {
+                return Ok(SessionGrantCommitOutcome::Replay(operation));
+            }
+            validate_authorization(&operation, authorization, now)?;
+            validate_grant_material(&operation, &grant)?;
+            lock_session_grant_subject(conn, grant.issuer_id, grant.subject_id).await?;
+            let retained_until = operation.retained_until.max(authorization.proof_expires_at);
+            let grant_id = grant.grant_id.clone();
+            let row = new_grant_row(id, operation_id, now, &grant);
+            diesel::insert_into(oauth_session_grants::table)
+                .values(&row)
+                .execute(conn)
                 .await?;
-                Ok(SessionGrantCommitOutcome::Committed(owned_grant(
-                    id,
+            commit_operation_outcome(
+                conn,
+                CommitOperationOutcome {
                     operation_id,
-                    now,
-                    grant,
-                )))
-            })
-            .await
+                    authorization,
+                    outcome,
+                    target_session_grant_id: None,
+                    result_grant_id: Some(&grant_id),
+                    affected_grant_ids: &[],
+                    retained_until,
+                    committed_at: now,
+                },
+            )
+            .await?;
+            Ok(SessionGrantCommitOutcome::Committed(owned_grant(
+                id,
+                operation_id,
+                now,
+                grant,
+            )))
+        })
+        .await
     }
 
     async fn commit_refresh(
@@ -1333,107 +1334,101 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         validate_exact_outcome(outcome)?;
         let now = clock.now();
         let successor_row_id = new_id(now, rng);
-        self.conn
-            .transaction(async move |conn| {
-                let operation = load_operation_for_update(conn, operation_id).await?;
-                if operation.state == SessionGrantOperationState::Evicted
-                    || now >= operation.retained_until
-                {
-                    return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
-                }
-                if operation
-                    .grant_expires_at
-                    .is_some_and(|expires_at| now >= expires_at)
-                {
-                    let operation = evict_operation(conn, operation_id).await?;
-                    return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
-                }
-                if operation.operation.kind() != SessionGrantOperationKind::Refresh
-                    || operation.target_session_grant_id.as_ref() != Some(predecessor_grant_id)
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                validate_authorization(&operation, authorization, now)?;
-                if operation.state == SessionGrantOperationState::Committed {
-                    return Ok(SessionGrantRefreshOutcome::Replay(operation));
-                }
+        horme::transaction(self.conn, async move |conn| {
+            let operation = load_operation_for_update(conn, operation_id).await?;
+            if operation.state == SessionGrantOperationState::Evicted
+                || now >= operation.retained_until
+            {
+                return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
+            }
+            if operation
+                .grant_expires_at
+                .is_some_and(|expires_at| now >= expires_at)
+            {
+                let operation = evict_operation(conn, operation_id).await?;
+                return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
+            }
+            if operation.operation.kind() != SessionGrantOperationKind::Refresh
+                || operation.target_session_grant_id.as_ref() != Some(predecessor_grant_id)
+            {
+                return Err(DatabaseError::invalid_operation());
+            }
+            validate_authorization(&operation, authorization, now)?;
+            if operation.state == SessionGrantOperationState::Committed {
+                return Ok(SessionGrantRefreshOutcome::Replay(operation));
+            }
 
-                validate_grant_material(&operation, &successor)?;
-                lock_session_grant_subject(conn, successor.issuer_id, successor.subject_id).await?;
-                let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
-                    .await?
-                    .ok_or_else(DatabaseError::invalid_operation)?;
-                if predecessor.issuer_id != *successor.issuer_id
-                    || predecessor.subject_id != *successor.subject_id
-                    || predecessor.session_id != successor.session_id
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                validate_refresh_chain(&predecessor, &successor)?;
-                let predecessor = load_grant_by_protocol_id_for_update(conn, predecessor_grant_id)
-                    .await?
-                    .ok_or_else(DatabaseError::invalid_operation)?;
-                if predecessor.lifecycle_state != SessionGrantLifecycleState::Active
-                    || predecessor.expires_at <= now
-                {
-                    return Ok(SessionGrantRefreshOutcome::PredecessorTerminal(Box::new(
-                        predecessor,
-                    )));
-                }
-                let successor_grant_id = successor.grant_id.clone();
-                diesel::insert_into(oauth_session_grants::table)
-                    .values(new_grant_row(
-                        successor_row_id,
-                        operation_id,
-                        now,
-                        &successor,
-                    ))
-                    .execute(conn)
-                    .await?;
-                let changed = diesel::update(
-                    oauth_session_grants::table
-                        .find(Uuid::from(predecessor.id))
-                        .filter(oauth_session_grants::lifecycle_state.eq("active")),
-                )
-                .set((
-                    oauth_session_grants::lifecycle_state.eq("superseded"),
-                    oauth_session_grants::superseded_at.eq(Some(now)),
-                    oauth_session_grants::successor_grant_id
-                        .eq(Some(successor_grant_id.token_bytes().to_vec())),
+            validate_grant_material(&operation, &successor)?;
+            lock_session_grant_subject(conn, successor.issuer_id, successor.subject_id).await?;
+            let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
+                .await?
+                .ok_or_else(DatabaseError::invalid_operation)?;
+            if predecessor.issuer_id != *successor.issuer_id
+                || predecessor.subject_id != *successor.subject_id
+                || predecessor.session_id != successor.session_id
+            {
+                return Err(DatabaseError::invalid_operation());
+            }
+            validate_refresh_chain(&predecessor, &successor)?;
+            let predecessor = load_grant_by_protocol_id_for_update(conn, predecessor_grant_id)
+                .await?
+                .ok_or_else(DatabaseError::invalid_operation)?;
+            if predecessor.lifecycle_state != SessionGrantLifecycleState::Active
+                || predecessor.expires_at <= now
+            {
+                return Ok(SessionGrantRefreshOutcome::PredecessorTerminal(Box::new(
+                    predecessor,
+                )));
+            }
+            let successor_grant_id = successor.grant_id.clone();
+            diesel::insert_into(oauth_session_grants::table)
+                .values(new_grant_row(
+                    successor_row_id,
+                    operation_id,
+                    now,
+                    &successor,
                 ))
                 .execute(conn)
                 .await?;
-                DatabaseError::ensure_affected_rows_usize(changed, 1)?;
+            let changed = diesel::update(
+                oauth_session_grants::table
+                    .find(Uuid::from(predecessor.id))
+                    .filter(oauth_session_grants::lifecycle_state.eq("active")),
+            )
+            .set((
+                oauth_session_grants::lifecycle_state.eq("superseded"),
+                oauth_session_grants::superseded_at.eq(Some(now)),
+                oauth_session_grants::successor_grant_id
+                    .eq(Some(successor_grant_id.token_bytes().to_vec())),
+            ))
+            .execute(conn)
+            .await?;
+            DatabaseError::ensure_affected_rows_usize(changed, 1)?;
 
-                let retained_until = operation.retained_until.max(authorization.proof_expires_at);
-                commit_operation_outcome(
-                    conn,
-                    CommitOperationOutcome {
-                        operation_id,
-                        authorization,
-                        outcome,
-                        target_session_grant_id: Some(predecessor_grant_id),
-                        result_grant_id: Some(&successor_grant_id),
-                        affected_grant_ids: &[],
-                        retained_until,
-                        committed_at: now,
-                    },
-                )
-                .await?;
-                let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
-                    .await?
-                    .ok_or_else(DatabaseError::invalid_operation)?;
-                Ok(SessionGrantRefreshOutcome::Committed {
-                    predecessor: Box::new(predecessor),
-                    successor: Box::new(owned_grant(
-                        successor_row_id,
-                        operation_id,
-                        now,
-                        successor,
-                    )),
-                })
+            let retained_until = operation.retained_until.max(authorization.proof_expires_at);
+            commit_operation_outcome(
+                conn,
+                CommitOperationOutcome {
+                    operation_id,
+                    authorization,
+                    outcome,
+                    target_session_grant_id: Some(predecessor_grant_id),
+                    result_grant_id: Some(&successor_grant_id),
+                    affected_grant_ids: &[],
+                    retained_until,
+                    committed_at: now,
+                },
+            )
+            .await?;
+            let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
+                .await?
+                .ok_or_else(DatabaseError::invalid_operation)?;
+            Ok(SessionGrantRefreshOutcome::Committed {
+                predecessor: Box::new(predecessor),
+                successor: Box::new(owned_grant(successor_row_id, operation_id, now, successor)),
             })
-            .await
+        })
+        .await
     }
 
     async fn commit_revoke(
@@ -1444,171 +1439,169 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         selector: SessionGrantRevokeSelector<'_>,
     ) -> Result<SessionGrantRevokeOutcome, Self::Error> {
         let now = clock.now();
-        self.conn
-            .transaction(async move |conn| {
-                let operation = load_operation_for_update(conn, operation_id).await?;
-                if operation.state == SessionGrantOperationState::Evicted
-                    || now >= operation.retained_until
-                {
-                    return Ok(SessionGrantRevokeOutcome::Indeterminate(operation));
-                }
-                if operation.operation.kind() != SessionGrantOperationKind::Revoke {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                validate_authorization(&operation, authorization, now)?;
-                if operation.state == SessionGrantOperationState::Committed {
-                    return Ok(SessionGrantRevokeOutcome::Replay(operation));
-                }
+        horme::transaction(self.conn, async move |conn| {
+            let operation = load_operation_for_update(conn, operation_id).await?;
+            if operation.state == SessionGrantOperationState::Evicted
+                || now >= operation.retained_until
+            {
+                return Ok(SessionGrantRevokeOutcome::Indeterminate(operation));
+            }
+            if operation.operation.kind() != SessionGrantOperationKind::Revoke {
+                return Err(DatabaseError::invalid_operation());
+            }
+            validate_authorization(&operation, authorization, now)?;
+            if operation.state == SessionGrantOperationState::Committed {
+                return Ok(SessionGrantRevokeOutcome::Replay(operation));
+            }
 
-                let (subject_id, expected_selector) = match selector {
-                    SessionGrantRevokeSelector::Grant(grant_id) => {
-                        let grant = load_grant_by_protocol_id(conn, grant_id)
-                            .await?
-                            .ok_or_else(DatabaseError::invalid_operation)?;
-                        if grant.issuer_id != operation.issuer_id {
-                            return Err(DatabaseError::invalid_operation());
-                        }
-                        (
-                            grant.subject_id,
-                            SessionGrantRevokeTarget::Grant {
-                                grant_id: grant_id.clone(),
-                            },
-                        )
+            let (subject_id, expected_selector) = match selector {
+                SessionGrantRevokeSelector::Grant(grant_id) => {
+                    let grant = load_grant_by_protocol_id(conn, grant_id)
+                        .await?
+                        .ok_or_else(DatabaseError::invalid_operation)?;
+                    if grant.issuer_id != operation.issuer_id {
+                        return Err(DatabaseError::invalid_operation());
                     }
-                    SessionGrantRevokeSelector::Device {
-                        subject_id,
-                        device_id,
-                    } => (
-                        subject_id.to_owned(),
-                        SessionGrantRevokeTarget::Device {
-                            subject_id: subject_id.to_owned(),
-                            device_id: device_id.to_owned(),
+                    (
+                        grant.subject_id,
+                        SessionGrantRevokeTarget::Grant {
+                            grant_id: grant_id.clone(),
                         },
-                    ),
-                    SessionGrantRevokeSelector::AllForSubject { subject_id } => (
-                        subject_id.to_owned(),
-                        SessionGrantRevokeTarget::AllForSubject {
-                            subject_id: subject_id.to_owned(),
-                        },
-                    ),
-                };
-                if operation.operation
-                    != (SessionGrantOperationDescriptor::Revoke {
-                        selector: expected_selector,
-                    })
-                {
-                    return Err(DatabaseError::invalid_operation());
-                }
-                lock_session_grant_subject(conn, &operation.issuer_id, &subject_id).await?;
-
-                let mut query = oauth_session_grants::table
-                    .filter(oauth_session_grants::issuer_id.eq(&operation.issuer_id))
-                    .filter(oauth_session_grants::subject_id.eq(&subject_id))
-                    .into_boxed();
-                match selector {
-                    SessionGrantRevokeSelector::Grant(grant_id) => {
-                        query = query.filter(
-                            oauth_session_grants::grant_id.eq(grant_id.token_bytes().to_vec()),
-                        );
-                    }
-                    SessionGrantRevokeSelector::Device { device_id, .. } => {
-                        query = query.filter(oauth_session_grants::device_id.eq(Some(device_id)));
-                    }
-                    SessionGrantRevokeSelector::AllForSubject { .. } => {}
-                }
-                let candidates = query
-                    .order(oauth_session_grants::grant_id.asc())
-                    .select(SessionGrantLookup::as_select())
-                    .load::<SessionGrantLookup>(conn)
-                    .await?
-                    .into_iter()
-                    .map(SessionGrant::try_from)
-                    .collect::<Result<Vec<_>, _>>()?;
-                let mut matched = Vec::with_capacity(candidates.len());
-                for candidate in candidates {
-                    matched.push(
-                        load_grant_by_protocol_id_for_update(conn, &candidate.grant_id)
-                            .await?
-                            .ok_or_else(DatabaseError::invalid_operation)?,
-                    );
-                }
-                let mut active_ids = matched
-                    .iter()
-                    .filter(|grant| {
-                        grant.lifecycle_state == SessionGrantLifecycleState::Active
-                            && grant.expires_at > now
-                    })
-                    .map(|grant| grant.grant_id.clone())
-                    .collect::<Vec<_>>();
-                active_ids.sort();
-                if !active_ids.is_empty() {
-                    let active_bytes = active_ids
-                        .iter()
-                        .map(|id| id.token_bytes().to_vec())
-                        .collect::<Vec<_>>();
-                    let changed = diesel::update(
-                        oauth_session_grants::table
-                            .filter(oauth_session_grants::grant_id.eq_any(active_bytes))
-                            .filter(oauth_session_grants::lifecycle_state.eq("active")),
                     )
-                    .set((
-                        oauth_session_grants::lifecycle_state.eq("revoked"),
-                        oauth_session_grants::revoked_at.eq(Some(now)),
-                    ))
-                    .execute(conn)
-                    .await?;
-                    DatabaseError::ensure_affected_rows_usize(changed, active_ids.len())?;
                 }
-                let retained_until = operation.retained_until.max(authorization.proof_expires_at);
-                let wire_outcome = WireSessionRevokeOutcome {
-                    revoked_count: u64::try_from(active_ids.len())?,
-                    revoked_session_grant_ids: active_ids.clone(),
-                };
-                let canonical_response = arkret_canonical::canonical_json_bytes(&wire_outcome)?;
-                let response_digest = arkret_canonical::sha256_bytes(&canonical_response);
-                let target = match selector {
-                    SessionGrantRevokeSelector::Grant(grant_id) => Some(grant_id),
-                    _ => None,
-                };
-                commit_operation_outcome(
-                    conn,
-                    CommitOperationOutcome {
-                        operation_id,
-                        authorization,
-                        outcome: SessionGrantExactOutcome {
-                            canonical_response: &canonical_response,
-                            response_digest,
-                        },
-                        target_session_grant_id: target,
-                        result_grant_id: None,
-                        affected_grant_ids: &active_ids,
-                        retained_until,
-                        committed_at: now,
+                SessionGrantRevokeSelector::Device {
+                    subject_id,
+                    device_id,
+                } => (
+                    subject_id.to_owned(),
+                    SessionGrantRevokeTarget::Device {
+                        subject_id: subject_id.to_owned(),
+                        device_id: device_id.to_owned(),
                     },
-                )
-                .await?;
-                let committed_operation = load_operation_for_update(conn, operation_id).await?;
-                if active_ids.is_empty() {
-                    return Ok(SessionGrantRevokeOutcome::AlreadyTerminal {
-                        grants: matched,
-                        operation: committed_operation,
-                    });
-                }
-                let mut grants = Vec::with_capacity(active_ids.len());
-                for grant_id in &active_ids {
-                    grants.push(
-                        load_grant_by_protocol_id(conn, grant_id)
-                            .await?
-                            .ok_or_else(DatabaseError::invalid_operation)?,
-                    );
-                }
-                Ok(SessionGrantRevokeOutcome::Revoked {
-                    grants,
-                    revoked_at: now,
-                    operation: committed_operation,
+                ),
+                SessionGrantRevokeSelector::AllForSubject { subject_id } => (
+                    subject_id.to_owned(),
+                    SessionGrantRevokeTarget::AllForSubject {
+                        subject_id: subject_id.to_owned(),
+                    },
+                ),
+            };
+            if operation.operation
+                != (SessionGrantOperationDescriptor::Revoke {
+                    selector: expected_selector,
                 })
+            {
+                return Err(DatabaseError::invalid_operation());
+            }
+            lock_session_grant_subject(conn, &operation.issuer_id, &subject_id).await?;
+
+            let mut query = oauth_session_grants::table
+                .filter(oauth_session_grants::issuer_id.eq(&operation.issuer_id))
+                .filter(oauth_session_grants::subject_id.eq(&subject_id))
+                .into_boxed();
+            match selector {
+                SessionGrantRevokeSelector::Grant(grant_id) => {
+                    query = query
+                        .filter(oauth_session_grants::grant_id.eq(grant_id.token_bytes().to_vec()));
+                }
+                SessionGrantRevokeSelector::Device { device_id, .. } => {
+                    query = query.filter(oauth_session_grants::device_id.eq(Some(device_id)));
+                }
+                SessionGrantRevokeSelector::AllForSubject { .. } => {}
+            }
+            let candidates = query
+                .order(oauth_session_grants::grant_id.asc())
+                .select(SessionGrantLookup::as_select())
+                .load::<SessionGrantLookup>(conn)
+                .await?
+                .into_iter()
+                .map(SessionGrant::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
+            let mut matched = Vec::with_capacity(candidates.len());
+            for candidate in candidates {
+                matched.push(
+                    load_grant_by_protocol_id_for_update(conn, &candidate.grant_id)
+                        .await?
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                );
+            }
+            let mut active_ids = matched
+                .iter()
+                .filter(|grant| {
+                    grant.lifecycle_state == SessionGrantLifecycleState::Active
+                        && grant.expires_at > now
+                })
+                .map(|grant| grant.grant_id.clone())
+                .collect::<Vec<_>>();
+            active_ids.sort();
+            if !active_ids.is_empty() {
+                let active_bytes = active_ids
+                    .iter()
+                    .map(|id| id.token_bytes().to_vec())
+                    .collect::<Vec<_>>();
+                let changed = diesel::update(
+                    oauth_session_grants::table
+                        .filter(oauth_session_grants::grant_id.eq_any(active_bytes))
+                        .filter(oauth_session_grants::lifecycle_state.eq("active")),
+                )
+                .set((
+                    oauth_session_grants::lifecycle_state.eq("revoked"),
+                    oauth_session_grants::revoked_at.eq(Some(now)),
+                ))
+                .execute(conn)
+                .await?;
+                DatabaseError::ensure_affected_rows_usize(changed, active_ids.len())?;
+            }
+            let retained_until = operation.retained_until.max(authorization.proof_expires_at);
+            let wire_outcome = WireSessionRevokeOutcome {
+                revoked_count: u64::try_from(active_ids.len())?,
+                revoked_session_grant_ids: active_ids.clone(),
+            };
+            let canonical_response = arkret_canonical::canonical_json_bytes(&wire_outcome)?;
+            let response_digest = arkret_canonical::sha256_bytes(&canonical_response);
+            let target = match selector {
+                SessionGrantRevokeSelector::Grant(grant_id) => Some(grant_id),
+                _ => None,
+            };
+            commit_operation_outcome(
+                conn,
+                CommitOperationOutcome {
+                    operation_id,
+                    authorization,
+                    outcome: SessionGrantExactOutcome {
+                        canonical_response: &canonical_response,
+                        response_digest,
+                    },
+                    target_session_grant_id: target,
+                    result_grant_id: None,
+                    affected_grant_ids: &active_ids,
+                    retained_until,
+                    committed_at: now,
+                },
+            )
+            .await?;
+            let committed_operation = load_operation_for_update(conn, operation_id).await?;
+            if active_ids.is_empty() {
+                return Ok(SessionGrantRevokeOutcome::AlreadyTerminal {
+                    grants: matched,
+                    operation: committed_operation,
+                });
+            }
+            let mut grants = Vec::with_capacity(active_ids.len());
+            for grant_id in &active_ids {
+                grants.push(
+                    load_grant_by_protocol_id(conn, grant_id)
+                        .await?
+                        .ok_or_else(DatabaseError::invalid_operation)?,
+                );
+            }
+            Ok(SessionGrantRevokeOutcome::Revoked {
+                grants,
+                revoked_at: now,
+                operation: committed_operation,
             })
-            .await
+        })
+        .await
     }
 
     #[tracing::instrument(name = "db.oauth_session_grant.lookup", skip_all, err)]
@@ -1688,25 +1681,24 @@ impl SessionGrantRepository for PgOAuthSessionGrantRepository<'_> {
         grant: SessionGrant,
     ) -> Result<SessionGrant, Self::Error> {
         let revoked_at = clock.now();
-        self.conn
-            .transaction(async move |conn| {
-                let rows_affected = diesel::update(
-                    oauth_session_grants::table
-                        .find(Uuid::from(grant.id))
-                        .filter(oauth_session_grants::lifecycle_state.eq("active")),
-                )
-                .set((
-                    oauth_session_grants::lifecycle_state.eq("revoked"),
-                    oauth_session_grants::revoked_at.eq(Some(revoked_at)),
-                ))
-                .execute(conn)
-                .await?;
-                DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
-                grant
-                    .revoke(revoked_at)
-                    .map_err(DatabaseError::to_invalid_operation)
-            })
-            .await
+        horme::transaction(self.conn, async move |conn| {
+            let rows_affected = diesel::update(
+                oauth_session_grants::table
+                    .find(Uuid::from(grant.id))
+                    .filter(oauth_session_grants::lifecycle_state.eq("active")),
+            )
+            .set((
+                oauth_session_grants::lifecycle_state.eq("revoked"),
+                oauth_session_grants::revoked_at.eq(Some(revoked_at)),
+            ))
+            .execute(conn)
+            .await?;
+            DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
+            grant
+                .revoke(revoked_at)
+                .map_err(DatabaseError::to_invalid_operation)
+        })
+        .await
     }
 
     #[tracing::instrument(name = "db.oauth_session_grant.revoke_if_active", skip_all, err)]

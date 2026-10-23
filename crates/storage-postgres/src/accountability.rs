@@ -9,7 +9,7 @@ use coauth_data::accountability::{
 };
 use coauth_data::{Clock, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -18,14 +18,16 @@ use crate::schema::{accountability_grants, accountability_subject_revocations};
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`AccountabilityGrantRepository`].
-pub struct PgAccountabilityGrantRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgAccountabilityGrantRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgAccountabilityGrantRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgAccountabilityGrantRepository<'c, P>
+{
     /// Construct from an active PostgreSQL connection.
     #[must_use]
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -475,7 +477,9 @@ struct InsertableSubjectRevocation {
 }
 
 #[async_trait]
-impl AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    AccountabilityGrantRepository for PgAccountabilityGrantRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

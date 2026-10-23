@@ -22,8 +22,7 @@ pub(super) async fn register_worker(
     let mut rng = state.rng();
     let clock = state.clock();
 
-    let conn = coauth_storage_postgres::pool::get_connection(state.pool()).await?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(state.pool().clone());
 
     let registration = repo.queue_worker().register(&mut rng, clock).await?;
     Ok((registration, clock.now()))
@@ -38,9 +37,7 @@ pub(super) async fn setup_schedules(
         .map(|schedule| schedule.schedule_name)
         .collect();
 
-    let conn = coauth_storage_postgres::pool::get_connection(state.pool()).await?;
-
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(state.pool().clone());
     repo.queue_schedule().setup(&schedule_names).await?;
     Ok(())
 }
@@ -60,8 +57,7 @@ pub(super) async fn shutdown_worker(
 
     let mut rng = state.rng();
     drain_jobs(state.pool(), &mut rng, clock, tracker).await?;
-    let conn = coauth_storage_postgres::pool::get_connection(state.pool()).await?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(state.pool().clone());
     repo.queue_worker().shutdown(clock, registration).await?;
     Ok(())
 }
@@ -78,8 +74,7 @@ pub(super) async fn tick_worker(
     let now = clock.now();
     let heartbeat_age = now - *last_heartbeat;
 
-    let conn = coauth_storage_postgres::pool::get_connection(state.pool()).await?;
-    let mut repo = PgRepository::new(conn);
+    let mut repo = PgRepository::from_pool(state.pool().clone());
 
     if heartbeat_age >= chrono::Duration::seconds(90) {
         tracing::warn!(
@@ -153,8 +148,7 @@ pub(super) async fn drain_jobs(
 ) -> Result<(), QueueRunnerError> {
     while tracker.running_jobs() > 0 {
         tracker.collect_next_job().await;
-        let conn = coauth_storage_postgres::pool::get_connection(pool).await?;
-        let mut repo = PgRepository::new(conn);
+        let mut repo = PgRepository::from_pool(pool.clone());
         tracker.process_jobs(rng, clock, &mut repo).await?;
     }
     Ok(())

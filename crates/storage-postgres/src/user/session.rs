@@ -9,7 +9,7 @@ use coauth_data::{
     UpstreamOAuthAuthorizationSession, User, new_id,
 };
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -22,14 +22,16 @@ use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`BrowserSessionRepository`] for a PostgreSQL
 /// connection
-pub struct PgBrowserSessionRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgBrowserSessionRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgBrowserSessionRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgBrowserSessionRepository<'c, P>
+{
     /// Create a new [`PgBrowserSessionRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -238,7 +240,7 @@ macro_rules! apply_session_filter {
 /// Load the session + user join using raw SQL to avoid diesel tuple
 /// compatibility issues. Returns the session row for the given ID or None.
 async fn load_session_lookup(
-    conn: &mut diesel_async::AsyncPgConnection,
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
     session_id: Uuid,
 ) -> Result<Option<SessionLookup>, DatabaseError> {
     let session_row = user_sessions::table
@@ -272,7 +274,9 @@ async fn load_session_lookup(
 }
 
 #[async_trait]
-impl BrowserSessionRepository for PgBrowserSessionRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    BrowserSessionRepository for PgBrowserSessionRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

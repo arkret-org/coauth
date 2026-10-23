@@ -12,10 +12,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use diesel::QueryableByName;
 use diesel::sql_types::{Int4, Jsonb, Nullable, Text, Timestamptz, Uuid as DieselUuid};
-use diesel::{OptionalExtension as _, QueryableByName};
+use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
-use diesel_async::{AsyncPgConnection, RunQueryDsl as _};
+use horme::{OptionalExtension as _, RunQueryDsl as _};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -240,11 +241,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
     ) -> Result<RiskActionProposalRecord, RiskActionProposalsError> {
         let id = Uuid::now_v7();
         let required = i32::try_from(input.required_approvals.max(1)).unwrap_or(1);
-        let mut conn = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let row = diesel::sql_query(
             r"
             INSERT INTO risk_action_proposals (
@@ -267,7 +264,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .bind::<Nullable<Text>, _>(input.ticket)
         .bind::<Int4, _>(required)
         .bind::<Timestamptz, _>(input.now)
-        .get_result::<ProposalRow>(&mut *conn)
+        .get_result::<ProposalRow>(&mut conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
 
@@ -278,11 +275,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         &self,
         id: Ulid,
     ) -> Result<Option<RiskActionProposalRecord>, RiskActionProposalsError> {
-        let mut conn = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let row = diesel::sql_query(
             r"
             SELECT id, account_id, action, proposer_id, reason, ticket,
@@ -293,7 +286,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             ",
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
-        .get_results::<ProposalRow>(&mut *conn)
+        .get_results::<ProposalRow>(&mut conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         row.into_iter()
@@ -306,11 +299,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         &self,
         account_id: Ulid,
     ) -> Result<Vec<RiskActionProposalRecord>, RiskActionProposalsError> {
-        let mut conn = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let rows = diesel::sql_query(
             r"
             SELECT id, account_id, action, proposer_id, reason, ticket,
@@ -323,7 +312,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             ",
         )
         .bind::<DieselUuid, _>(Uuid::from(account_id))
-        .get_results::<ProposalRow>(&mut *conn)
+        .get_results::<ProposalRow>(&mut conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         rows.into_iter().map(ProposalRow::try_into_record).collect()
@@ -368,11 +357,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         let proofs_json = serde_json::to_value(&proofs)
             .map_err(|e| RiskActionProposalsError::Storage(e.into()))?;
 
-        let mut conn = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let row = diesel::sql_query(
             r"
             UPDATE risk_action_proposals
@@ -392,7 +377,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         .bind::<Text, _>(new_state.as_str())
         .bind::<Nullable<Timestamptz>, _>(approved_at)
         .bind::<Timestamptz, _>(proof.recorded_at)
-        .get_result::<ProposalRow>(&mut *conn)
+        .get_result::<ProposalRow>(&mut conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         row.try_into_record()
@@ -403,11 +388,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         id: Ulid,
         executed_at: DateTime<Utc>,
     ) -> Result<RiskActionProposalRecord, RiskActionProposalsError> {
-        let mut conn = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
 
         // Atomic compare-and-set: only the `approved` row transitions to
         // `executed`, and PostgreSQL serialises concurrent UPDATEs on the same
@@ -430,7 +411,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
         .bind::<Timestamptz, _>(executed_at)
-        .get_result::<ProposalRow>(&mut *conn)
+        .get_result::<ProposalRow>(&mut conn)
         .await
         .optional()
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
@@ -481,11 +462,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
             return Err(RiskActionProposalsError::AlreadyCancelled);
         }
 
-        let mut conn = self
-            .pool
-            .get()
-            .await
-            .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
+        let mut conn = coauth_storage_postgres::pool::queries(&self.pool);
         let row = diesel::sql_query(
             r"
             UPDATE risk_action_proposals
@@ -501,7 +478,7 @@ impl RiskActionProposalsService for PgRiskActionProposalsService {
         )
         .bind::<DieselUuid, _>(Uuid::from(id))
         .bind::<Timestamptz, _>(cancelled_at)
-        .get_result::<ProposalRow>(&mut *conn)
+        .get_result::<ProposalRow>(&mut conn)
         .await
         .map_err(|e| RiskActionProposalsError::Storage(anyhow::anyhow!(e)))?;
         row.try_into_record()

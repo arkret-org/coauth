@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use coauth_data::{AccessToken, AccessTokenState, Clock, Session, new_id};
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use uuid::Uuid;
@@ -12,14 +12,16 @@ use crate::schema::oauth_access_tokens;
 
 /// An implementation of [`OAuthAccessTokenRepository`] for a PostgreSQL
 /// connection
-pub struct PgOAuthAccessTokenRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOAuthAccessTokenRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOAuthAccessTokenRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOAuthAccessTokenRepository<'c, P>
+{
     /// Create a new [`PgOAuthAccessTokenRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 }
@@ -77,7 +79,9 @@ struct CleanupResult {
 }
 
 #[async_trait]
-impl coauth_data::oauth::OAuthAccessTokenRepository for PgOAuthAccessTokenRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    coauth_data::oauth::OAuthAccessTokenRepository for PgOAuthAccessTokenRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

@@ -11,7 +11,7 @@ use coauth_jose::jwk::PublicJsonWebKeySet;
 use coauth_oauth_types::oidc::ApplicationType;
 use coauth_oauth_types::requests::GrantType;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
+use horme::{OptionalExtension, RunQueryDsl};
 use rand_core::RngCore;
 use ulid::Ulid;
 use url::Url;
@@ -24,14 +24,16 @@ use crate::schema::{
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// An implementation of [`OAuthClientRepository`] for a PostgreSQL connection
-pub struct PgOAuthClientRepository<'c> {
-    conn: &'c mut diesel_async::AsyncPgConnection,
+pub struct PgOAuthClientRepository<'c, P = diesel_async::AsyncPgConnection> {
+    conn: &'c mut P,
 }
 
-impl<'c> PgOAuthClientRepository<'c> {
+impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    PgOAuthClientRepository<'c, P>
+{
     /// Create a new [`PgOAuthClientRepository`] from an active PostgreSQL
     /// connection
-    pub fn new(conn: &'c mut diesel_async::AsyncPgConnection) -> Self {
+    pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
 
@@ -310,7 +312,9 @@ struct NewOAuthClient {
 }
 
 #[async_trait]
-impl OAuthClientRepository for PgOAuthClientRepository<'_> {
+impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
+    OAuthClientRepository for PgOAuthClientRepository<'_, P>
+{
     type Error = DatabaseError;
 
     #[tracing::instrument(

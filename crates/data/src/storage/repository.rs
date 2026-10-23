@@ -45,6 +45,12 @@ use crate::user::{
 pub trait RepositoryFactory {
     /// Create a new [`BoxRepository`]
     async fn create(&self) -> Result<BoxRepository, RepositoryError>;
+
+    /// Create a query-scoped repository for independent reads.
+    ///
+    /// Each query releases its connection before returning. Use `create` when
+    /// operations must share a transaction, snapshot, or advisory lock.
+    async fn read(&self) -> Result<BoxRepository, RepositoryError>;
 }
 
 /// A type-erased [`RepositoryFactory`]

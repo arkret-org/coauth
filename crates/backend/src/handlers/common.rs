@@ -227,6 +227,10 @@ pub trait DepotExt {
     /// Convenience shortcut for `self.repo_factory()?.create().await?` which is
     /// repeated in 40+ handler files.
     fn repo(&self) -> impl std::future::Future<Output = Result<BoxRepository, RouteError>> + Send;
+    /// Query-scoped repository for independent reads without a request transaction.
+    fn read_repo(
+        &self,
+    ) -> impl std::future::Future<Output = Result<BoxRepository, RouteError>> + Send;
     fn site_config(&self) -> Result<SiteConfig, RouteError>;
     fn station(&self) -> Result<Arc<dyn ConnectorAdmin>, RouteError>;
     fn policy_factory(&self) -> Result<Arc<PolicyFactory>, RouteError>;
@@ -282,6 +286,12 @@ fn depot_get<T: Send + Sync + Clone + 'static>(depot: &Depot, key: &str) -> Resu
 }
 
 impl DepotExt for Depot {
+    async fn read_repo(&self) -> Result<BoxRepository, RouteError> {
+        self.repo_factory()?
+            .read()
+            .await
+            .map_err(|e| RouteError::Internal(Box::new(e)))
+    }
     fn repo_factory(&self) -> Result<&BoxRepositoryFactory, RouteError> {
         self.get::<BoxRepositoryFactory>("box_repository_factory")
             .map_err(|_| {
