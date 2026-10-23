@@ -399,7 +399,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 4470e9ecc68df7b2be2340fb0304bb3e771e0e79
+          ref: 3fe4095cee96a967e6cf3d634b45800e30601aa7
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
@@ -449,6 +449,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: arkret-org/coauth
+          key: release-frontend
       - name: Install frontend tools
         run: |
           sudo apt-get update
@@ -512,7 +516,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 4470e9ecc68df7b2be2340fb0304bb3e771e0e79
+          ref: 3fe4095cee96a967e6cf3d634b45800e30601aa7
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6

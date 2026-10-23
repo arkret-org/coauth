@@ -2294,6 +2294,7 @@ dependencies = [
  "ipnetwork",
  "opentelemetry 0.32.0",
  "opentelemetry-semantic-conventions 0.32.1",
+ "pq-sys",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "serde",
@@ -2580,6 +2581,7 @@ dependencies = [
  "hmac 0.13.0",
  "horme",
  "parking_lot",
+ "pq-sys",
  "rand 0.10.2",
  "serde",
  "serde_json",
@@ -3560,7 +3562,6 @@ dependencies = [
  "ipnetwork",
  "itoa",
  "libc",
- "pq-src",
  "pq-sys",
  "r2d2",
  "serde_json",
@@ -8583,6 +8584,7 @@ checksum = "574ddd6a267294433f140b02a726b0640c43cf7c6f717084684aaa3b285aba61"
 dependencies = [
  "libc",
  "pkg-config",
+ "pq-src",
  "vcpkg",
 ]
 

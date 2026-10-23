@@ -161,6 +161,7 @@ diesel-async = { version = "0.9", features = [
     "async-connection-wrapper",
 ] }
 diesel_migrations = "2.3"
+pq-sys = { version = "0.7.5", features = ["bundled"] }
 digest = "0.10.7"
 dioxus = { version = "=0.7.10", default-features = false, features = [
     "minimal",
