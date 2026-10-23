@@ -255,6 +255,7 @@ skip-tree = []
 # ── Sources ─────────────────────────────────────────────────────────────────
 
 [sources]
+allow-git = ["https://github.com/arkret-org/openmls"]
 unknown-registry = "warn"
 unknown-git = "warn"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
