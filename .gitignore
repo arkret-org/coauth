@@ -23,6 +23,7 @@ _*.*
 *.log
 .sqlx
 *.py
+!.ci/package-release.py
 !conformance/prepare-local-config.py
 !conformance/run-official-plan.py
 !conformance/publish-evidence.py
@@ -44,3 +45,4 @@ conformance/test-config.yaml.raw
 
 # Local verification evidence and build metadata.
 /artifacts/
+/release-assets/

@@ -8,6 +8,8 @@ on:
     tags:
       - "v*"
 
+  workflow_dispatch:
+
   # Trigger on pull request label changes; only runs when 'Z-Build-Workflow' label is present
   pull_request:
     types: [labeled]
@@ -22,7 +24,7 @@ env:
 
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # -- Version computation --
@@ -335,13 +337,28 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     needs:
       - build-image
+      - build-binaries
+    permissions:
+      contents: write
 
     steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify release checksums
+        working-directory: release-assets
+        run: sha256sum --check ./*.sha256
+
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
-          draft: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
+          files: release-assets/*
           generate_release_notes: true
           body: |
             ### Docker image
@@ -356,3 +373,228 @@ jobs:
               ```
               ${{ needs.build-image.outputs.tags_text }}
               ```
+
+  release-frontend:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.label.name == 'Z-Build-Workflow')
+    permissions:
+      contents: read
+    name: Build frontend assets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: arkret-org/coauth
+    steps:
+      - name: Checkout coauth
+        uses: actions/checkout@v6
+        with:
+          path: arkret-org/coauth
+      - name: Checkout arkret-rust-sdk
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-org/arkret-rust-sdk
+          ref: db0f5b44dec117b6b316690650efd0adb3a0f990
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout coland
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/coland
+          path: arkret-org/coland
+          ref: 4470e9ecc68df7b2be2340fb0304bb3e771e0e79
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout cotest
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/cotest
+          path: arkret-org/cotest
+          ref: 43be65ca573064454b158502badcd2039dc58657
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout garth
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: arkret-org/garth
+          ref: 8cfc6775b84528ff75c1ce37e6f879bfb1bfaf33
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout floria
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: arkret-org/floria
+          ref: 9d9ee6e5ebfef35bae56d9d79a8a23157486bccb
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout arkret-spec
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-org/arkret-spec
+          ref: 8ae6fd0f14c630310a524e38b950b191918295e3
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout bridges
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/bridges
+          path: arkret-org/bridges
+          ref: c3f9d8e51eddf63690fa083a493125dafdc86dae
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout savfox
+        uses: actions/checkout@v6
+        with:
+          repository: savfox-ai/savfox
+          path: savfox-ai/savfox
+          ref: 30718f036341f22acb7cca1e35accee069a5d74a
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install frontend tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+          cargo install dioxus-cli --version 0.7.10 --locked
+      - name: Build frontend
+        run: dx build -p coauth-frontend --release --debug-symbols false --locked
+      - name: Locate frontend assets
+        shell: bash
+        run: |
+          target_dir=$(cargo metadata --locked --no-deps --format-version 1 | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
+          test -f "$target_dir/dx/coauth-frontend/release/web/public/index.html"
+          cp -R "$target_dir/dx/coauth-frontend/release/web/public" frontend-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coauth-frontend
+          path: arkret-org/coauth/frontend-dist/
+          if-no-files-found: error
+
+  build-binaries:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.label.name == 'Z-Build-Workflow')
+    permissions:
+      contents: read
+    name: Build (${{ matrix.target }})
+    needs: release-frontend
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: arkret-org/coauth
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform: linux
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            platform: windows
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: macos
+    steps:
+      - name: Checkout coauth
+        uses: actions/checkout@v6
+        with:
+          path: arkret-org/coauth
+      - name: Checkout arkret-rust-sdk
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/arkret-rust-sdk
+          path: arkret-org/arkret-rust-sdk
+          ref: db0f5b44dec117b6b316690650efd0adb3a0f990
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout coland
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/coland
+          path: arkret-org/coland
+          ref: 4470e9ecc68df7b2be2340fb0304bb3e771e0e79
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout cotest
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/cotest
+          path: arkret-org/cotest
+          ref: 43be65ca573064454b158502badcd2039dc58657
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout garth
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/garth
+          path: arkret-org/garth
+          ref: 8cfc6775b84528ff75c1ce37e6f879bfb1bfaf33
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout floria
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/floria
+          path: arkret-org/floria
+          ref: 9d9ee6e5ebfef35bae56d9d79a8a23157486bccb
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout arkret-spec
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/arkret-spec
+          path: arkret-org/arkret-spec
+          ref: 8ae6fd0f14c630310a524e38b950b191918295e3
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout bridges
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ github.repository_owner }}/bridges
+          path: arkret-org/bridges
+          ref: c3f9d8e51eddf63690fa083a493125dafdc86dae
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - name: Checkout savfox
+        uses: actions/checkout@v6
+        with:
+          repository: savfox-ai/savfox
+          path: savfox-ai/savfox
+          ref: 30718f036341f22acb7cca1e35accee069a5d74a
+          token: ${{ secrets.CI_REPO_TOKEN || github.token }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev cmake ninja-build nasm
+      - name: Configure static Windows OpenSSL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.ci/configure-windows-openssl.ps1
+      - name: Configure macOS OpenSSL
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          root=$(brew --prefix openssl@3)
+          echo "OPENSSL_DIR=$root" >> "$GITHUB_ENV"
+          echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: arkret-org/coauth
+          key: release-${{ matrix.target }}
+      - uses: actions/download-artifact@v5
+        with:
+          name: coauth-frontend
+          path: arkret-org/coauth/frontend-dist
+      - name: Build release executables
+        run: cargo build --release --locked --target ${{ matrix.target }} -p coauth -p coauth-keystore-keygen
+      - name: Package release
+        run: python .ci/package-release.py --target ${{ matrix.target }} --binary coauth --binary coauth-keystore-keygen --resource templates --resource translations --resource policies --resource config.example.yaml --resource frontend-dist=dist
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: arkret-org/coauth/release-assets/*
+          if-no-files-found: error
