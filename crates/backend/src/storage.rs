@@ -141,7 +141,7 @@ fn build_s3_operator(
     if let Some(secret_access_key) = secret_access_key {
         builder = builder.secret_access_key(secret_access_key);
     }
-    if path_style {
+    if !path_style {
         builder = builder.enable_virtual_host_style();
     }
     if !prefix.is_empty() {
@@ -155,4 +155,74 @@ fn build_s3_operator(
         region
     );
     Ok(op)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn assert_s3_addressing(style_config: &str, expected_host: &str, expected_path: &str) {
+        let config: StorageConfig = serde_saphyr::from_str(&format!(
+            "backend: s3\n\
+             bucket: avatar-bucket\n\
+             region: us-east-1\n\
+             endpoint: https://s3.example.com\n\
+             access_key_id: test-access-key\n\
+             secret_access_key: test-secret-key\n\
+             prefix: media/\n\
+             {style_config}"
+        ))
+        .unwrap();
+        let operator = build_operator(&config).unwrap();
+        let request = operator
+            .presign_read("avatars/user.png", Duration::from_secs(300))
+            .await
+            .unwrap();
+        let url = url::Url::parse(&request.uri().to_string()).unwrap();
+
+        assert_eq!(url.scheme(), "https");
+        assert_eq!(url.host_str(), Some(expected_host));
+        assert_eq!(url.path(), expected_path);
+        assert!(url.query_pairs().any(|(key, value)| {
+            key == "X-Amz-Credential" && value.starts_with("test-access-key/")
+        }));
+        assert!(
+            url.query_pairs()
+                .any(|(key, value)| key == "X-Amz-Expires" && value == "300")
+        );
+        assert!(
+            url.query_pairs()
+                .any(|(key, value)| key == "X-Amz-Signature" && !value.is_empty())
+        );
+    }
+
+    #[tokio::test]
+    async fn s3_path_style_places_bucket_in_path() {
+        assert_s3_addressing(
+            "path_style: true\n",
+            "s3.example.com",
+            "/avatar-bucket/media/avatars/user.png",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn s3_virtual_host_style_places_bucket_in_host() {
+        assert_s3_addressing(
+            "path_style: false\n",
+            "avatar-bucket.s3.example.com",
+            "/media/avatars/user.png",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn s3_defaults_to_virtual_host_style() {
+        assert_s3_addressing(
+            "",
+            "avatar-bucket.s3.example.com",
+            "/media/avatars/user.png",
+        )
+        .await;
+    }
 }
