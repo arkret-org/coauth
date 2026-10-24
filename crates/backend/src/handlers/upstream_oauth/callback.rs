@@ -285,7 +285,7 @@ pub async fn handler(
     let cookie_jar = depot.cookie_jar(req)?;
     let method = req.method().clone();
 
-    let params = callback_params(req, &method).await;
+    let parameters = callback_params(req, &method).await;
 
     let provider = repo
         .upstream_oauth_provider()
@@ -308,7 +308,7 @@ pub async fn handler(
 
     let sessions_cookie = UpstreamSessionsCookie::load(&cookie_jar);
 
-    if params.is_empty() {
+    if parameters.is_empty() {
         if method == http::Method::GET {
             return Err(RouteError::MissingQueryParams);
         }
@@ -326,12 +326,13 @@ pub async fn handler(
             // same values, which posts back to the same URL. However, there are
             // other valid reasons for the cookie to be missing, so to track whether we did
             // this POST ourselves, we set a flag.
-            if sessions_cookie.is_empty() && !params.did_repost_to_itself {
-                let params = Params {
+            if sessions_cookie.is_empty() && !parameters.did_repost_to_itself {
+                let parameters = Params {
                     did_repost_to_itself: true,
-                    ..params
+                    ..parameters
                 };
-                let context = FormPostContext::new_for_current_url(params).with_language(&locale);
+                let context =
+                    FormPostContext::new_for_current_url(parameters).with_language(&locale);
                 let html = templates.render_form_post(&context)?;
                 res.render(Text::Html(html));
                 return Ok(());
@@ -341,7 +342,7 @@ pub async fn handler(
         (Some(expected), _) => return Err(RouteError::InvalidResponseMode { expected }),
     }
 
-    if let Some(error) = params.error {
+    if let Some(error) = parameters.error {
         CALLBACK_COUNTER.add(
             1,
             &[
@@ -352,11 +353,11 @@ pub async fn handler(
 
         return Err(RouteError::ClientError {
             error,
-            error_description: params.error_description.clone(),
+            error_description: parameters.error_description.clone(),
         });
     }
 
-    let Some(state) = params.state else {
+    let Some(state) = parameters.state else {
         return Err(RouteError::MissingState);
     };
 
@@ -379,7 +380,7 @@ pub async fn handler(
     // to the session that initiated it; compare without leaking a
     // matching-prefix timing side channel.
     if !crate::util::constant_time_token_eq(&state, &session.state_str) {
-        // The state in the session cookie should match the one from the params
+        // The state in the session cookie should match the one from the parameters
         return Err(RouteError::StateMismatch);
     }
 
@@ -388,8 +389,8 @@ pub async fn handler(
         return Err(RouteError::AlreadyCompleted);
     }
 
-    // Let's extract the code from the params, and return if there was an error
-    let Some(code) = params.code else {
+    // Let's extract the code from the parameters, and return if there was an error
+    let Some(code) = parameters.code else {
         return Err(RouteError::MissingCode);
     };
 
@@ -470,7 +471,7 @@ pub async fn handler(
 
             let mut context = AttributeMappingContext::new();
             context = context.with_userinfo_claims(userinfo_value.clone());
-            if let Some(extra) = params.extra_callback_parameters.clone() {
+            if let Some(extra) = parameters.extra_callback_parameters.clone() {
                 context = context.with_extra_callback_parameters(extra);
             }
 
@@ -547,7 +548,7 @@ pub async fn handler(
             if let Some(ref ui) = userinfo {
                 context = context.with_userinfo_claims(ui.clone());
             }
-            if let Some(extra) = params.extra_callback_parameters.clone() {
+            if let Some(extra) = parameters.extra_callback_parameters.clone() {
                 context = context.with_extra_callback_parameters(extra);
             }
 
@@ -605,7 +606,7 @@ pub async fn handler(
             if let Some(ref ui) = userinfo {
                 context = context.with_userinfo_claims(ui.clone());
             }
-            if let Some(extra) = params.extra_callback_parameters.clone() {
+            if let Some(extra) = parameters.extra_callback_parameters.clone() {
                 context = context.with_extra_callback_parameters(extra);
             }
 
@@ -663,7 +664,7 @@ pub async fn handler(
 
             let mut context = AttributeMappingContext::new();
             context = context.with_userinfo_claims(userinfo_value.clone());
-            if let Some(extra) = params.extra_callback_parameters.clone() {
+            if let Some(extra) = parameters.extra_callback_parameters.clone() {
                 context = context.with_extra_callback_parameters(extra);
             }
 
@@ -735,7 +736,7 @@ pub async fn handler(
             if let Some(ref ui) = userinfo {
                 context = context.with_userinfo_claims(ui.clone());
             }
-            if let Some(extra) = params.extra_callback_parameters.clone() {
+            if let Some(extra) = parameters.extra_callback_parameters.clone() {
                 context = context.with_extra_callback_parameters(extra);
             }
 
@@ -829,7 +830,7 @@ pub async fn handler(
                 context = context.with_id_token_claims(claims);
             }
 
-            if let Some(extra_callback_parameters) = params.extra_callback_parameters.clone() {
+            if let Some(extra_callback_parameters) = parameters.extra_callback_parameters.clone() {
                 context = context.with_extra_callback_parameters(extra_callback_parameters);
             }
 
@@ -941,7 +942,7 @@ pub async fn handler(
             &link,
             id_token_raw,
             id_token_claims,
-            params.extra_callback_parameters,
+            parameters.extra_callback_parameters,
             userinfo,
         )
         .await?;

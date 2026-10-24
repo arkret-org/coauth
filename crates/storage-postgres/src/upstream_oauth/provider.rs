@@ -309,8 +309,8 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             upstream_oauth_provider.id,
-            upstream_oauth_provider.oidc_issuer_uri = params.oidc_issuer_uri,
-            upstream_oauth_provider.client_id = %params.client_id,
+            upstream_oauth_provider.oidc_issuer_uri = parameters.oidc_issuer_uri,
+            upstream_oauth_provider.client_id = %parameters.client_id,
         ),
         err,
     )]
@@ -318,7 +318,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: UpstreamOAuthProviderParams,
+        parameters: UpstreamOAuthProviderParams,
     ) -> Result<UpstreamOAuthProvider, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
@@ -326,46 +326,49 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         let new_provider = NewProvider {
             id: Uuid::from(id),
-            oidc_issuer_uri: params.oidc_issuer_uri.clone(),
-            human_name: params.human_name.clone(),
-            brand_name: params.brand_name.clone(),
-            scope: params.scope.to_string(),
-            client_id: params.client_id.clone(),
-            encrypted_client_secret: params.encrypted_client_secret.clone(),
-            token_endpoint_signing_alg: params
+            oidc_issuer_uri: parameters.oidc_issuer_uri.clone(),
+            human_name: parameters.human_name.clone(),
+            brand_name: parameters.brand_name.clone(),
+            scope: parameters.scope.to_string(),
+            client_id: parameters.client_id.clone(),
+            encrypted_client_secret: parameters.encrypted_client_secret.clone(),
+            token_endpoint_signing_alg: parameters
                 .token_endpoint_signing_alg
                 .as_ref()
                 .map(ToString::to_string),
-            token_endpoint_auth_method: params.token_endpoint_auth_method.to_string(),
-            id_token_signed_response_alg: params.id_token_signed_response_alg.to_string(),
-            fetch_userinfo: params.fetch_userinfo,
-            userinfo_signed_response_alg: params
+            token_endpoint_auth_method: parameters.token_endpoint_auth_method.to_string(),
+            id_token_signed_response_alg: parameters.id_token_signed_response_alg.to_string(),
+            fetch_userinfo: parameters.fetch_userinfo,
+            userinfo_signed_response_alg: parameters
                 .userinfo_signed_response_alg
                 .as_ref()
                 .map(ToString::to_string),
-            claims_imports: serde_json::to_value(&params.claims_imports).ok(),
-            jwks_uri_override: params.jwks_uri_override.as_ref().map(ToString::to_string),
-            authorization_endpoint_override: params
+            claims_imports: serde_json::to_value(&parameters.claims_imports).ok(),
+            jwks_uri_override: parameters
+                .jwks_uri_override
+                .as_ref()
+                .map(ToString::to_string),
+            authorization_endpoint_override: parameters
                 .authorization_endpoint_override
                 .as_ref()
                 .map(ToString::to_string),
-            token_endpoint_override: params
+            token_endpoint_override: parameters
                 .token_endpoint_override
                 .as_ref()
                 .map(ToString::to_string),
-            userinfo_endpoint_override: params
+            userinfo_endpoint_override: parameters
                 .userinfo_endpoint_override
                 .as_ref()
                 .map(ToString::to_string),
-            discovery_mode: params.discovery_mode.as_str().to_owned(),
-            pkce_mode: params.pkce_mode.as_str().to_owned(),
-            response_mode: params.response_mode.as_ref().map(ToString::to_string),
+            discovery_mode: parameters.discovery_mode.as_str().to_owned(),
+            pkce_mode: parameters.pkce_mode.as_str().to_owned(),
+            response_mode: parameters.response_mode.as_ref().map(ToString::to_string),
             additional_parameters: None,
-            forward_login_hint: params.forward_login_hint,
+            forward_login_hint: parameters.forward_login_hint,
             ui_order: 0,
-            on_backchannel_logout: Some(params.on_backchannel_logout.as_str().to_owned()),
+            on_backchannel_logout: Some(parameters.on_backchannel_logout.as_str().to_owned()),
             created_at,
-            source: params.source.as_str().to_owned(),
+            source: parameters.source.as_str().to_owned(),
         };
 
         diesel::insert_into(upstream_oauth_providers::table)
@@ -375,31 +378,31 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         Ok(UpstreamOAuthProvider {
             id,
-            oidc_issuer_uri: params.oidc_issuer_uri,
-            human_name: params.human_name,
-            brand_name: params.brand_name,
-            scope: params.scope,
-            client_id: params.client_id,
-            encrypted_client_secret: params.encrypted_client_secret,
-            token_endpoint_signing_alg: params.token_endpoint_signing_alg,
-            token_endpoint_auth_method: params.token_endpoint_auth_method,
-            id_token_signed_response_alg: params.id_token_signed_response_alg,
-            fetch_userinfo: params.fetch_userinfo,
-            userinfo_signed_response_alg: params.userinfo_signed_response_alg,
+            oidc_issuer_uri: parameters.oidc_issuer_uri,
+            human_name: parameters.human_name,
+            brand_name: parameters.brand_name,
+            scope: parameters.scope,
+            client_id: parameters.client_id,
+            encrypted_client_secret: parameters.encrypted_client_secret,
+            token_endpoint_signing_alg: parameters.token_endpoint_signing_alg,
+            token_endpoint_auth_method: parameters.token_endpoint_auth_method,
+            id_token_signed_response_alg: parameters.id_token_signed_response_alg,
+            fetch_userinfo: parameters.fetch_userinfo,
+            userinfo_signed_response_alg: parameters.userinfo_signed_response_alg,
             created_at,
             disabled_at: None,
-            claims_imports: params.claims_imports,
-            authorization_endpoint_override: params.authorization_endpoint_override,
-            token_endpoint_override: params.token_endpoint_override,
-            userinfo_endpoint_override: params.userinfo_endpoint_override,
-            jwks_uri_override: params.jwks_uri_override,
-            discovery_mode: params.discovery_mode,
-            pkce_mode: params.pkce_mode,
-            response_mode: params.response_mode,
-            additional_authorization_parameters: params.additional_authorization_parameters,
-            forward_login_hint: params.forward_login_hint,
-            on_backchannel_logout: params.on_backchannel_logout,
-            source: params.source,
+            claims_imports: parameters.claims_imports,
+            authorization_endpoint_override: parameters.authorization_endpoint_override,
+            token_endpoint_override: parameters.token_endpoint_override,
+            userinfo_endpoint_override: parameters.userinfo_endpoint_override,
+            jwks_uri_override: parameters.jwks_uri_override,
+            discovery_mode: parameters.discovery_mode,
+            pkce_mode: parameters.pkce_mode,
+            response_mode: parameters.response_mode,
+            additional_authorization_parameters: parameters.additional_authorization_parameters,
+            forward_login_hint: parameters.forward_login_hint,
+            on_backchannel_logout: parameters.on_backchannel_logout,
+            source: parameters.source,
         })
     }
 
@@ -443,8 +446,8 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             upstream_oauth_provider.id = %id,
-            upstream_oauth_provider.oidc_issuer_uri = params.oidc_issuer_uri,
-            upstream_oauth_provider.client_id = %params.client_id,
+            upstream_oauth_provider.oidc_issuer_uri = parameters.oidc_issuer_uri,
+            upstream_oauth_provider.client_id = %parameters.client_id,
         ),
         err,
     )]
@@ -452,55 +455,58 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         clock: &dyn Clock,
         id: Ulid,
-        params: UpstreamOAuthProviderParams,
+        parameters: UpstreamOAuthProviderParams,
     ) -> Result<UpstreamOAuthProvider, Self::Error> {
         let created_at = clock.now();
 
         let new_provider = NewProvider {
             id: Uuid::from(id),
-            oidc_issuer_uri: params.oidc_issuer_uri.clone(),
-            human_name: params.human_name.clone(),
-            brand_name: params.brand_name.clone(),
-            scope: params.scope.to_string(),
-            client_id: params.client_id.clone(),
-            encrypted_client_secret: params.encrypted_client_secret.clone(),
-            token_endpoint_signing_alg: params
+            oidc_issuer_uri: parameters.oidc_issuer_uri.clone(),
+            human_name: parameters.human_name.clone(),
+            brand_name: parameters.brand_name.clone(),
+            scope: parameters.scope.to_string(),
+            client_id: parameters.client_id.clone(),
+            encrypted_client_secret: parameters.encrypted_client_secret.clone(),
+            token_endpoint_signing_alg: parameters
                 .token_endpoint_signing_alg
                 .as_ref()
                 .map(ToString::to_string),
-            token_endpoint_auth_method: params.token_endpoint_auth_method.to_string(),
-            id_token_signed_response_alg: params.id_token_signed_response_alg.to_string(),
-            fetch_userinfo: params.fetch_userinfo,
-            userinfo_signed_response_alg: params
+            token_endpoint_auth_method: parameters.token_endpoint_auth_method.to_string(),
+            id_token_signed_response_alg: parameters.id_token_signed_response_alg.to_string(),
+            fetch_userinfo: parameters.fetch_userinfo,
+            userinfo_signed_response_alg: parameters
                 .userinfo_signed_response_alg
                 .as_ref()
                 .map(ToString::to_string),
-            claims_imports: serde_json::to_value(&params.claims_imports).ok(),
-            jwks_uri_override: params.jwks_uri_override.as_ref().map(ToString::to_string),
-            authorization_endpoint_override: params
+            claims_imports: serde_json::to_value(&parameters.claims_imports).ok(),
+            jwks_uri_override: parameters
+                .jwks_uri_override
+                .as_ref()
+                .map(ToString::to_string),
+            authorization_endpoint_override: parameters
                 .authorization_endpoint_override
                 .as_ref()
                 .map(ToString::to_string),
-            token_endpoint_override: params
+            token_endpoint_override: parameters
                 .token_endpoint_override
                 .as_ref()
                 .map(ToString::to_string),
-            userinfo_endpoint_override: params
+            userinfo_endpoint_override: parameters
                 .userinfo_endpoint_override
                 .as_ref()
                 .map(ToString::to_string),
-            discovery_mode: params.discovery_mode.as_str().to_owned(),
-            pkce_mode: params.pkce_mode.as_str().to_owned(),
-            response_mode: params.response_mode.as_ref().map(ToString::to_string),
+            discovery_mode: parameters.discovery_mode.as_str().to_owned(),
+            pkce_mode: parameters.pkce_mode.as_str().to_owned(),
+            response_mode: parameters.response_mode.as_ref().map(ToString::to_string),
             additional_parameters: serde_json::to_value(
-                &params.additional_authorization_parameters,
+                &parameters.additional_authorization_parameters,
             )
             .ok(),
-            forward_login_hint: params.forward_login_hint,
-            ui_order: params.ui_order,
-            on_backchannel_logout: Some(params.on_backchannel_logout.as_str().to_owned()),
+            forward_login_hint: parameters.forward_login_hint,
+            ui_order: parameters.ui_order,
+            on_backchannel_logout: Some(parameters.on_backchannel_logout.as_str().to_owned()),
             created_at,
-            source: params.source.as_str().to_owned(),
+            source: parameters.source.as_str().to_owned(),
         };
 
         let created_at: DateTime<Utc> = diesel::insert_into(upstream_oauth_providers::table)
@@ -508,56 +514,58 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             .on_conflict(upstream_oauth_providers::id)
             .do_update()
             .set((
-                upstream_oauth_providers::oidc_issuer_uri.eq(params.oidc_issuer_uri.as_deref()),
-                upstream_oauth_providers::human_name.eq(params.human_name.as_deref()),
-                upstream_oauth_providers::brand_name.eq(params.brand_name.as_deref()),
-                upstream_oauth_providers::scope.eq(params.scope.to_string()),
+                upstream_oauth_providers::oidc_issuer_uri.eq(parameters.oidc_issuer_uri.as_deref()),
+                upstream_oauth_providers::human_name.eq(parameters.human_name.as_deref()),
+                upstream_oauth_providers::brand_name.eq(parameters.brand_name.as_deref()),
+                upstream_oauth_providers::scope.eq(parameters.scope.to_string()),
                 upstream_oauth_providers::token_endpoint_auth_method
-                    .eq(params.token_endpoint_auth_method.to_string()),
-                upstream_oauth_providers::token_endpoint_signing_alg.eq(params
+                    .eq(parameters.token_endpoint_auth_method.to_string()),
+                upstream_oauth_providers::token_endpoint_signing_alg.eq(parameters
                     .token_endpoint_signing_alg
                     .as_ref()
                     .map(ToString::to_string)),
                 upstream_oauth_providers::id_token_signed_response_alg
-                    .eq(params.id_token_signed_response_alg.to_string()),
-                upstream_oauth_providers::fetch_userinfo.eq(params.fetch_userinfo),
-                upstream_oauth_providers::userinfo_signed_response_alg.eq(params
+                    .eq(parameters.id_token_signed_response_alg.to_string()),
+                upstream_oauth_providers::fetch_userinfo.eq(parameters.fetch_userinfo),
+                upstream_oauth_providers::userinfo_signed_response_alg.eq(parameters
                     .userinfo_signed_response_alg
                     .as_ref()
                     .map(ToString::to_string)),
                 // NOTE: do not touch `disabled_at` here. Admin-driven disables
                 // must survive subsequent `config_sync` runs (see sync.rs and
                 // the source-aware admin endpoints).
-                upstream_oauth_providers::client_id.eq(&params.client_id),
+                upstream_oauth_providers::client_id.eq(&parameters.client_id),
                 upstream_oauth_providers::encrypted_client_secret
-                    .eq(params.encrypted_client_secret.as_deref()),
+                    .eq(parameters.encrypted_client_secret.as_deref()),
                 upstream_oauth_providers::claims_imports
-                    .eq(serde_json::to_value(&params.claims_imports).ok()),
-                upstream_oauth_providers::authorization_endpoint_override.eq(params
+                    .eq(serde_json::to_value(&parameters.claims_imports).ok()),
+                upstream_oauth_providers::authorization_endpoint_override.eq(parameters
                     .authorization_endpoint_override
                     .as_ref()
                     .map(ToString::to_string)),
-                upstream_oauth_providers::token_endpoint_override.eq(params
+                upstream_oauth_providers::token_endpoint_override.eq(parameters
                     .token_endpoint_override
                     .as_ref()
                     .map(ToString::to_string)),
-                upstream_oauth_providers::userinfo_endpoint_override.eq(params
+                upstream_oauth_providers::userinfo_endpoint_override.eq(parameters
                     .userinfo_endpoint_override
                     .as_ref()
                     .map(ToString::to_string)),
-                upstream_oauth_providers::jwks_uri_override
-                    .eq(params.jwks_uri_override.as_ref().map(ToString::to_string)),
-                upstream_oauth_providers::discovery_mode.eq(params.discovery_mode.as_str()),
-                upstream_oauth_providers::pkce_mode.eq(params.pkce_mode.as_str()),
+                upstream_oauth_providers::jwks_uri_override.eq(parameters
+                    .jwks_uri_override
+                    .as_ref()
+                    .map(ToString::to_string)),
+                upstream_oauth_providers::discovery_mode.eq(parameters.discovery_mode.as_str()),
+                upstream_oauth_providers::pkce_mode.eq(parameters.pkce_mode.as_str()),
                 upstream_oauth_providers::response_mode
-                    .eq(params.response_mode.as_ref().map(ToString::to_string)),
+                    .eq(parameters.response_mode.as_ref().map(ToString::to_string)),
                 upstream_oauth_providers::additional_parameters
-                    .eq(serde_json::to_value(&params.additional_authorization_parameters).ok()),
-                upstream_oauth_providers::forward_login_hint.eq(params.forward_login_hint),
-                upstream_oauth_providers::ui_order.eq(params.ui_order),
+                    .eq(serde_json::to_value(&parameters.additional_authorization_parameters).ok()),
+                upstream_oauth_providers::forward_login_hint.eq(parameters.forward_login_hint),
+                upstream_oauth_providers::ui_order.eq(parameters.ui_order),
                 upstream_oauth_providers::on_backchannel_logout
-                    .eq(Some(params.on_backchannel_logout.as_str())),
-                upstream_oauth_providers::source.eq(params.source.as_str()),
+                    .eq(Some(parameters.on_backchannel_logout.as_str())),
+                upstream_oauth_providers::source.eq(parameters.source.as_str()),
             ))
             .returning(upstream_oauth_providers::created_at)
             .get_result(self.conn)
@@ -565,31 +573,31 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         Ok(UpstreamOAuthProvider {
             id,
-            oidc_issuer_uri: params.oidc_issuer_uri,
-            human_name: params.human_name,
-            brand_name: params.brand_name,
-            scope: params.scope,
-            client_id: params.client_id,
-            encrypted_client_secret: params.encrypted_client_secret,
-            token_endpoint_signing_alg: params.token_endpoint_signing_alg,
-            token_endpoint_auth_method: params.token_endpoint_auth_method,
-            id_token_signed_response_alg: params.id_token_signed_response_alg,
-            fetch_userinfo: params.fetch_userinfo,
-            userinfo_signed_response_alg: params.userinfo_signed_response_alg,
+            oidc_issuer_uri: parameters.oidc_issuer_uri,
+            human_name: parameters.human_name,
+            brand_name: parameters.brand_name,
+            scope: parameters.scope,
+            client_id: parameters.client_id,
+            encrypted_client_secret: parameters.encrypted_client_secret,
+            token_endpoint_signing_alg: parameters.token_endpoint_signing_alg,
+            token_endpoint_auth_method: parameters.token_endpoint_auth_method,
+            id_token_signed_response_alg: parameters.id_token_signed_response_alg,
+            fetch_userinfo: parameters.fetch_userinfo,
+            userinfo_signed_response_alg: parameters.userinfo_signed_response_alg,
             created_at,
             disabled_at: None,
-            claims_imports: params.claims_imports,
-            authorization_endpoint_override: params.authorization_endpoint_override,
-            token_endpoint_override: params.token_endpoint_override,
-            userinfo_endpoint_override: params.userinfo_endpoint_override,
-            jwks_uri_override: params.jwks_uri_override,
-            discovery_mode: params.discovery_mode,
-            pkce_mode: params.pkce_mode,
-            response_mode: params.response_mode,
-            additional_authorization_parameters: params.additional_authorization_parameters,
-            forward_login_hint: params.forward_login_hint,
-            on_backchannel_logout: params.on_backchannel_logout,
-            source: params.source,
+            claims_imports: parameters.claims_imports,
+            authorization_endpoint_override: parameters.authorization_endpoint_override,
+            token_endpoint_override: parameters.token_endpoint_override,
+            userinfo_endpoint_override: parameters.userinfo_endpoint_override,
+            jwks_uri_override: parameters.jwks_uri_override,
+            discovery_mode: parameters.discovery_mode,
+            pkce_mode: parameters.pkce_mode,
+            response_mode: parameters.response_mode,
+            additional_authorization_parameters: parameters.additional_authorization_parameters,
+            forward_login_hint: parameters.forward_login_hint,
+            on_backchannel_logout: parameters.on_backchannel_logout,
+            source: parameters.source,
         })
     }
 

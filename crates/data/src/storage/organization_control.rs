@@ -97,7 +97,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewOrganizationPrincipalControl,
+            parameters: NewOrganizationPrincipalControl,
         ) -> Result<OrganizationPrincipalControl, Self::Error>;
 
         /// Fetch the control row for a stable organization identity.
@@ -121,7 +121,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewOrganizationDelegation,
+            parameters: NewOrganizationDelegation,
         ) -> Result<OrganizationDelegation, Self::Error>;
 
         /// Resolve a delegation by its `delegation_ref`.

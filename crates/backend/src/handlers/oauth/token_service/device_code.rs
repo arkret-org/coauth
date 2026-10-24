@@ -173,7 +173,7 @@ pub async fn exchange_device_code(
         .add(rng, clock, &session, access_token_str, Some(ttl))
         .await?;
 
-    let mut params =
+    let mut parameters =
         AccessTokenResponse::new(access_token.access_token.clone()).with_expires_in(ttl);
 
     // If the client uses the refresh token grant type, we also generate a refresh
@@ -186,7 +186,7 @@ pub async fn exchange_device_code(
             .add(rng, clock, &session, &access_token, refresh_token_str)
             .await?;
 
-        params = params.with_refresh_token(refresh_token.refresh_token);
+        parameters = parameters.with_refresh_token(refresh_token.refresh_token);
     }
 
     // If the client asked for an ID token, we generate one
@@ -235,7 +235,7 @@ pub async fn exchange_device_code(
             DeviceCodeExchangeError::from(err)
         })?;
 
-        params = params.with_id_token(id_token);
+        parameters = parameters.with_id_token(id_token);
     }
 
     // Lock the user sync to make sure we don't get into a race condition
@@ -280,7 +280,7 @@ pub async fn exchange_device_code(
 
     if !session.scope.is_empty() {
         // We only return the scope if it's not empty
-        params = params.with_scope(session.scope);
+        parameters = parameters.with_scope(session.scope);
     }
 
     debug!(
@@ -291,5 +291,5 @@ pub async fn exchange_device_code(
         "Device_code token exchange completed"
     );
 
-    Ok((params, repo))
+    Ok((parameters, repo))
 }

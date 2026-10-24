@@ -16,7 +16,7 @@ use ulid::Ulid;
 
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::{OAuthSession, Resource, to_oauth_session};
-use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::parameters::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
@@ -225,16 +225,16 @@ pub async fn list_sessions(
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req
+    let parameters: FilterParams = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
-    let base = format!("{path}{params}", path = OAuthSession::PATH);
+    let base = format!("{path}{parameters}", path = OAuthSession::PATH);
     let base = include_count.add_to_base(&base);
     let filter = OAuthSessionFilter::default();
 
     // Load the user from the filter
-    let user = if let Some(user_id) = params.user {
+    let user = if let Some(user_id) = parameters.user {
         let user = repo
             .user()
             .lookup(user_id)
@@ -251,7 +251,7 @@ pub async fn list_sessions(
         None => filter,
     };
 
-    let client = if let Some(client_id) = params.client {
+    let client = if let Some(client_id) = parameters.client {
         let client = repo
             .oauth_client()
             .lookup(client_id)
@@ -268,13 +268,13 @@ pub async fn list_sessions(
         None => filter,
     };
 
-    let filter = match params.client_kind {
+    let filter = match parameters.client_kind {
         Some(OAuthClientKind::Dynamic) => filter.only_dynamic_clients(),
         Some(OAuthClientKind::Static) => filter.only_static_clients(),
         None => filter,
     };
 
-    let user_session = if let Some(user_session_id) = params.user_session {
+    let user_session = if let Some(user_session_id) = parameters.user_session {
         let user_session = repo
             .browser_session()
             .lookup(user_session_id)
@@ -293,7 +293,7 @@ pub async fn list_sessions(
         None => filter,
     };
 
-    let scope: Scope = params
+    let scope: Scope = parameters
         .scope
         .into_iter()
         .map(|s| {
@@ -309,7 +309,7 @@ pub async fn list_sessions(
         filter.with_scope(&scope)
     };
 
-    let filter = match params.status {
+    let filter = match parameters.status {
         Some(OAuthSessionStatus::Active) => filter.active_only(),
         Some(OAuthSessionStatus::Finished) => filter.finished_only(),
         None => filter,

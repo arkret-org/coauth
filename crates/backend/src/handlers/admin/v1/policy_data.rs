@@ -11,7 +11,7 @@ use serde::Deserialize;
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::PolicyData;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
 use crate::handlers::common::DepotExt;
 use crate::{AppError, CreatedJsonResult, JsonResult};

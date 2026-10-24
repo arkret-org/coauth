@@ -207,7 +207,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewNotificationRequest,
+            parameters: NewNotificationRequest,
         ) -> Result<NotificationRequest, Self::Error>;
 
         /// Update the lifecycle status of an existing request.
@@ -244,7 +244,7 @@ repository_impl! {
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
             notification_request: &NotificationRequest,
-            params: NewNotificationDelivery,
+            parameters: NewNotificationDelivery,
         ) -> Result<NotificationDelivery, Self::Error>;
 
         /// Reserve a batch of due deliveries for processing.
@@ -294,7 +294,7 @@ repository_impl! {
             clock: &dyn Clock,
             notification_request: &NotificationRequest,
             notification_delivery: Option<&NotificationDelivery>,
-            params: NewNotificationEventLog,
+            parameters: NewNotificationEventLog,
         ) -> Result<NotificationEventLog, Self::Error>;
 
         /// List audit events for a logical notification request.

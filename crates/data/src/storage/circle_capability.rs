@@ -33,7 +33,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewCircleCapabilityGrant,
+            parameters: NewCircleCapabilityGrant,
         ) -> Result<CircleCapabilityGrant, Self::Error>;
 
         /// List all non-revoked grants.

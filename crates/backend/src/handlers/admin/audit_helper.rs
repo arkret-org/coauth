@@ -55,11 +55,13 @@ pub async fn record_admin_operation(
     details: serde_json::Value,
 ) -> Result<(), RepositoryError> {
     if let Some(admin) = admin_user {
-        let mut params = NewAdminOperationLog::new(admin.id, operation, resource_type, details);
+        let mut parameters = NewAdminOperationLog::new(admin.id, operation, resource_type, details);
         if let Some(id) = resource_id {
-            params = params.with_resource_id(id);
+            parameters = parameters.with_resource_id(id);
         }
-        repo.audit().add_admin_operation(rng, clock, params).await?;
+        repo.audit()
+            .add_admin_operation(rng, clock, parameters)
+            .await?;
     }
     Ok(())
 }
@@ -88,12 +90,15 @@ pub async fn record_admin_operation_signed(
         return Ok(());
     };
 
-    let mut params = NewAdminOperationLog::new(admin.id, operation, resource_type, details);
+    let mut parameters = NewAdminOperationLog::new(admin.id, operation, resource_type, details);
     if let Some(id) = resource_id {
-        params = params.with_resource_id(id);
+        parameters = parameters.with_resource_id(id);
     }
 
-    let log = repo.audit().add_admin_operation(rng, clock, params).await?;
+    let log = repo
+        .audit()
+        .add_admin_operation(rng, clock, parameters)
+        .await?;
     sign_persisted_admin_operation(repo, keyring, service_did, fail_closed, &log).await
 }
 
@@ -117,12 +122,16 @@ pub(crate) async fn record_service_admin_operation_signed(
     details: serde_json::Value,
 ) -> Result<(), RepositoryError> {
     let admin_user_id = service_admin_user_id(service_did);
-    let mut params = NewAdminOperationLog::new(admin_user_id, operation, resource_type, details);
+    let mut parameters =
+        NewAdminOperationLog::new(admin_user_id, operation, resource_type, details);
     if let Some(id) = resource_id {
-        params = params.with_resource_id(id);
+        parameters = parameters.with_resource_id(id);
     }
 
-    let log = repo.audit().add_admin_operation(rng, clock, params).await?;
+    let log = repo
+        .audit()
+        .add_admin_operation(rng, clock, parameters)
+        .await?;
     sign_persisted_admin_operation(repo, keyring, service_did, fail_closed, &log).await
 }
 
@@ -215,7 +224,8 @@ pub fn verify_admin_operation_signature(
 
     let mut usable_key = false;
     for alg in audit_signature_algorithms() {
-        let Ok(verifying_key) = AsymmetricVerifyingKey::from_jwk_and_alg(public_key.params(), &alg)
+        let Ok(verifying_key) =
+            AsymmetricVerifyingKey::from_jwk_and_alg(public_key.parameters(), &alg)
         else {
             continue;
         };
@@ -576,7 +586,7 @@ mod tests {
             rows[0]
                 .audit_signature
                 .as_ref()
-                .is_some_and(|sig| sig.starts_with(&expected_prefix)),
+                .is_some_and(|signature| signature.starts_with(&expected_prefix)),
             "audit signature must name the designated audit kid: {:?}",
             rows[0].audit_signature
         );

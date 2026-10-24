@@ -185,7 +185,7 @@ repository_impl! {
         ///
         /// * `rng`: A random number generator
         /// * `clock`: The clock used to generate timestamps
-        /// * `params`: The parameters of the provider to add
+        /// * `parameters`: The parameters of the provider to add
         ///
         /// # Errors
         ///
@@ -194,7 +194,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: UpstreamOAuthProviderParams,
+            parameters: UpstreamOAuthProviderParams,
         ) -> Result<UpstreamOAuthProvider, Self::Error>;
 
         /// Delete an upstream OAuth provider by its ID
@@ -214,7 +214,7 @@ repository_impl! {
         ///
         /// * `clock`: The clock used to generate timestamps
         /// * `id`: The ID of the provider to update
-        /// * `params`: The parameters of the provider to update
+        /// * `parameters`: The parameters of the provider to update
         ///
         /// # Errors
         ///
@@ -223,7 +223,7 @@ repository_impl! {
             &mut self,
             clock: &dyn Clock,
             id: Ulid,
-            params: UpstreamOAuthProviderParams,
+            parameters: UpstreamOAuthProviderParams,
         ) -> Result<UpstreamOAuthProvider, Self::Error>;
 
         /// Disable an upstream OAuth provider

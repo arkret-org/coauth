@@ -40,7 +40,7 @@ Arkret protocol commitment.
 | `resource_models` | `UserEmail`, `OAuthSession`, `UserSession`, `UpstreamOAuthLink`, `UserRegistrationToken`, `UpstreamOAuthProvider`, `PersonalSession` | Coauth backend, Codmin | Coauth persistence-backed admin resources projected as product DTOs; secrets are excluded from the wire shapes. |
 | `risk_action` | `AccountRiskActionProposalRequestBody`, `AccountRiskActionApprovalRequestBody`, `AccountRiskActionExecuteRequestBody`, `AccountRiskActionProposalOutcome`, `AccountRiskActionApprovalOutcome`, `AccountRiskActionCurrentOutcome`, `AccountRiskActionHistoryOutcome`, `AccountRiskActionTransitionRecord` | Coauth backend, Codmin | Durable Coauth operator workflow DTOs; state-store implementation details are not part of the contract. |
 
-| `device_admin` | `DeviceRiskLevel`, `DeviceMfaState`, `DeviceRecord`, `DeviceListResBody`, `RevokeDeviceRequestBody`, `DeviceRevokeOutcome` | Coauth backend, Codmin | Deployment device administration and revocation outcome. These product device records do not replace canonical Arkret device identity or session-grant models. |
+| `device_admin` | `DeviceRiskLevel`, `DeviceMfaState`, `DeviceRecord`, `DeviceListResBody`, `RevokeDeviceRequestBody`, `DeviceRevocationStatusView` | Coauth backend, Codmin | Deployment device administration and revocation outcome. These product device records do not replace canonical Arkret device identity or session-grant models. |
 
 ### Audited provider-local dependencies
 

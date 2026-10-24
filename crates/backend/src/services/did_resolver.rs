@@ -207,7 +207,7 @@ fn verified_webvh_document_at(
         .entries
         .iter()
         .rev()
-        .find(|entry| entry.version_time <= decided_at)
+        .find(|entry| entry.version_created_at <= decided_at)
         .map(|entry| entry.state.clone())
         .ok_or_else(|| {
             DidResolveError::BadResolverResponse(
@@ -589,7 +589,7 @@ fn parse_resolution_response(
     DidResolveError,
 > {
     if let Ok(outcome) =
-        serde_json::from_value::<arkret_models_identity::IdentityResolveOutcome>(body.clone())
+        serde_json::from_value::<arkret_models_identity::IdentityResolveResponseBody>(body.clone())
     {
         let document =
             serde_json::from_value::<DidDocument>(serde_json::to_value(&outcome.did_document)?)?;
@@ -1200,14 +1200,14 @@ mod tests {
             entries: vec![
                 arkret_identity::DidWebvhLogEntry {
                     version_id: "1-old".to_owned(),
-                    version_time: old_time,
+                    version_created_at: old_time,
                     parameters: serde_json::json!({}),
                     state: document("old"),
                     proof: Vec::new(),
                 },
                 arkret_identity::DidWebvhLogEntry {
                     version_id: "2-new".to_owned(),
-                    version_time: rotated_time,
+                    version_created_at: rotated_time,
                     parameters: serde_json::json!({}),
                     state: document("new"),
                     proof: Vec::new(),
@@ -1244,7 +1244,7 @@ mod tests {
                 principal_endpoint: &endpoint,
                 local_id: "service",
                 also_known_as: &[],
-                version_time: Utc.with_ymd_and_hms(2026, 8, 18, 0, 0, 0).unwrap(),
+                version_created_at: Utc.with_ymd_and_hms(2026, 8, 18, 0, 0, 0).unwrap(),
                 did_key_fragment: Some("account-authority"),
             },
         )

@@ -1,8 +1,8 @@
 use arkret_identifiers::DidCoreId;
-use arkret_models_collaboration::session_grant_bodies::RecoverySessionGrantRequest;
+use arkret_models_collaboration::session_grant_bodies::RecoverySessionGrantRequestBody;
 use arkret_models_collaboration::session_grants::{
-    AgentSessionGrantRequest, HumanSessionGrantRequest, SessionGrantOutcome,
-    SessionGrantRequestBody,
+    AgentSessionGrantRequestBody, HumanSessionGrantRequestBody, SessionGrantRequestBody,
+    SessionGrantResponseBody,
 };
 use coauth_data::user::PrincipalDidRepository as _;
 use coauth_data::{
@@ -271,7 +271,7 @@ async fn retained_issue_outcome(
 // codes are consumed only by AccountHandoff creation.
 
 /// `POST /_arkret/gate/account/session-grants` — canonical session-grant
-/// issuance. Returns the SDK `SessionGrantOutcome`.
+/// issuance. Returns the SDK `SessionGrantResponseBody`.
 #[handler]
 pub async fn issue_session_grant_endpoint(
     req: &mut Request,
@@ -357,7 +357,7 @@ async fn validate_recovery_handoff_request_before_reservation(
     depot: &Depot,
     handoff_token: &str,
     holder_jkt: &str,
-    body: &RecoverySessionGrantRequest,
+    body: &RecoverySessionGrantRequestBody,
 ) -> Result<chrono::DateTime<chrono::Utc>, ArkretRouteError> {
     use coauth_data::storage::user::BrowserSessionRepository as _;
     use coauth_data::user::UserRepository as _;
@@ -461,7 +461,7 @@ async fn consume_recovery_dpop_jti(
 /// its holder key signs this request, and the Station independently
 /// gates the requested durable device against revocation.
 fn validate_human_issue_proof_before_reservation(
-    body: &HumanSessionGrantRequest,
+    body: &HumanSessionGrantRequestBody,
     handoff_token: &str,
     holder_jkt: &str,
 ) -> Result<(), ArkretRouteError> {
@@ -495,7 +495,7 @@ fn validate_human_issue_proof_before_reservation(
 
 async fn issue_account_handoff_session_grant(
     depot: &Depot,
-    body: &HumanSessionGrantRequest,
+    body: &HumanSessionGrantRequestBody,
     handoff_token: String,
     dpop: arkret_signatures::dpop::VerifiedDpopProof,
     operation: SessionGrantOperation,
@@ -635,7 +635,7 @@ async fn issue_account_handoff_session_grant(
         },
     )
     .map_err(map_session_grant_material_error)?;
-    let wire_outcome = SessionGrantOutcome {
+    let wire_outcome = SessionGrantResponseBody {
         account_id: material.account_id.clone(),
         device_id: Some(device_id),
         session_grant: material.grant_jwt.clone(),
@@ -750,7 +750,7 @@ async fn issue_account_handoff_session_grant(
 
 async fn issue_recovery_session_grant(
     depot: &Depot,
-    body: &RecoverySessionGrantRequest,
+    body: &RecoverySessionGrantRequestBody,
     handoff_token: String,
     dpop: arkret_signatures::dpop::VerifiedDpopProof,
     operation: SessionGrantOperation,
@@ -859,7 +859,7 @@ async fn issue_recovery_session_grant(
         },
     )
     .map_err(map_session_grant_material_error)?;
-    let wire_outcome = SessionGrantOutcome {
+    let wire_outcome = SessionGrantResponseBody {
         account_id: material.account_id.clone(),
         device_id: Some(body.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
@@ -1064,7 +1064,7 @@ async fn consume_agent_replay_dpop(depot: &Depot, jti: &str) -> Result<(), Arkre
 async fn validate_agent_before_reservation(
     depot: &Depot,
     repo: &mut coauth_data::BoxRepository,
-    body: &AgentSessionGrantRequest,
+    body: &AgentSessionGrantRequestBody,
     holder_jkt: &str,
 ) -> Result<(), ArkretRouteError> {
     use crate::handlers::account::agents::{
@@ -1118,14 +1118,14 @@ async fn validate_agent_before_reservation(
 
 /// AKP-0008 §4.6 agent runtime authentication branch. Validates the
 /// `agent_key_proof`, intersects scope, and mints a ≤ 15-minute device-bound
-/// session grant. Returns the SDK `SessionGrantOutcome` with the
+/// session grant. Returns the SDK `SessionGrantResponseBody` with the
 /// `scope_details` overlay. Human-approval and fail-closed rejections surface
 /// as structured errors.
 async fn issue_agent_key_proof_session_grant(
     req: &mut Request,
     depot: &Depot,
     dpop_binding: crate::handlers::account::auth::DpopSessionBinding,
-    body: &AgentSessionGrantRequest,
+    body: &AgentSessionGrantRequestBody,
     operation: SessionGrantOperation,
 ) -> Result<ArkretCanonicalJson, ArkretRouteError> {
     use crate::handlers::account::agents::{
@@ -1283,13 +1283,13 @@ async fn issue_agent_key_proof_session_grant(
     )
     .map_err(map_session_grant_material_error)?;
 
-    // Grant identity, session key and audience are typed SessionGrantOutcome
+    // Grant identity, session key and audience are typed SessionGrantResponseBody
     // fields. Scope details remain only in signed JWT/introspection claims;
     // the issue response never carries an unsigned authorization mirror.
     let grant_id = material.grant_id.clone();
     let wire_audience = material.audience_id.clone();
 
-    let wire_outcome = SessionGrantOutcome {
+    let wire_outcome = SessionGrantResponseBody {
         account_id: material.account_id.clone(),
         device_id: None,
         session_grant: material.grant_jwt.clone(),

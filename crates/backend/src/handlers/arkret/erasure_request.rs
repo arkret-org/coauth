@@ -28,7 +28,8 @@
 //! erasure receipt rail.
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::{
-    AccountRequestErasureOutcome, AccountRequestErasureRequestBody, AccountRequestErasureStatus,
+    AccountRequestErasureRequestBody, AccountRequestErasureResponseBody,
+    AccountRequestErasureStatus,
 };
 use chrono::{DateTime, Utc};
 use coauth_config::ArkretConfig;
@@ -276,7 +277,7 @@ pub(crate) async fn accept_erasure_request(
 
     // ── Acceptance outcome. This deployment grants no withdrawal window, so
     // the field is omitted (§8.1: MUST omit when not configured).
-    let outcome = AccountRequestErasureOutcome {
+    let outcome = AccountRequestErasureResponseBody {
         request_id: body.request_id.clone(),
         status: AccountRequestErasureStatus::Accepted,
         principal_id: binding.principal_id.clone(),

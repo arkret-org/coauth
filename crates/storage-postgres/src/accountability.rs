@@ -485,14 +485,14 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     #[tracing::instrument(
         name = "db.accountability_grant.add",
         skip_all,
-        fields(accountability_grant.id, accountability_grant.typed_id = params.accountability_grant_id),
+        fields(accountability_grant.id, accountability_grant.typed_id = parameters.accountability_grant_id),
         err,
     )]
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewAccountabilityGrant,
+        parameters: NewAccountabilityGrant,
     ) -> Result<AccountabilityGrant, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
@@ -500,20 +500,20 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         let row = InsertableAccountabilityGrant {
             id: Uuid::from(id),
-            accountability_grant_id: params.accountability_grant_id,
-            agent_id: params.agent_id,
-            controller_principal_id: params.controller_principal_id,
-            capabilities: params.capabilities,
-            capabilities_digest: params.capabilities_digest,
-            reason: params.reason,
-            issued_at: params.issued_at,
-            raw_payload_digest: params.raw_payload_digest,
-            coland_fanout_state: params.coland_fanout_state.to_string(),
-            coland_fanout_idempotency_key: params.coland_fanout_idempotency_key,
-            coland_fanout_payload: params.coland_fanout_payload,
-            coland_fanout_attempt: params.coland_fanout_attempt,
-            coland_fanout_next_retry_at: params.coland_fanout_next_retry_at,
-            coland_fanout_dead_letter_reason: params.coland_fanout_dead_letter_reason,
+            accountability_grant_id: parameters.accountability_grant_id,
+            agent_id: parameters.agent_id,
+            controller_principal_id: parameters.controller_principal_id,
+            capabilities: parameters.capabilities,
+            capabilities_digest: parameters.capabilities_digest,
+            reason: parameters.reason,
+            issued_at: parameters.issued_at,
+            raw_payload_digest: parameters.raw_payload_digest,
+            coland_fanout_state: parameters.coland_fanout_state.to_string(),
+            coland_fanout_idempotency_key: parameters.coland_fanout_idempotency_key,
+            coland_fanout_payload: parameters.coland_fanout_payload,
+            coland_fanout_attempt: parameters.coland_fanout_attempt,
+            coland_fanout_next_retry_at: parameters.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: parameters.coland_fanout_dead_letter_reason,
             created_at: now,
             updated_at: now,
         };
@@ -535,7 +535,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             revoked_at: None,
             revoked_reason: None,
             raw_payload_digest: row.raw_payload_digest,
-            coland_fanout_state: params.coland_fanout_state,
+            coland_fanout_state: parameters.coland_fanout_state,
             coland_fanout_idempotency_key: row.coland_fanout_idempotency_key,
             coland_fanout_payload: row.coland_fanout_payload,
             coland_fanout_attempt: row.coland_fanout_attempt,

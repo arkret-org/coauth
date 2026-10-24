@@ -125,7 +125,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             handle_audit_log.id,
-            handle_audit_log.user_id = params.user_id().map(|u| u.to_string()),
+            handle_audit_log.user_id = parameters.user_id().map(|u| u.to_string()),
         ),
         err,
     )]
@@ -133,7 +133,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewHandleAuditEvent,
+        parameters: NewHandleAuditEvent,
     ) -> Result<HandleAuditEvent, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
@@ -141,17 +141,17 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         let row = InsertableHandleAudit {
             id: Uuid::from(id),
-            user_id: params.user_id().map(Uuid::from),
-            event_type: event_type_to_db(params.event_type()),
-            handle: params.handle().map(ToOwned::to_owned),
-            handle_aliases: params.handle_aliases().to_vec(),
-            old_did: params.old_did().map(ToOwned::to_owned),
-            new_did: params.new_did().map(ToOwned::to_owned),
-            issuer_id: params.issuer_id().cloned(),
-            audience: params.audience().map(ToOwned::to_owned),
+            user_id: parameters.user_id().map(Uuid::from),
+            event_type: event_type_to_db(parameters.event_type()),
+            handle: parameters.handle().map(ToOwned::to_owned),
+            handle_aliases: parameters.handle_aliases().to_vec(),
+            old_did: parameters.old_did().map(ToOwned::to_owned),
+            new_did: parameters.new_did().map(ToOwned::to_owned),
+            issuer_id: parameters.issuer_id().cloned(),
+            audience: parameters.audience().map(ToOwned::to_owned),
             claim_digest: None,
-            details: params.details().clone(),
-            actor_id: params.actor_id().map(Uuid::from),
+            details: parameters.details().clone(),
+            actor_id: parameters.actor_id().map(Uuid::from),
             created_at,
         };
 
@@ -162,8 +162,8 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         Ok(HandleAuditEvent {
             id,
-            user_id: params.user_id(),
-            event_type: *params.event_type(),
+            user_id: parameters.user_id(),
+            event_type: *parameters.event_type(),
             handle: row.handle,
             handle_aliases: row.handle_aliases,
             old_did: row.old_did,
@@ -172,7 +172,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             audience: row.audience,
             claim_digest: row.claim_digest,
             details: row.details,
-            actor_id: params.actor_id(),
+            actor_id: parameters.actor_id(),
             created_at,
         })
     }

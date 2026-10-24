@@ -6,7 +6,7 @@
 //! No HTTP request or response is used in this module.
 
 use arkret_models_identity::{
-    AccountHandoffBinding, AccountHandoffOutcome, AccountHandoffRequestBody, Handle,
+    AccountHandoffBinding, AccountHandoffRequestBody, AccountHandoffResponseBody, Handle,
 };
 use base64ct::{Base64UrlUnpadded, Encoding as _};
 use chrono::Duration;
@@ -271,9 +271,9 @@ fn creation_to_outcome(
     account_handle: Handle,
     account_subject: arkret_identifiers::Hash,
     preferred_locale: Option<arkret_locale::UiLocale>,
-) -> Result<AccountHandoffOutcome, ArkretRouteError> {
+) -> Result<AccountHandoffResponseBody, ArkretRouteError> {
     let (grant, binding) = creation_binding(creation)?;
-    let outcome = AccountHandoffOutcome {
+    let outcome = AccountHandoffResponseBody {
         request_id: grant.request_id,
         account_handle,
         account_subject,

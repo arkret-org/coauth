@@ -43,7 +43,7 @@ use super::canonical_response::ArkretCanonicalJson;
 pub async fn issue_did_binding_challenge(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<arkret_models_identity::DidBindingChallengeOutcome>, ArkretRouteError> {
+) -> Result<Json<arkret_models_identity::DidBindingChallengeResponseBody>, ArkretRouteError> {
     let (grant, _dpop) = authenticate_account_handoff(
         req,
         depot,
@@ -596,7 +596,7 @@ pub async fn account_onboarding_state(
 pub async fn issue_identity_binding_challenge(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<arkret_models_identity::IdentityBindingChallengeOutcome>, ArkretRouteError> {
+) -> Result<Json<arkret_models_identity::IdentityBindingChallengeResponseBody>, ArkretRouteError> {
     let (grant, _dpop) = authenticate_account_handoff(
         req,
         depot,
@@ -741,7 +741,7 @@ pub async fn issue_identity_binding_challenge(
 pub async fn abandon_identity_creation(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<arkret_models_identity::IdentityAbandonmentOutcome>, ArkretRouteError> {
+) -> Result<Json<arkret_models_identity::IdentityAbandonmentResponseBody>, ArkretRouteError> {
     let (grant, _dpop) = authenticate_account_handoff(
         req,
         depot,
@@ -1290,7 +1290,7 @@ mod tests {
             .count
     }
 
-    fn handoff_request() -> AccountHandoffRequestBody {
+    fn realm_authority_handoff_request_body() -> AccountHandoffRequestBody {
         let mut body = AccountHandoffRequestBody {
             request_id: arkret_identifiers::RequestId::new(
                 "ak:request:018f4f17-71d8-7cc0-8b47-9d67c94d8f42",
@@ -1325,7 +1325,7 @@ mod tests {
 
     #[test]
     fn durable_handoff_intent_hashes_one_shot_secrets() {
-        let body = handoff_request();
+        let body = realm_authority_handoff_request_body();
         let bytes = redacted_handoff_intent(&body, &"H".repeat(43)).unwrap();
         let text = String::from_utf8(bytes).unwrap();
         for secret in [
@@ -1345,7 +1345,7 @@ mod tests {
 
     #[test]
     fn changing_one_shot_code_changes_the_durable_intent() {
-        let first = handoff_request();
+        let first = realm_authority_handoff_request_body();
         let mut second = first.clone();
         second.proof.authorization_code = "different-authorization-code".to_owned();
         second.proof.request_canonical_digest = second.canonical_request_digest().unwrap();
@@ -1920,7 +1920,7 @@ mod tests {
             .await;
         replay.assert_status(StatusCode::OK);
         assert_eq!(resumed.body(), replay.body());
-        let outcome: arkret_models_identity::AccountHandoffOutcome = resumed.json();
+        let outcome: arkret_models_identity::AccountHandoffResponseBody = resumed.json();
         outcome.validate().unwrap();
         assert_eq!(table_count(&state, "account_handoff_grants").await, 1);
         assert_eq!(table_count(&state, "identity_creation_leases").await, 1);

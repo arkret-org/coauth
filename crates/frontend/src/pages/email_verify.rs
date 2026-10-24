@@ -26,7 +26,7 @@ pub fn EmailVerify(id: String) -> Element {
 
     // Preliminary query to check email authentication status
     let id_for_query = id.clone();
-    let auth_data = use_resource(move || {
+    let signature_proof = use_resource(move || {
         let qid = id_for_query.clone();
         async move {
             crate::api::api_get::<UserEmailAuthentication>(&format!("/account/email-auth/{qid}"))
@@ -51,7 +51,7 @@ pub fn EmailVerify(id: String) -> Element {
         };
     }
 
-    let auth_binding = auth_data.read();
+    let auth_binding = signature_proof.read();
     match &*auth_binding {
         Some(Ok(auth)) => {
             // Check if already completed

@@ -429,13 +429,13 @@ pub async fn exchange_authorization_code(
         None
     };
 
-    let mut params = AccessTokenResponse::new(access_token.access_token)
+    let mut parameters = AccessTokenResponse::new(access_token.access_token)
         .with_expires_in(ttl)
         .with_refresh_token(refresh_token.refresh_token)
         .with_scope(session.scope.clone());
 
     if let Some(id_token) = id_token {
-        params = params.with_id_token(id_token);
+        parameters = parameters.with_id_token(id_token);
     }
 
     // Lock the user sync to make sure we don't get into a race condition
@@ -494,5 +494,5 @@ pub async fn exchange_authorization_code(
         "Authorization_code token exchange completed"
     );
 
-    Ok((params, repo))
+    Ok((parameters, repo))
 }

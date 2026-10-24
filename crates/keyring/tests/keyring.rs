@@ -282,7 +282,7 @@ fn generate_sign_and_verify() {
 
     for alg in all_algs {
         let matched = store.signing_key_for_algorithm(&alg).unwrap();
-        let signer = matched.params().signing_key_for_alg(&alg).unwrap();
+        let signer = matched.parameters().signing_key_for_alg(&alg).unwrap();
         let hdr = JsonWebSignatureHeader::new(alg.clone());
         let token = Jwt::sign_with_rng(&mut rng, hdr, "", &signer).unwrap();
         insta::assert_snapshot!(format!("jwt_{alg}"), token.as_str());

@@ -116,21 +116,21 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     #[tracing::instrument(
         name = "db.user_primary_handle_preference.at",
         skip_all,
-        fields(user.id = %user_id, %as_of),
+        fields(user.id = %user_id, %evaluated_at),
         err,
     )]
     async fn at(
         &mut self,
         user_id: Ulid,
-        as_of: DateTime<Utc>,
+        evaluated_at: DateTime<Utc>,
     ) -> Result<Option<UserPrimaryHandlePreference>, Self::Error> {
         user_primary_handle_preferences::table
             .filter(user_primary_handle_preferences::user_id.eq(Uuid::from(user_id)))
-            .filter(user_primary_handle_preferences::effective_at.le(as_of))
+            .filter(user_primary_handle_preferences::effective_at.le(evaluated_at))
             .filter(
                 user_primary_handle_preferences::replaced_at
                     .is_null()
-                    .or(user_primary_handle_preferences::replaced_at.gt(as_of)),
+                    .or(user_primary_handle_preferences::replaced_at.gt(evaluated_at)),
             )
             .order(user_primary_handle_preferences::effective_at.desc())
             .select(UserPrimaryHandlePreferenceRow::as_select())
@@ -151,11 +151,11 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         user_id: Ulid,
         handle: &str,
-        as_of: DateTime<Utc>,
+        evaluated_at: DateTime<Utc>,
     ) -> Result<Option<VerifiedUserHandleClaim>, Self::Error> {
         let row = handle_audit_log::table
             .filter(handle_audit_log::handle.eq(Some(handle.to_owned())))
-            .filter(handle_audit_log::created_at.le(as_of))
+            .filter(handle_audit_log::created_at.le(evaluated_at))
             .filter(handle_audit_log::event_type.eq_any([
                 "claim_issued",
                 "revoked",
@@ -190,21 +190,21 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     #[tracing::instrument(
         name = "db.user_primary_handle_preference.set",
         skip_all,
-        fields(user.id = %params.user_id),
+        fields(user.id = %parameters.user_id),
         err,
     )]
     async fn set(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewUserPrimaryHandlePreference,
+        parameters: NewUserPrimaryHandlePreference,
     ) -> Result<UserPrimaryHandlePreference, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
 
         diesel::update(
             user_primary_handle_preferences::table
-                .filter(user_primary_handle_preferences::user_id.eq(Uuid::from(params.user_id)))
+                .filter(user_primary_handle_preferences::user_id.eq(Uuid::from(parameters.user_id)))
                 .filter(user_primary_handle_preferences::replaced_at.is_null()),
         )
         .set(user_primary_handle_preferences::replaced_at.eq(Some(now)))
@@ -213,13 +213,13 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         let row = InsertableUserPrimaryHandlePreference {
             id: Uuid::from(id),
-            user_id: Uuid::from(params.user_id),
-            handle: params.handle,
+            user_id: Uuid::from(parameters.user_id),
+            handle: parameters.handle,
             effective_at: now,
             replaced_at: None,
-            source_claim_id: params.source_claim_id.map(Uuid::from),
-            actor_user_id: params.actor_user_id.map(Uuid::from),
-            source: params.source,
+            source_claim_id: parameters.source_claim_id.map(Uuid::from),
+            actor_user_id: parameters.actor_user_id.map(Uuid::from),
+            source: parameters.source,
             created_at: now,
         };
 
@@ -230,7 +230,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         Ok(UserPrimaryHandlePreference {
             id,
-            user_id: params.user_id,
+            user_id: parameters.user_id,
             handle: row.handle,
             effective_at: row.effective_at,
             replaced_at: row.replaced_at,

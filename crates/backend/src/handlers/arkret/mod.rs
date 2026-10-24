@@ -112,13 +112,13 @@ pub enum ArkretRouteError {
     /// controller approval flow. It renders as a closed `claim_required`
     /// details object and never as a browser challenge.
     #[error("controller approval required")]
-    HumanApprovalRequired(arkret_wire::AgentHumanApprovalProblem),
+    HumanApprovalRequired(arkret_wire::AgentHumanApprovalProblemExtensions),
 
     #[error("session grant exact replay has expired")]
-    SessionGrantReplayExpired(arkret_wire::SessionGrantReplayExpiredProblem),
+    SessionGrantReplayExpired(arkret_wire::SessionGrantReplayExpiredProblemExtensions),
 
     #[error("session grant exact replay reached a terminal lifecycle state")]
-    SessionGrantReplayTerminal(arkret_wire::SessionGrantReplayTerminalProblem),
+    SessionGrantReplayTerminal(arkret_wire::SessionGrantReplayTerminalProblemExtensions),
 
     /// Caller did not present a usable bearer token. Renders as `401`.
     #[error("{0}")]
@@ -150,18 +150,18 @@ impl ArkretRouteError {
     }
 
     pub fn session_grant_replay_expired(grant_id: arkret_identifiers::SessionGrantId) -> Self {
-        Self::SessionGrantReplayExpired(arkret_wire::SessionGrantReplayExpiredProblem::new(
-            grant_id,
-        ))
+        Self::SessionGrantReplayExpired(
+            arkret_wire::SessionGrantReplayExpiredProblemExtensions::new(grant_id),
+        )
     }
 
     pub fn session_grant_replay_terminal(
         grant_id: arkret_identifiers::SessionGrantId,
         state: arkret_wire::SessionGrantReplayTerminalState,
     ) -> Self {
-        Self::SessionGrantReplayTerminal(arkret_wire::SessionGrantReplayTerminalProblem::new(
-            grant_id, state,
-        ))
+        Self::SessionGrantReplayTerminal(
+            arkret_wire::SessionGrantReplayTerminalProblemExtensions::new(grant_id, state),
+        )
     }
 }
 
@@ -1063,7 +1063,7 @@ pub async fn debug_issue_dpop_grant(
 
     let public_jwk: PublicJsonWebKey = serde_json::from_value(body.dpop_jwk.clone())
         .map_err(|error| ArkretRouteError::BadRequest(format!("invalid dpop_jwk: {error}")))?;
-    let jkt = public_jwk.params().thumbprint_sha256_base64();
+    let jkt = public_jwk.parameters().thumbprint_sha256_base64();
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;

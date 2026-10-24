@@ -212,7 +212,7 @@ pub enum GrantType {
     ClientCredentials,
 
     /// Device authorization grant
-    #[serde(rename = "urn:ietf:params:oauth:grant-type:device_code")]
+    #[serde(rename = "urn:ietf:parameters:oauth:grant-type:device_code")]
     DeviceCode,
 }
 

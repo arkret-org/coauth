@@ -69,7 +69,7 @@ repository_impl! {
             &mut self,
             account_authority_id: &str,
             local_account_id: &str,
-            from_status_seq: u64,
+            from_status_sequence: u64,
             limit: u16,
         ) -> Result<Vec<AccountStatusRecord>, Self::Error>;
     }

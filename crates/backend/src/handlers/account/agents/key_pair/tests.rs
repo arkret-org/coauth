@@ -771,7 +771,7 @@ fn delegated_pairing_custody_encrypts_private_body_scope_and_actual_outcome() {
         "pending intent is not acceptance evidence"
     );
     custody.station_outcome = Some(
-        arkret_models_collaboration::agent_operations::AgentKeyPairOutcome {
+        arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody {
             activation_state:
                 arkret_models_collaboration::agent_operations::AgentKeyPairActivationState::Active,
             authorize_event_ref: custody.request.authorize_event.event.event_id.clone(),
@@ -858,12 +858,13 @@ fn delegated_pairing_custody_rejects_wrong_key_plaintext_and_row_transplant() {
 #[test]
 fn delegated_session_consumption_requires_exact_active_result_and_current_signer_evidence() {
     use arkret_models_collaboration::agent_operations::{
-        AgentKeyPairActivationState, AgentKeyPairOutcome, AgentView, KeyStateCurrentSignerEvidence,
+        AgentKeyPairActivationState, AgentKeyPairResponseBody, AgentView,
+        KeyStateCurrentSignerEvidence,
     };
     use arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey;
     let (mut custody, mut authorization) = custody_fixture();
     let encrypter = coauth_keyring::Encrypter::new(&[37; 32]);
-    custody.station_outcome = Some(AgentKeyPairOutcome {
+    custody.station_outcome = Some(AgentKeyPairResponseBody {
         activation_state: AgentKeyPairActivationState::Active,
         authorize_event_ref: custody.request.authorize_event.event.event_id.clone(),
     });
@@ -876,10 +877,10 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
         "commit_id": arkret_wire::RealmCommitId::from_digest([0;32]),
         "realm_id":event.realm_id,"stream_ref":{"kind":"realm","realm_id":event.realm_id},
         "stream_position":0,"previous_commit_ref":null,"event_ref":event.event_id,
-        "governance_generation":0,"authority_ref":event.realm_id.event_id(),"committed_at":test_now(),
+        "governance_generation":"0","authority_ref":event.realm_id.event_id(),"committed_at":test_now(),
         "signature":{"context":"ak.realm_commit_signature.v1","signature_algorithm":"Ed25519",
             "verification_method":"did:web:coland.local#service-signing-key",
-            "signed_digest":format!("sha256:{}","0".repeat(64)),"created_at":test_now(),"sig":"AA"}
+            "signed_digest":format!("sha256:{}","0".repeat(64)),"created_at":test_now(),"signature":"AA"}
     })).unwrap();
     let body =
         arkret_canonical::canonical::unsigned_value(&commit, &["commit_id", "signature"]).unwrap();
@@ -898,12 +899,13 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
     .unwrap();
     use ed25519_dalek::Signer as _;
     commit.signature.signed_digest = digest;
-    commit.signature.sig = arkret_wire::Base64UrlString::new(Base64UrlUnpadded::encode_string(
-        &ed25519_dalek::SigningKey::from_bytes(&[17; 32])
-            .sign(&bytes)
-            .to_bytes(),
-    ))
-    .unwrap();
+    commit.signature.signature =
+        arkret_wire::Base64UrlString::new(Base64UrlUnpadded::encode_string(
+            &ed25519_dalek::SigningKey::from_bytes(&[17; 32])
+                .sign(&bytes)
+                .to_bytes(),
+        ))
+        .unwrap();
     let evidence = arkret_models_identity::build_agent_signer_evidence(
         AGENT.parse().unwrap(),
         arkret_wire::DidUrl::new(VM).unwrap(),
@@ -945,7 +947,7 @@ fn delegated_session_consumption_requires_exact_active_result_and_current_signer
         "agent": {"agent_id":AGENT,"slug":"fixture",
             "lifecycle":"active","readiness":{"state":"ready","blockers":[]},"presence":{"state":"unknown",
                 "expires_at":"2026-07-06T00:06:00.000Z",
-                "refresh_after":"2026-07-06T00:05:30.000Z"}},
+                "refresh_at":"2026-07-06T00:05:30.000Z"}},
         "grants":[], "key_state": key_state
     }))
     .unwrap();

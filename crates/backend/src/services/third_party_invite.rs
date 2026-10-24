@@ -74,8 +74,8 @@ impl Drop for SecretMaterial {
 /// Only serialized inside the existing service AEAD cipher. This is not a wire DTO.
 #[derive(Serialize, Deserialize)]
 pub(crate) struct Custody {
-    pub public: ThirdPartyInviteProvisionOutcome,
-    pub activation: Option<ThirdPartyInviteActivationOutcome>,
+    pub public: ThirdPartyInviteProvisionResponseBody,
+    pub activation: Option<ThirdPartyInviteActivationResponseBody>,
     pub activation_digest: Option<String>,
     pub invite_digest: Option<Hash>,
     pub verification_method: DidUrl,
@@ -207,7 +207,7 @@ pub(crate) async fn provision_verified(
     service_did: &Did,
     source_ip_bucket: &str,
     now: DateTime<Utc>,
-) -> Result<ThirdPartyInviteProvisionOutcome, InviteError> {
+) -> Result<ThirdPartyInviteProvisionResponseBody, InviteError> {
     // Public canonical timestamps and PostgreSQL must retain identical cuts.
     let now = arkret_canonical::normalize_timestamp_canonical(now);
     let issuer = digest(
@@ -281,7 +281,7 @@ pub(crate) async fn provision_verified(
     let key = arkret_canonical::ed25519_pubkey_to_did_key_multibase(
         &signing_key.verifying_key().to_bytes(),
     );
-    let public = ThirdPartyInviteProvisionOutcome {
+    let public = ThirdPartyInviteProvisionResponseBody {
         provisioning_id: handle,
         realm_id: request.realm_id.clone(),
         inviter_account_id: request.inviter_account_id.clone(),
@@ -291,7 +291,7 @@ pub(crate) async fn provision_verified(
             oob_code_kind: request.oob_code_kind,
             display_name_hint: None,
             token_commitment: Some(commitment),
-            max_claims: 1,
+            max_claim_count: 1,
             token_salt_id: (request.oob_code_kind == ThirdPartyInviteOobKind::OfflineToken)
                 .then(|| format!("salt-{namespace}")),
             token_entropy_bits: (request.oob_code_kind == ThirdPartyInviteOobKind::OfflineToken)
@@ -357,7 +357,7 @@ pub(crate) async fn activate_verified(
     encrypter: &Encrypter,
     request: &ThirdPartyInviteActivationRequestBody,
     now: DateTime<Utc>,
-) -> Result<ThirdPartyInviteActivationOutcome, InviteError> {
+) -> Result<ThirdPartyInviteActivationResponseBody, InviteError> {
     let now = arkret_canonical::normalize_timestamp_canonical(now);
     let mut row = repo
         .third_party_invite()
@@ -393,7 +393,7 @@ pub(crate) async fn activate_verified(
     {
         return Err(InviteError::MaterialMismatch);
     }
-    let outcome = ThirdPartyInviteActivationOutcome {
+    let outcome = ThirdPartyInviteActivationResponseBody {
         provisioning_id: request.provisioning_id.clone(),
         realm_id: a.realm_id.clone(),
         invite_id: a.invite_id.clone(),
@@ -409,8 +409,8 @@ pub(crate) async fn activate_verified(
     Ok(outcome)
 }
 
-pub(crate) fn status(c: &Custody) -> ThirdPartyInviteProvisioningStatusOutcome {
-    ThirdPartyInviteProvisioningStatusOutcome {
+pub(crate) fn status(c: &Custody) -> ThirdPartyInviteProvisioningStatusResponseBody {
+    ThirdPartyInviteProvisioningStatusResponseBody {
         provisioning_id: c.public.provisioning_id.clone(),
         realm_id: c.public.realm_id.clone(),
         provisioning_state: c.state,
@@ -444,7 +444,7 @@ pub(crate) async fn consume_locked(
     encrypter: &Encrypter,
     request: &ThirdPartyInvitePresentRequestBody,
     now: DateTime<Utc>,
-) -> Result<ThirdPartyInvitePresentOutcome, InviteError> {
+) -> Result<ThirdPartyInvitePresentResponseBody, InviteError> {
     if c.state != ThirdPartyInviteProvisioningState::Activated
         || now >= c.public.expires_at
         || request.realm_id != c.public.realm_id
@@ -492,7 +492,7 @@ pub(crate) async fn consume_locked(
             .sign(&body.canonical_bytes().map_err(|_| InviteError::Internal)?)
             .to_bytes(),
     );
-    let outcome = ThirdPartyInvitePresentOutcome {
+    let outcome = ThirdPartyInvitePresentResponseBody {
         invite_id: activation.invite_id.clone(),
         token_commitment: commitment,
         binding_proof: proof,

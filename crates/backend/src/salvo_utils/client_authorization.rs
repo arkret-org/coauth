@@ -21,7 +21,8 @@ use thiserror::Error;
 use crate::record_error;
 use crate::services::dpop::{DpopError, DpopVerifier};
 
-static JWT_BEARER_CLIENT_ASSERTION: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+static JWT_BEARER_CLIENT_ASSERTION: &str =
+    "urn:ietf:parameters:oauth:client-assertion-type:jwt-bearer";
 
 #[derive(Deserialize)]
 struct AuthorizedForm<F = ()> {
@@ -117,7 +118,7 @@ impl Credentials {
     #[tracing::instrument(skip_all)]
     pub async fn verify(
         &self,
-        params: CredentialsVerificationParams<'_>,
+        parameters: CredentialsVerificationParams<'_>,
     ) -> Result<(), CredentialsVerificationError> {
         let CredentialsVerificationParams {
             http_client,
@@ -127,7 +128,7 @@ impl Credentials {
             expected_audience,
             now,
             replay_store,
-        } = params;
+        } = parameters;
         match (self, method) {
             (Credentials::None { .. }, OAuthClientAuthenticationMethod::None) => {}
 

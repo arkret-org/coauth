@@ -142,16 +142,16 @@ pub(crate) fn issue_handle_claim(
             &signing_key,
         )?,
     ];
-    let fresh_until = now + Duration::try_minutes(5).unwrap();
+    let cache_expires_at = now + Duration::try_minutes(5).unwrap();
     let mut final_payload = HandleClaimPayload {
         schema: SchemaId::HANDLE_CLAIM_V1.to_owned(),
         claim: core,
         status: HandleClaimStatus::Verified,
-        as_of: now,
+        evaluated_at: now,
         verifier_id: issuer_id,
         verified_at: Some(now),
         revocation: None,
-        fresh_until,
+        cache_expires_at,
         status_proof: handle_claim_proof(
             claim_digest.clone(),
             PayloadProofPurpose::StatusAttestation,

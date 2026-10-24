@@ -17,4 +17,4 @@ stages:
     purpose: registration
     template_key: verification
     code_expiry_seconds: 300
-    max_attempts: 5
+    max_attempt_count: 5

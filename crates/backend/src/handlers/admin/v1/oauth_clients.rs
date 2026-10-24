@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::{AppError, JsonResult};
 
 /// JSON shape for the localised metadata of a single OAuth client.

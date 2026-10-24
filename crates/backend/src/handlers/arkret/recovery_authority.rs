@@ -1,13 +1,13 @@
 //! Standard SessionGrant issuance after trusted root-anchored recovery completion.
 use arkret_models_collaboration::objects::account_status::AccountStatus;
-use arkret_models_collaboration::session_grants::SessionGrantOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantResponseBody;
 use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
 use arkret_models_identity::{
     AccountHandoffAllowedOperation, InitialSessionGrantIntent,
     STANDARD_INITIAL_SESSION_GRANT_OPERATIONS, SessionGrantProofKind,
 };
 use arkret_signatures::proof::verify_detached_ed25519_signature;
-use arkret_wire::{IssueRecoveryCompletionGrantOutcome, IssueRecoveryCompletionGrantRequest};
+use arkret_wire::{IssueRecoveryCompletionGrantResponseBody, RecoveryCompletionGrantRequestBody};
 use chrono::{Duration, Timelike as _, Utc};
 use coauth_data::storage::user::BrowserSessionRepository as _;
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
@@ -49,7 +49,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<ArkretCanonicalJson, ArkretRouteError> {
-    let request: IssueRecoveryCompletionGrantRequest = req
+    let request: RecoveryCompletionGrantRequestBody = req
         .parse_json()
         .await
         .map_err(|_| schema_violation("invalid recovery completion grant request"))?;
@@ -272,7 +272,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             .device_authorization_event_ref
             .event_id
             .clone(),
-        model_generation_ref: request.result_model_generation_ref,
+        model_generation_ref: request.new_model_generation_ref,
     };
     let device_binding = acquire_private_current_device_binding(
         depot,
@@ -313,7 +313,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
             proof_kind: SessionGrantProofKind::AccountHandoff,
         },
     )?;
-    let wire_grant = SessionGrantOutcome {
+    let wire_grant = SessionGrantResponseBody {
         account_id: material.account_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
@@ -324,7 +324,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         granted_scope: material.scopes.clone(),
         previous_session_grant_id: None,
     };
-    let outcome = IssueRecoveryCompletionGrantOutcome {
+    let outcome = IssueRecoveryCompletionGrantResponseBody {
         transaction_id: request.transaction_id.clone(),
         session_grant_outcome: serde_json::to_value(wire_grant)?,
         issued_at: issuance_seed.not_before,
@@ -402,7 +402,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         "terminal_receipt_id": receipt.receipt_id.to_string(),
         "reanchor_ref": serde_json::to_value(&request.completion_attestation.reanchor_event_ref)?,
         "device_authorization_ref": serde_json::to_value(&request.completion_attestation.device_authorization_event_ref)?,
-        "result_model_generation_ref": serde_json::to_value(request.result_model_generation_ref)?,
+        "new_model_generation_ref": serde_json::to_value(request.new_model_generation_ref)?,
     });
     let authorization_ref = format!("account-handoff:{}", handoff.id);
     let committed = repo
@@ -445,7 +445,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         }
     }
 
-    let generation = serde_json::to_value(request.result_model_generation_ref)?;
+    let generation = serde_json::to_value(request.new_model_generation_ref)?;
     let inserted = repo
         .recovery_authority()
         .insert_completion_issuance(NewRecoveryCompletionGrantIssuance {
@@ -460,7 +460,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
                     .completion_attestation
                     .device_authorization_event_ref,
             )?,
-            result_model_generation_ref: generation,
+            new_model_generation_ref: generation,
             canonical_request_digest: request.canonical_request_digest.to_string(),
             canonical_request: canonical_request.clone(),
             session_grant_operation_id: operation.id,
@@ -511,13 +511,13 @@ pub async fn issue_recovery_completion_grant_endpoint(
 /// `stream_position`, so the pair always names two distinct commits. Same-stream
 /// adjacency, the Realm stream kind, and the distinctness of both `commit_id`
 /// and `event_id` are all enforced by
-/// `IssueRecoveryCompletionGrantRequest::validate_structural`, which delegates
+/// `RecoveryCompletionGrantRequestBody::validate_structural`, which delegates
 /// to the SDK `validate_recovery_commit_pair`.
 ///
 /// The coordinator is `account_id.station_id`; no separate coordinator member
 /// exists on wire or in the signed projection.
 fn validate_completion_evidence(
-    request: &IssueRecoveryCompletionGrantRequest,
+    request: &RecoveryCompletionGrantRequestBody,
     receipt: &RecoveryReceipt,
     initial: &InitialSessionGrantIntent,
     handoff: &coauth_data::account_handoff::AccountHandoffGrant,
@@ -529,9 +529,9 @@ fn validate_completion_evidence(
     let receipt_digest =
         arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&receipt_bytes))
             .map_err(|error| failed_precondition(error.to_string()))?;
-    let receipt_generation = serde_json::to_value(receipt.result_model_generation_ref)
+    let receipt_generation = serde_json::to_value(receipt.new_model_generation_ref)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let request_generation = serde_json::to_value(request.result_model_generation_ref)
+    let request_generation = serde_json::to_value(request.new_model_generation_ref)
         .map_err(|error| failed_precondition(error.to_string()))?;
     if receipt.outcome != RecoveryReceiptOutcome::Completed
         || receipt.transaction_id != request.transaction_id
@@ -624,11 +624,11 @@ async fn verify_station_completion_attestation(
     depot: &Depot,
     repo: &mut coauth_data::BoxRepository,
     expected_station: &str,
-    request: &IssueRecoveryCompletionGrantRequest,
+    request: &RecoveryCompletionGrantRequestBody,
 ) -> Result<(), ArkretRouteError> {
     let attestation = &request.completion_attestation;
     let signer_did = arkret_identifiers::Did::new(verification_method_did(
-        attestation.auth_data.verification_method.as_str(),
+        attestation.signature_proof.verification_method.as_str(),
     ))
     .map_err(|error| signature_invalid(error.to_string()))?;
     let signer_core = arkret_identifiers::project_did_to_core_id(&signer_did)
@@ -670,11 +670,11 @@ async fn verify_station_completion_attestation(
     })?;
     verify_with_document_method(
         &resolution.document,
-        attestation.auth_data.verification_method.as_str(),
+        attestation.signature_proof.verification_method.as_str(),
         &attestation
             .signing_bytes()
             .map_err(|error| signature_invalid(error.to_string()))?,
-        &attestation.auth_data.signature,
+        &attestation.signature_proof.signature,
         "completion attestation",
     )
 }
@@ -702,7 +702,7 @@ fn verify_with_document_method(
 
 fn exact_replay(
     record: coauth_data::RecoveryCompletionGrantIssuance,
-    request: &IssueRecoveryCompletionGrantRequest,
+    request: &RecoveryCompletionGrantRequestBody,
     canonical_request: &[u8],
     account_id: coauth_data::Ulid,
 ) -> Result<ArkretCanonicalJson, ArkretRouteError> {
@@ -720,7 +720,7 @@ fn exact_replay(
 
 async fn replay_record_after_ledger_race(
     depot: &Depot,
-    request: &IssueRecoveryCompletionGrantRequest,
+    request: &RecoveryCompletionGrantRequestBody,
     canonical_request: &[u8],
     account_id: coauth_data::Ulid,
     ledger_outcome: Option<Vec<u8>>,

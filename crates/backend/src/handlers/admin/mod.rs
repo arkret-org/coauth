@@ -12,7 +12,7 @@ use serde::Serialize;
 
 mod call_context;
 mod model;
-mod params;
+mod parameters;
 mod response;
 mod schema;
 /// Version 1 of the Admin API endpoints.
@@ -21,7 +21,7 @@ pub mod v1;
 pub use self::call_context::CallContext;
 pub(crate) use self::call_context::CallContextRejection;
 pub(crate) use self::model::InconsistentPersonalSession;
-pub(crate) use self::params::{PaginationRejection, UlidPathParamRejection};
+pub(crate) use self::parameters::{PaginationRejection, UlidPathParamRejection};
 pub(crate) use self::response::ErrorOutcome;
 
 /// The canonical admin scope for the coauth Admin API.

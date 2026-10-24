@@ -63,7 +63,7 @@ impl AliyunSmsTransport {
         let template_param_json =
             serde_json::to_string(template_params).unwrap_or_else(|_| String::from("{}"));
 
-        let mut params: Vec<(&str, String)> = vec![
+        let mut parameters: Vec<(&str, String)> = vec![
             ("Action", "SendSms".to_owned()),
             ("Format", "JSON".to_owned()),
             ("Version", "2017-05-25".to_owned()),
@@ -79,17 +79,17 @@ impl AliyunSmsTransport {
         ];
 
         // Sort parameters alphabetically by key
-        params.sort_by(|a, b| a.0.cmp(b.0));
+        parameters.sort_by(|a, b| a.0.cmp(b.0));
 
         // Construct StringToSign + sign. Extracted into pure helpers so the
         // brittle canonicalization + HMAC-SHA1 chain has offline contract
         // coverage (see tests) without needing live Aliyun credentials.
-        let string_to_sign = aliyun_string_to_sign("POST", &params);
+        let string_to_sign = aliyun_string_to_sign("POST", &parameters);
         let signature = aliyun_signature(&self.access_key_secret, &string_to_sign);
 
-        // Add signature to params
+        // Add signature to parameters
         let mut form_params: Vec<(&str, &str)> =
-            params.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            parameters.iter().map(|(k, v)| (*k, v.as_str())).collect();
         // We need to own the signature string for the borrow to work
         form_params.push(("Signature", &signature));
 
@@ -175,13 +175,13 @@ mod tests {
 
     #[test]
     fn string_to_sign_canonicalises_sorted_params() {
-        let params = vec![
+        let parameters = vec![
             ("Action", "SendSms".to_owned()),
             ("Format", "JSON".to_owned()),
         ];
         // POST & pe("/") & pe("Action=SendSms&Format=JSON")
         assert_eq!(
-            aliyun_string_to_sign("POST", &params),
+            aliyun_string_to_sign("POST", &parameters),
             "POST&%2F&Action%3DSendSms%26Format%3DJSON"
         );
     }

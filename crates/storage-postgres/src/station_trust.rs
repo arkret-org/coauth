@@ -108,16 +108,16 @@ struct EnrollmentReplacement {
 }
 
 impl NewEnrollmentRow {
-    fn from_params(params: &NewStationTrustEnrollment, now: DateTime<Utc>) -> Self {
+    fn from_params(parameters: &NewStationTrustEnrollment, now: DateTime<Utc>) -> Self {
         Self {
-            name: params.name.clone(),
-            canonical_endpoint: params.canonical_endpoint.clone(),
-            service_id: params.service_id.clone(),
+            name: parameters.name.clone(),
+            canonical_endpoint: parameters.canonical_endpoint.clone(),
+            service_id: parameters.service_id.clone(),
             service_kind: "station".to_owned(),
-            did: params.did.to_string(),
-            method_history_head: params.method_history_head.clone(),
-            version_id: params.version_id.clone(),
-            source: params.source.as_str().to_owned(),
+            did: parameters.did.to_string(),
+            method_history_head: parameters.method_history_head.clone(),
+            version_id: parameters.version_id.clone(),
+            source: parameters.source.as_str().to_owned(),
             enrolled_at: now,
             last_verified_at: now,
         }
@@ -211,28 +211,28 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     async fn enroll(
         &mut self,
         clock: &dyn Clock,
-        params: NewStationTrustEnrollment,
+        parameters: NewStationTrustEnrollment,
     ) -> Result<Option<StationTrustEnrollment>, Self::Error> {
-        if arkret_identifiers::project_did_to_core_id(&params.did)
-            .map_or(true, |projected| projected != params.service_id)
+        if arkret_identifiers::project_did_to_core_id(&parameters.did)
+            .map_or(true, |projected| projected != parameters.service_id)
         {
             return Err(DatabaseError::invalid_operation());
         }
         let now = clock.now();
-        let row = NewEnrollmentRow::from_params(&params, now);
+        let row = NewEnrollmentRow::from_params(&parameters, now);
         let inserted = diesel::insert_into(station_trust_enrollments::table)
             .values(&row)
             .on_conflict_do_nothing()
             .execute(self.conn)
             .await?;
         Ok((inserted == 1).then_some(StationTrustEnrollment {
-            name: params.name,
-            canonical_endpoint: params.canonical_endpoint,
-            service_id: params.service_id,
-            did: params.did,
-            method_history_head: params.method_history_head,
-            version_id: params.version_id,
-            source: params.source,
+            name: parameters.name,
+            canonical_endpoint: parameters.canonical_endpoint,
+            service_id: parameters.service_id,
+            did: parameters.did,
+            method_history_head: parameters.method_history_head,
+            version_id: parameters.version_id,
+            source: parameters.source,
             enrolled_at: now,
             last_verified_at: now,
         }))
@@ -246,21 +246,21 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         expected_service_id: &arkret_identifiers::DidCoreId,
         expected_canonical_endpoint: &str,
         expected_method_history_head: &str,
-        params: NewStationTrustEnrollment,
+        parameters: NewStationTrustEnrollment,
     ) -> Result<bool, Self::Error> {
-        if arkret_identifiers::project_did_to_core_id(&params.did)
-            .map_or(true, |projected| projected != params.service_id)
-            || &params.service_id != expected_service_id
+        if arkret_identifiers::project_did_to_core_id(&parameters.did)
+            .map_or(true, |projected| projected != parameters.service_id)
+            || &parameters.service_id != expected_service_id
         {
             return Err(DatabaseError::invalid_operation());
         }
         let changes = EnrollmentReplacement {
-            canonical_endpoint: params.canonical_endpoint.clone(),
-            service_id: params.service_id.clone(),
-            did: params.did.to_string(),
-            method_history_head: params.method_history_head.clone(),
-            version_id: params.version_id.clone(),
-            source: params.source.as_str().to_owned(),
+            canonical_endpoint: parameters.canonical_endpoint.clone(),
+            service_id: parameters.service_id.clone(),
+            did: parameters.did.to_string(),
+            method_history_head: parameters.method_history_head.clone(),
+            version_id: parameters.version_id.clone(),
+            source: parameters.source.as_str().to_owned(),
             last_verified_at: clock.now(),
         };
         let rows_affected = diesel::update(
@@ -286,20 +286,20 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         clock: &dyn Clock,
         name: &str,
         expected_old_service_id: &arkret_identifiers::DidCoreId,
-        params: NewStationTrustEnrollment,
+        parameters: NewStationTrustEnrollment,
     ) -> Result<bool, Self::Error> {
-        if arkret_identifiers::project_did_to_core_id(&params.did)
-            .map_or(true, |projected| projected != params.service_id)
+        if arkret_identifiers::project_did_to_core_id(&parameters.did)
+            .map_or(true, |projected| projected != parameters.service_id)
         {
             return Err(DatabaseError::invalid_operation());
         }
         let changes = EnrollmentReplacement {
-            canonical_endpoint: params.canonical_endpoint.clone(),
-            service_id: params.service_id.clone(),
-            did: params.did.to_string(),
-            method_history_head: params.method_history_head.clone(),
-            version_id: params.version_id.clone(),
-            source: params.source.as_str().to_owned(),
+            canonical_endpoint: parameters.canonical_endpoint.clone(),
+            service_id: parameters.service_id.clone(),
+            did: parameters.did.to_string(),
+            method_history_head: parameters.method_history_head.clone(),
+            version_id: parameters.version_id.clone(),
+            source: parameters.source.as_str().to_owned(),
             last_verified_at: clock.now(),
         };
         let rows_affected = diesel::update(
@@ -361,17 +361,17 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewStationTrustAudit,
+        parameters: NewStationTrustAudit,
     ) -> Result<StationTrustAudit, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
         let row = NewAuditRow {
             id: Uuid::from(id),
-            enrollment_name: params.enrollment_name.clone(),
-            action: params.action.as_str().to_owned(),
-            service_id: params.service_id.clone(),
-            previous_service_id: params.previous_service_id.clone(),
-            detail: params.detail.clone(),
+            enrollment_name: parameters.enrollment_name.clone(),
+            action: parameters.action.as_str().to_owned(),
+            service_id: parameters.service_id.clone(),
+            previous_service_id: parameters.previous_service_id.clone(),
+            detail: parameters.detail.clone(),
             created_at,
         };
         diesel::insert_into(station_trust_audits::table)
@@ -380,11 +380,11 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             .await?;
         Ok(StationTrustAudit {
             id,
-            enrollment_name: params.enrollment_name,
-            action: params.action,
-            service_id: params.service_id,
-            previous_service_id: params.previous_service_id,
-            detail: params.detail,
+            enrollment_name: parameters.enrollment_name,
+            action: parameters.action,
+            service_id: parameters.service_id,
+            previous_service_id: parameters.previous_service_id,
+            detail: parameters.detail,
             created_at,
         })
     }

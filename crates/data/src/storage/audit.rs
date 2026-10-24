@@ -264,7 +264,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewAdminOperationLog,
+            parameters: NewAdminOperationLog,
         ) -> Result<AdminOperationLog, Self::Error>;
 
         /// Look up an admin operation log entry by id.
@@ -297,7 +297,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewAccountSecurityEvent,
+            parameters: NewAccountSecurityEvent,
         ) -> Result<AccountSecurityEvent, Self::Error>;
 
         /// List security events for a specific user.

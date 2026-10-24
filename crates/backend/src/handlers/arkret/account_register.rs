@@ -1,13 +1,13 @@
 //! Canonical account-first identity creation and binding.
 use arkret_models_collaboration::account_operations::{
-    AccountRegisterOutcome, AccountRegisterRequestBody,
+    AccountRegisterRequestBody, AccountRegisterResponseBody,
 };
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_collaboration::principal_operations::PcrGenesisAdmissionInput;
-use arkret_models_collaboration::session_grants::SessionGrantOutcome;
+use arkret_models_collaboration::session_grants::SessionGrantResponseBody;
 use arkret_models_identity::{
     AccountBindingKind, AccountBindingReceipt, AccountBindingState, AccountHandoffAllowedOperation,
-    DidOperationSubmitOutcome, DidOperationSubmitStatus, IdentityCreationLeaseState,
+    DidOperationSubmitResponseBody, DidOperationSubmitStatus, IdentityCreationLeaseState,
     IdentityCreationOperationStatus, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
 };
 use coauth_data::RepositoryAccess as _;
@@ -49,7 +49,7 @@ const PRIVATE_PRINCIPAL_GENESIS_PATH: &str = "/_coland/account-authority/princip
 pub async fn account_register_endpoint(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<AccountRegisterOutcome>, ArkretRouteError> {
+) -> Result<Json<AccountRegisterResponseBody>, ArkretRouteError> {
     let (handoff_token, replay_dpop) = verify_account_handoff_holder_without_lookup(req, depot)?;
     let mut replay_repo = depot.repo().await?;
     let mut grant = replay_repo
@@ -332,7 +332,7 @@ pub async fn account_register_endpoint(
         | IdentityCreationLeaseState::PcrAccepted
         | IdentityCreationLeaseState::AccountBound => {
             repo.cancel().await.ok();
-            let outcome: DidOperationSubmitOutcome =
+            let outcome: DidOperationSubmitResponseBody =
                 context.lease.registry_receipt.clone().ok_or_else(|| {
                     failed_precondition("published identity has no registry receipt")
                 })?;
@@ -429,7 +429,7 @@ pub async fn account_register_endpoint(
             ));
         }
         repo.save().await?;
-        let outcome: arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome =
+        let outcome: arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResponseBody =
             channel
                 .post_private_json(
                     "private_principal_genesis_admission",
@@ -698,7 +698,7 @@ pub async fn account_register_endpoint(
         },
     )?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
-    let session_grant_outcome = SessionGrantOutcome {
+    let session_grant_outcome = SessionGrantResponseBody {
         account_id: material.account_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
@@ -709,7 +709,7 @@ pub async fn account_register_endpoint(
         granted_scope: material.scopes.clone(),
         previous_session_grant_id: None,
     };
-    let outcome = AccountRegisterOutcome {
+    let outcome = AccountRegisterResponseBody {
         principal_id: body.principal_id.clone(),
         state: AccountStatus::Active,
         devices: Vec::new(),

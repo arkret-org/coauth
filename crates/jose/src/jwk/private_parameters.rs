@@ -29,7 +29,7 @@ impl JsonWebKeyPrivateParameters {
     #[must_use]
     pub const fn oct(&self) -> Option<&OctPrivateParameters> {
         match self {
-            Self::Oct(params) => Some(params),
+            Self::Oct(parameters) => Some(parameters),
             _ => None,
         }
     }
@@ -37,7 +37,7 @@ impl JsonWebKeyPrivateParameters {
     #[must_use]
     pub const fn rsa(&self) -> Option<&RsaPrivateParameters> {
         match self {
-            Self::Rsa(params) => Some(params),
+            Self::Rsa(parameters) => Some(parameters),
             _ => None,
         }
     }
@@ -45,7 +45,7 @@ impl JsonWebKeyPrivateParameters {
     #[must_use]
     pub const fn ec(&self) -> Option<&EcPrivateParameters> {
         match self {
-            Self::Ec(params) => Some(params),
+            Self::Ec(parameters) => Some(parameters),
             _ => None,
         }
     }
@@ -53,7 +53,7 @@ impl JsonWebKeyPrivateParameters {
     #[must_use]
     pub const fn okp(&self) -> Option<&OkpPrivateParameters> {
         match self {
-            Self::Okp(params) => Some(params),
+            Self::Okp(parameters) => Some(parameters),
             _ => None,
         }
     }
@@ -174,8 +174,8 @@ impl ParametersInfo for RsaPrivateParameters {
 }
 
 impl From<RsaPrivateParameters> for super::public_parameters::RsaPublicParameters {
-    fn from(params: RsaPrivateParameters) -> Self {
-        Self::new(params.n, params.e)
+    fn from(parameters: RsaPrivateParameters) -> Self {
+        Self::new(parameters.n, parameters.e)
     }
 }
 
@@ -261,8 +261,8 @@ impl ParametersInfo for EcPrivateParameters {
 }
 
 impl From<EcPrivateParameters> for super::public_parameters::EcPublicParameters {
-    fn from(params: EcPrivateParameters) -> Self {
-        Self::new(params.crv, params.x, params.y)
+    fn from(parameters: EcPrivateParameters) -> Self {
+        Self::new(parameters.crv, parameters.x, parameters.y)
     }
 }
 
@@ -354,8 +354,8 @@ impl ParametersInfo for OkpPrivateParameters {
 }
 
 impl From<OkpPrivateParameters> for super::public_parameters::OkpPublicParameters {
-    fn from(params: OkpPrivateParameters) -> Self {
-        Self::new(params.crv, params.x)
+    fn from(parameters: OkpPrivateParameters) -> Self {
+        Self::new(parameters.crv, parameters.x)
     }
 }
 
@@ -431,67 +431,67 @@ mod tests {
     #[test]
     fn p521_private_jwk_roundtrip() {
         let jwks = load_private_keys();
-        let params = jwks
+        let parameters = jwks
             .iter()
-            .find_map(|key| match key.params() {
-                JsonWebKeyPrivateParameters::Ec(params)
-                    if params.crv == JsonWebKeyEcEllipticCurve::P521 =>
+            .find_map(|key| match key.parameters() {
+                JsonWebKeyPrivateParameters::Ec(parameters)
+                    if parameters.crv == JsonWebKeyEcEllipticCurve::P521 =>
                 {
-                    Some(params.clone())
+                    Some(parameters.clone())
                 }
                 _ => None,
             })
             .unwrap();
 
-        let key: elliptic_curve::SecretKey<p521::NistP521> = (&params).try_into().unwrap();
+        let key: elliptic_curve::SecretKey<p521::NistP521> = (&parameters).try_into().unwrap();
 
-        assert_eq!(EcPrivateParameters::from(&key), params);
+        assert_eq!(EcPrivateParameters::from(&key), parameters);
         assert_eq!(
             EcPublicParameters::from(&key.public_key()),
-            params.clone().into()
+            parameters.clone().into()
         );
     }
 
     #[test]
     fn okp_private_and_public_jwk_roundtrip() {
         let jwks = load_private_keys();
-        let params = jwks
+        let parameters = jwks
             .iter()
-            .find_map(|key| match key.params() {
-                JsonWebKeyPrivateParameters::Okp(params)
-                    if params.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
+            .find_map(|key| match key.parameters() {
+                JsonWebKeyPrivateParameters::Okp(parameters)
+                    if parameters.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
                 {
-                    Some(params.clone())
+                    Some(parameters.clone())
                 }
                 _ => None,
             })
             .unwrap();
 
-        let key: SigningKey = (&params).try_into().unwrap();
+        let key: SigningKey = (&parameters).try_into().unwrap();
 
-        assert_eq!(OkpPrivateParameters::from(&key), params);
+        assert_eq!(OkpPrivateParameters::from(&key), parameters);
         assert_eq!(
             OkpPublicParameters::from(&key.verifying_key()),
-            params.clone().into()
+            parameters.clone().into()
         );
     }
 
     #[test]
     fn okp_private_jwk_rejects_mismatched_public_component() {
         let jwks = load_private_keys();
-        let params = jwks
+        let parameters = jwks
             .iter()
-            .find_map(|key| match key.params() {
-                JsonWebKeyPrivateParameters::Okp(params)
-                    if params.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
+            .find_map(|key| match key.parameters() {
+                JsonWebKeyPrivateParameters::Okp(parameters)
+                    if parameters.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
                 {
-                    Some(params.clone())
+                    Some(parameters.clone())
                 }
                 _ => None,
             })
             .unwrap();
 
-        let mut value = serde_json::to_value(&params).unwrap();
+        let mut value = serde_json::to_value(&parameters).unwrap();
         let mut x = value["x"].as_str().unwrap().to_owned();
         let replacement = if x.starts_with('A') { "B" } else { "A" };
         x.replace_range(..1, replacement);

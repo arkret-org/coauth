@@ -114,7 +114,7 @@ fn source_bucket(req: &Request) -> String {
 pub async fn provision_third_party_invite(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ThirdPartyInviteProvisionOutcome>, ArkretRouteError> {
+) -> Result<Json<ThirdPartyInviteProvisionResponseBody>, ArkretRouteError> {
     let runtime = provider(depot)?;
     let request: ThirdPartyInviteProvisionRequestBody =
         req.parse_json().await.map_err(|_| unavailable())?;
@@ -160,7 +160,7 @@ pub async fn provision_third_party_invite(
 pub async fn activate_third_party_invite(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ThirdPartyInviteActivationOutcome>, ArkretRouteError> {
+) -> Result<Json<ThirdPartyInviteActivationResponseBody>, ArkretRouteError> {
     let runtime = provider(depot)?;
     let request: ThirdPartyInviteActivationRequestBody =
         req.parse_json().await.map_err(|_| unavailable())?;
@@ -232,7 +232,7 @@ pub async fn activate_third_party_invite(
 pub async fn third_party_invite_status(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<ThirdPartyInviteProvisioningStatusOutcome>, ArkretRouteError> {
+) -> Result<Json<ThirdPartyInviteProvisioningStatusResponseBody>, ArkretRouteError> {
     let runtime = provider(depot)?;
     if req.uri().query().is_some() {
         return Err(unavailable());
@@ -294,7 +294,7 @@ async fn rate(
 async fn present(
     req: &mut Request,
     depot: &Depot,
-) -> Result<ThirdPartyInvitePresentOutcome, ArkretRouteError> {
+) -> Result<ThirdPartyInvitePresentResponseBody, ArkretRouteError> {
     let runtime = provider(depot)?;
     let request: ThirdPartyInvitePresentRequestBody =
         req.parse_json().await.map_err(|_| unavailable())?;
@@ -423,7 +423,7 @@ pub async fn present_third_party_invite(
 }
 
 pub(super) fn render_present_result(
-    result: Result<ThirdPartyInvitePresentOutcome, ArkretRouteError>,
+    result: Result<ThirdPartyInvitePresentResponseBody, ArkretRouteError>,
     res: &mut Response,
 ) -> Result<(), ArkretRouteError> {
     match result {

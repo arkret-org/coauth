@@ -66,8 +66,8 @@ fn requested_tags() -> Option<String> {
     {
         let window = web_sys::window()?;
         let search = window.location().search().ok()?;
-        let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
-        return params.get("ui_locales");
+        let parameters = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
+        return parameters.get("ui_locales");
     }
 
     #[cfg(not(target_arch = "wasm32"))]

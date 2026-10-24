@@ -129,16 +129,16 @@ pub(crate) fn client_credentials_for_provider(
         },
 
         provider::TokenAuthMethod::SignInWithApple => {
-            let params = client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?;
-            let params: SignInWithApple = serde_json::from_str(&params)?;
+            let parameters = client_secret.ok_or(ProviderCredentialsError::MissingClientSecret)?;
+            let parameters: SignInWithApple = serde_json::from_str(&parameters)?;
 
-            let key = elliptic_curve::SecretKey::from_pkcs8_pem(&params.private_key)?;
+            let key = elliptic_curve::SecretKey::from_pkcs8_pem(&parameters.private_key)?;
 
             ClientCredentials::SignInWithApple {
                 client_id,
                 key,
-                key_id: params.key_id,
-                team_id: params.team_id,
+                key_id: parameters.key_id,
+                team_id: parameters.team_id,
             }
         }
 

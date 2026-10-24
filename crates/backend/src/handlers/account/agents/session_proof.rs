@@ -76,7 +76,7 @@ pub async fn fetch_agent_participation_overlay(
         arkret_wire::AccountId::new(agent.clone(), station_id.clone()),
         arkret_wire::AccountId::new(controller.clone(), station_id),
     );
-    let outcome: arkret_models_collaboration::governance::agent_participation::AgentParticipationOutcome = channel
+    let outcome: arkret_models_collaboration::governance::agent_participation::AgentParticipationResponseBody = channel
         .post_private_json("private_agent_participation_read", "/_coland/account-authority/agent-participation/read", &accounts, None)
         .await.map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
     let mut scopes = BTreeSet::new();
@@ -124,7 +124,7 @@ pub struct AgentSessionAuthorization {
     /// Materialized `scope_details` overlay baked into the session-grant JWT
     /// payload (canonical resource constraints + optional participation
     /// entries). This is the JWT-internal shape coland enforces against; it is
-    /// not an unsigned field in the `SessionGrantOutcome` wire DTO.
+    /// not an unsigned field in the `SessionGrantResponseBody` wire DTO.
     pub scope_details: serde_json::Map<String, serde_json::Value>,
     /// Capped agent session TTL (≤ 15 min).
     pub ttl: chrono::Duration,
@@ -143,7 +143,7 @@ pub async fn validate_agent_session_refresh_proof<R>(
     arkret_config: &ArkretConfig,
     prior_claims: &arkret_models_identity::SignedSessionGrantClaims,
     prior_grant_jwt: &str,
-    request: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRefreshRequest,
+    request: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRefreshRequestBody,
     proof: &arkret_models_collaboration::session_grant_bodies::AgentSessionRefreshProof,
 ) -> Result<coauth_data::agent_key::AgentKeyAuthorization, AgentSessionProofError>
 where
@@ -276,7 +276,7 @@ pub enum AgentSessionProofError {
     /// Canonical fail-closed rejection (proof_invalid / agent_paused / …).
     Rejection(AgentAuthRejection),
     /// `claim_required` / `human_approval_required` structured error.
-    HumanApprovalRequired(arkret_wire::AgentHumanApprovalProblem),
+    HumanApprovalRequired(arkret_wire::AgentHumanApprovalProblemExtensions),
 }
 
 impl From<AgentAuthRejection> for AgentSessionProofError {
@@ -327,7 +327,7 @@ pub async fn validate_agent_session_proof(
     arkret_config: &ArkretConfig,
     encrypter: &coauth_keyring::Encrypter,
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
-    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
     consume_challenge: bool,
     http_client: &reqwest::Client,
 ) -> Result<AgentSessionAuthorization, AgentSessionProofError> {
@@ -546,8 +546,9 @@ pub async fn validate_agent_session_proof(
                 // a new approval request attached to that reserved operation.
                 return Err(AgentAuthRejection::CapabilityDenied.into());
             }
-            let details = arkret_wire::AgentHumanApprovalProblem::new(new_prefixed_uuid7(""))
-                .map_err(|_| AgentAuthRejection::ProofInvalid)?;
+            let details =
+                arkret_wire::AgentHumanApprovalProblemExtensions::new(new_prefixed_uuid7(""))
+                    .map_err(|_| AgentAuthRejection::ProofInvalid)?;
             return Err(AgentSessionProofError::HumanApprovalRequired(details));
         }
         qualify_station_content_scope(outcome, &source_request)?
@@ -599,7 +600,7 @@ pub async fn validate_agent_session_proof(
 }
 
 fn canonical_session_grant_request_digest_without_signature(
-    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequest,
+    body: &arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody,
 ) -> Result<String, AgentAuthRejection> {
     body.canonical_request_digest()
         .map(|digest| digest.to_string())
@@ -1171,7 +1172,7 @@ async fn station_content_authority(
     config: &ArkretConfig,
     view: &arkret_models_collaboration::agent_operations::AgentView,
     requested_scope: &[String],
-    resource_scope: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+    resource_scope: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
     intent_digest: arkret_identifiers::Hash,
     approval_evidence_refs: &[arkret_identifiers::EventId],
 ) -> Result<
@@ -1251,7 +1252,7 @@ async fn station_content_scope(
     config: &ArkretConfig,
     view: &arkret_models_collaboration::agent_operations::AgentView,
     requested_scope: &[String],
-    resource_scope: arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest,
+    resource_scope: arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope,
     intent_digest: arkret_identifiers::Hash,
 ) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
     let (request, outcome) = station_content_authority(
@@ -1325,7 +1326,7 @@ pub(crate) async fn revalidate_content_session_scope(
     details: &serde_json::Map<String, Value>,
     intent_digest: arkret_identifiers::Hash,
 ) -> Result<(), AgentAuthRejection> {
-    let resources:arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest=
+    let resources:arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope=
         serde_json::from_value(serde_json::json!({
             "realm_ids":details.get("realm_ids").ok_or(AgentAuthRejection::ProofInvalid)?,
             "strand_ids":details.get("strand_ids").ok_or(AgentAuthRejection::ProofInvalid)?,
@@ -2192,7 +2193,7 @@ mod tests {
                     "presence": {
                         "state": "unknown",
                         "expires_at": "2099-01-01T00:00:00.000Z",
-                        "refresh_after": "2098-12-31T23:59:00.000Z"
+                        "refresh_at": "2098-12-31T23:59:00.000Z"
                     }
                 },
                 "key_state": {
@@ -3076,7 +3077,7 @@ mod tests {
 
     #[test]
     fn session_request_digest_ignores_signature_but_binds_scope() {
-        let mut body = arkret_models_collaboration::session_grants::AgentSessionGrantRequest {
+        let mut body = arkret_models_collaboration::session_grants::AgentSessionGrantRequestBody {
             principal_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example")
                 .unwrap(),
             requested_scope: vec!["ak.message.create".to_owned()],
@@ -3087,7 +3088,7 @@ mod tests {
             )
             .unwrap(),
             agent_scope_request:
-                arkret_models_collaboration::session_grants::SessionGrantAgentScopeRequest {
+                arkret_models_collaboration::session_grants::RequestedAgentSessionGrantScope {
                     realm_ids: vec![
                         arkret_identifiers::RealmId::new(
                             "ak:realm:AR5_BcY29XYrMbX0Y8Qiz4KDnt-NvwrXmij2C3-4UD2c",
@@ -3113,7 +3114,7 @@ mod tests {
                     .unwrap(),
                 issued_at: "2026-09-09T00:00:00.000Z".parse().unwrap(),
                 expires_at: "2026-09-09T00:05:00.000Z".parse().unwrap(),
-                signature: "sig-a".to_owned(),
+                signature: "signature-a".to_owned(),
                 verification_method:
                     arkret_wire::DidUrl::new("did:web:agent.example#runtime-key-1").unwrap(),
             },
@@ -3124,7 +3125,7 @@ mod tests {
             arkret_identifiers::Hash::new(digest.clone()).unwrap();
 
         let mut signature_changed = body.clone();
-        signature_changed.proof.signature = "sig-b".to_owned();
+        signature_changed.proof.signature = "signature-b".to_owned();
         assert_eq!(
             canonical_session_grant_request_digest_without_signature(&signature_changed).unwrap(),
             digest

@@ -164,7 +164,7 @@ open_enum! {
     /// Source: <https://www.iana.org/assignments/jose/web-key-use.csv>
     pub enum JsonWebKeyUse {
         /// Digital Signature or MAC
-        Sig => "sig",
+        Sig => "signature",
         /// Encryption
         Enc => "enc",
     }

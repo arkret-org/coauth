@@ -624,12 +624,12 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOrMany<T> {
                 Ok(OneOrMany(vec![val]))
             }
 
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            fn visit_seq<A>(self, mut sequence: A) -> Result<Self::Value, A::Error>
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                let mut items = Vec::with_capacity(seq.size_hint().unwrap_or(1));
-                while let Some(elem) = seq.next_element()? {
+                let mut items = Vec::with_capacity(sequence.size_hint().unwrap_or(1));
+                while let Some(elem) = sequence.next_element()? {
                     items.push(elem);
                 }
                 Ok(OneOrMany(items))

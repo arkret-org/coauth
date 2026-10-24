@@ -21,8 +21,8 @@ fn session_storage() -> Option<web_sys::Storage> {
 pub(crate) fn current() -> Option<PostAuthAction> {
     let window = web_sys::window()?;
     let query = window.location().search().ok()?;
-    let params = web_sys::UrlSearchParams::new_with_str(&query).ok()?;
-    from_parts(&params.get("kind")?, &params.get("id")?)
+    let parameters = web_sys::UrlSearchParams::new_with_str(&query).ok()?;
+    from_parts(&parameters.get("kind")?, &parameters.get("id")?)
 }
 
 #[cfg(not(target_arch = "wasm32"))]

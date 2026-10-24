@@ -50,7 +50,7 @@ reg=$(http POST "$registration_ep" \
   -d '{
     "client_name": "coauth-device-grant-test",
     "client_uri": "https://github.com/arkret-org/coauth",
-    "grant_types": ["urn:ietf:params:oauth:grant-type:device_code", "refresh_token"],
+    "grant_types": ["urn:ietf:parameters:oauth:grant-type:device_code", "refresh_token"],
     "application_type": "native",
     "token_endpoint_auth_method": "none"
   }')
@@ -96,7 +96,7 @@ fi
 echo "==> Waiting for user authorization..."
 while true; do
   resp=$(http POST "$token_ep" \
-    --data-urlencode "grant_type=urn:ietf:params:oauth:grant-type:device_code" \
+    --data-urlencode "grant_type=urn:ietf:parameters:oauth:grant-type:device_code" \
     --data-urlencode "device_code=${device_code}" \
     --data-urlencode "client_id=${client_id}" 2>/dev/null || true)
 

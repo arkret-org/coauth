@@ -1,7 +1,8 @@
 use arkret_identifiers::{DeviceId, DidCoreId};
 use arkret_models_collaboration::session_grants::{
     SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND, SessionGrantHolderProof, SessionGrantHolderProofClaims,
-    SessionGrantValidationInput, SessionGrantValidationMetadata, SessionGrantValidationOutcome,
+    SessionGrantValidationInput, SessionGrantValidationMetadata,
+    SessionGrantValidationResponseBody,
 };
 use arkret_models_identity::SessionGrantAdminIntrospectionStatus;
 use chrono::{DateTime, Duration, Utc};
@@ -180,7 +181,7 @@ fn verify_session_grant_introspection_proof(
 pub async fn introspect_session_grant(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<SessionGrantValidationOutcome>, ArkretRouteError> {
+) -> Result<Json<SessionGrantValidationResponseBody>, ArkretRouteError> {
     // `json_invalid` (400) means the bytes are not JSON; a body that parses but
     // breaks the request contract — such as carrying both selectors, or
     // neither — is `schema_violation` (422). Deserializing straight into the
@@ -223,7 +224,7 @@ pub async fn introspect_session_grant(
 
     let Some(grant) = grant else {
         repo.cancel().await?;
-        return Ok(Json(SessionGrantValidationOutcome {
+        return Ok(Json(SessionGrantValidationResponseBody {
             active: false,
             status: SessionGrantAdminIntrospectionStatus::NotFound,
             proof_required: false,
@@ -242,7 +243,7 @@ pub async fn introspect_session_grant(
             .any(|audience_id| audience_id == grant.audience_id.as_str())
     {
         repo.cancel().await?;
-        return Ok(Json(SessionGrantValidationOutcome {
+        return Ok(Json(SessionGrantValidationResponseBody {
             active: false,
             status: SessionGrantAdminIntrospectionStatus::AudienceMismatch,
             proof_required: false,
@@ -403,7 +404,7 @@ pub async fn introspect_session_grant(
     // Station exchange and silently broke the refresh chain.
     repo.cancel().await?;
 
-    Ok(Json(SessionGrantValidationOutcome {
+    Ok(Json(SessionGrantValidationResponseBody {
         active,
         status,
         proof_required,

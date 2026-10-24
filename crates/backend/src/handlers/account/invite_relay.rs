@@ -159,7 +159,7 @@ pub async fn post_invite_relay(
     depot: &Depot,
     res: &mut Response,
 ) -> Result<(), RouteError> {
-    let params: InviteRelayRequestBody = req
+    let parameters: InviteRelayRequestBody = req
         .parse_json()
         .await
         .map_err(|_| RouteError::BadRequest("invalid_request_body".into()))?;
@@ -189,8 +189,8 @@ pub async fn post_invite_relay(
         let caller_id = arkret::published_principal_id_for_user(&mut repo, &arkret_config, user)
             .await?
             .ok_or(RouteError::Unauthorized)?;
-        if caller_id != params.inviter_id
-            || params
+        if caller_id != parameters.inviter_id
+            || parameters
                 .invite_delivery
                 .invite_event
                 .actor_id
@@ -204,9 +204,9 @@ pub async fn post_invite_relay(
     repo.cancel().await?;
 
     let principal_url = invite_delivery_target(
-        &params.invite_delivery,
-        &params.target_holder_principal_id,
-        params.target_principal_url.as_ref(),
+        &parameters.invite_delivery,
+        &parameters.target_holder_principal_id,
+        parameters.target_principal_url.as_ref(),
         &arkret_config,
         station_trust::shared(),
     )?;
@@ -231,7 +231,7 @@ pub async fn post_invite_relay(
         &arkret_config,
     ))
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    let destination_id = params
+    let destination_id = parameters
         .invite_delivery
         .invite_address
         .account_id
@@ -251,7 +251,7 @@ pub async fn post_invite_relay(
         trust_domain,
     )
     .map_err(|error| RouteError::Internal(Box::new(error)))?;
-    let body = relay_invite_with(&peer_client, &params.invite_delivery).await;
+    let body = relay_invite_with(&peer_client, &parameters.invite_delivery).await;
     res.status_code(StatusCode::OK);
     res.render(Json(body));
     Ok(())
@@ -374,7 +374,7 @@ mod tests {
                 device_id: device,
                 verification_method: vm,
                 key: arkret_models_identity::ResolvedSignerKey {
-                    public_key_b64u: arkret_wire::Base64UrlString::new(
+                    public_key_base64url: arkret_wire::Base64UrlString::new(
                         arkret_canonical::base64url_encode(
                             crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&device_seed)
                                 .verifying_key()
@@ -426,7 +426,7 @@ mod tests {
                 created_at: chrono::DateTime::parse_from_rfc3339("2026-09-20T00:00:00.000Z")
                     .unwrap()
                     .with_timezone(&chrono::Utc),
-                sig: arkret_wire::Base64UrlString::new("c2lnbmF0dXJl".to_owned()).unwrap(),
+                signature: arkret_wire::Base64UrlString::new("c2lnbmF0dXJl".to_owned()).unwrap(),
             },
         };
         let identity = arkret_canonical::canonical::unsigned_value(

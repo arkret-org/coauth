@@ -14,7 +14,7 @@ use serde::{Deserialize, Deserializer};
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::{Resource, UserRegistrationToken, to_user_registration_token};
-use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::parameters::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
@@ -185,25 +185,25 @@ pub async fn list_tokens(
         mut repo, clock, ..
     } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req
+    let parameters: FilterParams = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
-    let base_url = format!("{path}{params}", path = UserRegistrationToken::PATH);
+    let base_url = format!("{path}{parameters}", path = UserRegistrationToken::PATH);
     let base_url = include_count.add_to_base(&base_url);
     let now = clock.now();
     let mut filter = UserRegistrationTokenFilter::new(now);
 
-    if let Some(val) = params.used {
+    if let Some(val) = parameters.used {
         filter = filter.with_been_used(val);
     }
-    if let Some(val) = params.revoked {
+    if let Some(val) = parameters.revoked {
         filter = filter.with_revoked(val);
     }
-    if let Some(val) = params.expired {
+    if let Some(val) = parameters.expired {
         filter = filter.with_expired(val);
     }
-    if let Some(val) = params.valid {
+    if let Some(val) = parameters.valid {
         filter = filter.with_valid(val);
     }
 

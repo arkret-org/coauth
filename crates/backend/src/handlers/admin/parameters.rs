@@ -108,7 +108,7 @@ impl Scribe for PaginationRejection {
 pub fn extract_pagination(
     req: &mut Request,
 ) -> Result<(coauth_data::Pagination, IncludeCount), PaginationRejection> {
-    let params: PaginationParams = req.parse_queries().unwrap_or(PaginationParams {
+    let parameters: PaginationParams = req.parse_queries().unwrap_or(PaginationParams {
         before: None,
         after: None,
         first: None,
@@ -117,7 +117,7 @@ pub fn extract_pagination(
     });
 
     // Figure out the direction and the count out of the first and last parameters
-    let (direction, count) = match (params.first, params.last) {
+    let (direction, count) = match (parameters.first, parameters.last) {
         // Make sure we don't specify both first and last
         (Some(_), Some(_)) => return Err(PaginationRejection::FirstAndLast),
 
@@ -130,11 +130,11 @@ pub fn extract_pagination(
 
     Ok((
         coauth_data::Pagination {
-            before: params.before,
-            after: params.after,
+            before: parameters.before,
+            after: parameters.after,
             direction,
             count,
         },
-        params.include_count.unwrap_or_default(),
+        parameters.include_count.unwrap_or_default(),
     ))
 }

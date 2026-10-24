@@ -2,8 +2,8 @@
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use arkret_models_identity::agent_signer_evidence::{
     AgentDetachedJws, ControllerAccountEligibility, ControllerAccountGateAttestation,
-    ControllerAccountGateBasis, ControllerAccountGateIssuanceInput,
-    ControllerAccountGateIssuanceOutcome, ControllerAccountStatus,
+    ControllerAccountGateAttestationIssueResponseBody, ControllerAccountGateBasis,
+    ControllerAccountGateIssuanceInput, ControllerAccountStatus,
 };
 use arkret_wire::{DidUrl, NonEmptyString};
 use chrono::{Duration, Timelike as _};
@@ -137,10 +137,9 @@ pub async fn issue_controller_gate_attestation(
     {
         return Err(not_found());
     }
-    let basis = if current
-        .as_ref()
-        .is_none_or(|head| head.status_seq == 1 && head.previous_account_status_record_id.is_none())
-    {
+    let basis = if current.as_ref().is_none_or(|head| {
+        head.status_sequence == 1 && head.previous_account_status_record_id.is_none()
+    }) {
         default_basis_for_locked_head(
             binding.binding_version,
             binding.binding_receipt_digest.clone(),
@@ -223,7 +222,7 @@ pub async fn issue_controller_gate_attestation(
     };
     let sdk_signing_key = sdk_signing_key_from_seed_bytes(&signing_seed);
     sign_controller_gate_with_sdk(&mut attestation, &sdk_signing_key)?;
-    let outcome = ControllerAccountGateIssuanceOutcome {
+    let outcome = ControllerAccountGateAttestationIssueResponseBody {
         request_id: request.request_id.clone(),
         controller_account_gate_attestation: attestation,
     };
@@ -268,7 +267,7 @@ fn default_basis_for_locked_head(
     current: Option<&arkret_models_collaboration::account_status::AccountStatusRecord>,
 ) -> Result<ControllerAccountGateBasis, ArkretRouteError> {
     let is_initial = current.is_none_or(|head| {
-        head.status_seq == 1
+        head.status_sequence == 1
             && head.previous_account_status_record_id.is_none()
             && head.status == AccountStatus::Active
             && head.account_id == *account
@@ -468,7 +467,7 @@ mod tests {
             arkret_canonical::DigestSuite::Sha256,
             [0x61; 32],
         ));
-        let sign = |status, seq, previous| -> AccountStatusRecord {
+        let sign = |status, sequence, previous| -> AccountStatusRecord {
             arkret_signatures::account_status::sign_account_status_record(
                 UnsignedAccountStatusRecord {
                     schema: arkret_wire::SchemaId::ACCOUNT_STATUS_RECORD_V1.to_owned(),
@@ -476,7 +475,7 @@ mod tests {
                     account_id: account.clone(),
                     principal_control_realm_id: pcr.clone(),
                     binding_version: 7,
-                    status_seq: seq,
+                    status_sequence: sequence,
                     previous_account_status_record_id: previous,
                     status,
                     reason_code: None,
@@ -640,7 +639,7 @@ mod controller_gate_http_regression {
         let first = state.request(request(&original_request, TOKEN)).await;
         assert_eq!(first.status(), StatusCode::OK);
         let original_bytes = first.body().clone();
-        let accepted: ControllerAccountGateIssuanceOutcome =
+        let accepted: ControllerAccountGateAttestationIssueResponseBody =
             serde_json::from_str(&original_bytes).unwrap();
         assert_eq!(accepted.request_id, original_request.request_id);
         assert!(matches!(
@@ -708,7 +707,7 @@ mod controller_gate_http_regression {
         let successor = state.request(request(&fresh_request, TOKEN)).await;
         assert_eq!(successor.status(), StatusCode::OK);
         let accepted_successor_bytes = successor.body().clone();
-        let successor: ControllerAccountGateIssuanceOutcome =
+        let successor: ControllerAccountGateAttestationIssueResponseBody =
             serde_json::from_str(successor.body()).unwrap();
         assert!(matches!(
             &successor.controller_account_gate_attestation.basis,
@@ -722,7 +721,7 @@ mod controller_gate_http_regression {
         // upgraded by today's resolver or by possession of the signing key.
         use diesel_async::RunQueryDsl as _;
         let mut missing_source_conn = pool.get().await.unwrap();
-        diesel::sql_query("UPDATE account_status_records SET issuer_source=NULL WHERE account_authority_id=$1 AND local_account_id=$2 AND status_seq=2")
+        diesel::sql_query("UPDATE account_status_records SET issuer_source=NULL WHERE account_authority_id=$1 AND local_account_id=$2 AND status_sequence=2")
             .bind::<diesel::sql_types::Text,_>(authority.as_str())
             .bind::<diesel::sql_types::Text,_>(user.id.to_string())
             .execute(&mut missing_source_conn).await.unwrap();
@@ -894,7 +893,7 @@ mod controller_gate_http_regression {
             };
             let response = state.request(request(&input)).await;
             assert_eq!(response.status(), StatusCode::OK);
-            let outcome: ControllerAccountGateIssuanceOutcome =
+            let outcome: ControllerAccountGateAttestationIssueResponseBody =
                 serde_json::from_str(response.body()).unwrap();
             assert_eq!(
                 serde_json::to_value(outcome.controller_account_gate_attestation.status).unwrap(),

@@ -65,7 +65,7 @@ Coauth is an internal Account Authority process of the owning Station. Its
 signing credential is deployment-private: it is not an Arkret service kind, is
 not entered in public service registration, and is not exposed through a
 role-local Describe or peer discovery. Clients discover only the owning
-Station's `auth_metadata.account_authority` URL.
+Station's `authentication_metadata.account_authority` URL.
 
 The signer and any process-local identifier are implementation details. They
 must not be entered into public service registration, advertised as a service
@@ -117,5 +117,5 @@ endpoints as deployment-local product surface and never exposes them on its
 
 coauth publishes only its standard OpenID Provider discovery document at
 `/.well-known/openid-configuration`. The owning Station publishes the Arkret
-Describe document and its `auth_metadata.account_authority` entry; coauth does
+Describe document and its `authentication_metadata.account_authority` entry; coauth does
 not expose a role-local `/_arkret/describe` endpoint.

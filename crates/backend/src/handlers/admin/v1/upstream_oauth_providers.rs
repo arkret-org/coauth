@@ -18,7 +18,7 @@ use url::Url;
 
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::{Resource, UpstreamOAuthProvider, to_upstream_oauth_provider};
-use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::parameters::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
@@ -80,16 +80,16 @@ pub async fn list_providers(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req
+    let parameters: FilterParams = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
-    let base_url = format!("{path}{params}", path = UpstreamOAuthProvider::PATH);
+    let base_url = format!("{path}{parameters}", path = UpstreamOAuthProvider::PATH);
     let base_url = include_count.add_to_base(&base_url);
     let mut filter = UpstreamOAuthProviderFilter::new();
 
     // Apply the enabled/disabled constraint when requested
-    filter = match params.enabled {
+    filter = match parameters.enabled {
         Some(true) => filter.enabled_only(),
         Some(false) => filter.disabled_only(),
         None => filter,
@@ -289,11 +289,11 @@ pub async fn add_provider(
     let mut rng = crate::handlers::account::make_rng();
     let body: ProviderRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
-    let params = parse_request(body, &encrypter, provider::ProviderSource::Manual)?;
+    let parameters = parse_request(body, &encrypter, provider::ProviderSource::Manual)?;
 
     let provider = repo
         .upstream_oauth_provider()
-        .add(&mut rng, &clock, params)
+        .add(&mut rng, &clock, parameters)
         .await?;
 
     crate::handlers::admin::audit_helper::record_admin_operation(
@@ -352,11 +352,11 @@ pub async fn update_provider(
         ));
     }
 
-    let params = parse_request(body, &encrypter, provider::ProviderSource::Manual)?;
+    let parameters = parse_request(body, &encrypter, provider::ProviderSource::Manual)?;
 
     let provider = repo
         .upstream_oauth_provider()
-        .upsert(&clock, id, params)
+        .upsert(&clock, id, parameters)
         .await?;
 
     crate::handlers::admin::audit_helper::record_admin_operation(
@@ -538,7 +538,7 @@ mod tests {
     async fn create_test_provider(state: &mut TestState) -> UpstreamOAuthProvider {
         let mut repo = state.repository().await.unwrap();
 
-        let params = UpstreamOAuthProviderParams {
+        let parameters = UpstreamOAuthProviderParams {
             oidc_issuer_uri: Some("https://accounts.google.com".to_owned()),
             human_name: Some("Google".to_owned()),
             brand_name: Some("google".to_owned()),
@@ -567,7 +567,7 @@ mod tests {
 
         let provider = repo
             .upstream_oauth_provider()
-            .add(&mut state.rng(), &state.clock, params)
+            .add(&mut state.rng(), &state.clock, parameters)
             .await
             .unwrap();
 

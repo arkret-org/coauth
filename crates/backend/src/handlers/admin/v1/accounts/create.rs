@@ -59,36 +59,36 @@ pub async fn add_account(
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
     let station = depot.station()?;
-    let params: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
+    let parameters: AddRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     // Validate the handle before any repository lookup: the existence query
     // normalizes the localpart through the SDK PRECIS profile, so an invalid
     // handle reaches it as a repository error and escapes as a 500 instead of
     // the 400 this endpoint owes the caller.
-    if !handle_valid(&params.handle) {
+    if !handle_valid(&parameters.handle) {
         return Err(AppError::bad_request("Username is not valid"));
     }
 
-    if repo.user().exists(&params.handle).await? {
+    if repo.user().exists(&parameters.handle).await? {
         return Err(AppError::conflict("User already exists"));
     }
 
     // Ask the Station if the username is available
     let station_available = station
-        .is_handle_available(&params.handle)
+        .is_handle_available(&parameters.handle)
         .await
         .map_err(|error| AppError::internal(std::io::Error::other(error.to_string())))?;
 
     if !station_available {
-        if !params.skip_station_check {
+        if !parameters.skip_station_check {
             return Err(AppError::conflict("Username is reserved by the Station"));
         }
 
         // If we skipped the check, we still want to shout about it
-        warn!("Skipped Station check for username {}", params.handle);
+        warn!("Skipped Station check for username {}", parameters.handle);
     }
 
-    let user = repo.user().add(&mut rng, &clock, params.handle).await?;
+    let user = repo.user().add(&mut rng, &clock, parameters.handle).await?;
 
     // Admin creation persists only the service account. Principal identity
     // onboarding remains a separate client-signed flow.
@@ -268,22 +268,22 @@ pub async fn mint_registration_tokens(
     repo: &mut BoxRepository,
     clock: &BoxClock,
     rng: &mut coauth_data::BoxRng,
-    params: &MintRegistrationTokensParams,
+    parameters: &MintRegistrationTokensParams,
     admin_user_id: Option<ulid::Ulid>,
 ) -> Result<Vec<SingleOutcome<UserRegistrationToken>>, AppError> {
-    params.validate()?;
+    parameters.validate()?;
 
-    let expires_at = params
+    let expires_at = parameters
         .expires_in_hours
         .and_then(|h| Duration::try_hours(h as i64))
         .map(|d| clock.now() + d);
 
-    let mut tokens = Vec::with_capacity(params.count as usize);
-    for _ in 0..params.count {
+    let mut tokens = Vec::with_capacity(parameters.count as usize);
+    for _ in 0..parameters.count {
         let token_string = Alphanumeric.sample_string(&mut rand::thread_rng(), 12);
         let registration_token = repo
             .user_registration_token()
-            .add(rng, clock, token_string, params.usage_limit, expires_at)
+            .add(rng, clock, token_string, parameters.usage_limit, expires_at)
             .await?;
 
         if let Some(admin_id) = admin_user_id {
@@ -325,12 +325,12 @@ pub async fn batch_invite(
         ..
     } = call_context;
     let mut rng = crate::handlers::account::make_rng();
-    let params: BatchInviteRequestBody = req.parse_json().await.map_err(AppError::internal)?;
+    let parameters: BatchInviteRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     let mint_params = MintRegistrationTokensParams {
-        count: params.count,
-        usage_limit: params.usage_limit,
-        expires_in_hours: params.expires_in_hours,
+        count: parameters.count,
+        usage_limit: parameters.usage_limit,
+        expires_in_hours: parameters.expires_in_hours,
     };
     mint_params.validate()?;
 
@@ -339,10 +339,13 @@ pub async fn batch_invite(
     // handler only saves review parameters or mints registration tokens.
     let arkret_config = depot.arkret_config()?;
     let http_client = depot.http_client()?;
-    let gate_outcome =
-        evaluate_batch_invite_gate(params.consent_gate.as_ref(), &arkret_config, &http_client)
-            .await;
-    let request_reference_for_log = params
+    let gate_outcome = evaluate_batch_invite_gate(
+        parameters.consent_gate.as_ref(),
+        &arkret_config,
+        &http_client,
+    )
+    .await;
+    let request_reference_for_log = parameters
         .consent_gate
         .as_ref()
         .map(|g| g.request_reference.clone())
@@ -361,12 +364,12 @@ pub async fn batch_invite(
             // This queue is local management state, not holder Consent or the
             // holder Station's private invite quarantine. No tokens are minted
             // by this request; the admin review API exposes the queued row.
-            let admin_invite_review_id = if let Some(gate) = params.consent_gate.as_ref() {
+            let admin_invite_review_id = if let Some(gate) = parameters.consent_gate.as_ref() {
                 let queue = depot.admin_invite_review_service()?;
                 let payload = serde_json::json!({
-                    "count": params.count,
-                    "usage_limit": params.usage_limit,
-                    "expires_in_hours": params.expires_in_hours,
+                    "count": parameters.count,
+                    "usage_limit": parameters.usage_limit,
+                    "expires_in_hours": parameters.expires_in_hours,
                 });
                 let enqueue_result = queue
                     .enqueue(EnqueueAdminInviteReview {

@@ -1,6 +1,6 @@
 use arkret_models_collaboration::session_grants::{
-    AuthSessionTerminationOutcome, SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND,
-    SessionGrantHolderProofClaims, SessionGrantValidationOutcome,
+    AuthenticationSessionTerminationResponseBody, SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND,
+    SessionGrantHolderProofClaims, SessionGrantValidationResponseBody,
 };
 use arkret_models_identity::{
     SessionGrantAdminIntrospectionStatus, SessionGrantCredentialClass, SessionGrantHolderBinding,
@@ -38,7 +38,7 @@ use crate::services::station_trust::{owning_station_id_for, required_audience_fo
 #[salvo::handler]
 async fn human_approval_error_fixture() -> Result<(), ArkretRouteError> {
     Err(ArkretRouteError::HumanApprovalRequired(
-        arkret_wire::AgentHumanApprovalProblem::new("approval-opaque-01").unwrap(),
+        arkret_wire::AgentHumanApprovalProblemExtensions::new("approval-opaque-01").unwrap(),
     ))
 }
 
@@ -1014,9 +1014,9 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
         )
         .await;
     response.assert_status(StatusCode::OK);
-    let outcome: AuthSessionTerminationOutcome = response.json();
+    let outcome: AuthenticationSessionTerminationResponseBody = response.json();
     assert!(outcome.grant_chain_terminated);
-    assert!(outcome.auth_session_logged_out);
+    assert!(outcome.authentication_session_logged_out);
 
     let (first_revoked_at, first_finished_at) = {
         let mut repo = state.repository().await.unwrap();
@@ -1069,9 +1069,9 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
         )
         .await;
     response.assert_status(StatusCode::OK);
-    let replay: AuthSessionTerminationOutcome = response.json();
+    let replay: AuthenticationSessionTerminationResponseBody = response.json();
     assert!(replay.grant_chain_terminated);
-    assert!(replay.auth_session_logged_out);
+    assert!(replay.authentication_session_logged_out);
 
     let mut repo = state.repository().await.unwrap();
     let replayed_grant = repo
@@ -1295,7 +1295,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
     assert!(body["grant"].get("grant_jwt").is_none());
     assert!(body["grant"].get("scope_details").is_none());
-    let human_roundtrip: SessionGrantValidationOutcome =
+    let human_roundtrip: SessionGrantValidationResponseBody =
         serde_json::from_value(body.clone()).expect("closed human introspection metadata");
     assert!(
         human_roundtrip
@@ -1307,7 +1307,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     );
     let mut invalid_human = body.clone();
     invalid_human["grant"]["scope_details"] = serde_json::json!({});
-    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(invalid_human).is_err());
+    assert!(serde_json::from_value::<SessionGrantValidationResponseBody>(invalid_human).is_err());
     // Server-to-server introspection MUST expose session_public_key so the
     // Station can verify RFC 9421 PoP presentations (SPEC-CR-001).
     assert_eq!(
@@ -1569,7 +1569,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
                 "presence": {
                     "state": "unknown",
                     "expires_at": "2099-01-01T00:00:00.000Z",
-                    "refresh_after": "2098-12-31T23:59:00.000Z"
+                    "refresh_at": "2098-12-31T23:59:00.000Z"
                 }
             },
             "key_state": {
@@ -1823,7 +1823,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
         serde_json::from_str::<serde_json::Value>(&session_public_key).unwrap()
     );
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
-    let roundtrip: SessionGrantValidationOutcome = serde_json::from_value(body.clone())
+    let roundtrip: SessionGrantValidationResponseBody = serde_json::from_value(body.clone())
         .expect("agent introspection response must satisfy the shared closed wire model");
     assert_eq!(
         roundtrip.grant.as_ref().unwrap().scope_details.as_ref(),
@@ -1833,7 +1833,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
     let singular_scope = singular["grant"]["scope_details"].as_object_mut().unwrap();
     let entries = singular_scope.remove("participations").unwrap();
     singular_scope.insert("participation".to_owned(), entries);
-    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(singular).is_err());
+    assert!(serde_json::from_value::<SessionGrantValidationResponseBody>(singular).is_err());
     let encoded = serde_json::to_value(&roundtrip).unwrap();
     assert_eq!(
         encoded["grant"]["scope_details"],
@@ -1855,32 +1855,36 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
                 .remove(missing);
         }
         assert!(
-            serde_json::from_value::<SessionGrantValidationOutcome>(invalid).is_err(),
+            serde_json::from_value::<SessionGrantValidationResponseBody>(invalid).is_err(),
             "Agent introspection must reject missing {missing}"
         );
     }
     let mut invalid = body.clone();
     invalid["grant"]["scope_details"]["resources"]["unregistered_resource"] =
         serde_json::json!(true);
-    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(invalid).is_err());
+    assert!(serde_json::from_value::<SessionGrantValidationResponseBody>(invalid).is_err());
     let mut legacy_resources = body.clone();
     let resources = legacy_resources["grant"]["scope_details"]["resources"]
         .as_object_mut()
         .unwrap();
     let realms = resources.remove("realm_ids").unwrap();
     resources.insert("realm_refs".to_owned(), realms);
-    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(legacy_resources).is_err());
+    assert!(
+        serde_json::from_value::<SessionGrantValidationResponseBody>(legacy_resources).is_err()
+    );
     let mut legacy_constraints = body.clone();
     let constraints = legacy_constraints["grant"]["scope_details"]["constraints"]
         .as_object_mut()
         .unwrap();
     let labels = constraints.remove("allowed_data_labels").unwrap();
     constraints.insert("allowed_data_classes".to_owned(), labels);
-    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(legacy_constraints).is_err());
+    assert!(
+        serde_json::from_value::<SessionGrantValidationResponseBody>(legacy_constraints).is_err()
+    );
     let mut invalid = body;
     invalid["grant"]["scope_details"]["constraints"]["unregistered_constraint"] =
         serde_json::json!(true);
-    assert!(serde_json::from_value::<SessionGrantValidationOutcome>(invalid).is_err());
+    assert!(serde_json::from_value::<SessionGrantValidationResponseBody>(invalid).is_err());
 }
 
 /// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing

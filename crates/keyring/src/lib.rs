@@ -182,9 +182,9 @@ fn parse_pkcs8_key_info(info: PrivateKeyInfo) -> Result<PrivateKey, LoadError> {
 
 /// Helper: decode a SEC1-encoded EC private key into the correct curve variant.
 fn parse_sec1_ec_key(ec_key: sec1::EcPrivateKey) -> Result<PrivateKey, LoadError> {
-    let params = ec_key.parameters.ok_or(LoadError::MissingSec1Parameters)?;
+    let parameters = ec_key.parameters.ok_or(LoadError::MissingSec1Parameters)?;
 
-    let curve_oid = params
+    let curve_oid = parameters
         .named_curve()
         .ok_or(LoadError::MissingSec1CurveName)?;
 
@@ -735,7 +735,7 @@ impl Keyring {
         if candidates.next().is_some() {
             return Err(AccountAuthorityKeyError::Ambiguous);
         }
-        match candidate.params() {
+        match candidate.parameters() {
             PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
             _ => Err(AccountAuthorityKeyError::WrongKeyType),
         }
@@ -784,7 +784,7 @@ impl Keyring {
         if candidates.next().is_some() {
             return Err(AuditSigningKeyError::Ambiguous);
         }
-        match candidate.params() {
+        match candidate.parameters() {
             PrivateKey::OkpEd25519(key) => Ok(key.to_bytes()),
             _ => Err(AuditSigningKeyError::WrongKeyType),
         }
@@ -839,7 +839,7 @@ impl Keyring {
         // is the one the signing path will build a signer for.
         SERVICE_SIGNING_ALG_PREFERENCE
             .iter()
-            .find(|alg| key.params().signing_key_for_alg(alg).is_ok())
+            .find(|alg| key.parameters().signing_key_for_alg(alg).is_ok())
             .map(|alg| (alg.clone(), key))
     }
 
@@ -874,7 +874,7 @@ impl Keyring {
         }
 
         // Cache miss: build the signer once via the existing builder path.
-        let signer = Arc::new(jwk.params().signing_key_for_alg(alg)?);
+        let signer = Arc::new(jwk.parameters().signing_key_for_alg(alg)?);
 
         if let Ok(mut cache) = self.signer_cache.write() {
             // Another thread may have inserted the same key in the meantime;

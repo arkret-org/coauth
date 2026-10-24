@@ -55,7 +55,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewAccountabilityGrant,
+            parameters: NewAccountabilityGrant,
         ) -> Result<AccountabilityGrant, Self::Error>;
 
         /// Look up a grant by its wire typed id.

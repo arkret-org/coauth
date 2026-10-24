@@ -124,7 +124,7 @@ async fn append_event(
     summary: Option<&str>,
     audit_context: Value,
 ) -> Result<(), JobError> {
-    let params = summary.map_or_else(
+    let parameters = summary.map_or_else(
         || {
             NewNotificationEventLog::new(
                 kind,
@@ -148,7 +148,7 @@ async fn append_event(
             clock,
             notification_request,
             notification_delivery,
-            params,
+            parameters,
         )
         .await
         .map_err(JobError::retry)?;

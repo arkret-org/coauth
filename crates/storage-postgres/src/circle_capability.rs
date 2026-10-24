@@ -100,17 +100,17 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewCircleCapabilityGrant,
+        parameters: NewCircleCapabilityGrant,
     ) -> Result<CircleCapabilityGrant, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
         let row = InsertableCircleCapabilityGrant {
             id: Uuid::from(id),
-            subject: params.subject,
-            realm_id: params.realm_id,
-            action: params.action.to_string(),
-            allowed_circle_ids: params.allowed_circle_ids,
-            granted_by: params.granted_by,
+            subject: parameters.subject,
+            realm_id: parameters.realm_id,
+            action: parameters.action.to_string(),
+            allowed_circle_ids: parameters.allowed_circle_ids,
+            granted_by: parameters.granted_by,
             granted_at: now,
             created_at: now,
             updated_at: now,
@@ -125,7 +125,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             id: id.to_string(),
             subject: row.subject,
             realm_id: row.realm_id,
-            action: params.action,
+            action: parameters.action,
             allowed_circle_ids: row.allowed_circle_ids,
             granted_by: row.granted_by,
             granted_at: row.granted_at,

@@ -171,10 +171,10 @@ pub async fn handle_refresh_token(
         }
     }
 
-    let params = AccessTokenResponse::new(new_access_token.access_token)
+    let parameters = AccessTokenResponse::new(new_access_token.access_token)
         .with_expires_in(ttl)
         .with_refresh_token(new_refresh_token.refresh_token)
         .with_scope(session.scope);
 
-    Ok((params, repo))
+    Ok((parameters, repo))
 }

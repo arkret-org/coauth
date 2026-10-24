@@ -105,14 +105,14 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     }
 
     #[tracing::instrument(name = "db.user_erasure_request.insert", skip_all, err)]
-    async fn insert(&mut self, params: NewUserErasureRequest) -> Result<bool, Self::Error> {
+    async fn insert(&mut self, parameters: NewUserErasureRequest) -> Result<bool, Self::Error> {
         let row = InsertableUserErasureRequest {
-            request_id: params.request_id,
-            user_id: params.user_id.into(),
-            request_digest: params.request_digest,
-            canonical_outcome: params.canonical_outcome,
-            recorded_at: params.recorded_at,
-            withdrawal_window_ends_at: params.withdrawal_window_ends_at,
+            request_id: parameters.request_id,
+            user_id: parameters.user_id.into(),
+            request_digest: parameters.request_digest,
+            canonical_outcome: parameters.canonical_outcome,
+            recorded_at: parameters.recorded_at,
+            withdrawal_window_ends_at: parameters.withdrawal_window_ends_at,
         };
         let inserted = diesel::insert_into(user_erasure_requests::table)
             .values(row)

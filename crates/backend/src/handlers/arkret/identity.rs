@@ -2,9 +2,8 @@ use std::collections::BTreeMap;
 
 use arkret_identifiers::Did;
 use arkret_identity::DidBindingPurpose;
-use arkret_models_identity::http_bodies::IdentityDocumentViewOutcome;
 use arkret_models_identity::{
-    IdentityDocumentView, IdentityResolveOutcome, IdentityResolveRequestBody,
+    IdentityDocumentView, IdentityResolveRequestBody, IdentityResolveResponseBody,
 };
 use salvo::prelude::*;
 
@@ -16,7 +15,7 @@ use crate::services::did_binding;
 pub async fn identity_resolve(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityResolveOutcome>, ArkretRouteError> {
+) -> Result<Json<IdentityResolveResponseBody>, ArkretRouteError> {
     let body: IdentityResolveRequestBody = req
         .parse_json()
         .await
@@ -45,10 +44,10 @@ pub async fn identity_resolve(
     .await
     .map_err(map_did_binding_read_error)?;
 
-    Ok(Json(IdentityResolveOutcome {
+    Ok(Json(IdentityResolveResponseBody {
         did_document: did_document_object(read.document)?,
         key_log_head: read.history_head,
-        seq: None,
+        sequence: None,
         receipts: Vec::new(),
         method_evidence: None,
     }))
@@ -76,7 +75,7 @@ fn map_did_binding_read_error(
 pub async fn identity_document(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<IdentityDocumentViewOutcome>, ArkretRouteError> {
+) -> Result<Json<IdentityDocumentView>, ArkretRouteError> {
     enforce_identity_resolution_rate_limit(req, depot).await?;
     let did = req
         .query::<String>("did")
@@ -101,11 +100,11 @@ pub async fn identity_document(
     .await
     .map_err(map_did_binding_read_error)?;
 
-    Ok(Json(IdentityDocumentViewOutcome(IdentityDocumentView {
+    Ok(Json(IdentityDocumentView {
         did_document: did_document_object(read.document)?,
-        seq: None,
+        sequence: None,
         receipts: Vec::new(),
-    })))
+    }))
 }
 
 async fn enforce_identity_resolution_rate_limit(

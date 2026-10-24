@@ -102,7 +102,7 @@ pub enum StageKind {
         /// Code expiry in seconds.
         code_expiry_seconds: u32,
         /// Maximum verification attempts before the code is invalidated.
-        max_attempts: u32,
+        max_attempt_count: u32,
     },
     /// Collect and validate a password.
     PasswordWrite {

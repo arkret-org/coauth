@@ -73,8 +73,8 @@ fn apply_url_prefix(raw_url: &str, url_builder: &UrlBuilder) -> String {
 // Test: empty
 // ---------------------------------------------------------------------------
 
-fn test_is_empty(seq: Value) -> bool {
-    seq.len() == Some(0)
+fn test_is_empty(sequence: Value) -> bool {
+    sequence.len() == Some(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -96,8 +96,8 @@ fn filter_add_slashes(input: &str) -> String {
 }
 
 /// Serializes a value to URL-encoded query parameters.
-fn filter_to_params(params: &Value, kwargs: Kwargs) -> Result<String, Error> {
-    let encoded = serde_urlencoded::to_string(params).map_err(|e| {
+fn filter_to_params(parameters: &Value, kwargs: Kwargs) -> Result<String, Error> {
+    let encoded = serde_urlencoded::to_string(parameters).map_err(|e| {
         Error::new(
             ErrorKind::InvalidOperation,
             "Could not serialize parameters",
@@ -168,7 +168,7 @@ enum ParamTarget {
 fn fn_add_params_to_url(
     uri: ViaDeserialize<Url>,
     mode: &str,
-    params: ViaDeserialize<HashMap<String, Value>>,
+    parameters: ViaDeserialize<HashMap<String, Value>>,
 ) -> Result<String, Error> {
     let target = match mode {
         "fragment" => ParamTarget::Fragment,
@@ -181,7 +181,7 @@ fn fn_add_params_to_url(
         }
     };
 
-    // Parse existing params from the URL
+    // Parse existing parameters from the URL
     let existing_str = match target {
         ParamTarget::Fragment => uri.fragment(),
         ParamTarget::Query => uri.query(),
@@ -199,9 +199,10 @@ fn fn_add_params_to_url(
         })?
         .unwrap_or_default();
 
-    // Merge: new params take precedence, but we use a BTreeMap for
+    // Merge: new parameters take precedence, but we use a BTreeMap for
     // deterministic key ordering in the output
-    let merged: BTreeMap<&String, &Value> = params.iter().chain(existing_params.iter()).collect();
+    let merged: BTreeMap<&String, &Value> =
+        parameters.iter().chain(existing_params.iter()).collect();
 
     let encoded = serde_urlencoded::to_string(merged).map_err(|e| {
         Error::new(

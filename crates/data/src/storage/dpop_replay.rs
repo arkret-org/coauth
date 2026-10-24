@@ -24,6 +24,6 @@ repository_impl! {
         /// Atomically consume a DPoP `jti`. Returns `true` when the insert won
         /// the single-use race and `false` when the digest already exists inside
         /// the replay window.
-        async fn consume_jti(&mut self, params: NewDpopJtiReplay) -> Result<bool, Self::Error>;
+        async fn consume_jti(&mut self, parameters: NewDpopJtiReplay) -> Result<bool, Self::Error>;
     }
 }

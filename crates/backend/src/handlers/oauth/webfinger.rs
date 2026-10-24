@@ -34,7 +34,7 @@ pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
         }
     };
 
-    let params: Params = match req.parse_queries() {
+    let parameters: Params = match req.parse_queries() {
         Ok(p) => p,
         Err(e) => {
             res.status_code(StatusCode::BAD_REQUEST);
@@ -47,9 +47,9 @@ pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     // "MUST contain a `subject` member"; clients are expected to compare it
     // to the value they sent. We do not reject unusual subjects here because
     // WebFinger URIs may be arbitrary (acct:, mailto:, https:…).
-    let subject = params.resource;
+    let subject = parameters.resource;
 
-    let wants_issuer = params
+    let wants_issuer = parameters
         .rel
         .iter()
         .any(|i| i == "http://openid.net/specs/connect/1.0/issuer");

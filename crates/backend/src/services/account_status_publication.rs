@@ -135,7 +135,7 @@ pub async fn author_and_enqueue_transition(
         },
         principal_control_realm_id: binding.principal_control_realm_id.clone(),
         binding_version: binding.binding_version,
-        status_seq: current.as_ref().map_or(1, |head| head.status_seq + 1),
+        status_sequence: current.as_ref().map_or(1, |head| head.status_sequence + 1),
         previous_account_status_record_id: current
             .as_ref()
             .map(|head| head.account_status_record_id.clone()),

@@ -48,18 +48,18 @@ impl RunnableJob for AccountStatusPublicationJob {
         if outcome.status
             == arkret_models_collaboration::account_lifecycle::AccountStatusPublicationStatus::DependencyMissing
         {
-            let required = outcome.required_status_seq.ok_or_else(|| {
+            let required = outcome.required_status_sequence.ok_or_else(|| {
                 JobError::fail(anyhow::anyhow!(
-                    "dependency_missing outcome omits required_status_seq"
+                    "dependency_missing outcome omits required_status_sequence"
                 ))
             })?;
             let record = self.body().publication.record();
-            if required >= record.status_seq {
+            if required >= record.status_sequence {
                 return Err(JobError::fail(anyhow::anyhow!(
-                    "dependency_missing required_status_seq does not precede submitted record"
+                    "dependency_missing required_status_sequence does not precede submitted record"
                 )));
             }
-            let limit = u16::try_from(record.status_seq - required).map_err(JobError::fail)?;
+            let limit = u16::try_from(record.status_sequence - required).map_err(JobError::fail)?;
             let mut repo = state.repository().await.map_err(JobError::retry)?;
             let missing = repo
                 .account_status_ledger()

@@ -47,7 +47,7 @@ repository_impl! {
         ///
         /// * `rng`: A random number generator
         /// * `clock`: The clock used to generate timestamps
-        /// * `params`: The parameters used to create the device code grant. See the fields of
+        /// * `parameters`: The parameters used to create the device code grant. See the fields of
         ///   [`OAuthDeviceCodeGrantParams`]
         ///
         /// # Errors
@@ -57,7 +57,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: OAuthDeviceCodeGrantParams<'_>,
+            parameters: OAuthDeviceCodeGrantParams<'_>,
         ) -> Result<DeviceCodeGrant, Self::Error>;
 
         /// Lookup a device code grant by its ID

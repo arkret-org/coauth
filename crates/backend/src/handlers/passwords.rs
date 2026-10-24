@@ -392,12 +392,12 @@ impl Algorithm {
             Self::Argon2id => {
                 let algorithm = argon2::Algorithm::default();
                 let version = argon2::Version::default();
-                let params = argon2::Params::default();
+                let parameters = argon2::Params::default();
 
                 let phf = if let Some(secret) = pepper {
-                    Argon2::new_with_secret(secret, algorithm, version, params)?
+                    Argon2::new_with_secret(secret, algorithm, version, parameters)?
                 } else {
-                    Argon2::new(algorithm, version, params)
+                    Argon2::new(algorithm, version, parameters)
                 };
 
                 let salt = SaltString::generate(rng);
@@ -438,12 +438,12 @@ impl Algorithm {
             Algorithm::Argon2id => {
                 let algorithm = argon2::Algorithm::default();
                 let version = argon2::Version::default();
-                let params = argon2::Params::default();
+                let parameters = argon2::Params::default();
 
                 let phf = if let Some(secret) = pepper {
-                    Argon2::new_with_secret(secret, algorithm, version, params)?
+                    Argon2::new_with_secret(secret, algorithm, version, parameters)?
                 } else {
-                    Argon2::new(algorithm, version, params)
+                    Argon2::new(algorithm, version, parameters)
                 };
 
                 let parsed = PasswordHash::new(hashed_password)?;

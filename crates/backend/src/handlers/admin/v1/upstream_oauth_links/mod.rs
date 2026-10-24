@@ -14,7 +14,7 @@ use ulid::Ulid;
 use crate::handlers::admin::WriteOutcomeJson;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::{Resource, UpstreamOAuthLink, to_upstream_oauth_link};
-use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::parameters::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
@@ -285,16 +285,16 @@ pub async fn list_links(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req
+    let parameters: FilterParams = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
-    let base_url = format!("{path}{params}", path = UpstreamOAuthLink::PATH);
+    let base_url = format!("{path}{parameters}", path = UpstreamOAuthLink::PATH);
     let base_url = include_count.add_to_base(&base_url);
     let mut filter = UpstreamOAuthLinkFilter::default();
 
     // Optionally scope to a particular user
-    let resolved_user = match params.user {
+    let resolved_user = match parameters.user {
         Some(uid) => {
             let u = repo
                 .user()
@@ -312,7 +312,7 @@ pub async fn list_links(
     };
 
     // Optionally scope to a particular provider
-    let resolved_provider = match params.provider {
+    let resolved_provider = match parameters.provider {
         Some(pid) => {
             let p = repo
                 .upstream_oauth_provider()
@@ -330,7 +330,7 @@ pub async fn list_links(
     };
 
     // Optionally match by subject claim
-    filter = match &params.subject {
+    filter = match &parameters.subject {
         Some(sub) => filter.for_subject(sub),
         None => filter,
     };

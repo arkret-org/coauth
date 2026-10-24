@@ -19,7 +19,7 @@ ATTEMPT_BUDGET="${SMOKE_ATTEMPT_BUDGET:-30}"
 probe() {
     local name="$1"
     local url="$2"
-    for attempt in $(seq 1 "${ATTEMPT_BUDGET}"); do
+    for attempt in $(sequence 1 "${ATTEMPT_BUDGET}"); do
         local code
         code="$(curl -fsS -o /dev/null -m 2 -w '%{http_code}' "${url}" || echo "000")"
         if [[ "${code}" == "200" ]]; then

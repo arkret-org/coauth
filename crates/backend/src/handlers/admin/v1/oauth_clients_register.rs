@@ -134,7 +134,7 @@ fn parse_grant_type(value: &str) -> Result<GrantType, AppError> {
         "implicit" => Ok(GrantType::Implicit),
         "password" => Ok(GrantType::Password),
         // RFC 8628 device flow — accept canonical name.
-        "urn:ietf:params:oauth:grant-type:device_code" => Ok(GrantType::DeviceCode),
+        "urn:ietf:parameters:oauth:grant-type:device_code" => Ok(GrantType::DeviceCode),
         other => Err(AppError::bad_request(format!(
             "unsupported grant_type: {other}"
         ))),
@@ -159,7 +159,7 @@ fn grant_type_to_str(value: &GrantType) -> String {
         GrantType::ClientCredentials => "client_credentials".to_owned(),
         GrantType::Implicit => "implicit".to_owned(),
         GrantType::Password => "password".to_owned(),
-        GrantType::DeviceCode => "urn:ietf:params:oauth:grant-type:device_code".to_owned(),
+        GrantType::DeviceCode => "urn:ietf:parameters:oauth:grant-type:device_code".to_owned(),
         _ => format!("{value:?}").to_lowercase(),
     }
 }
@@ -231,7 +231,7 @@ pub async fn register(
     let body: AdminClientRegistrationRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
 
-    let auth_method = parse_auth_method(body.token_endpoint_auth_method.as_deref())?;
+    let authentication_method = parse_auth_method(body.token_endpoint_auth_method.as_deref())?;
 
     let grant_types_input: Vec<GrantType> = if body.grant_types.is_empty() {
         vec![GrantType::AuthorizationCode]
@@ -260,7 +260,8 @@ pub async fn register(
     let encrypter = depot.encrypter()?;
 
     // Generate an opaque client secret for confidential clients.
-    let (client_secret, encrypted_client_secret) = if requires_client_secret(&auth_method) {
+    let (client_secret, encrypted_client_secret) = if requires_client_secret(&authentication_method)
+    {
         let plain = Alphanumeric.sample_string(&mut rand::thread_rng(), 32);
         let encrypted = encrypter
             .encrypt_to_string(plain.as_bytes())
@@ -289,7 +290,7 @@ pub async fn register(
             None,
             None,
             None,
-            Some(auth_method.clone()),
+            Some(authentication_method.clone()),
             None,
             None,
         )
@@ -307,7 +308,7 @@ pub async fn register(
             "client_name": &body.client_name,
             "redirect_uri_count": redirect_uris.len(),
             "grant_types": grant_types_input.iter().map(grant_type_to_str).collect::<Vec<_>>(),
-            "token_endpoint_auth_method": auth_method_to_str(&auth_method),
+            "token_endpoint_auth_method": auth_method_to_str(&authentication_method),
             "scope": &body.scope,
         }),
     )
@@ -322,7 +323,7 @@ pub async fn register(
         client_name: body.client_name,
         redirect_uris: redirect_uris.iter().map(ToString::to_string).collect(),
         grant_types: grant_types_input.iter().map(grant_type_to_str).collect(),
-        token_endpoint_auth_method: auth_method_to_str(&auth_method).to_owned(),
+        token_endpoint_auth_method: auth_method_to_str(&authentication_method).to_owned(),
         scope: body.scope,
     };
 
@@ -417,7 +418,7 @@ mod tests {
 
     #[test]
     fn happy_device_code_grant_urn_parses() {
-        let g = parse_grant_type("urn:ietf:params:oauth:grant-type:device_code").unwrap();
+        let g = parse_grant_type("urn:ietf:parameters:oauth:grant-type:device_code").unwrap();
         assert!(matches!(g, GrantType::DeviceCode));
     }
 

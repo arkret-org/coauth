@@ -96,7 +96,7 @@ macro_rules! asymmetric_jwt_test {
                     let key = jwks.find_key(&jwt.header().into()).unwrap();
 
                     let key = coauth_jose::jwa::AsymmetricVerifyingKey::from_jwk_and_alg(
-                        key.params(),
+                        key.parameters(),
                         &JsonWebSignatureAlg::$alg,
                     )
                     .unwrap();
@@ -117,7 +117,7 @@ macro_rules! asymmetric_jwt_test {
                     let jwks = private_jwks();
                     let key = jwks.find_key(&template.header().into()).unwrap();
 
-                    let key = coauth_jose::jwa::AsymmetricSigningKey::from_jwk_and_alg(key.params(), &alg)
+                    let key = coauth_jose::jwa::AsymmetricSigningKey::from_jwk_and_alg(key.parameters(), &alg)
                         .unwrap();
 
                     let jwt: Jwt<'_, Payload> = Jwt::sign_with_rng(&mut rng, header, payload, &key).unwrap();
@@ -136,7 +136,7 @@ macro_rules! asymmetric_jwt_test {
                     let jwks = private_jwks();
                     let key = jwks.find_key(&template.header().into()).unwrap();
 
-                    let key = coauth_jose::jwa::AsymmetricSigningKey::from_jwk_and_alg(key.params(), &alg)
+                    let key = coauth_jose::jwa::AsymmetricSigningKey::from_jwk_and_alg(key.parameters(), &alg)
                         .unwrap();
 
                     let jwt: Jwt<'_, Payload> = Jwt::sign(header, payload, &key).unwrap();
@@ -146,7 +146,7 @@ macro_rules! asymmetric_jwt_test {
                     let key = jwks.find_key(&template.header().into()).unwrap();
 
                     let key =
-                        coauth_jose::jwa::AsymmetricVerifyingKey::from_jwk_and_alg(key.params(), &alg)
+                        coauth_jose::jwa::AsymmetricVerifyingKey::from_jwk_and_alg(key.parameters(), &alg)
                             .unwrap();
 
                     jwt.verify(&key).unwrap();

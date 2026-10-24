@@ -153,7 +153,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
     );
 
     // Parse form parameters
-    let params: Params = req
+    let parameters: Params = req
         .parse_queries()
         .map_err(|e| RouteError::Internal(Box::new(e)))?;
 
@@ -162,7 +162,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
     // account tier is not consulted here: this runs before the grant is bound
     // to an authenticated user, so there is no account preference to read yet.
     // The SPA applies it once the session exists.
-    let requested_locales = params.auth.ui_locales.as_ref().map(|tags| {
+    let requested_locales = parameters.auth.ui_locales.as_ref().map(|tags| {
         tags.iter()
             .map(ToString::to_string)
             .collect::<Vec<_>>()
@@ -181,22 +181,22 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
     // First, figure out what client it is
     let client = repo
         .oauth_client()
-        .find_by_client_id(&params.auth.client_id)
+        .find_by_client_id(&parameters.auth.client_id)
         .await?
         .ok_or(RouteError::ClientNotFound)?;
 
     // And resolve the redirect_uri and response_mode
     let redirect_uri = client
-        .resolve_redirect_uri(&params.auth.redirect_uri)?
+        .resolve_redirect_uri(&parameters.auth.redirect_uri)?
         .clone();
-    let response_type = params.auth.response_type;
-    let response_mode = resolve_response_mode(&response_type, params.auth.response_mode)?;
+    let response_type = parameters.auth.response_type;
+    let response_mode = resolve_response_mode(&response_type, parameters.auth.response_mode)?;
 
     // Now we have a proper callback destination to go to on error
     let callback_destination = CallbackDestination::try_new(
         &response_mode,
         redirect_uri.clone(),
-        params.auth.state.clone(),
+        parameters.auth.state.clone(),
     )?;
 
     // Get the session info from the cookie
@@ -209,11 +209,11 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
         let locale = locale.clone();
         async move {
             let maybe_session = session_info.load_active_session(&mut repo).await?;
-            let prompt = params.auth.prompt.as_deref().unwrap_or_default();
+            let prompt = parameters.auth.prompt.as_deref().unwrap_or_default();
 
-            // Check if the request/request_uri/registration params are used. If so, reply
+            // Check if the request/request_uri/registration parameters are used. If so, reply
             // with the right error since we don't support them.
-            if params.auth.request.is_some() {
+            if parameters.auth.request.is_some() {
                 return Ok(callback_destination.go(
                     &templates,
                     &locale,
@@ -221,7 +221,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                 )?);
             }
 
-            if params.auth.request_uri.is_some() {
+            if parameters.auth.request_uri.is_some() {
                 return Ok(callback_destination.go(
                     &templates,
                     &locale,
@@ -249,7 +249,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                 )?);
             }
 
-            if params.auth.registration.is_some() {
+            if parameters.auth.registration.is_some() {
                 return Ok(callback_destination.go(
                     &templates,
                     &locale,
@@ -276,7 +276,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     )?);
                 }
                 let pkce_required = super::token_service::authorization_code_pkce_required(&client);
-                match params.pkce.as_ref() {
+                match parameters.pkce.as_ref() {
                     None if pkce_required => {
                         return Ok(callback_destination.go(
                             &templates,
@@ -315,16 +315,16 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                         .collect()
                 };
 
-                let pkce = params.pkce.map(|p| Pkce {
+                let pkce = parameters.pkce.map(|p| Pkce {
                     challenge: p.code_challenge,
                     challenge_method: p.code_challenge_method,
                 });
 
                 Some(AuthorizationCode { code, pkce })
             } else {
-                // If the request had PKCE params but no code asked, it should get back with an
+                // If the request had PKCE parameters but no code asked, it should get back with an
                 // error
-                if params.pkce.is_some() {
+                if parameters.pkce.is_some() {
                     return Ok(callback_destination.go(
                         &templates,
                         &locale,
@@ -342,13 +342,13 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     &clock,
                     &client,
                     redirect_uri.clone(),
-                    params.auth.scope,
+                    parameters.auth.scope,
                     code,
-                    params.auth.state.clone(),
-                    params.auth.nonce,
+                    parameters.auth.state.clone(),
+                    parameters.auth.nonce,
                     response_mode,
                     response_type.has_id_token(),
-                    params.auth.login_hint,
+                    parameters.auth.login_hint,
                     Some(locale.to_string()),
                 )
                 .await?;

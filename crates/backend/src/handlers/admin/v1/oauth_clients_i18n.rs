@@ -29,7 +29,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::{AppError, JsonResult};
 
 /// Wire-format entry for one locale's worth of admin-curated display

@@ -232,14 +232,14 @@ string_enum! {
         /// [`password`](https://www.rfc-editor.org/rfc/rfc6749#section-4.3)
         Password => "password",
 
-        /// [`urn:ietf:params:oauth:grant-type:device_code`](https://www.rfc-editor.org/rfc/rfc8628)
-        DeviceCode => "urn:ietf:params:oauth:grant-type:device_code",
+        /// [`urn:ietf:parameters:oauth:grant-type:device_code`](https://www.rfc-editor.org/rfc/rfc8628)
+        DeviceCode => "urn:ietf:parameters:oauth:grant-type:device_code",
 
         /// [`https://datatracker.ietf.org/doc/html/rfc7523#section-2.1`](https://www.rfc-editor.org/rfc/rfc7523#section-2.1)
-        JwtBearer => "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        JwtBearer => "urn:ietf:parameters:oauth:grant-type:jwt-bearer",
 
-        /// [`urn:openid:params:grant-type:ciba`](https://openid.net/specs/openid-client-initiated-backchannel-authentication-core-1_0.html)
-        ClientInitiatedBackchannelAuthentication => "urn:openid:params:grant-type:ciba",
+        /// [`urn:openid:parameters:grant-type:ciba`](https://openid.net/specs/openid-client-initiated-backchannel-authentication-core-1_0.html)
+        ClientInitiatedBackchannelAuthentication => "urn:openid:parameters:grant-type:ciba",
 
         @unknown
         /// An unknown value.
@@ -623,7 +623,7 @@ pub enum AccessTokenRequest {
     ClientCredentials(ClientCredentialsGrant),
 
     /// A request in the Device Code flow.
-    #[serde(rename = "urn:ietf:params:oauth:grant-type:device_code")]
+    #[serde(rename = "urn:ietf:parameters:oauth:grant-type:device_code")]
     DeviceCode(DeviceCodeGrant),
 
     /// An unsupported request.
@@ -639,7 +639,7 @@ impl AccessTokenRequest {
             Self::AuthorizationCode(_) => "authorization_code",
             Self::RefreshToken(_) => "refresh_token",
             Self::ClientCredentials(_) => "client_credentials",
-            Self::DeviceCode(_) => "urn:ietf:params:oauth:grant-type:device_code",
+            Self::DeviceCode(_) => "urn:ietf:parameters:oauth:grant-type:device_code",
             Self::Unsupported => "unsupported",
         }
     }
@@ -930,11 +930,11 @@ mod tests {
             (GrantType::Password, "\"password\""),
             (
                 GrantType::DeviceCode,
-                "\"urn:ietf:params:oauth:grant-type:device_code\"",
+                "\"urn:ietf:parameters:oauth:grant-type:device_code\"",
             ),
             (
                 GrantType::ClientInitiatedBackchannelAuthentication,
-                "\"urn:openid:params:grant-type:ciba\"",
+                "\"urn:openid:parameters:grant-type:ciba\"",
             ),
         ];
 
@@ -953,11 +953,11 @@ mod tests {
             ("\"client_credentials\"", GrantType::ClientCredentials),
             ("\"password\"", GrantType::Password),
             (
-                "\"urn:ietf:params:oauth:grant-type:device_code\"",
+                "\"urn:ietf:parameters:oauth:grant-type:device_code\"",
                 GrantType::DeviceCode,
             ),
             (
-                "\"urn:openid:params:grant-type:ciba\"",
+                "\"urn:openid:parameters:grant-type:ciba\"",
                 GrantType::ClientInitiatedBackchannelAuthentication,
             ),
         ];

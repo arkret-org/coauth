@@ -114,7 +114,7 @@ impl CallbackDestination {
     /// POST form with the supplied parameters.
     pub fn redirect_url<T: Serialize>(
         &self,
-        params: &T,
+        parameters: &T,
     ) -> Result<RedirectInfo, CallbackDestinationError> {
         #[derive(Serialize)]
         struct AllParams<'s, T> {
@@ -125,7 +125,7 @@ impl CallbackDestination {
             state: Option<String>,
 
             #[serde(flatten)]
-            params: T,
+            parameters: T,
         }
 
         match &self.mode {
@@ -133,7 +133,7 @@ impl CallbackDestination {
                 let merged = AllParams {
                     existing: Some(existing_params),
                     state: self.state.clone(),
-                    params,
+                    parameters,
                 };
                 let new_qs = serde_urlencoded::to_string(merged)?;
                 let mut url = self.safe_redirect_uri.clone();
@@ -147,7 +147,7 @@ impl CallbackDestination {
                 let merged = AllParams {
                     existing: None,
                     state: self.state.clone(),
-                    params,
+                    parameters,
                 };
                 let new_qs = serde_urlencoded::to_string(merged)?;
                 let mut url = self.safe_redirect_uri.clone();
@@ -158,13 +158,13 @@ impl CallbackDestination {
                 })
             }
             CallbackDestinationMode::FormPost => {
-                // For form_post, the SPA must POST the params to the URI.
-                // We return the base URI; the caller can include the params
+                // For form_post, the SPA must POST the parameters to the URI.
+                // We return the base URI; the caller can include the parameters
                 // alongside it.
                 let merged = AllParams {
                     existing: None,
                     state: self.state.clone(),
-                    params,
+                    parameters,
                 };
                 let new_qs = serde_urlencoded::to_string(merged)?;
                 let mut url = self.safe_redirect_uri.clone();
@@ -181,7 +181,7 @@ impl CallbackDestination {
         self,
         templates: &Templates,
         locale: &Locale,
-        params: T,
+        parameters: T,
     ) -> Result<Response, CallbackDestinationError> {
         #[derive(Serialize)]
         struct AllParams<'s, T> {
@@ -192,7 +192,7 @@ impl CallbackDestination {
             state: Option<String>,
 
             #[serde(flatten)]
-            params: T,
+            parameters: T,
         }
 
         let mut redirect_uri = self.safe_redirect_uri;
@@ -203,7 +203,7 @@ impl CallbackDestination {
                 let merged = AllParams {
                     existing: Some(&existing_params),
                     state,
-                    params,
+                    parameters,
                 };
 
                 let new_qs = serde_urlencoded::to_string(merged)?;
@@ -219,7 +219,7 @@ impl CallbackDestination {
                 let merged = AllParams {
                     existing: None,
                     state,
-                    params,
+                    parameters,
                 };
 
                 let new_qs = serde_urlencoded::to_string(merged)?;
@@ -235,7 +235,7 @@ impl CallbackDestination {
                 let merged = AllParams {
                     existing: None,
                     state,
-                    params,
+                    parameters,
                 };
                 let ctx = FormPostContext::new_for_url(redirect_uri, merged).with_language(locale);
                 let rendered = templates.render_form_post(&ctx)?;

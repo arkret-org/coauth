@@ -11,7 +11,7 @@ use serde::Deserialize;
 use super::AccountRecord;
 use crate::handlers::admin::audit_helper::AdminAuditSigning;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
 use crate::handlers::common::DepotExt;
 use crate::services::station_trust::{owning_station_did_for, owning_station_id_for};

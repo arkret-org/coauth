@@ -55,7 +55,7 @@ $ coauth station trust replace --name coland \
 coauth 是所属 Station 的内部 Account Authority 进程。其签名凭据只属于部署内部：
 它不是 Arkret service kind，不进入公开服务注册，也不通过 role-local Describe 或
 peer discovery 暴露。客户端只从所属 Station 的
-`auth_metadata.account_authority` 发现入口 URL。
+`authentication_metadata.account_authority` 发现入口 URL。
 
 签名密钥和任何进程本地标识均为实现细节，不得进入公开服务注册，不得作为服务 DID
 发布，也不得用于 peer/federation 身份。恢复与轮换通过 Station 部署的私有密钥管理
@@ -96,5 +96,5 @@ coauth↔Station 这一跳限于受信部署网络内。Station 把这些端点�
 ## Discovery
 
 coauth 只在 `/.well-known/openid-configuration` 发布标准 OpenID Provider discovery。
-Arkret Describe 与 `auth_metadata.account_authority` 入口由所属 Station 发布；coauth
+Arkret Describe 与 `authentication_metadata.account_authority` 入口由所属 Station 发布；coauth
 不暴露 role-local `/_arkret/describe` 端点。

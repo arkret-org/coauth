@@ -113,12 +113,12 @@ pub async fn get(
             &mut rng,
         )?;
 
-    // We do that in a block because params borrows url mutably
+    // We do that in a block because parameters borrows url mutably
     {
         // Add any additional parameters to the query
-        let mut params = url.query_pairs_mut();
+        let mut parameters = url.query_pairs_mut();
         for (key, value) in &provider.additional_authorization_parameters {
-            params.append_pair(key, value);
+            parameters.append_pair(key, value);
         }
     }
 

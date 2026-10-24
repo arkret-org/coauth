@@ -1,5 +1,5 @@
 use arkret_models_identity::{
-    AccountHandoffBinding, AccountHandoffOutcome, IdentityBindingChallengeOutcome,
+    AccountHandoffBinding, AccountHandoffResponseBody, IdentityBindingChallengeResponseBody,
 };
 use sha2::Digest as _;
 
@@ -46,7 +46,7 @@ fn authenticated_request(
 
 fn pcr_outcome(
     request: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionInput,
-) -> arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome {
+) -> arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResponseBody {
     use arkret_wire::{
         Base64UrlString, CommitStreamRef, DetachedObjectSignature, DetachedSignatureAlgorithm,
         DetachedSignatureContext, DidUrl, Hash, RealmCommit, RealmCommitAuthorityRef,
@@ -72,7 +72,7 @@ fn pcr_outcome(
         verification_method: DidUrl::new(format!("{REGISTRATION_STATION_DID}#notary")).unwrap(),
         signed_digest: Hash::new(format!("sha256:{}", suffix.to_string().repeat(64))).unwrap(),
         created_at: now,
-        sig: Base64UrlString::new(suffix.to_string()).unwrap(),
+        signature: Base64UrlString::new(suffix.to_string()).unwrap(),
     };
     let mut create_commit = RealmCommit {
         commit_id: commit_id.clone(),
@@ -137,22 +137,23 @@ fn pcr_outcome(
         signature: signature('b'),
     };
     authorize_commit = seal(authorize_commit);
-    let outcome = arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome {
-        principal_id: request.principal_id.clone(),
-        pcr_realm_id: request.pcr_realm_id.clone(),
-        accepted_device_id: descriptor.device_id,
-        resolution: arkret_models_identity::PrincipalResolutionProjection {
-            did: request.did.clone(),
-            method_history_head: request
-                .registration_did_evidence
-                .method_history_head
-                .clone(),
-            version_id: request.registration_did_evidence.version_id.clone(),
-            resolution_event_ref: request.genesis_unit.create().event_id.to_string(),
-            updated_at: request.registration_did_evidence.accepted_at,
-        },
-        commits: [create_commit, authorize_commit],
-    };
+    let outcome =
+        arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResponseBody {
+            principal_id: request.principal_id.clone(),
+            pcr_realm_id: request.pcr_realm_id.clone(),
+            accepted_device_id: descriptor.device_id,
+            resolution: arkret_models_identity::PrincipalResolutionProjection {
+                did: request.did.clone(),
+                method_history_head: request
+                    .registration_did_evidence
+                    .method_history_head
+                    .clone(),
+                version_id: request.registration_did_evidence.version_id.clone(),
+                resolution_event_ref: request.genesis_unit.create().event_id.to_string(),
+                updated_at: request.registration_did_evidence.accepted_at,
+            },
+            commits: [create_commit, authorize_commit],
+        };
     outcome.validate_against(request).unwrap();
     outcome
 }
@@ -266,7 +267,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         ))
         .await;
     response.assert_status(StatusCode::OK);
-    let handoff: AccountHandoffOutcome = response.json();
+    let handoff: AccountHandoffResponseBody = response.json();
     let AccountHandoffBinding::IdentityCreationActive {
         identity_creation_lease: lease,
     } = &handoff.binding
@@ -289,7 +290,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         ))
         .await;
     challenge.assert_status(StatusCode::OK);
-    let challenge: IdentityBindingChallengeOutcome = challenge.json();
+    let challenge: IdentityBindingChallengeResponseBody = challenge.json();
     let wire_challenge = serde_json::to_value(&challenge).unwrap();
     assert_eq!(wire_challenge.as_object().unwrap().len(), 6);
     assert!(wire_challenge.get("account_subject").is_none());
@@ -336,7 +337,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         ))
         .await;
     response.assert_status(StatusCode::OK);
-    let reauthenticated: AccountHandoffOutcome = response.json();
+    let reauthenticated: AccountHandoffResponseBody = response.json();
     let AccountHandoffBinding::IdentityCreationActive {
         identity_creation_lease: renewed_lease,
     } = &reauthenticated.binding
@@ -376,11 +377,11 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
                 arkret_signatures::webvh::validate_principal_inception_operation(&operation)
                     .unwrap();
             ResponseTemplate::new(200).set_body_json(
-                arkret_models_identity::DidOperationSubmitOutcome {
+                arkret_models_identity::DidOperationSubmitResponseBody {
                     status: arkret_models_identity::DidOperationSubmitStatus::Accepted,
                     did: operation.did.clone(),
                     accepted_at,
-                    seq: Some(1),
+                    sequence: Some(1),
                     operation_ref: format!(
                         "{}?versionId={}",
                         operation.did, validated.did_version_id
@@ -639,7 +640,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         ))
         .await;
     completed.assert_status(StatusCode::OK);
-    let outcome: arkret_models_collaboration::account_operations::AccountRegisterOutcome =
+    let outcome: arkret_models_collaboration::account_operations::AccountRegisterResponseBody =
         completed.json();
     outcome.validate_against_request(&register).unwrap();
     assert!(outcome.session_grant_outcome.is_some());
@@ -727,7 +728,7 @@ async fn identity_challenge_http_uses_live_authority_without_renewal_and_replays
         ))
         .await;
     response.assert_status(StatusCode::OK);
-    let handoff: AccountHandoffOutcome = response.json();
+    let handoff: AccountHandoffResponseBody = response.json();
     let AccountHandoffBinding::IdentityCreationActive {
         identity_creation_lease: lease,
     } = &handoff.binding
@@ -744,7 +745,7 @@ async fn identity_challenge_http_uses_live_authority_without_renewal_and_replays
             principal_endpoint: &endpoint,
             local_id: "challengehttp",
             also_known_as: &[],
-            version_time: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
+            version_created_at: arkret_canonical::normalize_timestamp_canonical(chrono::Utc::now()),
             root_seed: &[21; 32],
             next_root_public_key_multibase: &next,
             witness_policy: None,
@@ -787,7 +788,7 @@ async fn identity_challenge_http_uses_live_authority_without_renewal_and_replays
         ))
         .await;
     first.assert_status(StatusCode::OK);
-    let challenge: IdentityBindingChallengeOutcome = first.json();
+    let challenge: IdentityBindingChallengeResponseBody = first.json();
     assert_eq!(
         (challenge.expires_at - challenge.issued_at).num_seconds(),
         300

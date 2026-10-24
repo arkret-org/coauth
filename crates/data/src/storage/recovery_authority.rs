@@ -21,7 +21,7 @@ repository_impl! {
         /// transaction already committed the same recovery transaction id.
         async fn insert_completion_issuance(
             &mut self,
-            params: NewRecoveryCompletionGrantIssuance,
+            parameters: NewRecoveryCompletionGrantIssuance,
         ) -> Result<bool, Self::Error>;
     }
 }

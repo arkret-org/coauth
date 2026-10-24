@@ -108,7 +108,8 @@ pub(crate) async fn commit_agent_key_pair_to_station(
     arkret_config: &ArkretConfig,
     keyring: &coauth_keyring::Keyring,
     request: &PrincipalAgentKeyPairCommitRequest,
-) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error> {
+) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody, anyhow::Error>
+{
     let server = arkret_config
         .owning_station()
         .ok_or_else(|| anyhow::anyhow!("owning Station is not explicitly configured"))?;
@@ -128,7 +129,8 @@ async fn submit_agent_key_pair_to_target(
     client: &crate::services::peer_protocol_client::PeerProtocolClient<'_>,
     target: &StationConfig,
     request: &PrincipalAgentKeyPairCommitRequest,
-) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error> {
+) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody, anyhow::Error>
+{
     let url = agent_key_pair_url(&target.endpoint);
     let response = client
         .post_agent_key_pair(request.body(), request.idempotency_key())
@@ -155,7 +157,7 @@ fn agent_key_pair_url(endpoint: &Url) -> Url {
 
 fn validate_agent_key_pair_response(
     request: &PrincipalAgentKeyPairCommitRequest,
-    response: &arkret_models_collaboration::agent_operations::AgentKeyPairOutcome,
+    response: &arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody,
 ) -> Result<(), anyhow::Error> {
     anyhow::ensure!(
         response.authorize_event_ref.as_str() == request.authorized_event_id(),
@@ -271,7 +273,7 @@ impl ConnectorAdmin for DbConnectorAdmin {
         &self,
         request: &PrincipalAccountStatusPublicationRequest,
     ) -> Result<
-        arkret_models_collaboration::account_lifecycle::AccountStatusPublicationOutcome,
+        arkret_models_collaboration::account_lifecycle::AccountStatusPublicationResponseBody,
         anyhow::Error,
     > {
         let target = self
@@ -313,8 +315,8 @@ impl ConnectorAdmin for DbConnectorAdmin {
             "response account_id mismatch"
         );
         anyhow::ensure!(
-            outcome.status_seq == record.status_seq,
-            "response status_seq mismatch"
+            outcome.status_sequence == record.status_sequence,
+            "response status_sequence mismatch"
         );
         Ok(outcome)
     }
@@ -429,8 +431,10 @@ impl ConnectorAdmin for DbConnectorAdmin {
     async fn commit_agent_key_pair(
         &self,
         request: &PrincipalAgentKeyPairCommitRequest,
-    ) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, anyhow::Error>
-    {
+    ) -> Result<
+        arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody,
+        anyhow::Error,
+    > {
         let signing = self
             .peer_signing
             .as_ref()

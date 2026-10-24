@@ -386,7 +386,7 @@ fn sign_issuance_preimage(
         reserved_signing_key(keyring, signing_key_id).ok_or(SessionGrantError::NoSigningKey)?;
     let key_id = signing_key_id.to_owned();
     let header = JsonWebSignatureHeader::new(alg.clone()).with_kid(key_id.clone());
-    let signer = key.params().signing_key_for_alg(&alg)?;
+    let signer = key.parameters().signing_key_for_alg(&alg)?;
     let grant_jwt = Jwt::sign(header, payload, &signer)?.into_string();
 
     Ok(SignedIssuance {
@@ -433,7 +433,7 @@ fn reserved_signing_key<'a>(
         JsonWebSignatureAlg::Ps256,
     ]
     .into_iter()
-    .find(|alg| key.params().signing_key_for_alg(alg).is_ok())
+    .find(|alg| key.parameters().signing_key_for_alg(alg).is_ok())
     .map(|alg| (alg, key))
 }
 

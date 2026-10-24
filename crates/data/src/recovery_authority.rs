@@ -16,7 +16,7 @@ pub struct RecoveryCompletionGrantIssuance {
     /// Closed `CommittedEventRef` of the immediately following replacement
     /// device authorization Event in the same PCR Realm stream.
     pub device_authorization_ref: Value,
-    pub result_model_generation_ref: Value,
+    pub new_model_generation_ref: Value,
     pub canonical_request_digest: String,
     pub canonical_request: Vec<u8>,
     pub session_grant_operation_id: crate::Ulid,
@@ -37,7 +37,7 @@ pub struct NewRecoveryCompletionGrantIssuance {
     /// Closed `CommittedEventRef` of the immediately following replacement
     /// device authorization Event in the same PCR Realm stream.
     pub device_authorization_ref: Value,
-    pub result_model_generation_ref: Value,
+    pub new_model_generation_ref: Value,
     pub canonical_request_digest: String,
     pub canonical_request: Vec<u8>,
     pub session_grant_operation_id: crate::Ulid,

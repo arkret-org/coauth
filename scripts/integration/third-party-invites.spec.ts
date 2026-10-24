@@ -390,7 +390,7 @@ test("TP3 signed activation remains distinct from withdrawn current delivery aut
     const binding = await accepted(owner, value);
     const forged = structuredClone(binding.request);
     const forgedAttestation = forged.acceptance_attestation as Record<string, any>;
-    forgedAttestation.third_party_invite.max_claims = 2;
+    forgedAttestation.third_party_invite.max_claim_count = 2;
     await rejected(await canonicalPost(request, `${station}/_arkret/open/third-party-invites/activate`, { data: forged }), 404, "not_found");
     await owner.bridge.submitTypedEvent({ handoffId: owner.handoffId, realmId: space.realmId,
       kind: "ak.invite.revoke", payload: { invite_id: binding.inviteId, previous_state: "pending", target_state: "revoked" } });

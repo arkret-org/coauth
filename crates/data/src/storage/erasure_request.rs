@@ -81,7 +81,7 @@ repository_impl! {
         /// recorded the same `request_id` (or the user's single live-intent slot),
         /// in which case the caller must re-read and apply the replay/conflict
         /// rules.
-        async fn insert(&mut self, params: NewUserErasureRequest) -> Result<bool, Self::Error>;
+        async fn insert(&mut self, parameters: NewUserErasureRequest) -> Result<bool, Self::Error>;
 
         /// Mark the intent's `erasure_pending` record as signed. Returns `false`
         /// when the row does not exist or was already marked.

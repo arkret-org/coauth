@@ -156,48 +156,48 @@ impl AsymmetricSigningKey {
     /// Returns an error if the key parameters are not suitable for the given
     /// algorithm.
     pub fn from_jwk_and_alg(
-        params: &JsonWebKeyPrivateParameters,
+        parameters: &JsonWebKeyPrivateParameters,
         alg: &JsonWebSignatureAlg,
     ) -> Result<Self, AsymmetricKeyFromJwkError> {
-        match (params, alg) {
-            (JsonWebKeyPrivateParameters::Rsa(params), alg) => match alg {
-                JsonWebSignatureAlg::Rs256 => Ok(Self::rs256(params.try_into()?)),
-                JsonWebSignatureAlg::Rs384 => Ok(Self::rs384(params.try_into()?)),
-                JsonWebSignatureAlg::Rs512 => Ok(Self::rs512(params.try_into()?)),
-                JsonWebSignatureAlg::Ps256 => Ok(Self::ps256(params.try_into()?)),
-                JsonWebSignatureAlg::Ps384 => Ok(Self::ps384(params.try_into()?)),
-                JsonWebSignatureAlg::Ps512 => Ok(Self::ps512(params.try_into()?)),
+        match (parameters, alg) {
+            (JsonWebKeyPrivateParameters::Rsa(parameters), alg) => match alg {
+                JsonWebSignatureAlg::Rs256 => Ok(Self::rs256(parameters.try_into()?)),
+                JsonWebSignatureAlg::Rs384 => Ok(Self::rs384(parameters.try_into()?)),
+                JsonWebSignatureAlg::Rs512 => Ok(Self::rs512(parameters.try_into()?)),
+                JsonWebSignatureAlg::Ps256 => Ok(Self::ps256(parameters.try_into()?)),
+                JsonWebSignatureAlg::Ps384 => Ok(Self::ps384(parameters.try_into()?)),
+                JsonWebSignatureAlg::Ps512 => Ok(Self::ps512(parameters.try_into()?)),
                 _ => Err(AsymmetricKeyFromJwkError::KeyNotSuitable { alg: alg.clone() }),
             },
 
-            (JsonWebKeyPrivateParameters::Ec(params), JsonWebSignatureAlg::Es256)
-                if params.crv == JsonWebKeyEcEllipticCurve::P256 =>
+            (JsonWebKeyPrivateParameters::Ec(parameters), JsonWebSignatureAlg::Es256)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::P256 =>
             {
-                Ok(Self::es256(params.try_into()?))
+                Ok(Self::es256(parameters.try_into()?))
             }
 
-            (JsonWebKeyPrivateParameters::Ec(params), JsonWebSignatureAlg::Es384)
-                if params.crv == JsonWebKeyEcEllipticCurve::P384 =>
+            (JsonWebKeyPrivateParameters::Ec(parameters), JsonWebSignatureAlg::Es384)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::P384 =>
             {
-                Ok(Self::es384(params.try_into()?))
+                Ok(Self::es384(parameters.try_into()?))
             }
 
-            (JsonWebKeyPrivateParameters::Ec(params), JsonWebSignatureAlg::Es512)
-                if params.crv == JsonWebKeyEcEllipticCurve::P521 =>
+            (JsonWebKeyPrivateParameters::Ec(parameters), JsonWebSignatureAlg::Es512)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::P521 =>
             {
-                Ok(Self::es512(params.try_into()?))
+                Ok(Self::es512(parameters.try_into()?))
             }
 
-            (JsonWebKeyPrivateParameters::Ec(params), JsonWebSignatureAlg::Es256K)
-                if params.crv == JsonWebKeyEcEllipticCurve::Secp256K1 =>
+            (JsonWebKeyPrivateParameters::Ec(parameters), JsonWebSignatureAlg::Es256K)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::Secp256K1 =>
             {
-                Ok(Self::es256k(params.try_into()?))
+                Ok(Self::es256k(parameters.try_into()?))
             }
 
-            (JsonWebKeyPrivateParameters::Okp(params), JsonWebSignatureAlg::Ed25519)
-                if params.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
+            (JsonWebKeyPrivateParameters::Okp(parameters), JsonWebSignatureAlg::Ed25519)
+                if parameters.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
             {
-                Ok(Self::ed25519(params.try_into()?))
+                Ok(Self::ed25519(parameters.try_into()?))
             }
 
             (JsonWebKeyPrivateParameters::Okp(_params), JsonWebSignatureAlg::Ed25519) => {
@@ -443,48 +443,48 @@ impl AsymmetricVerifyingKey {
     /// Returns an error if the key parameters are not suitable for the given
     /// algorithm.
     pub fn from_jwk_and_alg(
-        params: &JsonWebKeyPublicParameters,
+        parameters: &JsonWebKeyPublicParameters,
         alg: &JsonWebSignatureAlg,
     ) -> Result<Self, AsymmetricKeyFromJwkError> {
-        match (params, alg) {
-            (JsonWebKeyPublicParameters::Rsa(params), alg) => match alg {
-                JsonWebSignatureAlg::Rs256 => Ok(Self::rs256(params.try_into()?)),
-                JsonWebSignatureAlg::Rs384 => Ok(Self::rs384(params.try_into()?)),
-                JsonWebSignatureAlg::Rs512 => Ok(Self::rs512(params.try_into()?)),
-                JsonWebSignatureAlg::Ps256 => Ok(Self::ps256(params.try_into()?)),
-                JsonWebSignatureAlg::Ps384 => Ok(Self::ps384(params.try_into()?)),
-                JsonWebSignatureAlg::Ps512 => Ok(Self::ps512(params.try_into()?)),
+        match (parameters, alg) {
+            (JsonWebKeyPublicParameters::Rsa(parameters), alg) => match alg {
+                JsonWebSignatureAlg::Rs256 => Ok(Self::rs256(parameters.try_into()?)),
+                JsonWebSignatureAlg::Rs384 => Ok(Self::rs384(parameters.try_into()?)),
+                JsonWebSignatureAlg::Rs512 => Ok(Self::rs512(parameters.try_into()?)),
+                JsonWebSignatureAlg::Ps256 => Ok(Self::ps256(parameters.try_into()?)),
+                JsonWebSignatureAlg::Ps384 => Ok(Self::ps384(parameters.try_into()?)),
+                JsonWebSignatureAlg::Ps512 => Ok(Self::ps512(parameters.try_into()?)),
                 _ => Err(AsymmetricKeyFromJwkError::KeyNotSuitable { alg: alg.clone() }),
             },
 
-            (JsonWebKeyPublicParameters::Ec(params), JsonWebSignatureAlg::Es256)
-                if params.crv == JsonWebKeyEcEllipticCurve::P256 =>
+            (JsonWebKeyPublicParameters::Ec(parameters), JsonWebSignatureAlg::Es256)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::P256 =>
             {
-                Ok(Self::es256(params.try_into()?))
+                Ok(Self::es256(parameters.try_into()?))
             }
 
-            (JsonWebKeyPublicParameters::Ec(params), JsonWebSignatureAlg::Es384)
-                if params.crv == JsonWebKeyEcEllipticCurve::P384 =>
+            (JsonWebKeyPublicParameters::Ec(parameters), JsonWebSignatureAlg::Es384)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::P384 =>
             {
-                Ok(Self::es384(params.try_into()?))
+                Ok(Self::es384(parameters.try_into()?))
             }
 
-            (JsonWebKeyPublicParameters::Ec(params), JsonWebSignatureAlg::Es512)
-                if params.crv == JsonWebKeyEcEllipticCurve::P521 =>
+            (JsonWebKeyPublicParameters::Ec(parameters), JsonWebSignatureAlg::Es512)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::P521 =>
             {
-                Ok(Self::es512(params.try_into()?))
+                Ok(Self::es512(parameters.try_into()?))
             }
 
-            (JsonWebKeyPublicParameters::Ec(params), JsonWebSignatureAlg::Es256K)
-                if params.crv == JsonWebKeyEcEllipticCurve::Secp256K1 =>
+            (JsonWebKeyPublicParameters::Ec(parameters), JsonWebSignatureAlg::Es256K)
+                if parameters.crv == JsonWebKeyEcEllipticCurve::Secp256K1 =>
             {
-                Ok(Self::es256k(params.try_into()?))
+                Ok(Self::es256k(parameters.try_into()?))
             }
 
-            (JsonWebKeyPublicParameters::Okp(params), JsonWebSignatureAlg::Ed25519)
-                if params.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
+            (JsonWebKeyPublicParameters::Okp(parameters), JsonWebSignatureAlg::Ed25519)
+                if parameters.crv == JsonWebKeyOkpEllipticCurve::Ed25519 =>
             {
-                Ok(Self::ed25519(params.try_into()?))
+                Ok(Self::ed25519(parameters.try_into()?))
             }
 
             (JsonWebKeyPublicParameters::Okp(_params), JsonWebSignatureAlg::Ed25519) => {
@@ -637,15 +637,15 @@ mod tests {
             .iter()
             .find(|key| {
                 matches!(
-                    key.params(),
-                    JsonWebKeyPrivateParameters::Ec(params)
-                        if params.crv == JsonWebKeyEcEllipticCurve::P256
+                    key.parameters(),
+                    JsonWebKeyPrivateParameters::Ec(parameters)
+                        if parameters.crv == JsonWebKeyEcEllipticCurve::P256
                 )
             })
             .unwrap();
 
         let result =
-            AsymmetricSigningKey::from_jwk_and_alg(p256.params(), &JsonWebSignatureAlg::Es512);
+            AsymmetricSigningKey::from_jwk_and_alg(p256.parameters(), &JsonWebSignatureAlg::Es512);
 
         match result {
             Err(AsymmetricKeyFromJwkError::KeyNotSuitable {
@@ -663,15 +663,17 @@ mod tests {
             .iter()
             .find(|key| {
                 matches!(
-                    key.params(),
-                    JsonWebKeyPublicParameters::Okp(params)
-                        if params.crv == JsonWebKeyOkpEllipticCurve::Ed448
+                    key.parameters(),
+                    JsonWebKeyPublicParameters::Okp(parameters)
+                        if parameters.crv == JsonWebKeyOkpEllipticCurve::Ed448
                 )
             })
             .unwrap();
 
-        let result =
-            AsymmetricVerifyingKey::from_jwk_and_alg(ed448.params(), &JsonWebSignatureAlg::Ed25519);
+        let result = AsymmetricVerifyingKey::from_jwk_and_alg(
+            ed448.parameters(),
+            &JsonWebSignatureAlg::Ed25519,
+        );
 
         match result {
             Err(AsymmetricKeyFromJwkError::KeyNotSuitable {

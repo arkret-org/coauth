@@ -281,15 +281,15 @@ fn resolution_fields_map_onto_the_shared_binding() {
     // in memory agree.
     let profile = high_risk_freshness();
     assert_eq!(
-        binding.refresh_after(),
-        profile.refresh_after(now).map(canonical_instant)
+        binding.refresh_at(),
+        profile.refresh_at(now).map(canonical_instant)
     );
     assert_eq!(
         binding.expires_at(),
         profile.expires_at(now).map(canonical_instant)
     );
     assert_eq!(
-        binding.refresh_after(),
+        binding.refresh_at(),
         Some(canonical_instant(now + HIGH_RISK_MAX_AGE))
     );
     assert_eq!(
@@ -709,7 +709,7 @@ fn stale_is_readable_for_low_risk_but_rejected_by_high_risk_freshness() {
     );
     let key = accepted.binding().key();
 
-    // Past `refresh_after`, before `expires_at`.
+    // Past `refresh_at`, before `expires_at`.
     let later = now + HIGH_RISK_MAX_AGE + Duration::seconds(1);
     let (hit, freshness) = store.get_with_freshness(&key, later);
     let hit = hit.expect("stale entries stay readable");

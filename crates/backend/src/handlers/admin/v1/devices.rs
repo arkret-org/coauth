@@ -5,7 +5,7 @@ use std::collections::btree_map::Entry;
 
 use chrono::{DateTime, Utc};
 use coauth_admin_types::{
-    DeviceListResBody, DeviceMfaState, DeviceRecord, DeviceRevokeOutcome, DeviceRiskLevel,
+    DeviceListResBody, DeviceMfaState, DeviceRecord, DeviceRevocationStatusView, DeviceRiskLevel,
     RevokeDeviceRequestBody,
 };
 use coauth_data::audit::{AdminOperation, AdminOperationFilter};
@@ -16,7 +16,7 @@ use ulid::Ulid;
 
 use crate::handlers::admin::audit_helper::record_admin_operation;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::services::device_revoke::cascade_revoke_session_grants;
 use crate::{AppError, JsonResult};
 
@@ -216,7 +216,10 @@ async fn aggregate_devices(
 
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.devices.revoke", skip_all)]
-pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<DeviceRevokeOutcome> {
+pub async fn revoke_device(
+    req: &mut Request,
+    depot: &Depot,
+) -> JsonResult<DeviceRevocationStatusView> {
     let device_id = req
         .param::<String>("id")
         .map(|s| s.trim().to_owned())
@@ -281,7 +284,7 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
     .await?;
     repo.save().await?;
 
-    Ok(Json(DeviceRevokeOutcome {
+    Ok(Json(DeviceRevocationStatusView {
         device: DeviceRecord {
             id: device_id,
             account_id: None,
@@ -306,7 +309,7 @@ pub async fn revoke_device(req: &mut Request, depot: &Depot) -> JsonResult<Devic
 pub async fn revoke_account_device(
     req: &mut Request,
     depot: &Depot,
-) -> JsonResult<DeviceRevokeOutcome> {
+) -> JsonResult<DeviceRevocationStatusView> {
     let account_id = extract_ulid_param(req)?;
     let device_id = req
         .param::<String>("device_id")
@@ -376,7 +379,7 @@ pub async fn revoke_account_device(
     .await?;
     repo.save().await?;
 
-    Ok(Json(DeviceRevokeOutcome {
+    Ok(Json(DeviceRevocationStatusView {
         device: DeviceRecord {
             id: device_id,
             account_id: Some(account_id.to_string()),

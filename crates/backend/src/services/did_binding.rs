@@ -126,7 +126,7 @@ pub const CONTROLLER_MAX_AGE: Duration = Duration::minutes(15);
 
 /// Hard-expiry offset for every accepted binding.
 ///
-/// §5: crossing `refresh_after` only marks a binding `Stale` and MUST NOT turn
+/// §5: crossing `refresh_at` only marks a binding `Stale` and MUST NOT turn
 /// an ordinary read into an online resolution; `expires_at` is the point past
 /// which the entry stops existing for readers entirely. 24 hours bounds how
 /// long a rotated or revoked key could still back a low-risk read if no
@@ -238,7 +238,7 @@ fn resolver_policy(arkret_config: &ArkretConfig) -> ResolverPolicy {
         // not resolve itself.
         trust_root_ids: delegated.into_iter().collect(),
         // coauth's resolver holds no cache of its own: the binding store is the
-        // only reuse layer, and it carries `refresh_after` / `expires_at`.
+        // only reuse layer, and it carries `refresh_at` / `expires_at`.
         ttl: None,
         // Every resolver failure is returned to the caller; no cached answer is
         // ever served on error.
@@ -403,7 +403,7 @@ fn method_evidence(resolution: &DidResolution) -> MethodEvidence {
             .as_ref()
             .map(|head| head.as_str().to_owned()),
         // Neither `did:web` / `did:plc` / `did:key` nor coauth's delegated
-        // `IdentityResolveOutcome` exposes a method version identifier.
+        // `IdentityResolveResponseBody` exposes a method version identifier.
         version_id: None,
     }
 }
@@ -506,7 +506,7 @@ pub fn enforce_formal_accepted_binding_admission(
 /// | [`evidence_receipt`] over the pinned document digest and the surfaced pins | `evidence_digest` + `evidence_dependencies` |
 /// | `identity_fact_rejection` | `status` (see [`status_for`]) |
 /// | *(caller)* | `trust_domain`, `purpose`, `policy_digest`, `verification_method`, `verified_at` |
-/// | *(caller's [`FreshnessProfile`])* | `refresh_after`, `expires_at` |
+/// | *(caller's [`FreshnessProfile`])* | `refresh_at`, `expires_at` |
 #[allow(clippy::too_many_arguments)]
 pub fn binding_from_resolution(
     resolution: &DidResolution,
@@ -566,7 +566,7 @@ pub fn binding_from_resolution(
             evidence_dependencies,
             policy_digest,
             verified_at: now,
-            refresh_after: freshness.refresh_after(now),
+            refresh_at: freshness.refresh_at(now),
             expires_at: freshness.expires_at(now),
             status: status_for(resolution.identity_fact_rejection),
         },
@@ -590,7 +590,7 @@ pub struct CoauthBindingRequest<'a> {
     pub verification_method: Option<arkret_wire::DidUrl>,
     /// The registered §5.4 profile this call site references. It is the single
     /// freshness threshold: it derives the [`FreshnessRequirement`] a reusable
-    /// entry has to satisfy *and* the `refresh_after` / `expires_at` an
+    /// entry has to satisfy *and* the `refresh_at` / `expires_at` an
     /// acceptance is filed with, so the two can no longer drift apart.
     pub freshness: FreshnessProfile,
 }
@@ -761,7 +761,7 @@ pub async fn resolve_and_accept_binding(
 ///
 /// Derives the deployment trust domain and policy digest and hands the call
 /// site's registered §5.4 [`FreshnessProfile`] to the binding layer — which is
-/// what makes the reuse window and the filed `refresh_after` the same number.
+/// what makes the reuse window and the filed `refresh_at` the same number.
 /// A second call for the same DID / purpose inside that window reuses the
 /// binding and performs **zero** network fetches; a call outside it refreshes
 /// exactly once.
@@ -878,7 +878,7 @@ pub struct AuthorityDocument {
 /// is not a `<algo>:<hex>` digest. Every head coauth files went in as a
 /// [`Hash`] (`DidResolution::key_log_head` is typed that way and
 /// `parse_key_log_head` rejects anything else), and the outward
-/// `IdentityResolveOutcome` / `IdentityDocumentView` shapes are typed as
+/// `IdentityResolveResponseBody` / `IdentityDocumentView` shapes are typed as
 /// digests, so the round trip back is total for rows this deployment wrote. A
 /// row that somehow carries a non-digest head is reported rather than silently
 /// dropped: it means the acceptance was written by something other than this
@@ -1010,7 +1010,7 @@ pub fn mirrored_acceptance(
         evidence_dependencies: binding.evidence_dependencies().clone(),
         policy_digest: binding.policy_digest().clone(),
         verified_at: binding.verified_at(),
-        refresh_after: binding.refresh_after(),
+        refresh_at: binding.refresh_at(),
         expires_at: binding.expires_at(),
         status: binding.status(),
     })

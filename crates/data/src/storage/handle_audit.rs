@@ -180,7 +180,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewHandleAuditEvent,
+            parameters: NewHandleAuditEvent,
         ) -> Result<HandleAuditEvent, Self::Error>;
 
         /// List all audit events for a given user, newest first.

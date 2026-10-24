@@ -152,7 +152,7 @@ pub enum ClientCredentials {
         client_secret: String,
     },
 
-    /// `WeChat` Open Platform: uses appid/secret as query params.
+    /// `WeChat` Open Platform: uses appid/secret as query parameters.
     WeChat {
         /// The unique ID for the client (`WeChat` `AppID`).
         client_id: String,
@@ -456,7 +456,7 @@ impl fmt::Debug for ClientCredentials {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")]
+#[serde(rename = "urn:ietf:parameters:oauth:client-assertion-type:jwt-bearer")]
 struct JwtBearerClientAssertionType;
 
 /// Prepare the standard JWT bearer claims used for `client_secret_jwt` and

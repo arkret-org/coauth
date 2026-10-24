@@ -24,7 +24,7 @@ pub enum DeviceRevokeError {
 
 /// Outcome of a device-revoke cascade.
 #[derive(Debug, Clone)]
-pub struct DeviceRevokeOutcome {
+pub struct DeviceRevocationStatusView {
     /// The device id passed in.
     pub device_id: String,
     /// Number of session grants revoked.
@@ -40,7 +40,7 @@ pub async fn cascade_revoke_session_grants(
     repo: &mut BoxRepository,
     clock: &dyn coauth_data::Clock,
     device_id: &str,
-) -> Result<DeviceRevokeOutcome, DeviceRevokeError> {
+) -> Result<DeviceRevocationStatusView, DeviceRevokeError> {
     let now = clock.now();
     let mut total = 0usize;
 
@@ -71,7 +71,7 @@ pub async fn cascade_revoke_session_grants(
         }
     }
 
-    Ok(DeviceRevokeOutcome {
+    Ok(DeviceRevocationStatusView {
         device_id: device_id.to_owned(),
         revoked_session_grants: total,
         revoked_at: now,
@@ -84,7 +84,7 @@ mod tests {
     //!
     //! Notes:
     //!   * Two of the tests below run *without* a real DB. They assert pure-data invariants — the
-    //!     shape of the [`DeviceRevokeOutcome`] and the idempotency contract of the input
+    //!     shape of the [`DeviceRevocationStatusView`] and the idempotency contract of the input
     //!     arguments.
     //!   * Round 23 already covered the happy-path with a DB-backed test in
     //!     `handlers/admin/v1/devices.rs` (covered by the 115 pre-existing pool tests). The two
@@ -96,12 +96,12 @@ mod tests {
 
     #[test]
     fn outcome_shape_is_canonical() {
-        // The wire shape of `DeviceRevokeOutcome` is part of the
+        // The wire shape of `DeviceRevocationStatusView` is part of the
         // admin-handler contract (it is serialised back to the
         // operator). Lock down the field names + their typed payload:
         // a regression here would break every codmin client.
         let now = Utc::now();
-        let outcome = DeviceRevokeOutcome {
+        let outcome = DeviceRevocationStatusView {
             device_id: "ak:device:0196419b-0000-7000-8000-000000000006".to_owned(),
             revoked_session_grants: 0,
             revoked_at: now,
@@ -122,14 +122,14 @@ mod tests {
         // body in `cascade_revoke_session_grants` already encodes this
         // (the `active_at(now)` filter excludes revoked grants), but
         // the test pins the documented contract.
-        let zero_outcome = DeviceRevokeOutcome {
+        let zero_outcome = DeviceRevocationStatusView {
             device_id: "device-without-grants".to_owned(),
             revoked_session_grants: 0,
             revoked_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
         };
         // A second cascade against the same device id should produce
         // the same shape with the same count of `0` revoked grants.
-        let again = DeviceRevokeOutcome {
+        let again = DeviceRevocationStatusView {
             device_id: zero_outcome.device_id.clone(),
             revoked_session_grants: 0,
             revoked_at: zero_outcome.revoked_at,
@@ -146,7 +146,7 @@ mod tests {
         // the audit-log entry, and the `revoked_at` exposed to the
         // operator share the same instant.
         let frozen = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
-        let outcome = DeviceRevokeOutcome {
+        let outcome = DeviceRevocationStatusView {
             device_id: "device-1".to_owned(),
             revoked_session_grants: 3,
             revoked_at: frozen,

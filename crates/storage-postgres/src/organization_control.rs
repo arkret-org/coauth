@@ -269,17 +269,17 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewOrganizationPrincipalControl,
+        parameters: NewOrganizationPrincipalControl,
     ) -> Result<OrganizationPrincipalControl, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
         let supplied_realm_id =
-            arkret_identifiers::RealmId::new(params.principal_control_realm_id)?;
-        let create_event_id = arkret_identifiers::EventId::new(params.control_stream_ref)?;
+            arkret_identifiers::RealmId::new(parameters.principal_control_realm_id)?;
+        let create_event_id = arkret_identifiers::EventId::new(parameters.control_stream_ref)?;
         let principal_control_realm_id =
             arkret_identifiers::RealmId::from_event_id(&create_event_id);
-        let organization_id = params.organization_id;
-        let organization_did = params.organization_did;
+        let organization_id = parameters.organization_id;
+        let organization_did = parameters.organization_did;
         let projected_organization_id =
             arkret_identifiers::project_did_to_core_id(&organization_did)?;
         if organization_id != projected_organization_id {
@@ -294,11 +294,11 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             organization_did: organization_did.as_str().to_owned(),
             principal_control_realm_id: principal_control_realm_id.to_string(),
             control_stream_ref: create_event_id.to_string(),
-            pcr_commit_ref: params.pcr_commit_ref,
-            bootstrap_authorization: params.bootstrap_authorization.as_str().to_owned(),
-            bootstrap_delegation_ref: params.bootstrap_delegation_ref,
-            executed_by: params.executed_by,
-            bootstrap_proof_digest: params.bootstrap_proof_digest,
+            pcr_commit_ref: parameters.pcr_commit_ref,
+            bootstrap_authorization: parameters.bootstrap_authorization.as_str().to_owned(),
+            bootstrap_delegation_ref: parameters.bootstrap_delegation_ref,
+            executed_by: parameters.executed_by,
+            bootstrap_proof_digest: parameters.bootstrap_proof_digest,
             created_at: now,
             updated_at: now,
         };
@@ -315,7 +315,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             principal_control_realm_id: row.principal_control_realm_id,
             control_stream_ref: row.control_stream_ref,
             pcr_commit_ref: row.pcr_commit_ref,
-            bootstrap_authorization: params.bootstrap_authorization,
+            bootstrap_authorization: parameters.bootstrap_authorization,
             bootstrap_delegation_ref: row.bootstrap_delegation_ref,
             executed_by: row.executed_by,
             bootstrap_proof_digest: row.bootstrap_proof_digest,
@@ -373,35 +373,35 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewOrganizationDelegation,
+        parameters: NewOrganizationDelegation,
     ) -> Result<OrganizationDelegation, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
-        let organization_id = params.organization_id;
-        let delegate_id = params.delegate_id;
+        let organization_id = parameters.organization_id;
+        let delegate_id = parameters.delegate_id;
         let row = InsertableDelegation {
             id: Uuid::from(id),
-            delegation_ref: params.delegation_ref,
+            delegation_ref: parameters.delegation_ref,
             organization_id: organization_id.clone(),
             delegate_id: delegate_id.clone(),
-            issuer_role: issuer_role_str(params.issuer_role),
-            purposes: params.purposes,
-            covered_relationships: params
+            issuer_role: issuer_role_str(parameters.issuer_role),
+            purposes: parameters.purposes,
+            covered_relationships: parameters
                 .covered_relationships
                 .iter()
                 .copied()
                 .map(relationship_str)
                 .collect(),
-            covered_control_scopes: params
+            covered_control_scopes: parameters
                 .covered_control_scopes
                 .iter()
                 .copied()
                 .map(control_scope_str)
                 .collect(),
             status: OrganizationDelegationStatus::Active.as_str().to_owned(),
-            valid_from: params.valid_from,
-            valid_until: params.valid_until,
-            created_by: params.created_by,
+            valid_from: parameters.valid_from,
+            valid_until: parameters.valid_until,
+            created_by: parameters.created_by,
             created_at: now,
             updated_at: now,
         };
@@ -416,10 +416,10 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             delegation_ref: row.delegation_ref,
             organization_id,
             delegate_id,
-            issuer_role: params.issuer_role,
+            issuer_role: parameters.issuer_role,
             purposes: row.purposes,
-            covered_relationships: params.covered_relationships,
-            covered_control_scopes: params.covered_control_scopes,
+            covered_relationships: parameters.covered_relationships,
+            covered_control_scopes: parameters.covered_control_scopes,
             status: OrganizationDelegationStatus::Active,
             valid_from: row.valid_from,
             valid_until: row.valid_until,

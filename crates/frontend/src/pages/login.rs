@@ -56,15 +56,15 @@ fn get_query_param(name: &str) -> Option<String> {
 
     if let Ok(search) = window.location().search()
         && !search.is_empty()
-        && let Ok(params) = web_sys::UrlSearchParams::new_with_str(&search)
-        && let Some(value) = params.get(name)
+        && let Ok(parameters) = web_sys::UrlSearchParams::new_with_str(&search)
+        && let Some(value) = parameters.get(name)
     {
         return Some(value);
     }
 
     let search = preserved_login_query()?;
-    let params = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
-    params.get(name)
+    let parameters = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
+    parameters.get(name)
 }
 
 /// Return the current page's query string (without leading `?`), falling

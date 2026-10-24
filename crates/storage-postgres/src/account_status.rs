@@ -62,7 +62,7 @@ impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> +
         let value = account_status_records::table
             .filter(account_status_records::account_authority_id.eq(authority))
             .filter(account_status_records::local_account_id.eq(local_account_id))
-            .order(account_status_records::status_seq.desc())
+            .order(account_status_records::status_sequence.desc())
             .select(account_status_records::record)
             .for_update()
             .first::<serde_json::Value>(self.conn)
@@ -77,7 +77,7 @@ impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> +
 struct NewRecord {
     account_authority_id: String,
     local_account_id: String,
-    status_seq: i64,
+    status_sequence: i64,
     record_id: String,
     record: serde_json::Value,
     issued_at: chrono::DateTime<chrono::Utc>,
@@ -131,9 +131,11 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             return Ok(AccountStatusAppendOutcome::Duplicate);
         }
         let is_next = match &current {
-            None => record.status_seq == 1 && record.previous_account_status_record_id.is_none(),
+            None => {
+                record.status_sequence == 1 && record.previous_account_status_record_id.is_none()
+            }
             Some(head) => {
-                record.status_seq == head.status_seq + 1
+                record.status_sequence == head.status_sequence + 1
                     && record.previous_account_status_record_id.as_ref()
                         == Some(&head.account_status_record_id)
             }
@@ -144,12 +146,12 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             });
         }
 
-        let status_seq = i64::try_from(record.status_seq)?;
+        let status_sequence = i64::try_from(record.status_sequence)?;
         diesel::insert_into(account_status_records::table)
             .values(NewRecord {
                 account_authority_id: record.account_authority_id.to_string(),
                 local_account_id: local_account_id.to_string(),
-                status_seq,
+                status_sequence,
                 record_id: record.account_status_record_id.to_string(),
                 record: serde_json::to_value(record)?,
                 issued_at: record.issued_at,
@@ -167,7 +169,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 ),
         )
         .set((
-            account_status_ledger_heads::current_status_seq.eq(status_seq),
+            account_status_ledger_heads::current_status_sequence.eq(status_sequence),
             account_status_ledger_heads::current_record_id
                 .eq(record.account_status_record_id.as_str()),
         ))
@@ -271,15 +273,15 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         account_authority_id: &str,
         local_account_id: &str,
-        from_status_seq: u64,
+        from_status_sequence: u64,
         limit: u16,
     ) -> Result<Vec<AccountStatusRecord>, Self::Error> {
-        let from = i64::try_from(from_status_seq)?;
+        let from = i64::try_from(from_status_sequence)?;
         let values = account_status_records::table
             .filter(account_status_records::account_authority_id.eq(account_authority_id))
             .filter(account_status_records::local_account_id.eq(local_account_id))
-            .filter(account_status_records::status_seq.ge(from))
-            .order(account_status_records::status_seq.asc())
+            .filter(account_status_records::status_sequence.ge(from))
+            .order(account_status_records::status_sequence.asc())
             .limit(i64::from(limit))
             .select(account_status_records::record)
             .load::<serde_json::Value>(self.conn)
@@ -337,7 +339,7 @@ mod tests {
                 ),
             ),
             binding_version: 1,
-            status_seq: 1,
+            status_sequence: 1,
             previous_account_status_record_id: None,
             status: AccountStatus::Active,
             reason_code: None,
@@ -423,7 +425,7 @@ mod tests {
     async fn gate_exact_signed_replay_survives_new_status_head_and_changed_intent_refuses() {
         use arkret_models_identity::agent_signer_evidence::{
             AgentDetachedJws, ControllerAccountEligibility, ControllerAccountGateAttestation,
-            ControllerAccountGateBasis, ControllerAccountGateIssuanceOutcome,
+            ControllerAccountGateAttestationIssueResponseBody, ControllerAccountGateBasis,
             ControllerAccountStatus,
         };
         use coauth_data::account_handoff::{
@@ -499,10 +501,12 @@ mod tests {
         )
         .unwrap();
         let expires = gate.expires_at;
-        let bytes = arkret_canonical::canonical_json_bytes(&ControllerAccountGateIssuanceOutcome {
-            request_id,
-            controller_account_gate_attestation: gate,
-        })
+        let bytes = arkret_canonical::canonical_json_bytes(
+            &ControllerAccountGateAttestationIssueResponseBody {
+                request_id,
+                controller_account_gate_attestation: gate,
+            },
+        )
         .unwrap();
         let digest = Hash::new(arkret_canonical::sha256_digest(&bytes)).unwrap();
         let mut first = factory.create().await.unwrap();

@@ -97,7 +97,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewAgentKeyAuthorization,
+            parameters: NewAgentKeyAuthorization,
         ) -> Result<AgentKeyAuthorization, Self::Error>;
 
         /// Look up an authorization by its complete content-bound Event id.
@@ -158,7 +158,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewAgentSessionProofReplay,
+            parameters: NewAgentSessionProofReplay,
         ) -> Result<bool, Self::Error>;
 
         /// Delete replay rows past their prune horizon. Returns the number of rows

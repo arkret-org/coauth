@@ -1,7 +1,7 @@
 use arkret_identifiers::DeviceId;
 use arkret_models_collaboration::session_grant_bodies::session_grant_refresh_request_digest;
 use arkret_models_collaboration::session_grants::{
-    HumanSessionGrantRefreshRequest, SessionGrantOutcome, SessionGrantRefreshRequestBody,
+    HumanSessionGrantRefreshRequestBody, SessionGrantRefreshRequestBody, SessionGrantResponseBody,
 };
 use arkret_models_identity::{
     SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantProofKind,
@@ -63,7 +63,7 @@ fn require_bound_device_id<'a>(
 }
 
 fn validate_human_refresh_before_reservation(
-    body: &HumanSessionGrantRefreshRequest,
+    body: &HumanSessionGrantRefreshRequestBody,
     prior_grant: &coauth_data::SessionGrant,
     prior_payload: &SignedSessionGrantClaims,
     holder_jkt: &str,
@@ -634,7 +634,7 @@ pub async fn refresh_session_grant(
             },
         )?;
         let audience_id = new_material.audience_id.clone();
-        let outcome = SessionGrantOutcome {
+        let outcome = SessionGrantResponseBody {
             session_grant_id: new_material.grant_id.clone(),
             account_id: new_material.account_id.clone(),
             device_id: None,
@@ -894,7 +894,7 @@ pub async fn refresh_session_grant(
 
     let response_audience = new_material.audience_id.clone();
 
-    let outcome = SessionGrantOutcome {
+    let outcome = SessionGrantResponseBody {
         session_grant_id: new_material.grant_id.clone(),
         account_id: new_material.account_id.clone(),
         device_id: Some(device_id),

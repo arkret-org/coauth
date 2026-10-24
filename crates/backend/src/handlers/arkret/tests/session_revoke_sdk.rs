@@ -242,7 +242,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
         &arkret_signatures::webvh::RealmActorInceptionInput {
             principal_endpoint: &endpoint,
             local_id: "revoke-sdk",
-            version_time: Utc::now(),
+            version_created_at: Utc::now(),
             root_seed: &[82; 32],
             next_root_public_key_multibase: "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
             controller_public_key: &lifecycle_key.verifying_key().to_bytes(),

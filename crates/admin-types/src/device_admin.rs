@@ -90,7 +90,7 @@ pub struct RevokeDeviceRequestBody {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct DeviceRevokeOutcome {
+pub struct DeviceRevocationStatusView {
     /// The device that was revoked.
     pub device: DeviceRecord,
     /// How many active session grants were cascade-revoked atomically.

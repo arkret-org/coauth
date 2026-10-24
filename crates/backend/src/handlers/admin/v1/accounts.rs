@@ -31,7 +31,7 @@ use ulid::Ulid;
 use crate::handlers::admin::audit_helper::AdminAuditSigning;
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::Resource;
-use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::parameters::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
@@ -192,24 +192,24 @@ pub async fn list_accounts(
     let call_context = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = call_context;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: AccountFilterParams = req
+    let parameters: AccountFilterParams = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
-    let base = format!("{path}{params}", path = AccountRecord::PATH);
+    let base = format!("{path}{parameters}", path = AccountRecord::PATH);
     let base = include_count.add_to_base(&base);
     let mut filter = UserFilter::default();
 
-    filter = match params.admin {
+    filter = match parameters.admin {
         Some(true) => filter.can_request_admin_only(),
         Some(false) => filter.cannot_request_admin_only(),
         None => filter,
     };
-    filter = match params.search.as_deref() {
+    filter = match parameters.search.as_deref() {
         Some(search) => filter.matching_search(search),
         None => filter,
     };
-    filter = match params.status {
+    filter = match parameters.status {
         Some(AccountFilterStatus::Active) => filter.active_only(),
         Some(AccountFilterStatus::SoftLoggedOut) => filter.soft_logged_out_only(),
         Some(AccountFilterStatus::Locked) => filter.locked_only(),

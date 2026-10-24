@@ -227,14 +227,14 @@ fn build_authorization_request(
         pkce,
     };
 
-    let auth_data = AuthorizationValidationData {
+    let signature_proof = AuthorizationValidationData {
         state,
         nonce,
         redirect_uri,
         code_challenge_verifier,
     };
 
-    Ok((auth_request, auth_data))
+    Ok((auth_request, signature_proof))
 }
 
 /// Build the URL for authenticating at the Authorization endpoint.

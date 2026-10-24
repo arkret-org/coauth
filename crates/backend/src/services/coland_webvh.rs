@@ -1,6 +1,6 @@
 //! Submission of client-signed DID operations to an authoritative Station.
 
-use arkret_models_identity::{DidOperationSubmitOutcome, DidOperationSubmitRequestBody};
+use arkret_models_identity::{DidOperationSubmitRequestBody, DidOperationSubmitResponseBody};
 use thiserror::Error;
 use url::Url;
 
@@ -25,7 +25,7 @@ pub async fn submit_did_operation(
     principal_endpoint: &Url,
     bearer: Option<&str>,
     body: &DidOperationSubmitRequestBody,
-) -> Result<DidOperationSubmitOutcome, ColandWebvhError> {
+) -> Result<DidOperationSubmitResponseBody, ColandWebvhError> {
     let endpoint = principal_endpoint
         .join("/_arkret/root/identity/submit-did-operation")
         .map_err(ColandWebvhError::InvalidEndpoint)?;
@@ -98,8 +98,8 @@ mod tests {
         let body = DidOperationSubmitRequestBody {
             did: did.clone(),
             did_method: DidMethodName::Webvh,
-            seq: Some(0),
-            prev_event_digest: None,
+            sequence: Some(0),
+            previous_event_digest: None,
             operation: BTreeMap::new(),
         };
 

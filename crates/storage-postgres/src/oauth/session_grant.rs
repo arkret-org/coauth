@@ -1,5 +1,5 @@
 use arkret_identifiers::{DidCoreId, SessionGrantId};
-use arkret_models_collaboration::account_lifecycle::SessionRevokeOutcome as WireSessionRevokeOutcome;
+use arkret_models_collaboration::account_lifecycle::SessionRevokeResponseBody as WireSessionRevokeOutcome;
 use arkret_models_identity::{
     SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuancePreimage,
     SessionGrantProofKind, SignedSessionGrantClaims,

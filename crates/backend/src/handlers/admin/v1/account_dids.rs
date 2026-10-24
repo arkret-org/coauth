@@ -21,7 +21,7 @@ use serde::Deserialize;
 
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::{
     DidBindingProofError, normalize_did_for_binding, validate_account_registration_control_proof,

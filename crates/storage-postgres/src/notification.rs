@@ -354,7 +354,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             notification_request.id,
-            notification_request.template_key = params.template_key(),
+            notification_request.template_key = parameters.template_key(),
         ),
         err,
     )]
@@ -362,24 +362,24 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewNotificationRequest,
+        parameters: NewNotificationRequest,
     ) -> Result<NotificationRequest, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
         tracing::Span::current().record("notification_request.id", tracing::field::display(id));
 
-        let scheduled_at = params.scheduled_at().unwrap_or(created_at);
-        let source = serde_json::to_value(params.source())?;
+        let scheduled_at = parameters.scheduled_at().unwrap_or(created_at);
+        let source = serde_json::to_value(parameters.source())?;
 
         let row = NewNotificationRequestRow {
             id: Uuid::from(id),
-            template_key: params.template_key().to_owned(),
-            locale: params.locale().to_owned(),
+            template_key: parameters.template_key().to_owned(),
+            locale: parameters.locale().to_owned(),
             source,
-            payload: params.payload().clone(),
+            payload: parameters.payload().clone(),
             status: request_status_to_db(NotificationRequestStatus::Pending).to_owned(),
-            dedupe_key: params.dedupe_key().map(ToOwned::to_owned),
-            correlation_key: params.correlation_key().map(ToOwned::to_owned),
+            dedupe_key: parameters.dedupe_key().map(ToOwned::to_owned),
+            correlation_key: parameters.correlation_key().map(ToOwned::to_owned),
             created_at,
             scheduled_at,
             started_at: None,
@@ -396,7 +396,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             id,
             template_key: row.template_key,
             locale: row.locale,
-            source: params.source().clone(),
+            source: parameters.source().clone(),
             payload: row.payload,
             status: NotificationRequestStatus::Pending,
             dedupe_key: row.dedupe_key,
@@ -549,7 +549,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         fields(
             notification_request.id = %notification_request.id,
             notification_delivery.id,
-            notification_delivery.channel = ?params.channel(),
+            notification_delivery.channel = ?parameters.channel(),
         ),
         err,
     )]
@@ -558,7 +558,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
         notification_request: &NotificationRequest,
-        params: NewNotificationDelivery,
+        parameters: NewNotificationDelivery,
     ) -> Result<NotificationDelivery, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
@@ -567,9 +567,9 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         let row = NewNotificationDeliveryRow {
             id: Uuid::from(id),
             notification_request_id: Uuid::from(notification_request.id),
-            channel: channel_to_db(params.channel()).to_owned(),
-            destination: serde_json::to_value(params.destination())?,
-            provider_binding_key: params.provider_binding_key().map(ToOwned::to_owned),
+            channel: channel_to_db(parameters.channel()).to_owned(),
+            destination: serde_json::to_value(parameters.destination())?,
+            provider_binding_key: parameters.provider_binding_key().map(ToOwned::to_owned),
             provider_message_id: None,
             attempt_count: 0,
             status: delivery_status_to_db(NotificationDeliveryStatus::Pending).to_owned(),
@@ -590,8 +590,8 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         Ok(NotificationDelivery {
             id,
             notification_request_id: notification_request.id,
-            channel: params.channel(),
-            destination: params.destination().clone(),
+            channel: parameters.channel(),
+            destination: parameters.destination().clone(),
             provider_binding_key: row.provider_binding_key,
             provider_message_id: None,
             attempt_count: 0,
@@ -777,7 +777,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             notification_request.id = %notification_request.id,
-            notification_event.kind = ?params.kind(),
+            notification_event.kind = ?parameters.kind(),
         ),
         err,
     )]
@@ -787,7 +787,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         clock: &dyn Clock,
         notification_request: &NotificationRequest,
         notification_delivery: Option<&NotificationDelivery>,
-        params: NewNotificationEventLog,
+        parameters: NewNotificationEventLog,
     ) -> Result<NotificationEventLog, Self::Error> {
         let occurred_at = clock.now();
         let id = new_id(occurred_at, rng);
@@ -796,10 +796,10 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             id: Uuid::from(id),
             notification_request_id: Uuid::from(notification_request.id),
             notification_delivery_id: notification_delivery.map(|delivery| Uuid::from(delivery.id)),
-            kind: event_kind_to_db(params.kind()).to_owned(),
-            actor: serde_json::to_value(params.actor())?,
-            summary: params.summary().map(ToOwned::to_owned),
-            audit_context: params.audit_context().clone(),
+            kind: event_kind_to_db(parameters.kind()).to_owned(),
+            actor: serde_json::to_value(parameters.actor())?,
+            summary: parameters.summary().map(ToOwned::to_owned),
+            audit_context: parameters.audit_context().clone(),
             occurred_at,
         };
 
@@ -812,8 +812,8 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             id,
             notification_request_id: notification_request.id,
             notification_delivery_id: notification_delivery.map(|delivery| delivery.id),
-            kind: params.kind(),
-            actor: params.actor().clone(),
+            kind: parameters.kind(),
+            actor: parameters.actor().clone(),
             summary: row.summary,
             audit_context: row.audit_context,
             occurred_at,

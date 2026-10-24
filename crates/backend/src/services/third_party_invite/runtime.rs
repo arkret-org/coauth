@@ -5,7 +5,7 @@ use coauth_data::RepositoryFactory;
 use coauth_messaging::email::Mailer;
 use coauth_storage_postgres::PgRepositoryFactory;
 use coland_storage::{
-    InviteCurrentResultStore, PersistenceError, ThirdPartyInviteProviderLivenessGuard,
+    InviteCurrentStateStore, PersistenceError, ThirdPartyInviteProviderLivenessGuard,
     ThirdPartyInviteProviderLivenessRequest,
 };
 
@@ -17,7 +17,7 @@ pub struct ThirdPartyInviteRuntime {
     pub(crate) factory: PgRepositoryFactory,
     pub(crate) encrypter: Encrypter,
     pub(crate) config: coauth_config::ArkretConfig,
-    store: coland_storage_postgres::PgInviteCurrentResultStore,
+    store: coland_storage_postgres::PgInviteCurrentStateStore,
     mailer: Mailer,
 }
 impl ThirdPartyInviteRuntime {
@@ -56,7 +56,7 @@ impl ThirdPartyInviteRuntime {
             factory,
             encrypter,
             config,
-            store: coland_storage_postgres::PgInviteCurrentResultStore { pool },
+            store: coland_storage_postgres::PgInviteCurrentStateStore { pool },
             mailer,
         }))
     }
@@ -371,7 +371,7 @@ mod private_custody_tests {
             encrypter: Encrypter::new(&[0x42; 32]),
             config: coauth_config::ArkretConfig::default(),
             // No governance access is permitted in these expiry-only cases.
-            store: coland_storage_postgres::PgInviteCurrentResultStore { pool: db.clone() },
+            store: coland_storage_postgres::PgInviteCurrentStateStore { pool: db.clone() },
             mailer: Mailer::new(
                 templates,
                 coauth_messaging::email::Transport::blackhole(),

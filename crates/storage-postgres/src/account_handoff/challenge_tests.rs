@@ -152,8 +152,9 @@ fn pairing_fixture(
     arkret_models_collaboration::device_pairing::DevicePairingTargetProof,
 ) {
     use arkret_models_collaboration::device_pairing::{
-        DevicePairingCode, DevicePairingNonce, DevicePairingRequestId, DevicePairingStageOutcome,
-        DevicePairingStageRequestBody, UnsignedDevicePairingTargetProof,
+        DevicePairingCode, DevicePairingNonce, DevicePairingRequestId,
+        DevicePairingStageRequestBody, DevicePairingStageResponseBody,
+        UnsignedDevicePairingTargetProof,
     };
     use arkret_models_collaboration::governance::agent_artifacts::PublicKey;
     use arkret_signatures::device_pairing::{
@@ -185,12 +186,12 @@ fn pairing_fixture(
     let server_nonce = DevicePairingNonce::new("BBBBBBBBBBBBBBBBBBBBBB").unwrap();
     let expires_at = now + Duration::minutes(10);
     let stage_request = DevicePairingStageRequestBody {
-        new_device_pubkey: public_key.clone(),
+        new_device_public_key: public_key.clone(),
         client_nonce: client_nonce.clone(),
         display_name: None,
         device_metadata: None,
     };
-    let stage_outcome = DevicePairingStageOutcome {
+    let stage_outcome = DevicePairingStageResponseBody {
         device_pairing_request_id: request_id.clone(),
         pairing_code: pairing_code.clone(),
         gate_audience_uri: "https://account.example".to_owned(),
@@ -231,7 +232,7 @@ fn pairing_fixture(
             stage_outcome: stage_outcome_bytes,
             device_pairing_request_id: request_id,
             pairing_code,
-            new_device_pubkey: public_key,
+            new_device_public_key: public_key,
             client_nonce,
             display_name: None,
             device_metadata: None,

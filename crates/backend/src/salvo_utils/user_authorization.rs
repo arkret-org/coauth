@@ -167,29 +167,31 @@ impl Header for WwwAuthenticate {
     }
 
     fn encode<E: Extend<http::HeaderValue>>(&self, values: &mut E) {
-        let (scheme, params) = match self {
+        let (scheme, parameters) = match self {
             WwwAuthenticate::Bearer {
                 realm,
                 error,
                 error_description,
             } => {
-                let mut params = HashMap::new();
-                params.insert("error", error.error());
+                let mut parameters = HashMap::new();
+                parameters.insert("error", error.error());
 
                 if let Some(realm) = realm {
-                    params.insert("realm", realm.clone());
+                    parameters.insert("realm", realm.clone());
                 }
 
                 if let Some(error_description) = error_description {
-                    params.insert("error_description", error_description.clone());
+                    parameters.insert("error_description", error_description.clone());
                 }
 
-                ("Bearer", params)
+                ("Bearer", parameters)
             }
         };
 
-        let params = params.into_iter().map(|(k, v)| format!(" {k}={v:?}"));
-        let value: String = std::iter::once(scheme.to_owned()).chain(params).collect();
+        let parameters = parameters.into_iter().map(|(k, v)| format!(" {k}={v:?}"));
+        let value: String = std::iter::once(scheme.to_owned())
+            .chain(parameters)
+            .collect();
         let value = HeaderValue::from_str(&value).unwrap();
         values.extend(std::iter::once(value));
     }

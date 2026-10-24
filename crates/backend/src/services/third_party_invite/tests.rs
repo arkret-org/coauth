@@ -224,7 +224,7 @@ async fn terminal_intent_replay_preserves_public_ledger_without_restoring_custod
 // fixture does not represent an accepted governing Station or current Invite;
 // those authority checks are exercised by the live four-operation suite.
 pub(super) fn ledger_activation(
-    public: &ThirdPartyInviteProvisionOutcome,
+    public: &ThirdPartyInviteProvisionResponseBody,
     did: &Did,
     dot: u8,
 ) -> ThirdPartyInviteActivationRequestBody {

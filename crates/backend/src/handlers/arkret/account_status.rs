@@ -1,7 +1,7 @@
 //! Service-authenticated Account Authority issuer-ledger reads.
 use arkret_identity::DidBindingPurpose;
 use arkret_models_collaboration::account_lifecycle::{
-    AccountStatusResolveOutcome, AccountStatusResolveRequestBody,
+    AccountStatusResolveRequestBody, AccountStatusResolveResponseBody,
 };
 use arkret_signatures::http_signature::{
     HttpSignatureScenario, SignatureVerificationPolicy, parse_signature_input,
@@ -21,7 +21,7 @@ use crate::services::station_trust::owning_station_id_for;
 pub async fn resolve_account_status(
     req: &mut Request,
     depot: &Depot,
-) -> Result<Json<AccountStatusResolveOutcome>, ArkretRouteError> {
+) -> Result<Json<AccountStatusResolveResponseBody>, ArkretRouteError> {
     let request: AccountStatusResolveRequestBody =
         req.parse_json().await.map_err(|_| not_found())?;
     request.validate().map_err(|_| not_found())?;
@@ -123,23 +123,25 @@ pub async fn resolve_account_status(
         .resolve(
             request.account_authority_id.as_str(),
             local_account_id.as_str(),
-            request.from_status_seq,
+            request.from_status_sequence,
             fetch_limit,
         )
         .await?;
     let has_more = records.len() > usize::from(request.limit);
     records.truncate(usize::from(request.limit));
-    let next_status_seq = has_more.then(|| {
+    let next_status_sequence = has_more.then(|| {
         records
             .last()
-            .map_or(request.from_status_seq, |record| record.status_seq + 1)
+            .map_or(request.from_status_sequence, |record| {
+                record.status_sequence + 1
+            })
     });
-    let outcome = AccountStatusResolveOutcome {
+    let outcome = AccountStatusResolveResponseBody {
         account_authority_id: request.account_authority_id.clone(),
         account_id: request.account_id.clone(),
         records,
         has_more,
-        next_status_seq,
+        next_status_sequence,
     };
     outcome
         .validate_for_request(&request)

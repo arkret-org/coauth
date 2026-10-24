@@ -13,7 +13,7 @@ use super::wrappers::{SampleIdentifier, TemplateContext, WithLanguage};
 #[derive(Serialize)]
 pub struct FormPostContext<T> {
     redirect_uri: Option<Url>,
-    params: T,
+    parameters: T,
 }
 
 impl<T: TemplateContext> TemplateContext for FormPostContext<T> {
@@ -27,7 +27,7 @@ impl<T: TemplateContext> TemplateContext for FormPostContext<T> {
             .map(|(id, inner_params)| {
                 let ctx = Self {
                     redirect_uri: "https://example.com/callback".parse().ok(),
-                    params: inner_params,
+                    parameters: inner_params,
                 };
                 (id, ctx)
             })
@@ -37,18 +37,18 @@ impl<T: TemplateContext> TemplateContext for FormPostContext<T> {
 
 impl<T> FormPostContext<T> {
     /// Build a form-post context that redirects to the given URL.
-    pub fn new_for_url(redirect_uri: Url, params: T) -> Self {
+    pub fn new_for_url(redirect_uri: Url, parameters: T) -> Self {
         Self {
             redirect_uri: Some(redirect_uri),
-            params,
+            parameters,
         }
     }
 
     /// Build a form-post context that posts to the current URL.
-    pub fn new_for_current_url(params: T) -> Self {
+    pub fn new_for_current_url(parameters: T) -> Self {
         Self {
             redirect_uri: None,
-            params,
+            parameters,
         }
     }
 

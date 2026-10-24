@@ -76,7 +76,7 @@ pub async fn handle_client_credentials(
         .add(rng, clock, &session, access_token_str, Some(ttl))
         .await?;
 
-    let mut params = AccessTokenResponse::new(access_token.access_token).with_expires_in(ttl);
+    let mut parameters = AccessTokenResponse::new(access_token.access_token).with_expires_in(ttl);
 
     // TODO: there is a potential (but unlikely) race here, where the activity for
     // the session is recorded before the transaction is committed. We would have to
@@ -85,8 +85,8 @@ pub async fn handle_client_credentials(
 
     if !session.scope.is_empty() {
         // We only return the scope if it's not empty
-        params = params.with_scope(session.scope);
+        parameters = parameters.with_scope(session.scope);
     }
 
-    Ok((params, repo))
+    Ok((parameters, repo))
 }

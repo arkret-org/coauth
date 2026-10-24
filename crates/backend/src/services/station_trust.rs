@@ -369,7 +369,7 @@ async fn fetch_bounded(
 }
 
 /// The numeric sequence component of a `did:webvh` version id
-/// (`<seq>-<entry_hash>`), used for anti-rollback comparison.
+/// (`<sequence>-<entry_hash>`), used for anti-rollback comparison.
 fn webvh_version_sequence(version_id: &str) -> Option<u64> {
     version_id.split_once('-')?.0.parse().ok()
 }
@@ -751,10 +751,10 @@ async fn automatic_enroll(
 
     let mut repo = repository_factory.create().await?;
     let source = StationTrustSource::AutomaticVerified;
-    let params = enrollment_params(server, &verified, source);
+    let parameters = enrollment_params(server, &verified, source);
     let enrollment = repo
         .station_trust()
-        .enroll(&SystemClock::default(), params)
+        .enroll(&SystemClock::default(), parameters)
         .await?;
     let Some(enrollment) = enrollment else {
         let by_name = repo.station_trust().find_by_name(&server.name).await?;
@@ -1399,7 +1399,7 @@ pub(crate) async fn resolve_current_service_did(
     resolver
         .insert_from_https_response(
             did,
-            arkret_identity::DidWebvhDocumentOutcome {
+            arkret_identity::DidWebvhDocumentHttpResponse {
                 url: doc_url,
                 content_type: doc_type,
                 body: doc,
@@ -1409,7 +1409,7 @@ pub(crate) async fn resolve_current_service_did(
     resolver
         .ingest_log(
             did,
-            arkret_identity::DidWebvhLogOutcome {
+            arkret_identity::DidWebvhLogHttpResponse {
                 url: log_url,
                 content_type: log_type,
                 body: log,

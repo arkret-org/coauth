@@ -21,7 +21,7 @@ use ulid::Ulid;
 
 use crate::handlers::admin::call_context::{CallerSession, extract_call_context};
 use crate::handlers::admin::model::{PersonalSession, Resource, to_personal_session};
-use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::parameters::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
@@ -297,17 +297,17 @@ pub async fn list_sessions(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req
+    let parameters: FilterParams = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
-    let base_url = format!("{path}{params}", path = PersonalSession::PATH);
+    let base_url = format!("{path}{parameters}", path = PersonalSession::PATH);
     let base_url = include_count.add_to_base(&base_url);
 
     let mut filter = PersonalSessionFilter::new();
 
     // Resolve and apply the owner-user filter
-    let resolved_owner = if let Some(uid) = params.owner_user {
+    let resolved_owner = if let Some(uid) = parameters.owner_user {
         let u = repo
             .user()
             .lookup(uid)
@@ -324,7 +324,7 @@ pub async fn list_sessions(
     };
 
     // Resolve and apply the owner-client filter
-    let resolved_client = if let Some(cid) = params.owner_client {
+    let resolved_client = if let Some(cid) = parameters.owner_client {
         let c = repo
             .oauth_client()
             .lookup(cid)
@@ -341,7 +341,7 @@ pub async fn list_sessions(
     };
 
     // Resolve and apply the actor-user filter
-    let resolved_actor = if let Some(uid) = params.actor_user {
+    let resolved_actor = if let Some(uid) = parameters.actor_user {
         let u = repo
             .user()
             .lookup(uid)
@@ -358,7 +358,7 @@ pub async fn list_sessions(
     };
 
     // Parse and apply scope tokens
-    let requested_scope: Scope = params
+    let requested_scope: Scope = parameters
         .scope
         .into_iter()
         .map(|raw| {
@@ -372,20 +372,20 @@ pub async fn list_sessions(
     }
 
     // Apply status filter
-    filter = match params.status {
+    filter = match parameters.status {
         Some(PersonalSessionStatus::Active) => filter.active_only(),
         Some(PersonalSessionStatus::Revoked) => filter.finished_only(),
         None => filter,
     };
 
     // Apply expiry-window filters
-    if let Some(after) = params.expires_after {
+    if let Some(after) = parameters.expires_after {
         filter = filter.with_expires_after(after);
     }
-    if let Some(before) = params.expires_before {
+    if let Some(before) = parameters.expires_before {
         filter = filter.with_expires_before(before);
     }
-    if let Some(has_expiry) = params.expires {
+    if let Some(has_expiry) = parameters.expires {
         filter = filter.with_expires(has_expiry);
     }
 

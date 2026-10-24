@@ -172,7 +172,7 @@ impl JsonWebKeyPublicParameters {
     #[must_use]
     pub const fn rsa(&self) -> Option<&RsaPublicParameters> {
         match self {
-            Self::Rsa(params) => Some(params),
+            Self::Rsa(parameters) => Some(parameters),
             _ => None,
         }
     }
@@ -181,7 +181,7 @@ impl JsonWebKeyPublicParameters {
     #[must_use]
     pub const fn ec(&self) -> Option<&EcPublicParameters> {
         match self {
-            Self::Ec(params) => Some(params),
+            Self::Ec(parameters) => Some(parameters),
             _ => None,
         }
     }
@@ -190,7 +190,7 @@ impl JsonWebKeyPublicParameters {
     #[must_use]
     pub const fn okp(&self) -> Option<&OkpPublicParameters> {
         match self {
-            Self::Okp(params) => Some(params),
+            Self::Okp(parameters) => Some(parameters),
             _ => None,
         }
     }
@@ -277,17 +277,17 @@ mod rsa_impls {
     impl TryFrom<RsaPublicParameters> for RsaPublicKey {
         type Error = rsa::errors::Error;
 
-        fn try_from(params: RsaPublicParameters) -> Result<Self, Self::Error> {
-            Self::try_from(&params)
+        fn try_from(parameters: RsaPublicParameters) -> Result<Self, Self::Error> {
+            Self::try_from(&parameters)
         }
     }
 
     impl TryFrom<&RsaPublicParameters> for RsaPublicKey {
         type Error = rsa::errors::Error;
 
-        fn try_from(params: &RsaPublicParameters) -> Result<Self, Self::Error> {
-            let modulus = BigUint::from_bytes_be(params.n.as_bytes());
-            let exponent = BigUint::from_bytes_be(params.e.as_bytes());
+        fn try_from(parameters: &RsaPublicParameters) -> Result<Self, Self::Error> {
+            let modulus = BigUint::from_bytes_be(parameters.n.as_bytes());
+            let exponent = BigUint::from_bytes_be(parameters.e.as_bytes());
             // Reject weak RSA public keys outright: `RsaPublicKey::new` only
             // guards the *upper* size bound, so a compromised/misconfigured
             // upstream JWKS returning a 512/1024-bit key would otherwise be
@@ -331,15 +331,15 @@ mod ec_impls {
     {
         type Error = elliptic_curve::Error;
 
-        fn try_from(params: &EcPublicParameters) -> Result<Self, Self::Error> {
+        fn try_from(parameters: &EcPublicParameters) -> Result<Self, Self::Error> {
             let field_size = C::FieldBytesSize::USIZE;
 
-            let x_bytes = params
+            let x_bytes = parameters
                 .x
                 .as_bytes()
                 .get(..field_size)
                 .ok_or(elliptic_curve::Error)?;
-            let y_bytes = params
+            let y_bytes = parameters
                 .y
                 .as_bytes()
                 .get(..field_size)
@@ -422,21 +422,21 @@ mod okp_impls {
     impl TryFrom<OkpPublicParameters> for VerifyingKey {
         type Error = InvalidOkpParameters;
 
-        fn try_from(params: OkpPublicParameters) -> Result<Self, Self::Error> {
-            Self::try_from(&params)
+        fn try_from(parameters: OkpPublicParameters) -> Result<Self, Self::Error> {
+            Self::try_from(&parameters)
         }
     }
 
     impl TryFrom<&OkpPublicParameters> for VerifyingKey {
         type Error = InvalidOkpParameters;
 
-        fn try_from(params: &OkpPublicParameters) -> Result<Self, Self::Error> {
+        fn try_from(parameters: &OkpPublicParameters) -> Result<Self, Self::Error> {
             // Only Ed25519 is supported for OKP signature verification
-            if params.crv != JsonWebKeyOkpEllipticCurve::Ed25519 {
+            if parameters.crv != JsonWebKeyOkpEllipticCurve::Ed25519 {
                 return Err(InvalidOkpParameters);
             }
 
-            let raw_bytes = params
+            let raw_bytes = parameters
                 .x
                 .as_bytes()
                 .try_into()

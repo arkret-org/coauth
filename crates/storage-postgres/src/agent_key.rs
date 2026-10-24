@@ -116,16 +116,16 @@ mod tests {
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0xa94e);
         let label = unique_label("pair-refusal");
-        let mut params = authorization(
+        let mut parameters = authorization(
             &label,
             "AQ4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4O",
             &clock,
         );
-        let event = params.authorized_event_id.clone();
-        params.coland_fanout_payload =
+        let event = parameters.authorized_event_id.clone();
+        parameters.coland_fanout_payload =
             serde_json::Value::String("unqualified-ciphertext".to_owned());
         repo.agent_key_authorization()
-            .add(&mut rng, &clock, params.clone())
+            .add(&mut rng, &clock, parameters.clone())
             .await
             .unwrap();
         repo.queue_job()
@@ -135,7 +135,7 @@ mod tests {
                 AgentKeyPairCommitJob::new(
                     event.clone(),
                     event.clone(),
-                    params.raw_payload_digest.clone(),
+                    parameters.raw_payload_digest.clone(),
                     "owning".to_owned(),
                 ),
             )
@@ -165,7 +165,7 @@ mod tests {
             "refused intent must not leave a retry obligation"
         );
         drop(connection);
-        let mut corrected = params;
+        let mut corrected = parameters;
         corrected.raw_payload_digest = format!("sha256:{}", "d".repeat(64));
         corrected.coland_fanout_payload =
             serde_json::Value::String("corrected-ciphertext".to_owned());
@@ -191,18 +191,19 @@ mod tests {
             .unwrap();
         let clock = MockClock::default();
         let mut rng = ChaChaRng::seed_from_u64(0xa93e);
-        let mut params = authorization(
+        let mut parameters = authorization(
             &unique_label("pair-custody"),
             "AQ4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4O",
             &clock,
         );
-        let event = params.authorized_event_id.clone();
+        let event = parameters.authorized_event_id.clone();
         // The repository transports opaque AEAD custody; only the issuer/worker
         // holding its original Encrypter may inspect these bytes.
-        params.coland_fanout_payload = serde_json::Value::String("pending-ciphertext".to_owned());
-        params.agent_key_scope = "scope-ciphertext".to_owned();
+        parameters.coland_fanout_payload =
+            serde_json::Value::String("pending-ciphertext".to_owned());
+        parameters.agent_key_scope = "scope-ciphertext".to_owned();
         repo.agent_key_authorization()
-            .add(&mut rng, &clock, params)
+            .add(&mut rng, &clock, parameters)
             .await
             .unwrap();
         let active = serde_json::Value::String("active-ciphertext".to_owned());
@@ -588,14 +589,14 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     #[tracing::instrument(
         name = "db.agent_key_authorization.add",
         skip_all,
-        fields(agent_key_authorization.id, agent_key_authorization.event_id = params.authorized_event_id),
+        fields(agent_key_authorization.id, agent_key_authorization.event_id = parameters.authorized_event_id),
         err,
     )]
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewAgentKeyAuthorization,
+        parameters: NewAgentKeyAuthorization,
     ) -> Result<AgentKeyAuthorization, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
@@ -603,25 +604,25 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         let row = InsertableAgentKeyAuthorization {
             id: Uuid::from(id),
-            authorized_event_id: params.authorized_event_id,
-            agent_id: params.agent_id,
-            key_id: params.key_id,
-            verification_method: params.verification_method,
-            public_key: params.public_key,
-            accountable_principal_id: params.accountable_principal_id,
-            agent_key_scope: params.agent_key_scope,
-            audience: params.audience,
-            issued_at: params.issued_at,
-            expires_at: params.expires_at,
-            pairing_request_id: params.pairing_request_id,
-            request_canonical_digest: params.request_canonical_digest,
-            raw_payload_digest: params.raw_payload_digest,
-            coland_fanout_state: params.coland_fanout_state.to_string(),
-            coland_fanout_idempotency_key: params.coland_fanout_idempotency_key,
-            coland_fanout_payload: params.coland_fanout_payload,
-            coland_fanout_attempt: params.coland_fanout_attempt,
-            coland_fanout_next_retry_at: params.coland_fanout_next_retry_at,
-            coland_fanout_dead_letter_reason: params.coland_fanout_dead_letter_reason,
+            authorized_event_id: parameters.authorized_event_id,
+            agent_id: parameters.agent_id,
+            key_id: parameters.key_id,
+            verification_method: parameters.verification_method,
+            public_key: parameters.public_key,
+            accountable_principal_id: parameters.accountable_principal_id,
+            agent_key_scope: parameters.agent_key_scope,
+            audience: parameters.audience,
+            issued_at: parameters.issued_at,
+            expires_at: parameters.expires_at,
+            pairing_request_id: parameters.pairing_request_id,
+            request_canonical_digest: parameters.request_canonical_digest,
+            raw_payload_digest: parameters.raw_payload_digest,
+            coland_fanout_state: parameters.coland_fanout_state.to_string(),
+            coland_fanout_idempotency_key: parameters.coland_fanout_idempotency_key,
+            coland_fanout_payload: parameters.coland_fanout_payload,
+            coland_fanout_attempt: parameters.coland_fanout_attempt,
+            coland_fanout_next_retry_at: parameters.coland_fanout_next_retry_at,
+            coland_fanout_dead_letter_reason: parameters.coland_fanout_dead_letter_reason,
             created_at: now,
             updated_at: now,
         };
@@ -650,7 +651,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             quarantined_at: None,
             quarantine_reason: None,
             raw_payload_digest: row.raw_payload_digest,
-            coland_fanout_state: params.coland_fanout_state,
+            coland_fanout_state: parameters.coland_fanout_state,
             coland_fanout_idempotency_key: row.coland_fanout_idempotency_key,
             coland_fanout_payload: row.coland_fanout_payload,
             coland_fanout_attempt: row.coland_fanout_attempt,
@@ -878,21 +879,21 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewAgentSessionProofReplay,
+        parameters: NewAgentSessionProofReplay,
     ) -> Result<bool, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
         let row = InsertableProofReplay {
             id: Uuid::from(id),
-            agent_id: params.agent_id,
-            authorization_ref: params.authorization_ref,
-            verification_method: params.verification_method,
-            challenge: params.challenge,
-            request_canonical_digest: params.request_canonical_digest,
-            audience_id: params.audience_id,
+            agent_id: parameters.agent_id,
+            authorization_ref: parameters.authorization_ref,
+            verification_method: parameters.verification_method,
+            challenge: parameters.challenge,
+            request_canonical_digest: parameters.request_canonical_digest,
+            audience_id: parameters.audience_id,
             consumed_at: now,
-            proof_expires_at: params.proof_expires_at,
-            prune_after: params.prune_after,
+            proof_expires_at: parameters.proof_expires_at,
+            prune_after: parameters.prune_after,
             created_at: now,
         };
 

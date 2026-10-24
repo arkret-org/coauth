@@ -18,7 +18,7 @@ use zeroize::Zeroizing;
 
 use crate::handlers::admin::audit_helper::record_admin_operation_signed;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::handlers::common::DepotExt;
 use crate::services::station_trust::owning_station_did_for;
 use crate::{AppError, AppResult};
@@ -61,7 +61,7 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
     let id = extract_ulid_param(req)?;
     let mut rng = crate::handlers::account::make_rng();
     let password_manager = depot.password_manager()?;
-    let params: SetPasswordRequestBody = req.parse_json().await.map_err(AppError::internal)?;
+    let parameters: SetPasswordRequestBody = req.parse_json().await.map_err(AppError::internal)?;
 
     if !password_manager.is_enabled() {
         return Err(AppError::forbidden("Password auth is disabled"));
@@ -73,17 +73,17 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
         .await?
         .ok_or_else(|| AppError::not_found(format!("Account ID {id} not found")))?;
 
-    let skip_password_check = params.skip_password_check.unwrap_or(false);
+    let skip_password_check = parameters.skip_password_check.unwrap_or(false);
     tracing::info!(skip_password_check, "skip_password_check");
     if !skip_password_check
         && !password_manager
-            .is_password_complex_enough(&params.password)
+            .is_password_complex_enough(&parameters.password)
             .unwrap_or(false)
     {
         return Err(AppError::bad_request("Password is too weak"));
     }
 
-    let password = Zeroizing::new(params.password);
+    let password = Zeroizing::new(parameters.password);
     let (version, hashed_password) =
         password_manager
             .hash(&mut rng, password)

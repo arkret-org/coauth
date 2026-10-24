@@ -178,7 +178,7 @@ pub struct DevicePairingPendingRecord {
     pub device_pairing_request_id:
         arkret_models_collaboration::device_pairing::DevicePairingRequestId,
     pub pairing_code: arkret_models_collaboration::device_pairing::DevicePairingCode,
-    pub new_device_pubkey: arkret_models_collaboration::governance::agent_artifacts::PublicKey,
+    pub new_device_public_key: arkret_models_collaboration::governance::agent_artifacts::PublicKey,
     pub client_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce,
     pub display_name: Option<arkret_wire::NonEmptyString>,
     pub device_metadata:
@@ -264,7 +264,7 @@ pub struct NewDevicePairingPendingRecord {
     pub device_pairing_request_id:
         arkret_models_collaboration::device_pairing::DevicePairingRequestId,
     pub pairing_code: arkret_models_collaboration::device_pairing::DevicePairingCode,
-    pub new_device_pubkey: arkret_models_collaboration::governance::agent_artifacts::PublicKey,
+    pub new_device_public_key: arkret_models_collaboration::governance::agent_artifacts::PublicKey,
     pub client_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce,
     pub display_name: Option<arkret_wire::NonEmptyString>,
     pub device_metadata:
@@ -365,7 +365,7 @@ pub struct IdentityCreationLeaseRecord {
     pub expires_at: DateTime<Utc>,
     pub reserved_identity: Option<arkret_models_identity::ReservedIdentityCreation>,
     pub state: arkret_models_identity::IdentityCreationLeaseState,
-    pub registry_receipt: Option<arkret_models_identity::DidOperationSubmitOutcome>,
+    pub registry_receipt: Option<arkret_models_identity::DidOperationSubmitResponseBody>,
     pub log_head_digest: Option<arkret_identifiers::Hash>,
     /// Complete historical registration evidence frozen at the registry's
     /// original acceptance time.  Renewed handoffs and replacement devices
@@ -374,7 +374,7 @@ pub struct IdentityCreationLeaseRecord {
     pub registration_did_evidence: Option<arkret_wire::RegistrationDidEvidence>,
     pub pcr_genesis_request_digest: Option<arkret_identifiers::Hash>,
     pub pcr_genesis_outcome:
-        Option<arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome>,
+        Option<arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResponseBody>,
     pub binding_receipt: Option<arkret_models_identity::AccountBindingReceipt>,
     pub register_reservation: Option<IdentityCreationRegisterReservation>,
     pub register_ledger: Option<IdentityCreationRegisterLedger>,
@@ -406,7 +406,7 @@ pub struct IdentityCreationRegisterLedger {
     pub handoff_grant_id: Ulid,
     pub challenge_id: String,
     pub request_digest: arkret_identifiers::Hash,
-    pub outcome: arkret_models_collaboration::account_operations::AccountRegisterOutcome,
+    pub outcome: arkret_models_collaboration::account_operations::AccountRegisterResponseBody,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -422,7 +422,7 @@ pub enum IdentityCreationRegisterReplay {
     Pending,
     // Boxed: the outcome is ~1 KiB while every other variant is a unit, so an
     // inline payload would make each `Pending` cost the same as a full replay.
-    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterResponseBody>),
     DuplicateConflict,
 }
 
@@ -430,7 +430,7 @@ pub enum IdentityCreationRegisterReplay {
 pub enum IdentityCreationBindingCommit {
     Committed,
     // Boxed for the same reason as `IdentityCreationRegisterReplay::Replay`.
-    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterResponseBody>),
     DuplicateConflict,
     Stale,
 }
@@ -523,8 +523,8 @@ pub struct IdentityBindingChallengeRecord {
 }
 
 impl IdentityBindingChallengeRecord {
-    pub fn wire_outcome(&self) -> arkret_models_identity::IdentityBindingChallengeOutcome {
-        arkret_models_identity::IdentityBindingChallengeOutcome {
+    pub fn wire_outcome(&self) -> arkret_models_identity::IdentityBindingChallengeResponseBody {
+        arkret_models_identity::IdentityBindingChallengeResponseBody {
             request_id: self.request_id.clone(),
             challenge_id: self.challenge_id.clone(),
             challenge: self.challenge.clone(),
@@ -579,13 +579,13 @@ pub struct DidBindingChallengeRecord {
     pub consumed_at: Option<DateTime<Utc>>,
     pub register_request_digest: Option<arkret_identifiers::Hash>,
     pub register_outcome:
-        Option<Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>>,
+        Option<Box<arkret_models_collaboration::account_operations::AccountRegisterResponseBody>>,
 }
 
 impl DidBindingChallengeRecord {
-    pub fn wire_outcome(&self) -> arkret_models_identity::DidBindingChallengeOutcome {
+    pub fn wire_outcome(&self) -> arkret_models_identity::DidBindingChallengeResponseBody {
         let input = &self.input;
-        arkret_models_identity::DidBindingChallengeOutcome {
+        arkret_models_identity::DidBindingChallengeResponseBody {
             request_id: input.request_id.clone(),
             challenge_id: input.challenge_id.clone(),
             challenge: input.challenge.clone(),
@@ -624,7 +624,7 @@ pub enum DidBindingChallengeConsume {
 #[derive(Clone, Debug)]
 pub enum PublishedDidRegisterReplay {
     Pending(Box<DidBindingChallengeRecord>),
-    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterResponseBody>),
     DuplicateConflict,
     Stale,
 }
@@ -632,7 +632,7 @@ pub enum PublishedDidRegisterReplay {
 #[derive(Clone, Debug)]
 pub enum PublishedDidRegisterCommit {
     Committed,
-    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterOutcome>),
+    Replay(Box<arkret_models_collaboration::account_operations::AccountRegisterResponseBody>),
     DuplicateConflict,
     Stale,
 }
@@ -654,8 +654,8 @@ pub struct IdentityAbandonmentCommitInput {
 
 #[derive(Clone, Debug)]
 pub enum IdentityAbandonmentCommit {
-    Abandoned(arkret_models_identity::IdentityAbandonmentOutcome),
-    Replay(arkret_models_identity::IdentityAbandonmentOutcome),
+    Abandoned(arkret_models_identity::IdentityAbandonmentResponseBody),
+    Replay(arkret_models_identity::IdentityAbandonmentResponseBody),
     DuplicateConflict,
     AuthenticationRequired,
     DispatchUncertain,

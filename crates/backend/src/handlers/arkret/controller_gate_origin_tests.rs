@@ -68,7 +68,7 @@ async fn serve_gate(listener: tokio::net::TcpListener, state: TestState, wrong_b
     let mut body = response.body().clone();
     if wrong_binding {
         assert_eq!(response.status(), hyper::StatusCode::OK);
-        let mut outcome: ControllerAccountGateIssuanceOutcome =
+        let mut outcome: ControllerAccountGateAttestationIssueResponseBody =
             serde_json::from_str(&body).unwrap();
         let gate = &mut outcome.controller_account_gate_attestation;
         gate.principal_id =
@@ -127,7 +127,7 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
                 provider_endpoint: &"https://identity.example/".parse().unwrap(),
                 registration_key: &registration,
                 also_known_as: &[],
-                version_time: "2026-01-01T00:00:00Z".parse().unwrap(),
+                version_created_at: "2026-01-01T00:00:00Z".parse().unwrap(),
                 did_key_fragment: Some("notary-key"),
             },
             &[0x52; 32],
@@ -258,7 +258,7 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
         source_service_id: fixture.station.clone(),
         replay_receipt: None,
     };
-    let request = arkret_models_collaboration::authority_commit::PeerAuthorityForwardEventRequest {
+    let request = arkret_models_collaboration::authority_commit::PeerAuthorityForwardEventRequestBody {
         branch:
             arkret_models_collaboration::authority_commit::AuthorityForwardBranch::AuthorityForward,
         event_submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),

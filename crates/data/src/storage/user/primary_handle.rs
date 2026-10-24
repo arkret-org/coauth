@@ -21,11 +21,11 @@ repository_impl! {
             user_id: Ulid,
         ) -> Result<Option<UserPrimaryHandlePreference>, Self::Error>;
 
-        /// Return the preference version that was effective at `as_of`, if any.
+        /// Return the preference version that was effective at `evaluated_at`, if any.
         async fn at(
             &mut self,
             user_id: Ulid,
-            as_of: DateTime<Utc>,
+            evaluated_at: DateTime<Utc>,
         ) -> Result<Option<UserPrimaryHandlePreference>, Self::Error>;
 
         /// Find active verified claim evidence for `handle` owned by `user_id`.
@@ -33,7 +33,7 @@ repository_impl! {
             &mut self,
             user_id: Ulid,
             handle: &str,
-            as_of: DateTime<Utc>,
+            evaluated_at: DateTime<Utc>,
         ) -> Result<Option<VerifiedUserHandleClaim>, Self::Error>;
 
         /// Replace the current preference with a new version.
@@ -41,7 +41,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewUserPrimaryHandlePreference,
+            parameters: NewUserPrimaryHandlePreference,
         ) -> Result<UserPrimaryHandlePreference, Self::Error>;
     }
 }

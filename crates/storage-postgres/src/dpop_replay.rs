@@ -40,18 +40,18 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     type Error = DatabaseError;
 
     #[tracing::instrument(name = "db.dpop_replay.consume_jti", skip_all, err)]
-    async fn consume_jti(&mut self, params: NewDpopJtiReplay) -> Result<bool, Self::Error> {
+    async fn consume_jti(&mut self, parameters: NewDpopJtiReplay) -> Result<bool, Self::Error> {
         diesel::delete(
-            dpop_jti_replay::table.filter(dpop_jti_replay::expires_at.le(params.seen_at)),
+            dpop_jti_replay::table.filter(dpop_jti_replay::expires_at.le(parameters.seen_at)),
         )
         .execute(self.conn)
         .await?;
 
         let row = InsertableDpopJtiReplay {
-            jti_digest: params.jti_digest,
-            seen_at: params.seen_at,
-            expires_at: params.expires_at,
-            created_at: params.seen_at,
+            jti_digest: parameters.jti_digest,
+            seen_at: parameters.seen_at,
+            expires_at: parameters.expires_at,
+            created_at: parameters.seen_at,
         };
 
         let inserted = diesel::insert_into(dpop_jti_replay::table)

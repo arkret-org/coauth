@@ -289,7 +289,7 @@ impl<P> JsonWebKey<P> {
 
     /// Get the inner parameters of this [`JsonWebKey`].
     #[must_use]
-    pub const fn params(&self) -> &P {
+    pub const fn parameters(&self) -> &P {
         &self.parameters
     }
 }
@@ -571,7 +571,7 @@ where
             .into_iter()
             .flat_map(|key| match key.alg() {
                 Some(alg) => vec![alg.clone()],
-                None => key.params().possible_algs().to_vec(),
+                None => key.parameters().possible_algs().to_vec(),
             })
             .collect();
         algs.sort();
@@ -604,9 +604,9 @@ mod tests {
         jwks.iter()
             .find(|key| {
                 matches!(
-                    key.params(),
-                    JsonWebKeyPublicParameters::Ec(params)
-                        if params.crv == JsonWebKeyEcEllipticCurve::P521
+                    key.parameters(),
+                    JsonWebKeyPublicParameters::Ec(parameters)
+                        if parameters.crv == JsonWebKeyEcEllipticCurve::P521
                 )
             })
             .cloned()
@@ -617,9 +617,9 @@ mod tests {
         jwks.iter()
             .find(|key| {
                 matches!(
-                    key.params(),
-                    JsonWebKeyPublicParameters::Okp(params)
-                        if params.crv == coauth_iana::jose::JsonWebKeyOkpEllipticCurve::Ed25519
+                    key.parameters(),
+                    JsonWebKeyPublicParameters::Okp(parameters)
+                        if parameters.crv == coauth_iana::jose::JsonWebKeyOkpEllipticCurve::Ed25519
                 )
             })
             .cloned()
@@ -664,7 +664,7 @@ mod tests {
         let jwks: PublicJsonWebKeySet = serde_json::from_value(jwks).unwrap();
         // Both keys are RSA public keys
         for jwk in &jwks.keys {
-            let p = jwk.params().rsa().expect("an RSA key");
+            let p = jwk.parameters().rsa().expect("an RSA key");
             rsa::RsaPublicKey::try_from(p).unwrap();
         }
 
@@ -974,23 +974,23 @@ mod tests {
         let jwks: PublicJsonWebKeySet = serde_json::from_value(jwks).unwrap();
         // The first 6 keys are RSA, 7th is P-256
         let mut keys = jwks.keys.into_iter();
-        rsa::RsaPublicKey::try_from(keys.next().unwrap().params().rsa().unwrap()).unwrap();
-        rsa::RsaPublicKey::try_from(keys.next().unwrap().params().rsa().unwrap()).unwrap();
-        rsa::RsaPublicKey::try_from(keys.next().unwrap().params().rsa().unwrap()).unwrap();
-        rsa::RsaPublicKey::try_from(keys.next().unwrap().params().rsa().unwrap()).unwrap();
-        rsa::RsaPublicKey::try_from(keys.next().unwrap().params().rsa().unwrap()).unwrap();
-        rsa::RsaPublicKey::try_from(keys.next().unwrap().params().rsa().unwrap()).unwrap();
+        rsa::RsaPublicKey::try_from(keys.next().unwrap().parameters().rsa().unwrap()).unwrap();
+        rsa::RsaPublicKey::try_from(keys.next().unwrap().parameters().rsa().unwrap()).unwrap();
+        rsa::RsaPublicKey::try_from(keys.next().unwrap().parameters().rsa().unwrap()).unwrap();
+        rsa::RsaPublicKey::try_from(keys.next().unwrap().parameters().rsa().unwrap()).unwrap();
+        rsa::RsaPublicKey::try_from(keys.next().unwrap().parameters().rsa().unwrap()).unwrap();
+        rsa::RsaPublicKey::try_from(keys.next().unwrap().parameters().rsa().unwrap()).unwrap();
         // 7th is P-256
         elliptic_curve::PublicKey::<p256::NistP256>::try_from(
-            keys.next().unwrap().params().ec().unwrap(),
+            keys.next().unwrap().parameters().ec().unwrap(),
         )
         .unwrap();
         // 8th is P-384
         elliptic_curve::PublicKey::<p384::NistP384>::try_from(
-            keys.next().unwrap().params().ec().unwrap(),
+            keys.next().unwrap().parameters().ec().unwrap(),
         )
         .unwrap();
         // 8th is P-521, but we don't support it yet
-        keys.next().unwrap().params().ec().unwrap();
+        keys.next().unwrap().parameters().ec().unwrap();
     }
 }

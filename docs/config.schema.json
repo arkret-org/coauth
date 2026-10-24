@@ -585,7 +585,7 @@
       "description": "IANA registry: JsonWebKeyUse",
       "anyOf": [
         {
-          "const": "sig"
+          "const": "signature"
         },
         {
           "const": "enc"

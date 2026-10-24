@@ -304,7 +304,7 @@ impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> +
         .load::<CommittedHandoffOutcomeRow>(self.conn)
         .await?;
         for row in rows {
-            let mut outcome: arkret_models_identity::AccountHandoffOutcome =
+            let mut outcome: arkret_models_identity::AccountHandoffResponseBody =
                 serde_json::from_slice(&row.canonical_outcome)?;
             let arkret_models_identity::AccountHandoffBinding::IdentityCreationActive {
                 identity_creation_lease,
@@ -633,7 +633,7 @@ struct DevicePairingPendingRow {
     #[diesel(sql_type = Text)]
     pairing_code: String,
     #[diesel(sql_type = Jsonb)]
-    new_device_pubkey: serde_json::Value,
+    new_device_public_key: serde_json::Value,
     #[diesel(sql_type = Text)]
     client_nonce: String,
     #[diesel(sql_type = Nullable<Text>)]
@@ -786,7 +786,7 @@ fn device_pairing_pending_from_row(
             row.pairing_code,
         )
         .map_err(|_| DatabaseError::invalid_operation())?,
-        new_device_pubkey: serde_json::from_value(row.new_device_pubkey)?,
+        new_device_public_key: serde_json::from_value(row.new_device_public_key)?,
         client_nonce: arkret_models_collaboration::device_pairing::DevicePairingNonce::new(
             row.client_nonce,
         )
@@ -1707,7 +1707,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         let inserted = diesel::sql_query(
             "INSERT INTO device_pairing_pending \
              (device_pairing_request_id, stage_idempotency_key, stage_request_digest, \
-              stage_outcome, pairing_code, new_device_pubkey, client_nonce, \
+              stage_outcome, pairing_code, new_device_public_key, client_nonce, \
               display_name, device_metadata, gate_audience_uri, server_nonce, state, \
               expires_at, retained_until, created_at) \
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'staged',$12,$13,$14) \
@@ -1718,7 +1718,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         .bind::<Text, _>(input.stage_request_digest.as_str())
         .bind::<Bytea, _>(&input.stage_outcome)
         .bind::<Text, _>(input.pairing_code.as_str())
-        .bind::<Jsonb, _>(serde_json::to_value(&input.new_device_pubkey)?)
+        .bind::<Jsonb, _>(serde_json::to_value(&input.new_device_public_key)?)
         .bind::<Text, _>(input.client_nonce.as_str())
         .bind::<Nullable<Text>, _>(
             input
@@ -1779,7 +1779,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         request_id: &arkret_models_collaboration::device_pairing::DevicePairingRequestId,
     ) -> Result<Option<DevicePairingPendingRecord>, Self::Error> {
         let row = diesel::sql_query(
-            "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+            "SELECT device_pairing_request_id, pairing_code, new_device_public_key, client_nonce, \
              display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
              target_proof, finalize_request_digest, finalize_outcome, admission_state, \
              admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
@@ -1801,7 +1801,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         now: DateTime<Utc>,
     ) -> Result<Option<DevicePairingPendingRecord>, Self::Error> {
         let row = diesel::sql_query(
-            "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+            "SELECT device_pairing_request_id, pairing_code, new_device_public_key, client_nonce, \
              display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
              target_proof, finalize_request_digest, finalize_outcome, admission_state, \
              admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
@@ -1909,7 +1909,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         } = input;
         self.lock_device_pairing_account(account_id).await?;
         let row = diesel::sql_query(
-            "SELECT device_pairing_request_id, pairing_code, new_device_pubkey, client_nonce, \
+            "SELECT device_pairing_request_id, pairing_code, new_device_public_key, client_nonce, \
              display_name, device_metadata, gate_audience_uri, server_nonce, state, account_id, \
              target_proof, finalize_request_digest, finalize_outcome, admission_state, \
              admission_approving_account_id, admission_approving_device_id, admission_request_digest, \
@@ -2860,7 +2860,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         grant: &AccountHandoffGrant,
         challenge_id: &str,
         request_digest: &arkret_identifiers::Hash,
-        outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
+        outcome: &arkret_models_collaboration::account_operations::AccountRegisterResponseBody,
         now: DateTime<Utc>,
     ) -> Result<PublishedDidRegisterCommit, Self::Error> {
         match self
@@ -3025,7 +3025,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         // The outcome is persisted as canonical (millisecond) JSON and replayed
         // from it, so the first response must carry the same canonical instant.
         let abandoned_at = arkret_canonical::normalize_timestamp_canonical(now);
-        let outcome = arkret_models_identity::IdentityAbandonmentOutcome {
+        let outcome = arkret_models_identity::IdentityAbandonmentResponseBody {
             request_id: input.request_id.clone(),
             account_subject: input.account_subject.clone(),
             principal_id: input.principal_id.clone(),
@@ -3277,7 +3277,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     async fn mark_did_published(
         &mut self,
         context: &IdentityCreationRegistrationContext,
-        registry_receipt: &arkret_models_identity::DidOperationSubmitOutcome,
+        registry_receipt: &arkret_models_identity::DidOperationSubmitResponseBody,
         log_head_digest: &arkret_identifiers::Hash,
         registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
         now: DateTime<Utc>,
@@ -3436,7 +3436,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         context: &IdentityCreationRegistrationContext,
         request_digest: &arkret_identifiers::Hash,
-        outcome: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome,
+        outcome: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResponseBody,
         now: DateTime<Utc>,
     ) -> Result<bool, Self::Error> {
         let Some(lease) = self
@@ -3574,7 +3574,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         context: &IdentityCreationRegistrationContext,
         request_digest: &arkret_identifiers::Hash,
-        outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
+        outcome: &arkret_models_collaboration::account_operations::AccountRegisterResponseBody,
         now: DateTime<Utc>,
     ) -> Result<IdentityCreationBindingCommit, Self::Error> {
         let Some(lease) = self

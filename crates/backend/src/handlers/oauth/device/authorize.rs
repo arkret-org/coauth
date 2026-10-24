@@ -228,7 +228,7 @@ mod tests {
         let request = Request::post("/oauth/registration").json(serde_json::json!({
             "client_uri": "https://example.com/",
             "token_endpoint_auth_method": "none",
-            "grant_types": ["urn:ietf:params:oauth:grant-type:device_code"],
+            "grant_types": ["urn:ietf:parameters:oauth:grant-type:device_code"],
             "response_types": [],
         }));
 

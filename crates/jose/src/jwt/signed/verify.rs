@@ -140,7 +140,7 @@ impl<T> Jwt<'_, T> {
             return Err(NoKeyWorked::default());
         }
 
-        // SECURITY: only consider keys whose `use` is `sig` (or unspecified),
+        // SECURITY: only consider keys whose `use` is `signature` (or unspecified),
         // mirroring the signing path (`signing_key_for_algorithm`). This
         // prevents an encryption-only key from being used to verify a
         // signature.
@@ -150,7 +150,7 @@ impl<T> Jwt<'_, T> {
 
         for candidate in candidates {
             let Ok(vk) = crate::jwa::AsymmetricVerifyingKey::from_jwk_and_alg(
-                candidate.params(),
+                candidate.parameters(),
                 self.header.alg(),
             ) else {
                 continue;

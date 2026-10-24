@@ -26,7 +26,7 @@ function Invoke-JsonRequest {
 
     Write-Host ("> {0,4} {1}" -f $Method, $Url)
 
-    $params = @{
+    $parameters = @{
         Method      = $Method
         Uri         = $Url
         Headers     = @{ Accept = "application/json" }
@@ -35,17 +35,17 @@ function Invoke-JsonRequest {
 
     if ($PSBoundParameters.ContainsKey("Body")) {
         if ($Form) {
-            $params["ContentType"] = "application/x-www-form-urlencoded"
-            $params["Body"] = $Body
+            $parameters["ContentType"] = "application/x-www-form-urlencoded"
+            $parameters["Body"] = $Body
         }
         else {
-            $params["ContentType"] = "application/json"
-            $params["Body"] = ($Body | ConvertTo-Json -Depth 10 -Compress)
+            $parameters["ContentType"] = "application/json"
+            $parameters["Body"] = ($Body | ConvertTo-Json -Depth 10 -Compress)
         }
     }
 
     try {
-        $response = Invoke-WebRequest @params
+        $response = Invoke-WebRequest @parameters
         if ([string]::IsNullOrWhiteSpace($response.Content)) {
             return $null
         }
@@ -96,7 +96,7 @@ Write-Host "Registering the client"
 $registration = Invoke-JsonRequest -Method POST -Url $metadata.registration_endpoint -Body @{
     client_name                = "CLI tool"
     client_uri                 = "https://github.com/arkret-org/coauth/"
-    grant_types                = @("urn:ietf:params:oauth:grant-type:device_code", "refresh_token")
+    grant_types                = @("urn:ietf:parameters:oauth:grant-type:device_code", "refresh_token")
     application_type           = "native"
     token_endpoint_auth_method = "none"
 }
@@ -133,7 +133,7 @@ $interval = if ($null -ne $deviceGrant.interval) { [int]$deviceGrant.interval } 
 
 while ($true) {
     $deviceResponse = Invoke-JsonRequest -Method POST -Url $metadata.token_endpoint -Form -Body @{
-        grant_type = "urn:ietf:params:oauth:grant-type:device_code"
+        grant_type = "urn:ietf:parameters:oauth:grant-type:device_code"
         device_code = $deviceCode
         client_id = $clientId
     }

@@ -49,14 +49,14 @@ const AGENT_KEY_PAIR_COMMIT_QUEUE: &str = "principal-agent-key-pair-commit";
 /// Agent. Runtime replacement re-pairing is expressed atomically by the
 /// controller-signed `authorize_event.payload.supersedes[]`; Coauth never
 /// fabricates controller-authored revoke Events. Returns the SDK
-/// [`AgentKeyPairOutcome`] carrying the accepted authorization Event ref.
+/// [`AgentKeyPairResponseBody`] carrying the accepted authorization Event ref.
 #[handler]
 #[tracing::instrument(name = "handler.account.agents.agent_key_pair", skip_all)]
 pub async fn post_agent_key_pair(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<
-    Json<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome>,
+    Json<arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody>,
     ArkretRouteError,
 > {
     let url_builder = depot.url_builder()?;
@@ -1086,7 +1086,7 @@ async fn commit_and_mark_agent_key_authorization(
     request_digest: &str,
     station_name: &str,
     body: arkret_models_collaboration::agent_operations::AgentKeyPairRequestBody,
-) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome, AppError> {
+) -> Result<arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody, AppError> {
     let superseded_event_refs = pairing_superseded_event_refs(&body)?;
     let http_client = depot.http_client()?;
     let arkret_config = depot.arkret_config()?;

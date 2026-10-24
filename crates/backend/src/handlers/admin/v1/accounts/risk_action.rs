@@ -21,7 +21,7 @@ use ulid::Ulid;
 
 use crate::handlers::admin::audit_helper::{AdminAuditSigning, record_admin_operation_signed};
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::handlers::admin::response::SingleOutcome;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding_proof::verify_detached_jws_with_sdk;
@@ -503,12 +503,12 @@ pub async fn propose(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<AccountRiskActionProposalOutcome> {
-    let params: AccountRiskActionProposalRequestBody =
+    let parameters: AccountRiskActionProposalRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
-    if params.action.trim().is_empty() {
+    if parameters.action.trim().is_empty() {
         return Err(AppError::bad_request("risk action is required"));
     }
-    if params
+    if parameters
         .reason
         .as_deref()
         .is_none_or(|reason| reason.trim().is_empty())
@@ -518,7 +518,7 @@ pub async fn propose(
         ));
     }
 
-    let _mutation = account_risk_action_mutation(&params.action)?;
+    let _mutation = account_risk_action_mutation(&parameters.action)?;
     let risk_action_state = depot.risk_action_state_service()?;
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let arkret_config = depot.arkret_config()?;
@@ -545,12 +545,12 @@ pub async fn propose(
     let proposal = risk_action_proposals
         .create(CreateProposal {
             account_id: account.id,
-            action: params.action.clone(),
+            action: parameters.action.clone(),
             proposer_id,
-            reason: params.reason.clone().unwrap_or_default(),
-            ticket: params.ticket.clone(),
+            reason: parameters.reason.clone().unwrap_or_default(),
+            ticket: parameters.ticket.clone(),
             required_approvals: required_approvals_for(
-                &params.action,
+                &parameters.action,
                 arkret_config.high_risk_threshold,
             ),
             now: requested_at,
@@ -571,20 +571,20 @@ pub async fn propose(
             &service_did,
             arkret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
-            AdminOperation::Other(format!("account_{}_proposal", params.action)),
+            AdminOperation::Other(format!("account_{}_proposal", parameters.action)),
             "account",
             Some(account.id),
             serde_json::json!({
                 "state_record_id": state_record_id,
                 "state_revision": 1_u64,
                 "proposal_id": proposal_id,
-                "action": params.action,
+                "action": parameters.action,
                 "transition_kind": "proposal_requested",
                 "previous_state": "idle",
                 "next_state": "draft",
-                "reason": params.reason,
-                "ticket": params.ticket,
-                "approved_by": params.approved_by,
+                "reason": parameters.reason,
+                "ticket": parameters.ticket,
+                "approved_by": parameters.approved_by,
                 "requested_by": requested_by,
                 "requested_by_handle": requested_by_handle,
                 "allowed_next_transitions": allowed_next_transitions.clone(),
@@ -600,10 +600,10 @@ pub async fn propose(
         state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
-        action: params.action,
-        reason: params.reason,
-        ticket: params.ticket,
-        approved_by: params.approved_by,
+        action: parameters.action,
+        reason: parameters.reason,
+        ticket: parameters.ticket,
+        approved_by: parameters.approved_by,
         requested_at: Some(requested_at),
         requested_by,
         requested_by_handle,
@@ -622,12 +622,12 @@ pub async fn approve(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<AccountRiskActionApprovalOutcome> {
-    let params: AccountRiskActionApprovalRequestBody =
+    let parameters: AccountRiskActionApprovalRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
-    if params.action.trim().is_empty() {
+    if parameters.action.trim().is_empty() {
         return Err(AppError::bad_request("risk action is required"));
     }
-    if params
+    if parameters
         .approval_note
         .as_deref()
         .is_none_or(|note| note.trim().is_empty())
@@ -636,7 +636,7 @@ pub async fn approve(
             "risk action approvals require a non-empty approval_note",
         ));
     }
-    if params.approval_proof_jws.trim().is_empty() {
+    if parameters.approval_proof_jws.trim().is_empty() {
         return Err(AppError::bad_request(
             "risk action approvals require approval_proof_jws",
         ));
@@ -674,19 +674,19 @@ pub async fn approve(
     ensure_proposal_targets(
         &existing,
         account.id,
-        &params.action,
-        params.ticket.as_deref(),
+        &parameters.action,
+        parameters.ticket.as_deref(),
     )?;
     let caller_identity =
         admin_actor_identity(&mut repo, admin_user.as_ref(), &arkret_config).await?;
     let approved_by = bind_approval_admin_did(
         caller_identity.principal_id.to_string(),
-        params
+        parameters
             .approved_by
             .as_ref()
             .map(arkret_identifiers::DidCoreId::as_str),
     )?;
-    let approval_note = params.approval_note.as_deref().unwrap_or_default();
+    let approval_note = parameters.approval_note.as_deref().unwrap_or_default();
     let (verification_method, approved_at) = verify_approval_proof_jws(
         &http_client,
         &url_builder,
@@ -695,11 +695,11 @@ pub async fn approve(
         &mut repo,
         did_resolver.as_ref(),
         depot.verified_did_binding_store()?.as_ref(),
-        &params.approval_proof_jws,
+        &parameters.approval_proof_jws,
         &caller_identity.verified_did,
         &proposal_id,
         account.id,
-        &params.action,
+        &parameters.action,
         existing.ticket.as_deref(),
         approval_note,
         &approved_by,
@@ -712,8 +712,8 @@ pub async fn approve(
             ApprovalProof {
                 admin_id: arkret_identifiers::DidCoreId::new(approved_by.clone())
                     .map_err(|error| AppError::bad_request(error.to_string()))?,
-                signature: params.approval_proof_jws.clone(),
-                note: params.approval_note.clone(),
+                signature: parameters.approval_proof_jws.clone(),
+                note: parameters.approval_note.clone(),
                 recorded_at: approved_at,
             },
         )
@@ -735,22 +735,22 @@ pub async fn approve(
             &service_did,
             arkret_config.audit_signature_fail_closed,
             admin_user.as_ref(),
-            AdminOperation::Other(format!("account_{}_proposal_approved", params.action)),
+            AdminOperation::Other(format!("account_{}_proposal_approved", parameters.action)),
             "account",
             Some(account.id),
             serde_json::json!({
                 "state_record_id": state_record_id,
                 "state_revision": state_revision,
                 "proposal_id": proposal_id,
-                "action": params.action,
+                "action": parameters.action,
                 "transition_kind": transition_kind,
                 "previous_state": existing.state.as_str(),
                 "next_state": approved.state.as_str(),
-                "ticket": params.ticket,
+                "ticket": parameters.ticket,
                 "approved_by": approved_by,
                 "approval_verification_method": verification_method,
                 "approved_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
-                "approval_note": params.approval_note,
+                "approval_note": parameters.approval_note,
                 "allowed_next_transitions": allowed_next_transitions.clone(),
             }),
         )
@@ -764,8 +764,8 @@ pub async fn approve(
         state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
-        action: params.action,
-        ticket: params.ticket,
+        action: parameters.action,
+        ticket: parameters.ticket,
         previous_state: existing.state.as_str().to_owned(),
         approval_state: approved.state.as_str().to_owned(),
         state_revision,
@@ -776,7 +776,7 @@ pub async fn approve(
                 .map_err(|error| AppError::bad_request(error.to_string()))?,
         ),
         approved_by_handle: admin_user.as_ref().map(|user| user.localpart.clone()),
-        approval_note: params.approval_note,
+        approval_note: parameters.approval_note,
         allowed_next_transitions,
     }))
 }
@@ -843,12 +843,12 @@ pub async fn execute(
     req: &mut Request,
     depot: &Depot,
 ) -> JsonResult<AccountRiskActionExecuteOutcome> {
-    let params: AccountRiskActionExecuteRequestBody =
+    let parameters: AccountRiskActionExecuteRequestBody =
         req.parse_json().await.map_err(AppError::internal)?;
-    if params.action.trim().is_empty() {
+    if parameters.action.trim().is_empty() {
         return Err(AppError::bad_request("risk action is required"));
     }
-    if params
+    if parameters
         .execution_note
         .as_deref()
         .is_none_or(|note| note.trim().is_empty())
@@ -858,7 +858,7 @@ pub async fn execute(
         ));
     }
 
-    let mutation = account_risk_action_mutation(&params.action)?;
+    let mutation = account_risk_action_mutation(&parameters.action)?;
     let risk_action_state = depot.risk_action_state_service()?;
     let risk_action_proposals = depot.risk_action_proposals_service()?;
     let crate::handlers::admin::call_context::CallContext {
@@ -903,8 +903,8 @@ pub async fn execute(
     ensure_proposal_targets(
         &existing,
         account.id,
-        &params.action,
-        params.ticket.as_deref(),
+        &parameters.action,
+        parameters.ticket.as_deref(),
     )?;
     let executed_proposal = risk_action_proposals
         .mark_executed(proposal_ulid, executed_at)
@@ -951,14 +951,14 @@ pub async fn execute(
         &service_did,
         arkret_config.audit_signature_fail_closed,
         admin_user.as_ref(),
-        AdminOperation::Other(format!("account_{}_proposal_executed", params.action)),
+        AdminOperation::Other(format!("account_{}_proposal_executed", parameters.action)),
         "account",
         Some(account.id),
         serde_json::json!({
             "state_record_id": state_record_id,
             "state_revision": state_revision,
             "proposal_id": proposal_id,
-            "action": params.action,
+            "action": parameters.action,
             "transition_kind": "proposal_executed",
             "previous_state": existing.state.as_str(),
             "next_state": "mutation_recorded",
@@ -966,10 +966,10 @@ pub async fn execute(
             "mutation_description": mutation.mutation_description,
             "principal_erase": principal_erase,
             "sessions_terminated": sessions_terminated,
-            "ticket": params.ticket,
+            "ticket": parameters.ticket,
             "executed_by": executed_by,
             "executed_by_handle": admin_user.as_ref().map(|user| user.localpart.as_str()),
-            "execution_note": params.execution_note,
+            "execution_note": parameters.execution_note,
             "allowed_next_transitions": allowed_next_transitions.clone(),
         }),
     )
@@ -984,15 +984,15 @@ pub async fn execute(
         state_record_id,
         proposal_id,
         account_id: account.id.to_string(),
-        action: params.action,
-        ticket: params.ticket,
+        action: parameters.action,
+        ticket: parameters.ticket,
         previous_state: existing.state.as_str().to_owned(),
         execution_state: "mutation_recorded".to_owned(),
         mutation_kind: mutation.mutation_kind.to_owned(),
         state_revision,
         transition_kind: "proposal_executed".to_owned(),
         executed_at,
-        execution_note: params.execution_note,
+        execution_note: parameters.execution_note,
         account: account_response,
         allowed_next_transitions,
     }))

@@ -95,7 +95,7 @@ pub struct OAuthSessionList {
 }
 
 /// List the requesting user's active OAuth sessions (settings "signed-in
-/// apps" card). Query params: `limit` (default 50, cap 100) and `after`
+/// apps" card). Query parameters: `limit` (default 50, cap 100) and `after`
 /// (an `OAuthSession` node id from a previous page's `next_cursor`).
 #[endpoint]
 pub async fn list_oauth_sessions(

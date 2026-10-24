@@ -169,26 +169,26 @@ CREATE TABLE public.verified_did_bindings (
 CREATE TABLE public.account_status_ledger_heads (
     account_authority_id text NOT NULL,
     local_account_id text NOT NULL,
-    current_status_seq bigint,
+    current_status_sequence bigint,
     current_record_id text,
     PRIMARY KEY (account_authority_id, local_account_id),
-    CHECK ((current_status_seq IS NULL) = (current_record_id IS NULL))
+    CHECK ((current_status_sequence IS NULL) = (current_record_id IS NULL))
 );
 
 CREATE TABLE public.account_status_records (
     account_authority_id text NOT NULL,
     local_account_id text NOT NULL,
-    status_seq bigint NOT NULL CHECK (status_seq >= 1),
+    status_sequence bigint NOT NULL CHECK (status_sequence >= 1),
     record_id text NOT NULL,
     record jsonb NOT NULL,
     issuer_source jsonb,
     issued_at timestamp with time zone NOT NULL,
-    PRIMARY KEY (account_authority_id, local_account_id, status_seq),
+    PRIMARY KEY (account_authority_id, local_account_id, status_sequence),
     UNIQUE (record_id)
 );
 
 CREATE INDEX account_status_records_range_idx
-    ON public.account_status_records (account_authority_id, local_account_id, status_seq);
+    ON public.account_status_records (account_authority_id, local_account_id, status_sequence);
 
 -- RFC 9449 DPoP proof replay cache. `jti_digest` is a SHA-256 digest of
 -- the caller-supplied `jti`, bounded for storage and safe for audit logs.
@@ -227,7 +227,7 @@ CREATE TABLE public.recovery_completion_grant_issuances (
     device_id text NOT NULL,
     reanchor_ref jsonb NOT NULL,
     device_authorization_ref jsonb NOT NULL,
-    result_model_generation_ref jsonb NOT NULL,
+    new_model_generation_ref jsonb NOT NULL,
     canonical_request_digest text NOT NULL,
     canonical_request bytea NOT NULL,
     session_grant_operation_id uuid NOT NULL,
@@ -746,7 +746,7 @@ CREATE TABLE public.device_pairing_pending (
     stage_request_digest text NOT NULL,
     stage_outcome bytea NOT NULL,
     pairing_code text NOT NULL UNIQUE,
-    new_device_pubkey jsonb NOT NULL,
+    new_device_public_key jsonb NOT NULL,
     client_nonce text NOT NULL,
     display_name text,
     device_metadata jsonb,
@@ -2041,7 +2041,7 @@ ALTER TABLE ONLY public.webauthn_ceremonies
 ALTER TABLE ONLY public.user_session_authentications
     ADD CONSTRAINT user_session_authentications_webauthn_credential_id_fkey FOREIGN KEY (webauthn_credential_id) REFERENCES public.webauthn_credentials(id) ON DELETE SET NULL;
 
--- Provider-local custody. This is not an Invite current-result table.
+-- Provider-local custody. This is not an Invite current-state table.
 CREATE TABLE third_party_invite_private (
     handle_digest TEXT PRIMARY KEY,
     issuer_digest TEXT NOT NULL,

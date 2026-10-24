@@ -31,7 +31,7 @@ class PublicEvidenceTests(unittest.TestCase):
                         "results": [{"src": "CheckHttps", "result": "SUCCESS", "input": sentinel},
                                     {"src": "CheckIssuer", "result": "FAILURE", "msg": sentinel}],
                     }))
-                bundle.writestr("test-log-PASSED.sig", "unchanged signature")
+                bundle.writestr("test-log-PASSED.signature", "unchanged signature")
             original = archive.read_bytes()
             evidence.export_modules(root, output, "1" * 40)
             report = (output / "modules.json").read_text()

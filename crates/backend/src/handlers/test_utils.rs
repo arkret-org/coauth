@@ -955,7 +955,9 @@ impl TestState {
                 principal_endpoint: &endpoint,
                 local_id: "service",
                 also_known_as: &[],
-                version_time: arkret_canonical::normalize_timestamp_canonical(self.clock.now()),
+                version_created_at: arkret_canonical::normalize_timestamp_canonical(
+                    self.clock.now(),
+                ),
                 did_key_fragment: Some("account-authority"),
             },
             &self.keyring.account_authority_seed().unwrap(),

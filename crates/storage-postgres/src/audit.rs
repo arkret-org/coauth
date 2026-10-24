@@ -189,7 +189,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             admin_operation_log.id,
-            admin_operation_log.admin_user_id = %params.admin_user_id(),
+            admin_operation_log.admin_user_id = %parameters.admin_user_id(),
         ),
         err,
     )]
@@ -197,26 +197,26 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewAdminOperationLog,
+        parameters: NewAdminOperationLog,
     ) -> Result<AdminOperationLog, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
         tracing::Span::current().record("admin_operation_log.id", tracing::field::display(id));
 
-        let operation = params.operation().clone();
-        let ip_address = params.ip_address();
+        let operation = parameters.operation().clone();
+        let ip_address = parameters.ip_address();
 
         let row = InsertableAdminOperationLog {
             id: Uuid::from(id),
-            admin_user_id: Uuid::from(params.admin_user_id()),
+            admin_user_id: Uuid::from(parameters.admin_user_id()),
             operation: admin_operation_to_db(&operation),
-            resource_type: params.resource_type().to_owned(),
-            resource_id: params.resource_id().map(Uuid::from),
-            details: params.details().clone(),
+            resource_type: parameters.resource_type().to_owned(),
+            resource_id: parameters.resource_id().map(Uuid::from),
+            details: parameters.details().clone(),
             ip_address: ip_address.map(IpNetwork::from),
-            user_agent: params.user_agent().map(ToOwned::to_owned),
+            user_agent: parameters.user_agent().map(ToOwned::to_owned),
             created_at,
-            audit_signature: params.audit_signature().map(ToOwned::to_owned),
+            audit_signature: parameters.audit_signature().map(ToOwned::to_owned),
         };
 
         diesel::insert_into(admin_operation_logs::table)
@@ -226,10 +226,10 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         Ok(AdminOperationLog {
             id,
-            admin_user_id: params.admin_user_id(),
+            admin_user_id: parameters.admin_user_id(),
             operation,
             resource_type: row.resource_type,
-            resource_id: params.resource_id(),
+            resource_id: parameters.resource_id(),
             details: row.details,
             ip_address,
             user_agent: row.user_agent,
@@ -384,7 +384,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             account_security_event.id,
-            account_security_event.user_id = %params.user_id(),
+            account_security_event.user_id = %parameters.user_id(),
         ),
         err,
     )]
@@ -392,22 +392,22 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: NewAccountSecurityEvent,
+        parameters: NewAccountSecurityEvent,
     ) -> Result<AccountSecurityEvent, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
         tracing::Span::current().record("account_security_event.id", tracing::field::display(id));
 
-        let event_type = params.event_type().clone();
-        let ip_address = params.ip_address();
+        let event_type = parameters.event_type().clone();
+        let ip_address = parameters.ip_address();
 
         let row = InsertableAccountSecurityEvent {
             id: Uuid::from(id),
-            user_id: Uuid::from(params.user_id()),
+            user_id: Uuid::from(parameters.user_id()),
             event_type: security_event_type_to_db(&event_type),
-            metadata: params.metadata().clone(),
+            metadata: parameters.metadata().clone(),
             ip_address: ip_address.map(IpNetwork::from),
-            user_agent: params.user_agent().map(ToOwned::to_owned),
+            user_agent: parameters.user_agent().map(ToOwned::to_owned),
             created_at,
         };
 
@@ -418,7 +418,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 
         Ok(AccountSecurityEvent {
             id,
-            user_id: params.user_id(),
+            user_id: parameters.user_id(),
             event_type,
             metadata: row.metadata,
             ip_address,

@@ -4,10 +4,10 @@
 #![allow(missing_docs)]
 
 diesel::table! {
-    account_status_records (account_authority_id, local_account_id, status_seq) {
+    account_status_records (account_authority_id, local_account_id, status_sequence) {
         account_authority_id -> Text,
         local_account_id -> Text,
-        status_seq -> Int8,
+        status_sequence -> Int8,
         record_id -> Text,
         record -> Jsonb,
         issuer_source -> Nullable<Jsonb>,
@@ -19,7 +19,7 @@ diesel::table! {
     account_status_ledger_heads (account_authority_id, local_account_id) {
         account_authority_id -> Text,
         local_account_id -> Text,
-        current_status_seq -> Nullable<Int8>,
+        current_status_sequence -> Nullable<Int8>,
         current_record_id -> Nullable<Text>,
     }
 }
@@ -234,7 +234,7 @@ diesel::table! {
         device_id -> Text,
         reanchor_ref -> Jsonb,
         device_authorization_ref -> Jsonb,
-        result_model_generation_ref -> Jsonb,
+        new_model_generation_ref -> Jsonb,
         canonical_request_digest -> Text,
         canonical_request -> Bytea,
         session_grant_operation_id -> Uuid,

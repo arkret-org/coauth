@@ -8,14 +8,14 @@ use std::time::Duration;
 
 use arkret_canonical::canonical_json_bytes;
 use arkret_models_collaboration::account_lifecycle::{
-    AccountStatusPublicationOutcome, AccountStatusPublicationRequestBody,
+    AccountStatusPublicationRequestBody, AccountStatusPublicationResponseBody,
 };
 use arkret_models_collaboration::agent_operations::{
-    AgentKeyPairOutcome, AgentKeyPairRequestBody, AgentView,
+    AgentKeyPairRequestBody, AgentKeyPairResponseBody, AgentView,
 };
 use arkret_models_collaboration::governance::erasure::ErasureReceiptResource;
 use arkret_models_collaboration::governance::invite_addressing::{
-    InviteDeliveryOutcome, InviteDeliveryRequestBody,
+    InviteDeliveryRequestBody, InviteDeliveryResponseBody,
 };
 use arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding;
 use arkret_signatures::http_signature::{
@@ -188,7 +188,7 @@ impl<'a> PeerProtocolClient<'a> {
     pub async fn post_invite_delivery(
         &self,
         request: &InviteDeliveryRequestBody,
-    ) -> Result<InviteDeliveryOutcome, PeerProtocolClientError> {
+    ) -> Result<InviteDeliveryResponseBody, PeerProtocolClientError> {
         let url = self.join_absolute("/_arkret/peer/invites")?;
         self.post_json(
             "peer_invites_submit",
@@ -207,7 +207,7 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         request: &AccountStatusPublicationRequestBody,
         idempotency_key: &str,
-    ) -> Result<AccountStatusPublicationOutcome, PeerProtocolClientError> {
+    ) -> Result<AccountStatusPublicationResponseBody, PeerProtocolClientError> {
         let url = self.join_absolute("/_arkret/peer/account-status")?;
         self.post_json(
             "peer_account_status_submit",
@@ -261,7 +261,7 @@ impl<'a> PeerProtocolClient<'a> {
         &self,
         request: &AgentKeyPairRequestBody,
         idempotency_key: &str,
-    ) -> Result<AgentKeyPairOutcome, anyhow::Error> {
+    ) -> Result<AgentKeyPairResponseBody, anyhow::Error> {
         let url = self.join_absolute("/_arkret/gate/account/agent-key-pair")?;
         let response = self
             .post_json_response(

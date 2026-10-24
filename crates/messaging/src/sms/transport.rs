@@ -390,15 +390,15 @@ impl SmsTransport {
 
             SmsTransportInner::AliyunSms(transport) => {
                 tracing::debug!(sms.transport = "sms.aliyun", "Sending SMS through provider");
-                // Parse body as template params: try JSON first, fall back to
+                // Parse body as template parameters: try JSON first, fall back to
                 // {"code": body}
-                let params: std::collections::HashMap<String, String> = serde_json::from_str(body)
-                    .unwrap_or_else(|_| {
+                let parameters: std::collections::HashMap<String, String> =
+                    serde_json::from_str(body).unwrap_or_else(|_| {
                         let mut m = std::collections::HashMap::new();
                         m.insert("code".to_owned(), body.to_owned());
                         m
                     });
-                transport.send(to, &params).await?;
+                transport.send(to, &parameters).await?;
                 tracing::debug!(sms.transport = "sms.aliyun", "SMS accepted by provider");
             }
 
@@ -407,11 +407,11 @@ impl SmsTransport {
                     sms.transport = "sms.tencent_cloud",
                     "Sending SMS through provider"
                 );
-                // Parse body as template params: try JSON array first, fall
+                // Parse body as template parameters: try JSON array first, fall
                 // back to [body]
-                let params: Vec<String> =
+                let parameters: Vec<String> =
                     serde_json::from_str(body).unwrap_or_else(|_| vec![body.to_owned()]);
-                transport.send(to, &params).await?;
+                transport.send(to, &parameters).await?;
                 tracing::debug!(
                     sms.transport = "sms.tencent_cloud",
                     "SMS accepted by provider"

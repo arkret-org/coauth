@@ -160,8 +160,8 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         skip_all,
         fields(
             oauth_device_code.id,
-            oauth_device_code.scope = %params.scope,
-            oauth_client.id = %params.client.id,
+            oauth_device_code.scope = %parameters.scope,
+            oauth_client.id = %parameters.client.id,
         ),
         err,
     )]
@@ -169,26 +169,26 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         &mut self,
         rng: &mut (dyn RngCore + Send),
         clock: &dyn Clock,
-        params: OAuthDeviceCodeGrantParams<'_>,
+        parameters: OAuthDeviceCodeGrantParams<'_>,
     ) -> Result<DeviceCodeGrant, Self::Error> {
         let now = clock.now();
         let id = new_id(now, rng);
         tracing::Span::current().record("oauth_device_code.id", tracing::field::display(id));
 
         let created_at = now;
-        let expires_at = now + params.expires_in;
-        let client_id = params.client.id;
+        let expires_at = now + parameters.expires_in;
+        let client_id = parameters.client.id;
 
         let new_grant = NewDeviceCodeGrant {
             id: Uuid::from(id),
             oauth_client_id: Uuid::from(client_id),
-            scope: params.scope.to_string(),
-            device_code: params.device_code.clone(),
-            user_code: params.user_code.clone(),
+            scope: parameters.scope.to_string(),
+            device_code: parameters.device_code.clone(),
+            user_code: parameters.user_code.clone(),
             created_at,
             expires_at,
-            ip_address: params.ip_address.map(IpNetwork::from),
-            user_agent: params.user_agent.clone(),
+            ip_address: parameters.ip_address.map(IpNetwork::from),
+            user_agent: parameters.user_agent.clone(),
         };
 
         diesel::insert_into(oauth_device_code_grant::table)
@@ -200,13 +200,13 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             id,
             state: DeviceCodeGrantState::Pending,
             client_id,
-            scope: params.scope,
-            user_code: params.user_code,
-            device_code: params.device_code,
+            scope: parameters.scope,
+            user_code: parameters.user_code,
+            device_code: parameters.device_code,
             created_at,
             expires_at,
-            ip_address: params.ip_address,
-            user_agent: params.user_agent,
+            ip_address: parameters.ip_address,
+            user_agent: parameters.user_agent,
         })
     }
 

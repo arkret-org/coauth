@@ -16,7 +16,7 @@ use ulid::Ulid;
 
 use crate::handlers::admin::call_context::extract_call_context;
 use crate::handlers::admin::model::{Resource, UserEmail, to_user_email};
-use crate::handlers::admin::params::{IncludeCount, extract_pagination, extract_ulid_param};
+use crate::handlers::admin::parameters::{IncludeCount, extract_pagination, extract_ulid_param};
 use crate::handlers::admin::response::{
     PaginatedOutcome, SingleOutcome, paginated_response_for_count_only, paginated_response_for_page,
 };
@@ -219,16 +219,16 @@ pub async fn list_emails(
     let ctx = extract_call_context(req, depot).await?;
     let crate::handlers::admin::call_context::CallContext { mut repo, .. } = ctx;
     let (pagination, include_count) = extract_pagination(req)?;
-    let params: FilterParams = req
+    let parameters: FilterParams = req
         .parse_queries()
         .map_err(|error| AppError::bad_request(format!("Invalid filter parameters: {error}")))?;
 
-    let base_url = format!("{path}{params}", path = UserEmail::PATH);
+    let base_url = format!("{path}{parameters}", path = UserEmail::PATH);
     let base_url = include_count.add_to_base(&base_url);
     let mut filter = UserEmailFilter::default();
 
     // Optionally scope to a particular user
-    let resolved_user = match params.user {
+    let resolved_user = match parameters.user {
         Some(uid) => {
             let u = repo
                 .user()
@@ -246,7 +246,7 @@ pub async fn list_emails(
     };
 
     // Optionally match by email address
-    filter = match &params.email {
+    filter = match &parameters.email {
         Some(addr) => filter.for_email(addr),
         None => filter,
     };

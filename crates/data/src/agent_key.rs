@@ -87,7 +87,8 @@ pub struct AgentKeyPairCustody {
     pub station_id: arkret_identifiers::DidCoreId,
     pub station_name: String,
     pub request_digest: String,
-    pub station_outcome: Option<arkret_models_collaboration::agent_operations::AgentKeyPairOutcome>,
+    pub station_outcome:
+        Option<arkret_models_collaboration::agent_operations::AgentKeyPairResponseBody>,
 }
 
 impl AgentKeyPairCustody {

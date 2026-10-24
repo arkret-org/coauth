@@ -12,7 +12,7 @@ use ulid::Ulid;
 use crate::handlers::admin::CreatedJson;
 use crate::handlers::admin::audit_helper::record_admin_operation;
 use crate::handlers::admin::call_context::extract_call_context;
-use crate::handlers::admin::params::extract_ulid_param;
+use crate::handlers::admin::parameters::extract_ulid_param;
 use crate::handlers::common::DepotExt;
 use crate::services::account_claims::{
     AccountClaimFilter, AccountClaimRecord as StoredClaimRecord, AccountClaimStatus,

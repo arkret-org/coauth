@@ -259,7 +259,7 @@ repository_impl! {
             grant: &AccountHandoffGrant,
             challenge_id: &str,
             request_digest: &arkret_identifiers::Hash,
-            outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
+            outcome: &arkret_models_collaboration::account_operations::AccountRegisterResponseBody,
             now: DateTime<Utc>,
         ) -> Result<PublishedDidRegisterCommit, Self::Error>;
 
@@ -304,7 +304,7 @@ repository_impl! {
         async fn mark_did_published(
             &mut self,
             context: &IdentityCreationRegistrationContext,
-            registry_receipt: &arkret_models_identity::DidOperationSubmitOutcome,
+            registry_receipt: &arkret_models_identity::DidOperationSubmitResponseBody,
             log_head_digest: &arkret_identifiers::Hash,
             registration_did_evidence: &arkret_wire::RegistrationDidEvidence,
             now: DateTime<Utc>,
@@ -324,7 +324,7 @@ repository_impl! {
             &mut self,
             context: &IdentityCreationRegistrationContext,
             request_digest: &arkret_identifiers::Hash,
-            outcome: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionOutcome,
+            outcome: &arkret_models_collaboration::principal_operations::PcrGenesisAdmissionResponseBody,
             now: DateTime<Utc>,
         ) -> Result<bool, Self::Error>;
 
@@ -341,7 +341,7 @@ repository_impl! {
             &mut self,
             context: &IdentityCreationRegistrationContext,
             request_digest: &arkret_identifiers::Hash,
-            outcome: &arkret_models_collaboration::account_operations::AccountRegisterOutcome,
+            outcome: &arkret_models_collaboration::account_operations::AccountRegisterResponseBody,
             now: DateTime<Utc>,
         ) -> Result<IdentityCreationBindingCommit, Self::Error>;
 

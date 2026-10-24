@@ -39,16 +39,16 @@ impl SmsSender {
         );
 
         if self.transport.is_aliyun() {
-            // Aliyun: pass code as JSON template params
-            let params = serde_json::json!({"code": code});
-            let body = serde_json::to_string(&params).unwrap_or_default();
+            // Aliyun: pass code as JSON template parameters
+            let parameters = serde_json::json!({"code": code});
+            let body = serde_json::to_string(&parameters).unwrap_or_default();
             return self.transport.send(to, &body).await;
         }
 
         if self.transport.is_tencent_cloud() {
-            // Tencent Cloud: pass code as JSON array of template params
-            let params = serde_json::json!([code]);
-            let body = serde_json::to_string(&params).unwrap_or_default();
+            // Tencent Cloud: pass code as JSON array of template parameters
+            let parameters = serde_json::json!([code]);
+            let body = serde_json::to_string(&parameters).unwrap_or_default();
             return self.transport.send(to, &body).await;
         }
 

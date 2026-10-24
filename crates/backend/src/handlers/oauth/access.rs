@@ -64,14 +64,14 @@ impl From<AuthorizationConsentInfo> for ConsentScreen {
 pub struct AuthorizationConsentDecision {
     pub session: Session,
     pub callback_destination: CallbackDestination,
-    pub params: AuthorizationResponse,
+    pub parameters: AuthorizationResponse,
 }
 
 impl AuthorizationConsentDecision {
     /// Build the redirect URL string for JSON API responses.
     pub fn redirect_url(&self) -> Result<String, OAuthAccessError> {
         self.callback_destination
-            .redirect_url(&self.params)
+            .redirect_url(&self.parameters)
             .map(|info| info.url)
             .map_err(|error| OAuthAccessError::Internal(Box::new(error)))
     }
@@ -221,7 +221,7 @@ pub async fn accept_authorization_consent(
         .fulfill(clock, &session, grant)
         .await?;
 
-    let mut params = AuthorizationResponse::default();
+    let mut parameters = AuthorizationResponse::default();
 
     if grant.response_type_id_token {
         let last_authentication = repo
@@ -237,7 +237,7 @@ pub async fn accept_authorization_consent(
         )
         .await?;
 
-        params.id_token = Some(
+        parameters.id_token = Some(
             generate_id_token(
                 rng,
                 clock,
@@ -259,7 +259,7 @@ pub async fn accept_authorization_consent(
     }
 
     if let Some(code) = grant.code {
-        params.code = Some(code.code);
+        parameters.code = Some(code.code);
     }
 
     repo.save().await?;
@@ -267,7 +267,7 @@ pub async fn accept_authorization_consent(
     Ok(AuthorizationConsentDecision {
         session,
         callback_destination,
-        params,
+        parameters,
     })
 }
 

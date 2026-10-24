@@ -241,24 +241,24 @@ pub async fn resolve_admin_invite_review(
 
     // ── Approve auto-replay (current admin behavior) ───────────────────────────
     //
-    // batch_invite enqueues the original mint params (count /
+    // batch_invite enqueues the original mint parameters (count /
     // usage_limit / expires_in_hours) into `payload` at review
     // time. On approve, re-mint the same number of tokens against
     // `repo` and return them in the response. We deliberately do NOT
     // re-run the consent gate here — the operator approving the queue
     // row has approved these registration-token mint parameters.
     //
-    // If `payload` has no recognisable mint params (for example manual
+    // If `payload` has no recognisable mint parameters (for example manual
     // queue inserts), we log a warning and fall through to the
     // flag-flip-only path. Reject always falls through.
     let mut minted_tokens: Vec<SingleOutcome<UserRegistrationToken>> = Vec::new();
     if matches!(body.decision, AdminInviteReviewDecision::Approve) {
-        if let Some(params) = mint_params_from_payload(&record.payload) {
+        if let Some(parameters) = mint_params_from_payload(&record.payload) {
             match mint_registration_tokens(
                 &mut repo,
                 &clock,
                 &mut rng,
-                &params,
+                &parameters,
                 admin_user.as_ref().map(|u| u.id),
             )
             .await
@@ -279,7 +279,7 @@ pub async fn resolve_admin_invite_review(
         } else {
             warn!(
                 admin_invite_review_id = %record.id,
-                "admin_invite_review.approve: payload has no mint params; row resolved without minting",
+                "admin_invite_review.approve: payload has no mint parameters; row resolved without minting",
             );
         }
     }
@@ -435,19 +435,19 @@ mod tests {
             "usage_limit": 1,
             "expires_in_hours": 24,
         });
-        let params = mint_params_from_payload(&v).expect("should parse");
-        assert_eq!(params.count, 5);
-        assert_eq!(params.usage_limit, Some(1));
-        assert_eq!(params.expires_in_hours, Some(24));
+        let parameters = mint_params_from_payload(&v).expect("should parse");
+        assert_eq!(parameters.count, 5);
+        assert_eq!(parameters.usage_limit, Some(1));
+        assert_eq!(parameters.expires_in_hours, Some(24));
     }
 
     #[test]
     fn mint_params_from_payload_handles_partial() {
         let v = serde_json::json!({"count": 3});
-        let params = mint_params_from_payload(&v).expect("count alone is enough");
-        assert_eq!(params.count, 3);
-        assert_eq!(params.usage_limit, None);
-        assert_eq!(params.expires_in_hours, None);
+        let parameters = mint_params_from_payload(&v).expect("count alone is enough");
+        assert_eq!(parameters.count, 3);
+        assert_eq!(parameters.usage_limit, None);
+        assert_eq!(parameters.expires_in_hours, None);
     }
 
     #[test]

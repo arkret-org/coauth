@@ -70,7 +70,7 @@ pub(crate) struct OutboundRequestPolicy {
     service: &'static str,
     operation: &'static str,
     timeout: Duration,
-    max_attempts: usize,
+    max_attempt_count: usize,
     retry: RetryPolicy,
 }
 
@@ -81,7 +81,7 @@ impl OutboundRequestPolicy {
             service,
             operation,
             timeout: Duration::from_secs(10),
-            max_attempts: 1,
+            max_attempt_count: 1,
             retry: RetryPolicy::arkret_default(),
         }
     }
@@ -93,8 +93,8 @@ impl OutboundRequestPolicy {
     }
 
     #[must_use]
-    pub(crate) const fn with_max_attempts(mut self, max_attempts: usize) -> Self {
-        self.max_attempts = max_attempts;
+    pub(crate) const fn with_max_attempts(mut self, max_attempt_count: usize) -> Self {
+        self.max_attempt_count = max_attempt_count;
         self
     }
 
@@ -105,8 +105,8 @@ impl OutboundRequestPolicy {
         self
     }
 
-    fn max_attempts(self) -> usize {
-        self.max_attempts.max(1)
+    fn max_attempt_count(self) -> usize {
+        self.max_attempt_count.max(1)
     }
 
     const fn operation(self) -> &'static str {
@@ -573,11 +573,11 @@ pub(crate) async fn send_with_policy<F>(
 where
     F: Fn() -> reqwest::RequestBuilder,
 {
-    let max_attempts = policy.max_attempts();
+    let max_attempt_count = policy.max_attempt_count();
     let mut schedule = RetrySchedule::from_policy(policy.retry)
         .with_jitter(policy.retry.jitter_ratio(), retry_jitter_seed());
     let mut had_prior_ambiguous_result = false;
-    for attempt in 1..max_attempts {
+    for attempt in 1..max_attempt_count {
         let result = build_request().timeout(policy.timeout).send_traced().await;
         match result {
             Ok(mut response) => {
@@ -722,7 +722,7 @@ fn record_retry(
         service = policy.service,
         operation = policy.operation,
         attempt,
-        max_attempts = policy.max_attempts(),
+        max_attempt_count = policy.max_attempt_count(),
         timeout_ms = policy.timeout.as_millis(),
         outcome,
         status_code,
@@ -740,7 +740,7 @@ fn record_terminal_error(
     tracing::warn!(
         service = policy.service,
         operation = policy.operation,
-        max_attempts = policy.max_attempts(),
+        max_attempt_count = policy.max_attempt_count(),
         timeout_ms = policy.timeout.as_millis(),
         outcome,
         status_code,

@@ -2,12 +2,12 @@
 
 use arkret_identity::DidBindingPurpose;
 use arkret_models_collaboration::device_pairing::{
-    AccountDevicePairOutcome, AccountDevicePairRequestBody, DevicePairingBootstrap,
-    DevicePairingCode, DevicePairingCodeClaimOutcome, DevicePairingCodeClaimRequestBody,
-    DevicePairingFinalizeOutcome, DevicePairingFinalizeRequestBody, DevicePairingNonce,
-    DevicePairingRequestId, DevicePairingResolveRequestBody, DevicePairingStageOutcome,
-    DevicePairingStageRequestBody, DevicePairingState, DevicePairingStatusOutcome,
-    DevicePairingStatusRequestBody, DevicePairingTargetKeyAlgorithm, DevicePairingTargetProof,
+    AccountDevicePairRequestBody, AccountDevicePairResponseBody, DevicePairingBootstrap,
+    DevicePairingCode, DevicePairingCodeClaimRequestBody, DevicePairingCodeClaimResponseBody,
+    DevicePairingFinalizeRequestBody, DevicePairingFinalizeResponseBody, DevicePairingNonce,
+    DevicePairingRequestId, DevicePairingResolveRequestBody, DevicePairingStageRequestBody,
+    DevicePairingStageResponseBody, DevicePairingState, DevicePairingStatusRequestBody,
+    DevicePairingStatusResponseBody, DevicePairingTargetKeyAlgorithm, DevicePairingTargetProof,
 };
 use arkret_models_collaboration::events_payloads::{
     DeviceAuthorizationBindingKind, DeviceAuthorizePayload, DeviceOrPrincipalRef,
@@ -134,7 +134,7 @@ async fn stage_device_pairing_with_key(
         ))?;
         let pairing_code = mint_pairing_code(&mut *rng);
         let server_nonce = mint_nonce(&mut *rng);
-        let outcome = DevicePairingStageOutcome {
+        let outcome = DevicePairingStageResponseBody {
             device_pairing_request_id: device_pairing_request_id.clone(),
             pairing_code: pairing_code.clone(),
             gate_audience_uri: gate_audience_uri.clone(),
@@ -150,7 +150,7 @@ async fn stage_device_pairing_with_key(
                 stage_outcome: bytes.clone(),
                 device_pairing_request_id,
                 pairing_code,
-                new_device_pubkey: body.new_device_pubkey.clone(),
+                new_device_public_key: body.new_device_public_key.clone(),
                 client_nonce: body.client_nonce.clone(),
                 display_name: body.display_name.clone(),
                 device_metadata: body.device_metadata.clone(),
@@ -236,7 +236,7 @@ pub async fn private_resolve_device_pairing_adapter(
         arkret_base_url: station_origin,
         device_pairing_request_id: record.device_pairing_request_id,
         pairing_code: record.pairing_code,
-        new_device_pubkey: record.new_device_pubkey,
+        new_device_public_key: record.new_device_public_key,
         client_nonce: record.client_nonce,
         gate_audience_uri: record.gate_audience_uri,
         server_nonce: record.server_nonce,
@@ -282,7 +282,7 @@ pub async fn private_device_pairing_status_adapter(
         record.state
     };
     let authorized = public_state == DevicePairingState::Authorized;
-    let outcome = DevicePairingStatusOutcome {
+    let outcome = DevicePairingStatusResponseBody {
         state: public_state,
         device_id: authorized.then_some(record.authorized_device_id).flatten(),
         authorized_event_ref: authorized.then_some(record.authorized_event_ref).flatten(),
@@ -400,7 +400,7 @@ pub async fn finalize_device_pairing(
             device_metadata: record.device_metadata.clone(),
         };
         if let Err(error) = verify_server_device_pairing_target_proof(
-            &record.new_device_pubkey,
+            &record.new_device_public_key,
             &challenge,
             &binding.account_id,
             &body.target_proof,
@@ -416,7 +416,7 @@ pub async fn finalize_device_pairing(
         }
     }
 
-    let outcome = DevicePairingFinalizeOutcome {
+    let outcome = DevicePairingFinalizeResponseBody {
         device_pairing_request_id: body.device_pairing_request_id.clone(),
         state: DevicePairingState::ReadyForClaim,
         expires_at: record.expires_at,
@@ -618,7 +618,7 @@ fn validate_pairing_intent<'a>(
     {
         return Err(ArkretRouteError::NotFound);
     }
-    if record.new_device_pubkey != body.new_device_pubkey
+    if record.new_device_public_key != body.new_device_public_key
         || record
             .display_name
             .as_ref()
@@ -702,7 +702,7 @@ fn validate_pairing_intent<'a>(
         device_metadata: record.device_metadata.clone(),
     };
     verify_server_device_pairing_target_proof(
-        &record.new_device_pubkey,
+        &record.new_device_public_key,
         &challenge,
         &authenticated.account_id,
         &target_proof,
@@ -755,7 +755,7 @@ async fn resume_device_pairing_admission(
             admission.approving_account_id.station_id.clone(),
         )
         .map_err(map_pairing_peer_error)?;
-        let peer_outcome: arkret_wire::AuthoritySubmitOutcome = channel
+        let peer_outcome: arkret_wire::AuthoritySubmitResponseBody = channel
             .post_private_json(
                 "private_pairing_event_admission",
                 PRIVATE_EVENT_ADMISSION_PATH,
@@ -765,11 +765,11 @@ async fn resume_device_pairing_admission(
             .await
             .map_err(map_pairing_peer_error)?;
         let commit = match &peer_outcome {
-            arkret_wire::AuthoritySubmitOutcome::Accepted {
+            arkret_wire::AuthoritySubmitResponseBody::Accepted {
                 status: AuthorityCommitStatus::Committed | AuthorityCommitStatus::Duplicate,
                 commit,
             } => commit.clone(),
-            arkret_wire::AuthoritySubmitOutcome::Rejected {
+            arkret_wire::AuthoritySubmitResponseBody::Rejected {
                 status: AuthorityRejectionStatus::Rejected,
                 reason_code,
             } => {
@@ -793,7 +793,7 @@ async fn resume_device_pairing_admission(
                 }
                 return Err(pairing_failed_precondition());
             }
-            arkret_wire::AuthoritySubmitOutcome::Rejected {
+            arkret_wire::AuthoritySubmitResponseBody::Rejected {
                 status: AuthorityRejectionStatus::RetryableUnavailable,
                 ..
             } => return Err(pairing_temporarily_unavailable()),
@@ -829,7 +829,7 @@ async fn resume_device_pairing_admission(
     };
     let payload = DeviceAuthorizePayload::try_from(&event_submission.event)
         .map_err(|_| pairing_temporarily_unavailable())?;
-    let outcome = AccountDevicePairOutcome {
+    let outcome = AccountDevicePairResponseBody {
         device_id: payload.device_id.clone(),
         authorized_event_ref: authorized_event_ref.clone(),
         device_grant: None,
@@ -1096,7 +1096,7 @@ pub async fn claim_device_pairing_code(
         .clone()
         .expect("usable pairing record has a target proof");
     if verify_server_device_pairing_target_proof(
-        &record.new_device_pubkey,
+        &record.new_device_public_key,
         &challenge,
         &authenticated.account_id,
         &target_proof,
@@ -1111,7 +1111,7 @@ pub async fn claim_device_pairing_code(
         return Err(ArkretRouteError::NotFound);
     }
 
-    let outcome = DevicePairingCodeClaimOutcome {
+    let outcome = DevicePairingCodeClaimResponseBody {
         device_pairing_request_id: record.device_pairing_request_id.clone(),
         bootstrap: DevicePairingBootstrap {
             arkret_base_url: depot
@@ -1122,7 +1122,7 @@ pub async fn claim_device_pairing_code(
                 .to_owned(),
             device_pairing_request_id: record.device_pairing_request_id,
             pairing_code: record.pairing_code,
-            new_device_pubkey: record.new_device_pubkey,
+            new_device_public_key: record.new_device_public_key,
             client_nonce: record.client_nonce,
             gate_audience_uri: record.gate_audience_uri,
             server_nonce: record.server_nonce,

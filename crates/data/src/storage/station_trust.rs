@@ -208,7 +208,7 @@ repository_impl! {
         async fn enroll(
             &mut self,
             clock: &dyn Clock,
-            params: NewStationTrustEnrollment,
+            parameters: NewStationTrustEnrollment,
         ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
 
         /// Move a verified binding to a new endpoint while preserving the
@@ -221,7 +221,7 @@ repository_impl! {
             expected_service_id: &arkret_identifiers::DidCoreId,
             expected_canonical_endpoint: &str,
             expected_method_history_head: &str,
-            params: NewStationTrustEnrollment,
+            parameters: NewStationTrustEnrollment,
         ) -> Result<bool, Self::Error>;
 
         /// Compare-and-swap replacement of an existing enrollment: the update
@@ -233,7 +233,7 @@ repository_impl! {
             clock: &dyn Clock,
             name: &str,
             expected_old_service_id: &arkret_identifiers::DidCoreId,
-            params: NewStationTrustEnrollment,
+            parameters: NewStationTrustEnrollment,
         ) -> Result<bool, Self::Error>;
 
         /// Advance the anti-rollback floor and `last_verified_at` after a
@@ -250,7 +250,7 @@ repository_impl! {
             &mut self,
             rng: &mut (dyn RngCore + Send),
             clock: &dyn Clock,
-            params: NewStationTrustAudit,
+            parameters: NewStationTrustAudit,
         ) -> Result<StationTrustAudit, Self::Error>;
 
         /// List audit entries for one enrollment, newest first.

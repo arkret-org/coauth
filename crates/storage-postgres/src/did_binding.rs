@@ -3,7 +3,7 @@
 //!
 //! # Hard expiry
 //!
-//! §5 distinguishes *stale* (past `refresh_after`; still readable) from
+//! §5 distinguishes *stale* (past `refresh_at`; still readable) from
 //! *hard-expired* (past `expires_at`; gone for readers). Only the second one is
 //! visible at this layer, and it is enforced **in the query**: [`get`] filters
 //! on `expires_at`, so an expired row can never be handed back even if it is
