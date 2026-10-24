@@ -364,12 +364,11 @@ impl ConnectorAdmin for DbConnectorAdmin {
             request.triggering_status_record_id(),
             ErasureStorageBoundary::AccountPrivateStore,
         );
-        let resource = match client.get_erasure_receipt(&receipt_id).await {
+        let package = match client.get_erasure_receipt(&receipt_id).await {
             Ok(resource) => resource,
             Err(PeerProtocolClientError::Status { status: 404, .. }) => return Ok(None),
             Err(error) => return Err(error.into()),
         };
-        let package = resource.package;
         package.validate_bindings()?;
         anyhow::ensure!(
             package.receipt.receipt_id == receipt_id,

@@ -123,11 +123,6 @@ pub async fn account_register_endpoint(
             ));
         }
     }
-    if body.device_id.is_some() {
-        return Err(failed_precondition(
-            "top-level device_id is not used by the atomic identity-creation flow",
-        ));
-    }
     if identity_creation.principal_registration_anchor.did() != &body.did
         || identity_creation.control_proof.principal_id != body.principal_id
         || identity_creation.control_proof.did != body.did
@@ -698,7 +693,7 @@ pub async fn account_register_endpoint(
         },
     )?;
     persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
-    let session_grant_outcome = SessionGrantResponseBody {
+    let issued_session = SessionGrantResponseBody {
         account_id: material.account_id.clone(),
         device_id: Some(initial.device_id.clone()),
         session_grant: material.grant_jwt.clone(),
@@ -719,8 +714,8 @@ pub async fn account_register_endpoint(
         profile: None,
         registration_audit: None,
         binding_receipt: receipt,
-        pcr_genesis_commits: Some(pcr_outcome.commits),
-        session_grant_outcome: Some(session_grant_outcome),
+        pcr_genesis_commits: pcr_outcome.commits,
+        issued_session,
     };
     outcome
         .validate_against_request(&body)

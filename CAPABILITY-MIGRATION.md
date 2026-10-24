@@ -240,13 +240,13 @@ third-party use:
    **建议由 coland 自己的能力账本承接。**
 4. **NC-TYPE-001 命名扫描（顺带）**：SDK 非生成代码里末词为 `Result` / `Item` 的类型有
    `SignerKeyResolution`（`crates/models-identity/src/signer_key_operations.rs:263`）、
-   `AccountSubscribeSnapshotResult`
+   `AccountSubscribeReadAction`
    （`crates/models-collaboration/src/sync_frames/account_subscribe.rs:1038`）、
    `ModerationQueueItem`（`crates/models-collaboration/src/governance/moderation_queue.rs:61`）。
    按已裁定口径，查询/同步操作的答案应为 `_Outcome`、逐条记录应为 `_Row`。
    `AccountStateView`（`sync_frames/current_states.rs:53`）与 `CurrentState`
    （`crates/wire/src/authority_commit.rs:732`）是与 `operation_kind` 双射的类型化当前结果信封，
-   合规。`MlsAddMemberResult` / `MlsAddMembersResult` / `MlsRemoveMemberResult`
+   合规。`MlsMemberAdditionArtifacts` / `MlsMemberBatchAdditionArtifacts` / `MlsMemberRemovalArtifacts`
    （`crates/mls/src/group.rs:211/218/241`）与 `SdkClauseVerdict`
    （`crates/schema/src/sdk_conformance.rs:81`）是进程内返回值，不是 wire DTO，
    是否受该规则约束需 spec 侧确认。以上均属 SDK 仓的事，不阻塞 coauth。

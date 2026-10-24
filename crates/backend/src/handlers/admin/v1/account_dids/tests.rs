@@ -265,8 +265,31 @@ async fn exercise_handler(
         issued_at: now,
         expires_at: expires,
         verification_method: method.clone(),
-        witness_evidence: None,
         signature: "pending".to_owned(),
+        registration_anchor_digest: arkret_identifiers::Hash::new(
+            "sha256:e7484e3548b9463b4a63d5f4aa87de25bc0c7a517fc8488415a3b1edd00ce5ea",
+        )
+        .unwrap(),
+        realm_create_payload_digest: arkret_identifiers::Hash::new(
+            "sha256:4e92192037e539bedbeaa6cedc8f934f6992257b11f27edac41198efb29bdc7d",
+        )
+        .unwrap(),
+        founding_authorize_payload_digest: arkret_identifiers::Hash::new(
+            "sha256:3814995a8fd02c84f94b4758fb3b8b33e96b7ae9c7fcf1e75e21a83c26f390b4",
+        )
+        .unwrap(),
+        initial_session_request_digest: arkret_identifiers::Hash::new(
+            "sha256:d4b56cabdd9a881db96395d9c5e67517db6fcc2f48f6cd359824fe1d1bbdf1d6",
+        )
+        .unwrap(),
+        pcr_realm_id: arkret_identifiers::RealmId::new(
+            "ak:realm:ARn9Y97Ha81FH12YY8HLiDixId_wA5Wx2c25p82mJcJ5",
+        )
+        .unwrap(),
+        genesis_unit_kinds: arkret_models_identity::PCR_GENESIS_UNIT_KINDS,
+        identity_creation_lease_id: "genesis-lease-fence-0001".to_owned(),
+        lease_fence: 1,
+        signature_algorithm: arkret_wire::DetachedSignatureAlgorithm::Ed25519,
     };
     proof.signature = arkret_canonical::base64url_encode(
         signer

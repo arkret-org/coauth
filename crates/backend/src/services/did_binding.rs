@@ -35,7 +35,7 @@
 //! ## Digests come from the SDK, not from here
 //!
 //! `policy_digest` and `evidence_digest` are the digests of the SDK's canonical
-//! §5 contract objects — [`ResolverPolicySnapshot`] and [`EvidenceReceipt`] —
+//! §5 contract objects — [`ResolverPolicySnapshot`] and [`DidBindingEvidenceReceipt`] —
 //! so that five services stop producing five incompatible values for the same
 //! inputs. Neither object has an extension map any more: §5.3 makes the
 //! resolver policy profile a **schema discriminator**, and v1 registers exactly
@@ -59,10 +59,10 @@ use std::sync::Arc;
 
 use arkret_identifiers::{Did, Hash, TrustDomainId};
 use arkret_identity::{
-    AcceptedDidBinding, BindingInvalidation, DidBindingPurpose, DidBindingStatus, EvidenceReceipt,
-    FreshnessProfile, FreshnessRequirement, LimitedTrust, MethodEvidence, ResolverFailMode,
-    ResolverPolicy, ResolverPolicySnapshot, VerifiedDidBinding, VerifiedDidBindingDocumentInput,
-    VerifiedDidBindingKey, VerifiedDidBindingStore,
+    AcceptedDidBinding, BindingInvalidation, DidBindingEvidenceReceipt, DidBindingPurpose,
+    DidBindingStatus, FreshnessProfile, FreshnessRequirement, LimitedTrust, MethodEvidence,
+    ResolverFailMode, ResolverPolicy, ResolverPolicySnapshot, VerifiedDidBinding,
+    VerifiedDidBindingDocumentInput, VerifiedDidBindingKey, VerifiedDidBindingStore,
 };
 use arkret_wire::DidFreshnessProfileId;
 use chrono::{DateTime, Duration, Utc};
@@ -389,7 +389,7 @@ pub const fn is_storable(resolution: &DidResolution) -> Result<(), &'static str>
 /// coauth's delegated resolver returns `method_evidence` as an **opaque**
 /// method-specific JSON subtree: it carries degradation flags and a method
 /// label, but never the witness set and witness-proof digest a
-/// `MethodEvidenceProof::WebvhLog` row requires. §5.2 makes that shape
+/// `DidBindingMethodProof` (`kind=webvh_log`) row requires. §5.2 makes that shape
 /// unconstructible on purpose — a receipt row is what the resolver *verified*,
 /// not what it reported — so coauth surfaces the history-head pin and no proof
 /// rows. The degradation flags are not lost: `identity_fact_rejection` already
@@ -430,10 +430,10 @@ fn method_is_evidence_bearing(did: &str) -> bool {
 fn evidence_receipt(
     resolution: &DidResolution,
     document: &arkret_models_identity::DidDocument,
-) -> Result<EvidenceReceipt, DidBindingError> {
+) -> Result<DidBindingEvidenceReceipt, DidBindingError> {
     let document_digest = arkret_identity::document_canonical_digest(document)
         .map_err(|error| DidBindingError::Digest(error.to_string()))?;
-    Ok(EvidenceReceipt::new(
+    Ok(DidBindingEvidenceReceipt::new(
         document.id.method(),
         document_digest,
         &method_evidence(resolution),
@@ -1075,3 +1075,5 @@ pub(crate) fn test_resolution(
         identity_fact_rejection: rejection,
     }
 }
+
+use arkret_identity::DidBindingEvidenceReceiptExt;

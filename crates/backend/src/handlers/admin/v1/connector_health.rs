@@ -4,7 +4,7 @@
 //! and any other admin client deserialize the same struct rustc has
 //! type-checked the backend against.
 
-use coauth_admin_types::{ConnectorHealthOutcome, ConnectorHealthStatus, ConnectorHealthView};
+use coauth_admin_types::{ConnectorHealthReport, ConnectorHealthStatus, ConnectorHealthView};
 use coauth_principal::ConnectorRegistry;
 use salvo::prelude::*;
 
@@ -21,7 +21,7 @@ fn get_registry(depot: &Depot) -> Option<ConnectorRegistry> {
 }
 #[endpoint]
 #[tracing::instrument(name = "handler.admin.v1.connector_health", skip_all)]
-pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHealthOutcome> {
+pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHealthReport> {
     let call_context = extract_call_context(req, depot).await?;
 
     let providers = if let Some(registry) = get_registry(depot) {
@@ -62,5 +62,5 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
 
     call_context.repo.cancel().await?; // read-only, no save needed
 
-    Ok(Json(ConnectorHealthOutcome { providers }))
+    Ok(Json(ConnectorHealthReport { providers }))
 }

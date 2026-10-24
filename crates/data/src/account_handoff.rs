@@ -595,7 +595,6 @@ impl DidBindingChallengeRecord {
             did: input.did.clone(),
             did_version_id: input.did_version_id.clone(),
             control_key_digest: input.control_key_digest.clone(),
-            witness_evidence: input.witness_evidence.clone(),
             dpop_jkt: input.dpop_jkt.clone(),
             audience_id: input.audience_id.clone(),
             origin: input.origin.clone(),

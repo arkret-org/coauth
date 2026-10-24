@@ -241,14 +241,6 @@ pub(super) fn ledger_activation(
         third_party_invite: public.third_party_invite.clone(),
         invite_expires_at: public.expires_at,
         invite_state: ThirdPartyInviteAttestedState::Pending,
-        accepted_commit_ref: arkret_wire::CommittedEventRef {
-            event_id,
-            commit_id: arkret_wire::RealmCommitId::from_digest([dot; 32]),
-            stream_ref: arkret_wire::CommitStreamRef::Realm {
-                realm_id: public.realm_id.clone(),
-            },
-            stream_position: u64::from(dot),
-        },
         observed_at: at,
         expires_at: (at + Duration::seconds(60)).min(public.expires_at),
         signature: arkret_wire::PayloadProof {

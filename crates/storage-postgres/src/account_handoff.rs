@@ -3031,6 +3031,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             principal_id: input.principal_id.clone(),
             did_version_id: input.did_version_id.clone(),
             abandoned_at,
+            binding_kind: arkret_models_identity::AccountBindingKind::IdentityCreation,
         };
         let inserted = diesel::sql_query(
             "INSERT INTO identity_orphan_anchor_tombstones \

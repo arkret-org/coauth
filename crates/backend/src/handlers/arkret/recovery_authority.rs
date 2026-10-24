@@ -326,7 +326,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
     };
     let outcome = IssueRecoveryCompletionGrantResponseBody {
         transaction_id: request.transaction_id.clone(),
-        session_grant_outcome: serde_json::to_value(wire_grant)?,
+        issued_session: serde_json::to_value(wire_grant)?,
         issued_at: issuance_seed.not_before,
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;

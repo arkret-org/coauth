@@ -13,7 +13,7 @@ use arkret_models_collaboration::account_lifecycle::{
 use arkret_models_collaboration::agent_operations::{
     AgentKeyPairRequestBody, AgentKeyPairResponseBody, AgentView,
 };
-use arkret_models_collaboration::governance::erasure::ErasureReceiptResource;
+use arkret_models_collaboration::governance::erasure::ErasureReceiptPackage;
 use arkret_models_collaboration::governance::invite_addressing::{
     InviteDeliveryRequestBody, InviteDeliveryResponseBody,
 };
@@ -222,7 +222,7 @@ impl<'a> PeerProtocolClient<'a> {
     pub async fn get_erasure_receipt(
         &self,
         receipt_id: &str,
-    ) -> Result<ErasureReceiptResource, PeerProtocolClientError> {
+    ) -> Result<ErasureReceiptPackage, PeerProtocolClientError> {
         let url = self.join_absolute(&format!("/_arkret/peer/erasure-receipts/{receipt_id}"))?;
         self.get_json(
             "peer_erasure_receipt_get",

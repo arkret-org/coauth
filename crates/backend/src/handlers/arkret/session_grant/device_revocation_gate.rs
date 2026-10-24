@@ -1,7 +1,7 @@
 use arkret_identifiers::Hash;
 use arkret_models_identity::SessionGrantDeviceBinding;
 use arkret_wire::{
-    AcceptedDevicePossessionProof, AccountId, DeviceId, DeviceRevocationAdmissionInput,
+    AcceptedDevicePossessionProof, AccountDeviceRevocationAdmissionInput, AccountId, DeviceId,
     DeviceRevocationDeniedAction, EventId, RealmCommitId,
 };
 use chrono::{DateTime, Utc};
@@ -210,7 +210,7 @@ fn map_peer_gate_error(error: PeerProtocolClientError) -> ArkretRouteError {
 }
 
 fn validate_private_request(request: &PrivateCurrentDeviceRequest) -> Result<(), String> {
-    DeviceRevocationAdmissionInput {
+    AccountDeviceRevocationAdmissionInput {
         account_id: request.account_id.clone(),
         device_id: request.device_id.clone(),
         expected_device_authorize_event_id: request.expected_device_authorize_event_id.clone(),

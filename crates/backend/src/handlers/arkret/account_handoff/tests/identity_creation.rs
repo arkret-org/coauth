@@ -643,7 +643,6 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
     let outcome: arkret_models_collaboration::account_operations::AccountRegisterResponseBody =
         completed.json();
     outcome.validate_against_request(&register).unwrap();
-    assert!(outcome.session_grant_outcome.is_some());
     let mut conn = state.repository_factory.pool().get().await.unwrap();
     let phase = diesel::sql_query("SELECT state FROM identity_creation_leases")
         .get_result::<Phase>(&mut conn)

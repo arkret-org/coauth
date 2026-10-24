@@ -82,13 +82,13 @@ pub async fn fetch_agent_participation_overlay(
     let mut scopes = BTreeSet::new();
     if outcome.agent_id != agent.as_str()
         || outcome
-            .agent_participation_entries
+            .participation_entries
             .iter()
-            .any(|e| e.validate().is_err() || !scopes.insert(e.scope.scope_key()))
+            .any(|e| e.validate().is_err() || !scopes.insert(e.target_scope.scope_key()))
     {
         return Err(AgentAuthRejection::PolicyUnavailable);
     }
-    serde_json::to_value(outcome.agent_participation_entries)
+    serde_json::to_value(outcome.participation_entries)
         .map_err(|_| AgentAuthRejection::PolicyUnavailable)
 }
 
@@ -99,7 +99,7 @@ pub(crate) fn apply_agent_participation_overlay(
     participation: serde_json::Value,
 ) -> Result<(), AgentAuthRejection> {
     let entries: Vec<
-        arkret_models_collaboration::governance::agent_participation::AgentParticipationEntry,
+        arkret_models_collaboration::governance::agent_participation::AgentParticipationView,
     > = serde_json::from_value(participation.clone())
         .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
     if entries.iter().any(|entry| entry.validate().is_err()) {
@@ -297,7 +297,7 @@ struct AgentScopeRequestInput {
     track_names: Vec<String>,
     #[serde(default)]
     participation:
-        Vec<arkret_models_collaboration::governance::agent_participation::AgentParticipationEntry>,
+        Vec<arkret_models_collaboration::governance::agent_participation::AgentParticipationView>,
 }
 
 /// Validate an `agent_key_proof` session-grant request. On success returns the
@@ -1113,7 +1113,7 @@ fn materialize_agent_scope_details(
     controller_principal_id: &str,
     authorization_ref: &str,
     effective_scope: &EffectiveAgentSessionScope,
-    participations: &[arkret_models_collaboration::governance::agent_participation::AgentParticipationEntry],
+    participations: &[arkret_models_collaboration::governance::agent_participation::AgentParticipationView],
 ) -> Result<serde_json::Map<String, Value>, AgentAuthRejection> {
     let constraints = materialize_agent_session_constraints(effective_scope)?;
 
@@ -1178,12 +1178,12 @@ async fn station_content_authority(
 ) -> Result<
     (
         coland_contracts::agent_session_authority::AgentSessionAuthorityRequest,
-        coland_contracts::agent_session_authority::AgentSessionAuthorityOutcome,
+        coland_contracts::agent_session_authority::AgentSessionAuthorityView,
     ),
     AgentAuthRejection,
 > {
     use coland_contracts::agent_session_authority::{
-        AGENT_SESSION_AUTHORITY_PATH, AgentSessionAuthorityOutcome, AgentSessionAuthorityRequest,
+        AGENT_SESSION_AUTHORITY_PATH, AgentSessionAuthorityRequest, AgentSessionAuthorityView,
     };
 
     use crate::services::peer_protocol_client::InternalAuthorityChannel;
@@ -1232,7 +1232,7 @@ async fn station_content_authority(
         station_id,
     )
     .map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
-    let outcome: AgentSessionAuthorityOutcome = channel
+    let outcome: AgentSessionAuthorityView = channel
         .post_private_json(
             "private_agent_session_authority",
             AGENT_SESSION_AUTHORITY_PATH,
@@ -1269,7 +1269,7 @@ async fn station_content_scope(
 }
 
 fn qualify_station_content_scope(
-    outcome: coland_contracts::agent_session_authority::AgentSessionAuthorityOutcome,
+    outcome: coland_contracts::agent_session_authority::AgentSessionAuthorityView,
     request: &coland_contracts::agent_session_authority::AgentSessionAuthorityRequest,
 ) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
     let requested_scope = &request.requested_scope;
@@ -2049,7 +2049,7 @@ mod tests {
     #[test]
     fn authenticated_content_source_keeps_empty_grant_refs_and_exact_intent_binding() {
         use coland_contracts::agent_session_authority::{
-            AgentSessionAuthorityOutcome, AgentSessionAuthorityRequest,
+            AgentSessionAuthorityRequest, AgentSessionAuthorityView,
         };
         let request: AgentSessionAuthorityRequest = serde_json::from_value(serde_json::json!({
             "agent_account_id":{"principal_id":"ak:did_core:web:agent.example","station_id":"ak:did_core:web:station.example"},
@@ -2061,7 +2061,7 @@ mod tests {
             "approval_evidence_refs":[],
             "resource_scope":{"realm_ids":["ak:realm:ATH75ame6bMfYpXtcoLOVb7FKmgpWVniZZqVBz1dUdQa"],"strand_ids":[],"track_names":[]}
         })).unwrap();
-        let outcome = AgentSessionAuthorityOutcome {
+        let outcome = AgentSessionAuthorityView {
             approval_required: false,
             binding: request.clone(),
             granted_scope: request.requested_scope.clone(),
