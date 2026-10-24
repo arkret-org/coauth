@@ -4,7 +4,7 @@
 //! and any other admin client deserialize the same struct rustc has
 //! type-checked the backend against.
 
-use coauth_admin_types::{ConnectorHealthOutcome, ConnectorHealthRow, ConnectorHealthStatus};
+use coauth_admin_types::{ConnectorHealthOutcome, ConnectorHealthStatus, ConnectorHealthView};
 use coauth_principal::ConnectorRegistry;
 use salvo::prelude::*;
 
@@ -38,7 +38,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
                     Ok(()) => (ConnectorHealthStatus::Healthy, None),
                     Err(e) => (ConnectorHealthStatus::Unhealthy, Some(e)),
                 };
-                ConnectorHealthRow {
+                ConnectorHealthView {
                     provider: name.to_owned(),
                     account_id,
                     status,
@@ -52,7 +52,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
             Ok(_) => (ConnectorHealthStatus::Healthy, None),
             Err(e) => (ConnectorHealthStatus::Unhealthy, Some(e.to_string())),
         };
-        vec![ConnectorHealthRow {
+        vec![ConnectorHealthView {
             provider: "principal".to_owned(),
             account_id: station.account_id().to_owned(),
             status,

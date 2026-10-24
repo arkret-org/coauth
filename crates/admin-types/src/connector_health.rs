@@ -47,7 +47,7 @@ impl ConnectorHealthStatus {
     feature = "schema",
     derive(schemars::JsonSchema, salvo::oapi::ToSchema)
 )]
-pub struct ConnectorHealthRow {
+pub struct ConnectorHealthView {
     #[serde(default)]
     pub provider: String,
     #[serde(default)]
@@ -58,7 +58,7 @@ pub struct ConnectorHealthRow {
     pub error: Option<String>,
 }
 
-impl ConnectorHealthRow {
+impl ConnectorHealthView {
     #[must_use]
     pub fn is_healthy(&self) -> bool {
         self.status.is_healthy()
@@ -73,7 +73,7 @@ impl ConnectorHealthRow {
 )]
 pub struct ConnectorHealthOutcome {
     #[serde(default)]
-    pub providers: Vec<ConnectorHealthRow>,
+    pub providers: Vec<ConnectorHealthView>,
 }
 
 #[cfg(test)]
@@ -98,7 +98,7 @@ mod tests {
             );
         }
 
-        let row: ConnectorHealthRow =
+        let row: ConnectorHealthView =
             serde_json::from_str(r#"{"provider":"coland","account_id":"coland.example"}"#).unwrap();
         assert_eq!(row.status, ConnectorHealthStatus::Unhealthy);
         assert!(!row.is_healthy());
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn healthy_omits_error_on_serialize() {
-        let row = ConnectorHealthRow {
+        let row = ConnectorHealthView {
             provider: "coland".into(),
             account_id: "coland.example".into(),
             status: ConnectorHealthStatus::Healthy,
@@ -119,7 +119,7 @@ mod tests {
 
     #[test]
     fn unhealthy_carries_error_field() {
-        let row = ConnectorHealthRow {
+        let row = ConnectorHealthView {
             provider: "coland".into(),
             account_id: "coland.example".into(),
             status: ConnectorHealthStatus::Unhealthy,
@@ -133,13 +133,13 @@ mod tests {
     fn response_round_trips_through_serde_json() {
         let resp = ConnectorHealthOutcome {
             providers: vec![
-                ConnectorHealthRow {
+                ConnectorHealthView {
                     provider: "coland".into(),
                     account_id: "coland-a.example".into(),
                     status: ConnectorHealthStatus::Healthy,
                     error: None,
                 },
-                ConnectorHealthRow {
+                ConnectorHealthView {
                     provider: "secondary".into(),
                     account_id: "coland-b.example".into(),
                     status: ConnectorHealthStatus::Unhealthy,
