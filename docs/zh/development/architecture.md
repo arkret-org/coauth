@@ -67,7 +67,7 @@ coauth 是 Station 内部的部署私有 Account Authority 组件，负责账号
 
 | Crate | 说明 |
 |-------|------|
-| `coauth-frontend` | Dioxus 前端（Rust SPA） |
+| `coauth-frontend` | Glory/Sapid 前端（Rust SPA） |
 | `coauth-i18n` | 国际化 |
 
 ### 基础设施
@@ -151,7 +151,7 @@ Handler 层负责 HTTP 协议的适配——解析请求、校验参数、映射
 ## API 分层
 
 ### 用户门户 API（/_coauth/self/viewer/*, /_coauth/gate/account/auth/*, /_coauth/gate/account/email-auth/*, etc.）
-用户自服务端点，由 Dioxus 前端消费。
+用户自服务端点，由 Glory/Sapid 前端消费。
 
 ### Journey API（/_coauth/self/journey/*）
 流程引擎端点，支持多步交互流程（注册、恢复、MFA 等）。

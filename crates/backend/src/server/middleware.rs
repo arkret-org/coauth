@@ -310,18 +310,46 @@ pub async fn cache_control_middleware(
         CacheControl::new()
             .with_public()
             .with_max_age(Duration::from_mins(5))
-    } else if req.uri().path().starts_with("/wasm/") {
-        // Debug Dioxus output uses stable, unhashed filenames. Do not let the
-        // browser combine a cached JS glue module with a newer WASM binary.
-        CacheControl::new().with_no_store()
     } else {
-        // Cache assets for 1 year
-        CacheControl::new()
-            .with_public()
-            .with_max_age(Duration::from_hours(8760))
-            .with_immutable()
+        // Frontend filenames are stable. Revalidate the complete JS/WASM/CSS
+        // bundle instead of combining modules from different deployments.
+        CacheControl::new().with_no_cache()
     };
     res.headers_mut().typed_insert(cache_control);
+}
+
+#[cfg(test)]
+mod frontend_cache_tests {
+    use salvo::prelude::*;
+    use salvo::test::TestClient;
+
+    #[handler]
+    async fn asset(res: &mut Response) {
+        res.render(Text::Plain("frontend asset"));
+    }
+
+    #[tokio::test]
+    async fn stable_frontend_modules_revalidate_after_deployment() {
+        let service = Service::new(
+            Router::with_path("/assets/{**path}")
+                .hoop(super::cache_control_middleware)
+                .get(asset),
+        );
+        for path in ["bootstrap.js", "pkg/coauth_frontend_bg.wasm", "main.css"] {
+            let response = TestClient::get(format!("http://localhost/assets/{path}"))
+                .send(&service)
+                .await;
+            assert_eq!(response.status_code, Some(StatusCode::OK));
+            let policy = response
+                .headers()
+                .get("cache-control")
+                .unwrap()
+                .to_str()
+                .unwrap();
+            assert!(policy.contains("no-cache"), "{path}: {policy}");
+            assert!(!policy.contains("immutable"), "{path}: {policy}");
+        }
+    }
 }
 
 /// Cap the time a single request handler may run.

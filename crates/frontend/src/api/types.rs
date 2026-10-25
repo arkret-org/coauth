@@ -1,12 +1,11 @@
 pub use coauth_account_types::{
     AppSession, BootstrapAdminStatus, BrowserSession, ChangeRegistrationEmailOutcome,
-    ChannelAvailability, ChannelPreference, DeviceLinkOutcome, DeviceType,
-    EmailAuthStatusOutcome as UserEmailAuthentication, LinkedAccount, LinkedAccountsOutcome,
-    NotificationPreferencesOutcome, OAuthClientDetail, OAuthSession, PatchViewerProfileOutcome,
-    PrincipalUser, RecoveryStatusOutcome, RecoveryTicketStatusOutcome, RegisterInput,
-    RegisterOutcome, SecuritySummaryOutcome, Session, SiteConfigOutcome as SiteConfig,
-    UnlinkOutcome, UpdateNotificationPreferencesOutcome, UserEmail, ViewerOutcome,
-    ViewerUserProfile as UserProfile,
+    ChannelPreference, DeviceLinkOutcome, EmailAuthStatusOutcome as UserEmailAuthentication,
+    LinkedAccount, LinkedAccountsOutcome, NotificationPreferencesOutcome, OAuthClientDetail,
+    OAuthSession, PatchViewerProfileOutcome, RecoveryStatusOutcome, RecoveryTicketStatusOutcome,
+    RegisterInput, RegisterOutcome, SecuritySummaryOutcome, Session,
+    SiteConfigOutcome as SiteConfig, UnlinkOutcome, UpdateNotificationPreferencesOutcome,
+    UserEmail, ViewerOutcome,
 };
 use serde::{Deserialize, Serialize};
 
@@ -127,7 +126,7 @@ pub struct ResendEmailAuthCodePayload {
 pub use coauth_account_types::passkey::{
     PasskeyListOutcome, PasskeyMutationOutcome, PasskeySummary,
 };
-pub use coauth_account_types::{CurrentAccountInfo, LoginOutcome, ProvidersOutcome};
+pub use coauth_account_types::{LoginOutcome, ProvidersOutcome};
 
 // ── Registration API types ────────────────────────────────────
 

@@ -45,7 +45,7 @@ This includes:
  - [`coauth-jose`][coauth-jose]: JWT/JWS/JWE/JWK abstraction
  - [`coauth-oauth-types`][coauth-oauth-types]: Structures and types for OAuth/OpenID Connect endpoints
  - [`coauth-account-types`][coauth-account-types] / [`coauth-admin-types`][coauth-admin-types]: Product-surface contract crates consumed by sibling products (see `docs/architecture/contracts-ownership.md`)
- - [`coauth-frontend`][coauth-frontend]: Frontend application (Dioxus-based Rust SPA)
+ - [`coauth-frontend`][coauth-frontend]: Frontend application (Glory/Sapid-based Rust SPA)
  - [`coauth-tasks`][coauth-tasks]: Asynchronous task runner and scheduler
 
 [coauth-config]: ../rustdoc/coauth_config/index.html
@@ -131,7 +131,7 @@ The whole project is highly modular and APIs are coherent between crates.
 ## API Layering
 
 ### User Portal API (/_coauth/self/viewer/*, /_coauth/gate/account/auth/*, /_coauth/gate/account/email-auth/*, etc.)
-User self-service endpoints, consumed by the Dioxus frontend.
+User self-service endpoints, consumed by the Glory/Sapid frontend.
 
 ### Journey API (/_coauth/self/journey/*)
 Journey engine endpoints, supporting multi-step interactive journeys (registration, recovery, MFA, etc.).

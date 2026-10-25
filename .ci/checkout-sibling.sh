@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+bash "$(dirname "${BASH_SOURCE[0]}")/checkout-ui-dependencies.sh"
+
 repo="${1:?repo name is required}"
 dest="${2:?destination path is required}"
 ref="${3:-main}"

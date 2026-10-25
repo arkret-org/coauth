@@ -23,7 +23,7 @@
 #
 # This wraps T08b's `GET / PUT /_arkret/local/admin/oauth-clients/{id}/localized-metadata`
 # endpoint so operators can manage localised client metadata without a UI.
-# The Dioxus admin SPA editor (T08c) will eventually replace this script.
+# The Glory/Sapid admin SPA editor (T08c) will eventually replace this script.
 
 set -eu
 

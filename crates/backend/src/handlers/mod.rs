@@ -7,11 +7,11 @@
 //! - [`health`] — Health-check endpoint
 //! - [`oauth`] — OAuth / OpenID Connect endpoints (token, authorization, discovery, userinfo, etc.)
 //! - [`rest`] — REST API endpoints for the account management frontend (JSON)
-//! - [`spa`] — SPA shell handler (serves the Dioxus frontend HTML wrapper)
+//! - [`spa`] — SPA shell handler (serves the Glory/Sapid frontend HTML wrapper)
 //! - [`upstream_oauth`] — Upstream SSO / federated identity provider flows
 //! - [`passwords`] — Password hashing and verification utilities
 //!
-//! All user-facing pages are rendered by the Dioxus frontend
+//! All user-facing pages are rendered by the Glory/Sapid frontend
 //! (`crates/frontend`). The backend serves only REST API endpoints and the SPA
 //! shell.
 
@@ -55,7 +55,7 @@ pub mod oauth;
 pub mod passwords;
 /// Post-authentication action utilities (shared across handlers).
 pub mod post_auth;
-/// SPA shell serving (renders the Dioxus frontend HTML wrapper).
+/// SPA shell serving (renders the Glory/Sapid frontend HTML wrapper).
 pub mod spa;
 /// Upstream (federated) OAuth / OIDC provider integration.
 pub mod upstream_oauth;

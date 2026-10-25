@@ -1,157 +1,251 @@
-pub mod account;
-pub mod account_overview;
-pub mod account_settings;
-pub mod admin_oauth_client_i18n;
-pub mod browser_sessions;
-pub mod client_detail;
-pub mod device_approval;
-pub mod device_link;
-pub mod device_redirect;
-pub mod email_in_use;
-pub mod email_verify;
-pub mod identity_bindings;
-pub mod login;
-pub mod notification_preferences;
-pub mod oauth_approval;
-pub mod password_change;
-pub mod password_change_success;
-pub mod password_recovery;
-pub mod plan;
-pub mod recovery_progress;
-pub mod recovery_start;
-pub mod register;
-pub mod security_center;
-pub mod session_detail;
-pub mod sessions;
-pub mod upstream_link;
+mod account;
+mod approvals;
+mod auth;
+mod registration;
+mod security;
+mod sessions;
+use crate::api::types::SiteConfig;
+use crate::translations::{self, UiLocale};
+use crate::ui::{self, *};
 
-// Re-export page components for the router
-use account_overview::AccountOverview;
-use account_settings::AccountSettings;
-use admin_oauth_client_i18n::AdminOAuthClientI18n;
-use browser_sessions::BrowserSessions;
-use client_detail::ClientDetail;
-use device_approval::DeviceApproval;
-use device_link::DeviceLink;
-use device_redirect::DeviceRedirect;
-use dioxus::prelude::*;
-use email_in_use::EmailInUse;
-use email_verify::EmailVerify;
-use identity_bindings::IdentityBindings;
-use login::Login;
-use notification_preferences::NotificationPreferences;
-use oauth_approval::OAuthApproval;
-use password_change::PasswordChange;
-use password_change_success::PasswordChangeSuccess;
-use password_recovery::PasswordRecovery;
-use plan::Plan;
-use recovery_progress::RecoveryProgress;
-use recovery_start::RecoveryStart;
-use register::{
-    Register, RegisterDisplayName, RegisterFinish, RegisterVerifyEmail, RegisterVerifyPhone,
-};
-use security_center::SecurityCenter;
-use session_detail::SessionDetail;
-use sessions::Sessions;
-use upstream_link::UpstreamLink;
-
-use crate::components::error::NotFound;
-use crate::components::layout::Layout;
-
-/// Application route definition.
-#[derive(Debug, Clone, Routable, PartialEq)]
-#[rustfmt::skip]
-pub enum Route {
-    // Auth pages (public)
-    #[route("/login")]
-    Login {},
-    #[route("/register")]
-    Register {},
-    #[route("/register/steps/:id/verify-email")]
-    RegisterVerifyEmail { id: String },
-    #[route("/register/steps/:id/verify-phone")]
-    RegisterVerifyPhone { id: String },
-    #[route("/register/steps/:id/display-name")]
-    RegisterDisplayName { id: String },
-    #[route("/register/steps/:id/finish")]
-    RegisterFinish { id: String },
-    #[route("/recover")]
-    RecoveryStart {},
-    #[route("/recover/progress/:id")]
-    RecoveryProgress { id: String },
-
-    // OAuth approval & device code (public, require session)
-    #[route("/oauth/approval/:grant_id")]
-    OAuthApproval { grant_id: String },
-    #[route("/link")]
-    DeviceLink {},
-    #[route("/device/:id")]
-    DeviceApproval { id: String },
-
-    // Account layout with nested routes (authenticated)
-    #[layout(AccountLayout)]
-        #[route("/")]
-        AccountOverview {},
-        #[route("/settings")]
-        AccountSettings {},
-        #[route("/sessions")]
-        Sessions {},
-        #[route("/sessions/browsers")]
-        BrowserSessions {},
-        #[route("/plan")]
-        Plan {},
-        #[route("/security")]
-        SecurityCenter {},
-        #[route("/notifications")]
-        NotificationPreferences {},
-        #[route("/identities")]
-        IdentityBindings {},
-    #[end_layout]
-
-    // Standalone pages
-    #[route("/password/change")]
-    PasswordChange {},
-    #[route("/password/change/success")]
-    PasswordChangeSuccess {},
-    #[route("/password/recovery")]
-    PasswordRecovery {},
-    #[route("/emails/:id/verify")]
-    EmailVerify { id: String },
-    #[route("/emails/:id/in-use")]
-    EmailInUse { id: String },
-    #[route("/sessions/:id")]
-    SessionDetail { id: String },
-    #[route("/clients/:id")]
-    ClientDetail { id: String },
-    #[route("/admin/oauth-clients/:id/i18n")]
-    AdminOAuthClientI18n { id: String },
-    #[route("/devices/:..route")]
-    DeviceRedirect { route: Vec<String> },
-
-    // Upstream OAuth link
-    #[route("/upstream/link/:id")]
-    UpstreamLink { id: String },
-
-    // Catch-all 404
-    #[route("/:..route")]
-    PageNotFound { route: Vec<String> },
-}
-
-/// Account layout wrapping the account-related pages (settings, sessions,
-/// plan).
-#[component]
-fn AccountLayout() -> Element {
-    rsx! {
-        account::AccountPage {}
-    }
-}
-
-/// 404 page component.
-#[component]
-fn PageNotFound(route: Vec<String>) -> Element {
-    rsx! {
-        Layout {
-            NotFound {}
+pub fn init_theme() {
+    #[cfg(target_arch = "wasm32")]
+    if let Some(window) = web_sys::window() {
+        let stored = window
+            .local_storage()
+            .ok()
+            .flatten()
+            .and_then(|storage| storage.get_item("coauth_theme").ok().flatten());
+        let dark = stored.as_deref() == Some("dark")
+            || stored.is_none()
+                && window
+                    .match_media("(prefers-color-scheme: dark)")
+                    .ok()
+                    .flatten()
+                    .is_some_and(|query| query.matches());
+        if let Some(root) = window.document().and_then(|doc| doc.document_element()) {
+            let _ = root.set_attribute("data-theme", if dark { "dark" } else { "light" });
         }
     }
+}
+fn preferences(scope: &Scope) -> View {
+    let dark = scope.cage({
+        #[cfg(target_arch = "wasm32")]
+        {
+            web_sys::window()
+                .and_then(|window| window.document())
+                .and_then(|doc| doc.document_element())
+                .and_then(|root| root.get_attribute("data-theme"))
+                .as_deref()
+                == Some("dark")
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            false
+        }
+    });
+    let theme = ui::reactive(dark, move |_, is_dark| {
+        button(
+            if is_dark { "🌙 Dark" } else { "🔴 Light" },
+            "theme-toggle",
+            move || {
+                dark.revise(|value| *value = !*value);
+                #[cfg(target_arch = "wasm32")]
+                if let Some(window) = web_sys::window() {
+                    let value = if dark.get_untracked() {
+                        "dark"
+                    } else {
+                        "light"
+                    };
+                    if let Some(root) = window.document().and_then(|doc| doc.document_element()) {
+                        let _ = root.set_attribute("data-theme", value);
+                    }
+                    if let Ok(Some(storage)) = window.local_storage() {
+                        let _ = storage.set_item("coauth_theme", value);
+                    }
+                }
+            },
+        )
+    });
+    let mut buttons = vec![];
+    for (locale, label) in [(UiLocale::En, "EN"), (UiLocale::Zh, "中文")] {
+        let weak = scope.downgrade();
+        buttons.push(button(
+            label,
+            if translations::initial_locale() == locale {
+                "language-option active"
+            } else {
+                "language-option"
+            },
+            move || {
+                translations::set_locale(locale);
+                translations::set_account_locale(Some(locale));
+                if let Some(scope) = weak.upgrade() {
+                    let _ = scope.owner().spawn(async move {
+                        let _ = crate::api::api_patch::<serde_json::Value>(
+                            "/self/viewer/profile",
+                            serde_json::json!({"preferred_locale":locale.code()}),
+                        )
+                        .await;
+                        #[cfg(target_arch = "wasm32")]
+                        if let Some(window) = web_sys::window() {
+                            let _ = window.location().reload();
+                        }
+                    });
+                }
+            },
+        ));
+    }
+    block(
+        "display-preferences",
+        vec![block("language-toggle", buttons), theme],
+    )
+}
+pub fn app(scope: &Scope) -> View {
+    let path: String = {
+        #[cfg(target_arch = "wasm32")]
+        {
+            web_sys::window()
+                .and_then(|w| w.location().pathname().ok())
+                .unwrap_or_else(|| "/".into())
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            "/login".into()
+        }
+    };
+    let account = matches!(
+        path.as_str(),
+        "/" | "/settings"
+            | "/sessions"
+            | "/sessions/browsers"
+            | "/security"
+            | "/notifications"
+            | "/identities"
+            | "/plan"
+    );
+    let content = if account {
+        account::shell(scope, path.clone())
+    } else {
+        layout(scope, route(scope, &path), false)
+    };
+    block("coauth-application", vec![preferences(scope), content])
+}
+pub fn layout(scope: &Scope, body: View, full: bool) -> View {
+    let site = ui::resource(scope, || {
+        crate::api::api_get::<SiteConfig>("/self/site-config")
+    });
+    block(
+        if full {
+            "layout-container full"
+        } else {
+            "layout-container"
+        },
+        vec![
+            body,
+            ui::reactive(site.data, |_, result| {
+                let Some(Ok(site)) = result else {
+                    return block("legal-footer", vec![]);
+                };
+                let mut links = vec![];
+                if let Some(uri) = site.policy_uri {
+                    links.push(link("Privacy policy", uri, ""));
+                }
+                if let Some(uri) = site.tos_uri {
+                    if !links.is_empty() {
+                        links.push(copy("dot-separator", "•"));
+                    }
+                    links.push(link("Terms and conditions", uri, ""));
+                }
+                let mut body = vec![block("legal-links", links)];
+                if let Some(imprint) = site.imprint {
+                    body.push(copy("imprint", imprint));
+                }
+                block("legal-footer", body)
+            }),
+        ],
+    )
+}
+pub fn route(scope: &Scope, path: &str) -> View {
+    let parts = path.trim_matches('/').split('/').collect::<Vec<_>>();
+    match parts.as_slice() {
+        ["login"] => auth::login(scope),
+        ["register"] => registration::entry(scope),
+        ["register", "steps", id, kind] => {
+            registration::step(scope, (*id).to_owned(), (*kind).to_owned())
+        }
+        ["recover"] => auth::recovery_start(scope),
+        ["recover", "progress", id] => auth::recovery_progress(scope, (*id).to_owned()),
+        ["password", "change"] => auth::password_change(scope),
+        ["password", "change", "success"] => stack(vec![
+            heading(1, "heading-xs", "Password changed"),
+            plain("Your account password has been changed successfully."),
+            link("Back to account", "/", "btn btn-primary"),
+        ]),
+        ["password", "recovery"] => auth::password_recovery(scope),
+        ["oauth", "approval", id] => approvals::approval(scope, (*id).to_owned(), false),
+        ["link"] => approvals::device_link(scope),
+        ["device", id] => approvals::approval(scope, (*id).to_owned(), true),
+        ["emails", id, "verify"] => auth::email_verify(scope, (*id).to_owned()),
+        ["emails", _, "in-use"] => stack(vec![
+            heading(1, "heading-xs", "Email address already in use"),
+            plain("This email address is already associated with another account."),
+            link("Back to settings", "/settings", "btn btn-primary"),
+        ]),
+        ["sessions", "browsers"] => sessions::list(scope, true),
+        ["sessions", id] => sessions::detail(scope, (*id).to_owned()),
+        ["clients", id] => approvals::client(scope, (*id).to_owned()),
+        ["admin", "oauth-clients", id, "i18n"] => approvals::client_i18n(scope, (*id).to_owned()),
+        ["upstream", "link", id] => approvals::upstream(scope, (*id).to_owned()),
+        ["devices", rest @ ..] => {
+            let id = rest.join("/");
+            let data = ui::resource(scope, move || {
+                let path = format!("/self/viewer?session_limit=1&app_device={}", encode(&id));
+                async move { crate::api::api_get::<crate::api::types::ViewerOutcome>(&path).await }
+            });
+            ui::resource_body(data, |_, response| {
+                let Some(user) = response.viewer.as_user() else {
+                    return stack(vec![
+                        note(
+                            "Not authenticated",
+                            "Please sign in to view device information.",
+                        ),
+                        link("Sign in", "/login", "btn btn-primary"),
+                    ]);
+                };
+                if let Some(edge) = user
+                    .app_sessions
+                    .as_ref()
+                    .and_then(|sessions| sessions.edges.first())
+                {
+                    let crate::api::types::AppSession::OAuthSession(session) = &edge.node;
+                    let _ = go(&format!("/sessions/{}", encode(&session.id)));
+                    return copy("loading-screen", "Redirecting…");
+                }
+                stack(vec![
+                    note(
+                        "Device not found",
+                        "The device you are looking for could not be found.",
+                    ),
+                    link("Back to sessions", "/sessions", "btn btn-primary"),
+                ])
+            })
+        }
+        [""] => account::overview(scope),
+        ["settings"] => account::settings(scope),
+        ["sessions"] => sessions::list(scope, false),
+        ["security"] => security::page(scope),
+        ["identities"] => account::identities(scope),
+        ["notifications"] => account::notifications(scope),
+        ["plan"] => account::plan(scope),
+        _ => empty(
+            "Page not found",
+            "The requested account page does not exist.",
+        ),
+    }
+}
+pub fn auth_card(title: impl Into<String>, children: Vec<View>) -> View {
+    let mut body = vec![heading(1, "heading-md login-title", title)];
+    body.extend(children);
+    block("login-page", vec![block("login-container", body)])
 }

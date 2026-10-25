@@ -1,11 +1,11 @@
-// Run against an actual dx WASM build. Pass its public directory; NODE_PATH must expose Playwright.
+// Run against an actual Glory/Sapid WASM build. Pass its public directory; NODE_PATH must expose Playwright.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const path = require('node:path');
-const { chromium } = require('playwright');
+const { chromium } = require(process.env.COAUTH_PLAYWRIGHT_MODULE || 'playwright');
 
-assert.ok(process.argv[2], 'pass the dx public directory reported by cargo metadata');
+assert.ok(process.argv[2], 'pass the static frontend directory reported by cargo metadata');
 const assets = path.resolve(process.argv[2]);
 const providers = { providers: [], password_login_enabled: true, password_registration_enabled: false };
 const siteConfig = {id:null,email_change_allowed:false,password_login_enabled:true,account_deactivation_allowed:false,display_name_change_allowed:false,password_registration_enabled:false,registration_email_delivery_bypass_allowed:false,bootstrap_admin_token_enabled:false,minimum_password_complexity:0,imprint:null,tos_uri:null,policy_uri:null,admin_portal_url:null,plan_management_iframe_uri:null};
@@ -52,7 +52,7 @@ const server = http.createServer(async (req, res) => {
   await fs.access(path.join(assets, 'index.html'));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
+  const browser = await chromium.launch({ headless: true, channel: process.env.COAUTH_BROWSER_CHANNEL || 'msedge', executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
   try {
     for (const scenario of [
       { endpoint: '/account/auth/providers', page: '/login', mode: 'headers', seconds: 5, retry: true },
@@ -85,7 +85,7 @@ const server = http.createServer(async (req, res) => {
         await page.getByRole('button', { name: 'Try again', exact: true }).click();
         await alert.waitFor({ state: 'detached', timeout: 5000 });
         if (scenario.endpoint === '/account/auth/providers') {
-          await page.locator('#login-handle').waitFor();
+          await page.getByLabel('Username', {exact: true}).waitFor();
         } else {
           await page.waitForURL(url => url.pathname === '/login');
         }

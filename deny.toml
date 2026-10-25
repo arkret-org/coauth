@@ -231,14 +231,6 @@ skip = [
     { name = "phf", version = "0.12.1" },
     { name = "phf_shared", version = "0.12.1" },
 
-    # Dioxus 0.7 subtree (coauth-frontend): manganis pulls both const-serialize
-    # lines; dioxus-web/devtools pin older gloo-timers/rustc-hash/tungstenite.
-    { name = "const-serialize", version = "0.7.2" },
-    { name = "const-serialize-macro", version = "0.7.2" },
-    { name = "gloo-timers", version = "0.3.0" },
-    { name = "rustc-hash", version = "1.1.0" },
-    { name = "tungstenite", version = "0.28.0" },
-
     # nom 7 pulled by the x509 parsing stack (asn1-rs/der-parser); nom 8 by
     # newer parsers.
     { name = "nom", version = "7.1.3" },

@@ -1,5 +1,5 @@
 # syntax = docker/dockerfile:1.7.1
-# Build from the repository parent with --build-context savfox=../savfox-ai/savfox.
+# Build from the repository parent with savfox, glory and sapid named contexts.
 # Builds a minimal image with the binary only. Buildx publishes amd64 and arm64
 # variants from this Dockerfile. Frontend assets can either be built in-Docker
 # on the native builder platform or injected as a prebuilt named build context,
@@ -11,7 +11,7 @@ ARG DEBIAN_VERSION=12
 ARG DEBIAN_VERSION_NAME=bookworm
 ARG CARGO_AUDITABLE_VERSION=0.7.0
 ARG CARGO_CHEF_VERSION=0.1.77
-ARG DIOXUS_CLI_VERSION=0.7.10
+ARG WASM_BINDGEN_VERSION=0.2.129
 ARG FRONTEND_DIST_SOURCE=frontend-build
 
 ############################################
@@ -19,7 +19,7 @@ ARG FRONTEND_DIST_SOURCE=frontend-build
 ############################################
 FROM --platform=${BUILDPLATFORM} docker.io/library/rust:${DEBIAN_VERSION_NAME} AS frontend-toolchain
 
-ARG DIOXUS_CLI_VERSION
+ARG WASM_BINDGEN_VERSION
 ARG CARGO_CHEF_VERSION
 
 ENV CARGO_HOME=/usr/local/cargo
@@ -30,19 +30,19 @@ ENV CARGO_NET_RETRY=10
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 ENV CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
 
-# Install wasm target (with retries for flaky networks) and Dioxus CLI
+# Install the WASM target and matching JavaScript binding generator.
 # Network access: to fetch dependencies
 ENV RUSTUP_HTTP_TIMEOUT=600
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
   --mount=type=cache,id=frontend-cargo-git,target=/usr/local/cargo/git,sharing=locked \
   for i in 1 2 3 4 5; do rustup target add wasm32-unknown-unknown && break || sleep 10; done && \
-  cargo install --locked dioxus-cli@${DIOXUS_CLI_VERSION} && \
+  cargo install --locked wasm-bindgen-cli@${WASM_BINDGEN_VERSION} && \
   cargo install --locked cargo-chef@=${CARGO_CHEF_VERSION}
 
-# Pre-install binaryen (wasm-opt) so dx build doesn't need to download from GitHub
+# Cargo metadata and frontend bundle packaging use Python.
 RUN --network=default \
-  apt-get update && apt-get install -y binaryen && rm -rf /var/lib/apt/lists/* || true
+  apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/*
 
 ############################################
 ## Build stage that builds the frontend   ##
@@ -59,6 +59,11 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
+COPY --from=glory Cargo.toml README.md /glory-rs/glory/
+COPY --from=glory crates /glory-rs/glory/crates
+COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
+COPY --from=sapid src /glory-rs/sapid/src
+COPY --from=sapid styles /glory-rs/sapid/styles
 
 # cargo-chef computes a recipe keyed by workspace manifests so frontend
 # dependency compilation can be reused when Rust sources change.
@@ -79,6 +84,11 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
+COPY --from=glory Cargo.toml README.md /glory-rs/glory/
+COPY --from=glory crates /glory-rs/glory/crates
+COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
+COPY --from=sapid src /glory-rs/sapid/src
+COPY --from=sapid styles /glory-rs/sapid/styles
 
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
@@ -93,13 +103,12 @@ RUN --network=default \
 
 COPY ./coauth/ /app
 
-# Build the WASM frontend (retry for flaky esbuild downloads)
+# Build the static browser bundle from the same library used by local checks.
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
   --mount=type=cache,id=frontend-cargo-git,target=/usr/local/cargo/git,sharing=locked \
   --mount=type=cache,id=frontend-target,target=/app/target,sharing=locked \
-  for i in 1 2 3; do dx build -p coauth-frontend --release --debug-symbols false && break || echo "Retry $i..." && sleep 10; done \
-  && cp -r target/dx/coauth-frontend/release/web/public /frontend-dist
+  python3 scripts/build-frontend.py --release --out-dir /frontend-dist
 
 # Export the built frontend assets as a filesystem root so workflows can
 # materialize them once and reuse them across architecture-specific image jobs.
@@ -158,6 +167,11 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
+COPY --from=glory Cargo.toml README.md /glory-rs/glory/
+COPY --from=glory crates /glory-rs/glory/crates
+COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
+COPY --from=sapid src /glory-rs/sapid/src
+COPY --from=sapid styles /glory-rs/sapid/styles
 
 # cargo-chef keeps the dependency build layer keyed to Cargo manifests so
 # source-only changes can reuse compiled dependencies and downloaded crates.
@@ -181,6 +195,11 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
+COPY --from=glory Cargo.toml README.md /glory-rs/glory/
+COPY --from=glory crates /glory-rs/glory/crates
+COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
+COPY --from=sapid src /glory-rs/sapid/src
+COPY --from=sapid styles /glory-rs/sapid/styles
 
 RUN --network=default \
   --mount=type=cache,id=builder-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \

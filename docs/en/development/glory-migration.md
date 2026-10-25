@@ -1,0 +1,11 @@
+# Glory/Sapid frontend migration
+
+The `glory` branch replaces the account SPA renderer and controls with the local Glory and Sapid crates. Typed authentication/account APIs and continuation, WebAuthn, registration, approval and recovery flows remain in the account SPA.
+
+Build with `python scripts/build-frontend.py --release`. The generated directory is `<cargo-target>/web`; pass `--out-dir` for a deployment directory. The backend loads `assets/bootstrap.js` and prefixes module/style URLs with the configured base path. Stable JS/WASM/CSS names revalidate after deployment. Windows builds use `D:/BuildCache/coauth-glory`; the build script checks Cargo’s resolved target. CI recreates the sibling Glory/Sapid layout using `.ci/checkout-ui-dependencies.sh`.
+
+The original implementation at `8cdfa931` supplied the reference stylesheet, real WASM baseline and 56 populated screenshots. The migrated application has 96 route/theme/viewport captures, 23 interaction/request-contract scenarios, 8 modal/CSP checks, 4 axe checks and 2 direct mobile control-size comparisons. Mobile password/exit controls match reference widths/heights within 1 px. The email action wraps inside narrow viewports, fixing the original overflow.
+
+Validation also passed 9 frontend unit tests, the deployment-prefix template test, the stable-resource cache test, frontend/backend/CLI Clippy with warnings denied, and all five stalled-request/abort/manual-retry scenarios. Python/TOML/workflow and shell syntax checks passed; the new Web release archive and SHA-256 were verified. Raw results and original/new screenshots are retained locally under `artifacts/glory-migration` (ignored build evidence).
+
+The strict policy in `config.example.yaml` remains unchanged. The original renderer reports 3 inline CSP violations; Glory currently reports 2 (its base stylesheet and control style attribute). External application CSS preserves layout and tested save behavior. This migration does not claim those framework CSP reports have been eliminated. Live database/provider, hardware credential, OAuth callback, container-image and remote-CI runs need their configured services; local verification used populated typed fixtures. No local Docker build ran.

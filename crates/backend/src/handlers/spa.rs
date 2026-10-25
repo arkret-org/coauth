@@ -1,6 +1,6 @@
-//! SPA shell handler — serves the Dioxus frontend HTML wrapper.
+//! SPA shell handler — serves the Glory/Sapid frontend HTML wrapper.
 //!
-//! This handler renders the `app.html` template, which loads the Dioxus WASM
+//! This handler renders the `app.html` template, which loads the Glory/Sapid WASM
 //! frontend. The client-side router then handles all page routing.
 
 use coauth_templates::{AppContext, TemplateContext};
@@ -13,7 +13,7 @@ use crate::salvo_utils::InternalError;
 /// Serve the SPA shell for anonymous (public) pages.
 ///
 /// Used for login, registration, recovery, consent, and all other user-facing
-/// pages that are handled by the Dioxus frontend.
+/// pages that are handled by the Glory/Sapid frontend.
 #[handler]
 pub async fn get(
     req: &mut Request,

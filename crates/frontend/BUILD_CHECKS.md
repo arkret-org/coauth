@@ -1,36 +1,42 @@
-# Frontend Build Checks
+# Frontend build and browser checks
 
-## Fluent Catalog Bundle
-
-The Dioxus SPA embeds the current Fluent catalogs from:
-
-- `translations/en.ftl`
-- `translations/zh.ftl`
-
-`src/translations.rs` includes both files with `include_str!`, and
-`src/main.rs` renders them into a hidden `application/json` script with
-`id="coauth-fluent-bundles"`. This keeps the `dx build` output tied to the
-same en+zh catalogs that the backend loads through `coauth-i18n`.
-
-`Dioxus.toml` watches `../../translations` so local `dx serve` sessions reload
-when either catalog changes.
-
-## Local Check
+The account UI uses the local Glory and Sapid workspaces. Run commands from the
+Coauth root with Cargo, temporary files, and npm caches on D:.
 
 ```powershell
-Push-Location crates/frontend
-dx build --release --platform web
-Pop-Location
-
-$buildRoots = @("dist", "crates/frontend/dist", "target/dx", "crates/frontend/target/dx") |
-  Where-Object { Test-Path $_ }
-rg -a -n 'coauth-account-locked-heading|账户已锁定|coauth-fluent-bundles' $buildRoots
+$env:CARGO_TARGET_DIR = 'D:/BuildCache/coauth-glory/target'
+$env:CARGO_HOME = 'D:/BuildCache/cargo'
+$env:TEMP = $env:TMP = 'D:/BuildCache/coauth-glory/tmp'
+cargo metadata --no-deps --format-version 1
+cargo +nightly fmt -p coauth-frontend --check
+cargo test -p coauth-frontend --lib
+python scripts/build-frontend.py --release
 ```
 
-Expected result: the build succeeds, and the grep finds the English Fluent key,
-the Chinese translation text, and the `coauth-fluent-bundles` canary in the
-generated assets.
+The build script produces `target_directory/web` and matches wasm-bindgen to
+Cargo.lock. `--out-dir dist` creates the deployment directory. The static host
+loads `/assets/bootstrap.js`, `/assets/pkg/coauth_frontend.js`, its WASM file,
+and the Sapid/application stylesheets. Fluent en/zh catalogs are embedded in the
+WASM module by `src/translations.rs`.
 
-If the local Rust workspace is blocked by a sibling SDK version mismatch, run
-the `rg -a` check against the most recent local `dist/` after recording the
-Cargo resolver error in the task notes.
+Serve the web directory with SPA fallback, then run the fixture browser suite:
+
+```powershell
+$env:npm_config_cache = 'D:/BuildCache/coauth-glory/npm'
+npm --prefix crates/frontend ci --ignore-scripts
+$env:COAUTH_TEST_URL = 'http://127.0.0.1:4183'
+npm --prefix crates/frontend test
+node crates/frontend/tests/smoke.cjs
+```
+
+`tests/fixtures.cjs` supplies populated typed API responses and records every
+request. The regression suite covers authentication, registration, recovery,
+profile/avatar upload, session actions, passkeys, notifications, authorization,
+client translations, sign-out, and deactivation gates. It fails on missing
+fixture requests, uncaught browser errors, and semantic rendering failures.
+Screenshots and machine-readable results are written below the ignored
+`artifacts/glory-migration` directory. `tests/csp.cjs` compares the saved old
+host on port 4182 with the new host under the configured strict CSP.
+
+The fixtures verify browser behavior and request contracts. Live delivery,
+WebAuthn hardware, and OAuth callbacks require configured service integration.

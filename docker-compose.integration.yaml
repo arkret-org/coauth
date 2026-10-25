@@ -61,6 +61,10 @@ services:
       # land under one root inside the build sandbox.
       context: ..
       dockerfile: coauth/Dockerfile
+      additional_contexts:
+        savfox: ../../savfox-ai/savfox
+        glory: ../../glory-rs/glory
+        sapid: ../../glory-rs/sapid
     container_name: arkret-coauth
     depends_on:
       postgres:

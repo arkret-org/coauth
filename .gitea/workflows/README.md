@@ -23,7 +23,7 @@ Notes:
 - Published image tags are pushed directly from the native `arm64` build
   job; the workflow currently does not use Docker Buildx or manifest
   assembly
-- The Gitea release image jobs build the Dioxus frontend inside each
+- The Gitea release image jobs build the Glory/Sapid frontend inside each
   per-architecture Docker build, matching the GitHub release workflow and
   avoiding artifact hand-off failures between jobs
 - Each enabled architecture also gets its own published tags such as

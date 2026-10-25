@@ -236,7 +236,7 @@ impl Options {
             listeners_config.push(metrics_listener);
         }
 
-        // Discover the hashed frontend script path from the Dioxus build output
+        // Discover the frontend bootstrap script in the static build output.
         let frontend_script_src = listeners_config
             .iter()
             .flat_map(|l| &l.resources)
@@ -247,7 +247,7 @@ impl Options {
                     None
                 }
             })
-            .unwrap_or_else(|| "/assets/coauth-frontend.js".into());
+            .unwrap_or_else(|| "/assets/bootstrap.js".into());
         info!(frontend_script_src, "Discovered frontend script path");
 
         let password_manager = password_manager_from_config(&config.passwords).await?;

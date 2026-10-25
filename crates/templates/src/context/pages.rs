@@ -17,6 +17,7 @@ pub struct AppConfig {
     root: String,
     api_endpoint: String,
     script_src: String,
+    assets_root: String,
 }
 
 /// Data passed to the `app.html` template.
@@ -27,7 +28,7 @@ pub struct AppContext {
 
 impl AppContext {
     /// Build the context from a [`UrlBuilder`] and frontend script path
-    /// (resolved from the Dioxus build output at startup).
+    /// (resolved from the static frontend build output at startup).
     #[must_use]
     pub fn new(url_builder: &UrlBuilder, script_src: &str) -> Self {
         let root = url_builder.relative_url("/account/");
@@ -36,7 +37,8 @@ impl AppContext {
             app_config: AppConfig {
                 root,
                 api_endpoint: format!("{prefix}/_coauth"),
-                script_src: script_src.to_owned(),
+                script_src: format!("{prefix}{script_src}"),
+                assets_root: format!("{prefix}/assets"),
             },
         }
     }
@@ -49,7 +51,23 @@ impl TemplateContext for AppContext {
         _locales: &[coauth_i18n::Locale],
     ) -> BTreeMap<SampleIdentifier, Self> {
         let builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
-        sample_list(vec![Self::new(&builder, "/assets/coauth-frontend.js")])
+        sample_list(vec![Self::new(&builder, "/assets/bootstrap.js")])
+    }
+}
+
+#[cfg(test)]
+mod app_tests {
+    use super::*;
+
+    #[test]
+    fn frontend_bundle_urls_follow_the_deployment_prefix() {
+        let builder = UrlBuilder::new("https://example.com/auth/".parse().unwrap(), None, None);
+        let context =
+            serde_json::to_value(AppContext::new(&builder, "/assets/bootstrap.js")).unwrap();
+        let config = &context["app_config"];
+        assert_eq!(config["api_endpoint"], "/auth/_coauth");
+        assert_eq!(config["assets_root"], "/auth/assets");
+        assert_eq!(config["script_src"], "/auth/assets/bootstrap.js");
     }
 }
 

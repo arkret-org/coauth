@@ -23,6 +23,8 @@ _*.*
 *.log
 .sqlx
 *.py
+!scripts/build-frontend.py
+!scripts/serve-frontend.py
 !.ci/package-release.py
 !conformance/prepare-local-config.py
 !conformance/run-official-plan.py

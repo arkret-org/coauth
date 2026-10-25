@@ -3,6 +3,8 @@
 **/target/
 **/.shared-target/
 **/node_modules/
+**/artifacts/
+**/release-assets/
 **/.sqlx/
 **/.git/
 **/.local/

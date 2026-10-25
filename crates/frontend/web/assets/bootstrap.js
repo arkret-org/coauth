@@ -1,0 +1,2 @@
+import init from './pkg/coauth_frontend.js';
+init().catch(error => { console.error('Coauth could not start', error); const root=document.getElementById('app')||document.getElementById('main'); if(root) { const message=document.createElement('p'); message.setAttribute('role','alert'); message.textContent='The account interface could not start. Reload to try again.'; root.replaceChildren(message); } });

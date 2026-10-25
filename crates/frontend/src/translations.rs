@@ -7,7 +7,6 @@
 //! `<html lang>`, `navigator.language`) and renders the chosen catalogue.
 
 pub use arkret_locale::UiLocale;
-use dioxus::prelude::*;
 use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
 use unic_langid::LanguageIdentifier;
 
@@ -15,8 +14,6 @@ use unic_langid::LanguageIdentifier;
 const LOCALE_STORAGE_KEY: &str = "arkret.ui.locale.v1";
 #[cfg(target_arch = "wasm32")]
 const LOCALE_COOKIE_KEY: &str = "arkret.ui.locale.v1";
-
-pub type LocaleSignal = Signal<UiLocale>;
 
 const EN_FTL: &str = include_str!("../../../translations/en.ftl");
 const ZH_FTL: &str = include_str!("../../../translations/zh.ftl");
@@ -188,10 +185,13 @@ pub fn adopt_requested_locale_into_account(stored: Option<UiLocale>) {
 /// still lives in the device cache and is re-sent on the next navigation —
 /// there is nothing here for the user to act on.
 pub fn spawn_account_locale_write(value: UiLocale) {
-    dioxus::prelude::spawn(async move {
+    #[cfg(target_arch = "wasm32")]
+    wasm_bindgen_futures::spawn_local(async move {
         let body = serde_json::json!({ "preferred_locale": value.code() });
         let _ = crate::api::api_patch::<serde_json::Value>("/self/viewer/profile", body).await;
     });
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = value;
 }
 
 /// Resolve the SPA's locale through the shared precedence chain.
@@ -214,7 +214,7 @@ pub fn initial_locale() -> UiLocale {
 }
 
 fn current_locale() -> UiLocale {
-    try_consume_context::<LocaleSignal>().map_or_else(initial_locale, |locale| *locale.read())
+    initial_locale()
 }
 
 fn format_for_locale(locale: UiLocale, key: &str, args: Option<&FluentArgs<'_>>) -> Option<String> {
@@ -285,12 +285,8 @@ pub fn apply_locale(locale: UiLocale) {
     let _ = locale;
 }
 
-pub fn set_locale(locale: &mut LocaleSignal, value: UiLocale) {
-    if *locale.read() == value {
-        return;
-    }
+pub fn set_locale(value: UiLocale) {
     apply_locale(value);
-    locale.set(value);
 }
 
 #[cfg(test)]

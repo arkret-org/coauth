@@ -63,36 +63,21 @@ backend *ARGS: init-dev frontend-assets
 backend-config config="config.yaml":
     cargo run -p coauth --features cedar -- server -c {{config}}
 
-# Start the frontend dev server (Dioxus hot-reload)
+# Start a same-origin frontend server with backend API forwarding.
 frontend:
-    dx serve -p coauth-frontend --port 8182
+    python scripts/serve-frontend.py --port 8182
 
-# Start the frontend in hot-reload mode
+# Rebuild the frontend and refresh the browser after source edits.
 frontend-hot:
-    dx serve -p coauth-frontend --hot-reload
+    python scripts/serve-frontend.py --port 8182 --watch
 
-# Build the frontend for production (output → dist/)
-frontend-build: && (_dx-dist "release")
-    dx build -p coauth-frontend --release
+# Build production assets directly into the backend's configured directory.
+frontend-build:
+    python scripts/build-frontend.py --release --out-dir dist
 
-# Build backend-served frontend assets from the current source tree.
-# Uses a debug build on purpose: `dx build --release` always invokes wasm-opt,
-# whose bundled binaryen binary crashes on Windows (exit 0xc0000409) and prints
-# a scary ERROR during `just dev`/`just backend`. Debug builds skip wasm-opt
-# entirely and are perfectly fine for locally serving the dev frontend.
-frontend-assets: && (_dx-dist "debug")
-    dx build -p coauth-frontend
-
-# Replace `dist/` with the `dx build` bundle for the given profile.
-#
-# `dx` writes below cargo's target directory, and the workspace-level
-# `../.cargo/config.toml` moves that directory outside this repository
-# (`build.target-dir` = a shared tree for all sibling repos). A hard-coded
-# `target/dx/...` therefore resolves to nothing and the copy fails. Ask cargo
-# where its target directory actually is; that answer is correct with or
-# without the shared configuration.
-_dx-dist profile:
-    {{ if os() == "windows" { '$target = (cargo metadata --format-version 1 --no-deps | ConvertFrom-Json).target_directory; $public = Join-Path $target "dx/coauth-frontend/' + profile + '/web/public"; if (-not (Test-Path -LiteralPath $public)) { throw "dx build output not found: $public" }; if (Test-Path dist) { Remove-Item -Recurse -Force dist }; Copy-Item -Recurse $public dist' } else { 'public="$(cargo metadata --format-version 1 --no-deps | sed -n "s/.*\"target_directory\":\"\([^\"]*\)\".*/\1/p")/dx/coauth-frontend/' + profile + '/web/public"; test -d "$public" || { echo "dx build output not found: $public" >&2; exit 1; }; rm -rf dist && cp -r "$public" dist' } }}
+# Build backend-served assets for local development.
+frontend-assets:
+    python scripts/build-frontend.py --out-dir dist
 
 # ── Build ────────────────────────────────────────────────────
 
@@ -117,13 +102,13 @@ lint:
 # sibling path dependency in this workspace, and `cargo fmt --all` reaches into
 # that repository and rewrites its sources.
 fmt:
-    cargo fmt -p coauth -p coauth-account-types -p coauth-admin-types -p coauth-backend -p coauth-config -p coauth-data -p coauth-data-model -p coauth-email-types -p coauth-frontend -p coauth-i18n -p coauth-iana -p coauth-jose -p coauth-keyring -p coauth-keystore-keygen -p coauth-messaging -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres -p coauth-tasks -p coauth-templates
+    cargo +nightly fmt -p coauth -p coauth-account-types -p coauth-admin-types -p coauth-backend -p coauth-config -p coauth-data -p coauth-data-model -p coauth-email-types -p coauth-frontend -p coauth-i18n -p coauth-iana -p coauth-jose -p coauth-keyring -p coauth-keystore-keygen -p coauth-messaging -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres -p coauth-tasks -p coauth-templates
 
 # Scoped to this repository's own packages on purpose. The Arkret SDK is a
 # sibling path dependency in this workspace, and `cargo fmt --all` reaches into
 # that repository and rewrites its sources.
 fmt-check:
-    cargo fmt -p coauth -p coauth-account-types -p coauth-admin-types -p coauth-backend -p coauth-config -p coauth-data -p coauth-data-model -p coauth-email-types -p coauth-frontend -p coauth-i18n -p coauth-iana -p coauth-jose -p coauth-keyring -p coauth-keystore-keygen -p coauth-messaging -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres -p coauth-tasks -p coauth-templates -- --check
+    cargo +nightly fmt -p coauth -p coauth-account-types -p coauth-admin-types -p coauth-backend -p coauth-config -p coauth-data -p coauth-data-model -p coauth-email-types -p coauth-frontend -p coauth-i18n -p coauth-iana -p coauth-jose -p coauth-keyring -p coauth-keystore-keygen -p coauth-messaging -p coauth-oauth-types -p coauth-principal -p coauth-storage-postgres -p coauth-tasks -p coauth-templates -- --check
 
 # ── Database ─────────────────────────────────────────────────
 

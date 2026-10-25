@@ -1,6 +1,6 @@
 //! REST API endpoints for OAuth approval and device-code flows.
 //!
-//! These endpoints are consumed by the Dioxus SPA frontend and return JSON
+//! These endpoints are consumed by the Glory/Sapid SPA frontend and return JSON
 //! responses. They replace the server-rendered HTML approval pages.
 
 use coauth_account_types::DeviceLinkOutcome;

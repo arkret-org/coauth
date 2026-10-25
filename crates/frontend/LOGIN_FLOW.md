@@ -1,35 +1,26 @@
-# Login Flow Cross-Check
+# Login flow
 
-This note captures the coauth-side login flow that `codmin` should align with.
-No `codmin` files are modified by this slice; the shared admin bridge boundary
-continues to live in `coauth-admin-types`.
+The Glory account UI retains the account service API boundary:
 
-## SPA Flow
+| Action | Request |
+| --- | --- |
+| Discover methods and login hint | `GET /_coauth/account/auth/providers` with the entry query |
+| Password sign-in | `POST /_coauth/account/auth/login` |
+| Passkey ceremony | `/_coauth/account/auth/passkey/*` |
+| Upstream sign-in | Provider `authorize_url`, preserving entry query parameters |
+| Registration | `POST /_coauth/account/auth/register` and registration step endpoints |
 
-| SPA action | Frontend path | Backend route |
-| --- | --- | --- |
-| Load login methods | `GET /auth/providers` | `GET /_coauth/gate/account/auth/providers` |
-| Password login | `POST /auth/login` | `POST /_coauth/gate/account/auth/login` |
-| Upstream OAuth login | provider `authorize_url` from providers response | backend-managed upstream authorize route |
-| Continue OAuth grant after login | `kind=continue_authorization_grant&id=...` query | frontend routes to `Route::OAuthApproval { grant_id }` |
-| Register during grant continuation | store `post_auth_kind` and `post_auth_id` in `sessionStorage` | registration finish resumes the same grant context |
+`src/pages/auth.rs` owns identifier/password stages. A supplied login hint fixes
+the selected account; otherwise users can switch accounts without losing the
+continuation. Provider discovery failures retain a password fallback and an
+explicit retry. Mutations expose busy state and visible error alerts.
 
-The `/login` server-rendered page and the Dioxus SPA both resolve available
-upstream providers from the same account-auth service layer. The SPA uses the
-JSON API routes under `/_coauth/gate/account/auth/*`; the server-rendered fallback posts form
-data to `/login` and then calls the same password-login service path.
+`src/post_auth_continuation.rs` parses entry parameters into shared
+`PostAuthAction` values and stores the continuation in session storage. Password
+login, passkey login, and registration completion use `ui::auth_success` to
+resume OAuth/device approval, account management, password change, or upstream
+linking. Registration sends the typed continuation to the backend.
 
-## Codmin Boundary
-
-`codmin` should not post login credentials through the admin bridge. The
-admin bridge is for operator/admin workflows and is described by
-`GET /_coauth/admin/bridge/describe`. Interactive user login should target the
-account-auth endpoints above or follow the provider `authorize_url` returned by
-`GET /_coauth/gate/account/auth/providers`.
-
-## Local Check
-
-```powershell
-rg -n '"/auth/providers"|"/auth/login"|continue_authorization_grant|post_auth_kind|post_auth_id' crates/frontend/src/pages/login.rs
-rg -n 'Router::with_path\("providers"\)|pub async fn login|pub async fn providers|POST /_coauth/gate/account/auth/login|GET /_coauth/gate/account/auth/providers' crates/backend/src/handlers/account/auth.rs crates/backend/src/server.rs
-```
+Interactive account credentials go to the account API, while the admin bridge
+serves operator workflows. `tests/run.cjs` checks sign-in retry, fixed hints,
+provider query preservation, and grant continuation.

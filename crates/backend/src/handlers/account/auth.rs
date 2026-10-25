@@ -1,6 +1,6 @@
 //! REST API endpoints for authentication flows (login, logout, providers).
 //!
-//! These endpoints are consumed by the Dioxus SPA frontend and return JSON
+//! These endpoints are consumed by the Glory/Sapid SPA frontend and return JSON
 //! responses. Session cookies are set/cleared as side effects.
 
 pub mod oidc_bridge;

@@ -211,7 +211,7 @@ with flags.
 
 ## Build from source
 
-`coauth` is a Rust workspace. The frontend is a Dioxus app.
+`coauth` is a Rust workspace. The frontend is a Glory/Sapid app.
 
 ```bash
 git clone https://github.com/arkret-org/coauth.git
@@ -220,7 +220,7 @@ cd coauth
 # Backend binary only. The default configuration uses the Cedar policy engine.
 cargo build --release -p coauth --features cedar
 
-# Full production build with web assets (requires `just` and `dx`)
+# Full production build with web assets (requires `just`, Python 3.11+, and the locked wasm-bindgen CLI)
 just build-all
 ```
 

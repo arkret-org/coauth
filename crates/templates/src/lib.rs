@@ -393,7 +393,7 @@ impl Templates {
 // ── Template registration ───────────────────────────────────────────────────
 
 register_templates! {
-    /// Render the frontend app (Dioxus SPA shell)
+    /// Render the frontend app (Glory/Sapid SPA shell)
     pub fn render_app(WithLanguage<AppContext>) { "app.html" }
 
     /// Render the form used by the `form_post` response mode (OAuth protocol)
