@@ -1410,15 +1410,8 @@ mod tests {
         }
     }
 
-    fn wire_error(code: &str, message: &str) -> serde_json::Value {
-        serde_json::json!({
-            "ok": false,
-            "error": {
-                "code": code,
-                "message": message,
-            },
-            "request_id": "ak:request:01964137-0000-7000-8000-000000000001",
-        })
+    fn wire_error(code: &str, message: &str) -> arkret_wire::problem_details::Problem {
+        arkret_wire::problem_details::Problem::new(code, 409, message)
     }
 
     fn request_json(request: &WiremockRequest) -> serde_json::Value {
@@ -1549,10 +1542,14 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
             .and(path(ACCOUNT_REGISTER_PATH))
-            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                arkret_wire::ErrorCode::FAILED_PRECONDITION,
-                "account registration is closed",
-            )))
+            .respond_with(
+                ResponseTemplate::new(409)
+                    .set_body_json(wire_error(
+                        arkret_wire::ErrorCode::FAILED_PRECONDITION,
+                        "account registration is closed",
+                    ))
+                    .insert_header("content-type", "application/problem+json"),
+            )
             .expect(1)
             .mount(&server)
             .await;
@@ -1592,10 +1589,14 @@ mod tests {
             .to_owned();
         Mock::given(method("POST"))
             .and(path(localparts_path))
-            .respond_with(ResponseTemplate::new(409).set_body_json(wire_error(
-                arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
-                "localpart is already assigned",
-            )))
+            .respond_with(
+                ResponseTemplate::new(409)
+                    .set_body_json(wire_error(
+                        arkret_wire::ErrorCode::DUPLICATE_CONFLICT,
+                        "localpart is already assigned",
+                    ))
+                    .insert_header("content-type", "application/problem+json"),
+            )
             .expect(1)
             .mount(&server)
             .await;

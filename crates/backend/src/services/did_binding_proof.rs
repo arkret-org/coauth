@@ -65,7 +65,8 @@ pub fn validate_account_registration_control_proof(
     }
     if proof.challenge_id != stored.challenge_id
         || proof.challenge != stored.challenge
-        || proof.purpose != arkret_models_identity::DidBindingPurpose::AccountBindingForPublishedDid
+        || proof.purpose
+            != arkret_models_identity::AccountDidBindingPurpose::AccountBindingForPublishedDid
         || proof.request_canonical_digest != stored.request_digest
         || proof.account_subject != stored.account_subject
         || proof.principal_id != stored.principal_id
@@ -341,7 +342,8 @@ mod tests {
                 arkret_models_identity::AccountRegistrationControlProofKind::DidBoundSignature,
             challenge_id: "challenge-id".to_owned(),
             challenge: "Y2hhbGxlbmdlLXdpdGgtMTI4LWJpdHM".to_owned(),
-            purpose: arkret_models_identity::DidBindingPurpose::AccountBindingForPublishedDid,
+            purpose:
+                arkret_models_identity::AccountDidBindingPurpose::AccountBindingForPublishedDid,
             request_canonical_digest: request_digest.clone(),
             account_subject: account_subject.clone(),
             principal_id: principal_id.clone(),

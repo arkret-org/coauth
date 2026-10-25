@@ -589,7 +589,8 @@ impl DidBindingChallengeRecord {
             request_id: input.request_id.clone(),
             challenge_id: input.challenge_id.clone(),
             challenge: input.challenge.clone(),
-            purpose: arkret_models_identity::DidBindingPurpose::AccountBindingForPublishedDid,
+            purpose:
+                arkret_models_identity::AccountDidBindingPurpose::AccountBindingForPublishedDid,
             account_subject: input.account_subject.clone(),
             principal_id: input.principal_id.clone(),
             did: input.did.clone(),

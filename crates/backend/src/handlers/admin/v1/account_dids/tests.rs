@@ -6,7 +6,7 @@ use arkret_identity::test_material::{
     PublicKeyFingerprintInput, is_published_test_key, reserved_identifier_matches,
 };
 use arkret_models_identity::{
-    AccountRegistrationControlProof, AccountRegistrationControlProofKind, DidBindingPurpose,
+    AccountDidBindingPurpose, AccountRegistrationControlProof, AccountRegistrationControlProofKind,
     IdentityMethodEvidence,
 };
 use arkret_signatures::proof::{PublicKeyMaterial, verify_detached_ed25519_signature};
@@ -251,7 +251,7 @@ async fn exercise_handler(
         proof_kind: AccountRegistrationControlProofKind::DidBoundSignature,
         challenge_id: challenge_id.to_owned(),
         challenge: input.challenge,
-        purpose: DidBindingPurpose::AccountBindingForPublishedDid,
+        purpose: AccountDidBindingPurpose::AccountBindingForPublishedDid,
         request_canonical_digest: request_digest,
         account_subject: subject,
         principal_id,
