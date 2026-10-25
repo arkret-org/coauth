@@ -26,7 +26,7 @@ pub fn get_config() -> AppConfig {
                         .ok()
                         .and_then(|v| v.as_string())
                 })
-                .unwrap_or_else(|| "/_coauth".to_string());
+                .unwrap_or_else(|| "/_coauth".to_owned());
 
             return AppConfig { api_endpoint };
         }
@@ -59,12 +59,11 @@ pub fn api_base_url() -> String {
 
     #[cfg(target_arch = "wasm32")]
     {
-        if let Some(win) = web_sys::window() {
-            if let Ok(location) = win.location().href() {
-                if let Ok(base) = web_sys::Url::new_with_base(&config.api_endpoint, &location) {
-                    return base.href();
-                }
-            }
+        if let Some(win) = web_sys::window()
+            && let Ok(location) = win.location().href()
+            && let Ok(base) = web_sys::Url::new_with_base(&config.api_endpoint, &location)
+        {
+            return base.href();
         }
     }
 

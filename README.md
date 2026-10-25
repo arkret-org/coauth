@@ -265,3 +265,12 @@ rollout details.
 ## License
 
 `coauth` is distributed under `AGPL-3.0-only`. See [LICENSE](LICENSE).
+
+### Git UI dependency compatibility
+
+Glory and Sapid resolve from their public `main` branches, with exact commits in
+`Cargo.lock`. The remote Sapid manifest still uses a sibling Glory path, so the
+workspace patch resolves Glory from its Git repository as well. The pinned Sapid
+TextField placeholder API is unavailable; existing empty-value hints use an
+application CSS overlay around the same named, associated input. The overlay
+does not receive pointer events or replace the input during typing.

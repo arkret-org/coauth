@@ -163,8 +163,8 @@ diesel-async = { version = "0.9", features = [
 diesel_migrations = "2.3"
 pq-sys = { version = "0.7.5", features = ["bundled"] }
 digest = "0.10.7"
-glory = { path = "../../glory-rs/glory/crates/glory", default-features = false }
-sapid = { path = "../../glory-rs/sapid", default-features = false }
+glory = { git = "https://github.com/glory-rs/glory.git", branch = "main", version = "0.3.1", default-features = false }
+sapid = { git = "https://github.com/sapid-ui/sapid.git", branch = "main", version = "0.1.0", default-features = false }
 dotenvy = "0.15.7"
 ecdsa = { version = "0.16.9", features = ["signing", "verifying"] }
 # Two Ed25519 generations, on purpose and under guard. `ed25519-dalek 2.2`
@@ -433,3 +433,8 @@ num-bigint-dig.opt-level = 3
 pbkdf2.opt-level = 3
 rayon.opt-level = 3
 sha2.opt-level = 3
+
+# Sapid main currently declares its sibling Glory path. Resolve that package
+# from the same remote Glory source as the application, without a local override.
+[patch."https://github.com/sapid-ui/sapid.git"]
+glory = { git = "https://github.com/glory-rs/glory.git", branch = "main", version = "0.3.1" }

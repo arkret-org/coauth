@@ -152,12 +152,26 @@ fn profile_editor(
         scope,
         "profile-edit",
         vec![
-            Field::new(scope, "Display name", initial),
-            Field::new(scope, "Preferred language", locale).choices([
-                ("", "Use device language"),
-                ("en", "English"),
-                ("zh", "中文"),
-            ]),
+            Field::new(scope, "Display name", initial)
+                .description("Your display name is shown to other users."),
+            Field::new(scope, "Language", locale)
+                .description(
+                    "Applies everywhere you sign in, and to the notifications we send you.",
+                )
+                .choices([
+                    ("", "Use device language"),
+                    ("en", "English"),
+                    ("zh", "中文"),
+                ]),
+            Field::new(
+                scope,
+                "Principal ID",
+                user.principal
+                    .as_ref()
+                    .map(|p| p.principal_address.clone())
+                    .unwrap_or_default(),
+            )
+            .readonly(true),
         ],
         "Save",
         "btn btn-primary",
@@ -203,13 +217,6 @@ fn profile_editor(
             ],
         ),
         form,
-        copy(
-            "text-sm text-secondary",
-            user.principal
-                .as_ref()
-                .map(|p| p.principal_address.clone())
-                .unwrap_or_default(),
-        ),
     ]);
     ui::dialog(
         scope,

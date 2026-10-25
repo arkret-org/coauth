@@ -204,8 +204,6 @@ jobs:
           file: coauth/Dockerfile
           build-contexts: |
             savfox=../savfox-ai/savfox
-            glory=../glory-rs/glory
-            sapid=../glory-rs/sapid
           platforms: ${{ matrix.platform }}
           pull: true
           push: ${{ github.server_url == 'https://github.com' }}

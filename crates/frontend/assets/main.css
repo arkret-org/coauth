@@ -1915,3 +1915,12 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   .user-email > .email-identity { flex-basis: 100%; }
   .user-email > .sapid-button { margin-inline-start: auto; }
 }
+
+/* Git Sapid exposes labels but no TextField placeholder API. */
+.form-input-hint-wrap { position: relative; min-width: 0; width: 100%; }
+.form-input-hint { position: absolute; left: calc(var(--space-4x) + 1.5px); right: 48px; top: 50%; transform: translateY(-50%); color: var(--color-text-tertiary); font-size: var(--font-size-md); line-height: 1.5; pointer-events: none; white-space: nowrap; overflow: hidden; }
+.form-input-hint.is-hidden { display: none; }
+
+.layout-container > .layout-footer-region { margin-top: auto; }
+.form-field > .sapid-field-description { order: 3; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.sapid-dialog.account-dialog > .sapid-layer-close { align-self: center; font-weight: 600; }

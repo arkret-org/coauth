@@ -143,26 +143,29 @@ pub fn layout(scope: &Scope, body: View, full: bool) -> View {
         },
         vec![
             body,
-            ui::reactive(site.data, |_, result| {
-                let Some(Ok(site)) = result else {
-                    return block("legal-footer", vec![]);
-                };
-                let mut links = vec![];
-                if let Some(uri) = site.policy_uri {
-                    links.push(link("Privacy policy", uri, ""));
-                }
-                if let Some(uri) = site.tos_uri {
-                    if !links.is_empty() {
-                        links.push(copy("dot-separator", "•"));
+            block(
+                "layout-footer-region",
+                vec![ui::reactive(site.data, |_, result| {
+                    let Some(Ok(site)) = result else {
+                        return block("legal-footer", vec![]);
+                    };
+                    let mut links = vec![];
+                    if let Some(uri) = site.policy_uri {
+                        links.push(link("Privacy policy", uri, ""));
                     }
-                    links.push(link("Terms and conditions", uri, ""));
-                }
-                let mut body = vec![block("legal-links", links)];
-                if let Some(imprint) = site.imprint {
-                    body.push(copy("imprint", imprint));
-                }
-                block("legal-footer", body)
-            }),
+                    if let Some(uri) = site.tos_uri {
+                        if !links.is_empty() {
+                            links.push(copy("dot-separator", "•"));
+                        }
+                        links.push(link("Terms and conditions", uri, ""));
+                    }
+                    let mut body = vec![block("legal-links", links)];
+                    if let Some(imprint) = site.imprint {
+                        body.push(copy("imprint", imprint));
+                    }
+                    block("legal-footer", body)
+                })],
+            ),
         ],
     )
 }

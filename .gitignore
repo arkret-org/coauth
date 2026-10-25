@@ -48,3 +48,5 @@ conformance/test-config.yaml.raw
 # Local verification evidence and build metadata.
 /artifacts/
 /release-assets/
+
+!scripts/ui_dependencies.py

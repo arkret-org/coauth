@@ -64,7 +64,7 @@ fn requested_tags() -> Option<String> {
         let window = web_sys::window()?;
         let search = window.location().search().ok()?;
         let parameters = web_sys::UrlSearchParams::new_with_str(&search).ok()?;
-        return parameters.get("ui_locales");
+        parameters.get("ui_locales")
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -76,9 +76,9 @@ fn requested_tags() -> Option<String> {
 fn stored_tags() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        return web_sys::window()
+        web_sys::window()
             .and_then(|window| window.local_storage().ok().flatten())
-            .and_then(|storage| storage.get_item(LOCALE_STORAGE_KEY).ok().flatten());
+            .and_then(|storage| storage.get_item(LOCALE_STORAGE_KEY).ok().flatten())
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -92,10 +92,10 @@ fn stored_tags() -> Option<String> {
 fn document_tags() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        return web_sys::window()
+        web_sys::window()
             .and_then(|window| window.document())
             .and_then(|document| document.document_element())
-            .and_then(|root| root.get_attribute("lang"));
+            .and_then(|root| root.get_attribute("lang"))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -105,7 +105,7 @@ fn document_tags() -> Option<String> {
 fn platform_tags() -> Option<String> {
     #[cfg(target_arch = "wasm32")]
     {
-        return web_sys::window().and_then(|window| window.navigator().language());
+        web_sys::window().and_then(|window| window.navigator().language())
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -141,11 +141,11 @@ pub fn set_account_locale(_locale: Option<UiLocale>) {}
 fn account_locale() -> Option<UiLocale> {
     #[cfg(target_arch = "wasm32")]
     {
-        return match ACCOUNT_LOCALE.load(std::sync::atomic::Ordering::Relaxed) {
+        match ACCOUNT_LOCALE.load(std::sync::atomic::Ordering::Relaxed) {
             0 => Some(UiLocale::En),
             1 => Some(UiLocale::Zh),
             _ => None,
-        };
+        }
     }
 
     #[cfg(not(target_arch = "wasm32"))]

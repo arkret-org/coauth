@@ -13,10 +13,10 @@ fn js_error(value: wasm_bindgen::JsValue) -> String {
     let name = js_sys::Reflect::get(&value, &"name".into())
         .ok()
         .and_then(|value| value.as_string());
-    name.as_deref()
-        .or(raw.as_deref())
-        .map(authenticator_error_message)
-        .unwrap_or_else(|| authenticator_error_message(""))
+    name.as_deref().or(raw.as_deref()).map_or_else(
+        || authenticator_error_message(""),
+        authenticator_error_message,
+    )
 }
 
 #[cfg(any(target_arch = "wasm32", test))]

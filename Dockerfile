@@ -1,5 +1,6 @@
 # syntax = docker/dockerfile:1.7.1
-# Build from the repository parent with savfox, glory and sapid named contexts.
+# Build from the repository parent with the savfox named context.
+# UI dependencies come from the Git revisions in Cargo.lock.
 # Builds a minimal image with the binary only. Buildx publishes amd64 and arm64
 # variants from this Dockerfile. Frontend assets can either be built in-Docker
 # on the native builder platform or injected as a prebuilt named build context,
@@ -59,11 +60,6 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
-COPY --from=glory Cargo.toml README.md /glory-rs/glory/
-COPY --from=glory crates /glory-rs/glory/crates
-COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
-COPY --from=sapid src /glory-rs/sapid/src
-COPY --from=sapid styles /glory-rs/sapid/styles
 
 # cargo-chef computes a recipe keyed by workspace manifests so frontend
 # dependency compilation can be reused when Rust sources change.
@@ -84,11 +80,6 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
-COPY --from=glory Cargo.toml README.md /glory-rs/glory/
-COPY --from=glory crates /glory-rs/glory/crates
-COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
-COPY --from=sapid src /glory-rs/sapid/src
-COPY --from=sapid styles /glory-rs/sapid/styles
 
 RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
@@ -167,11 +158,6 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
-COPY --from=glory Cargo.toml README.md /glory-rs/glory/
-COPY --from=glory crates /glory-rs/glory/crates
-COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
-COPY --from=sapid src /glory-rs/sapid/src
-COPY --from=sapid styles /glory-rs/sapid/styles
 
 # cargo-chef keeps the dependency build layer keyed to Cargo manifests so
 # source-only changes can reuse compiled dependencies and downloaded crates.
@@ -195,11 +181,6 @@ COPY ./floria/ /floria
 COPY ./arkret-spec/ /arkret-spec
 COPY ./bridges/ /bridges
 COPY --from=savfox . /savfox-ai/savfox
-COPY --from=glory Cargo.toml README.md /glory-rs/glory/
-COPY --from=glory crates /glory-rs/glory/crates
-COPY --from=sapid Cargo.toml README.md /glory-rs/sapid/
-COPY --from=sapid src /glory-rs/sapid/src
-COPY --from=sapid styles /glory-rs/sapid/styles
 
 RUN --network=default \
   --mount=type=cache,id=builder-cargo-registry-${TARGETARCH},target=/usr/local/cargo/registry,sharing=locked \

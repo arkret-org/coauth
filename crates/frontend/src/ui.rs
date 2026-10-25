@@ -90,6 +90,11 @@ pub fn dialog(
             .class("account-dialog")
             .label(label.to_owned())
             .title(label.to_owned())
+            .close_label(if key == "edit-profile" {
+                "Cancel"
+            } else {
+                "Close"
+            })
             .open(open)
             .on_open_change(move |next| open.revise(|value| *value = next))
             .trigger_content({
@@ -305,6 +310,7 @@ pub struct Field {
     pub required: bool,
     pub readonly: bool,
     pub placeholder: String,
+    pub description: String,
     pub options: Vec<(String, String)>,
 }
 impl Field {
@@ -316,6 +322,7 @@ impl Field {
             required: false,
             readonly: false,
             placeholder: String::new(),
+            description: String::new(),
             options: vec![],
         }
     }
@@ -343,6 +350,10 @@ impl Field {
             .into_iter()
             .map(|(value, label)| (value.into(), label.into()))
             .collect();
+        self
+    }
+    pub fn description(mut self, value: impl Into<String>) -> Self {
+        self.description = value.into();
         self
     }
     pub fn placeholder(mut self, value: impl Into<String>) -> Self {
@@ -380,11 +391,21 @@ pub fn field(
         });
     }
     let select_key = format!("select-{}-{key}", scope.id().slot());
+    let hint_empty = item.placeholder.is_empty();
+    let hint_class = scope.bond(move || {
+        if hint_empty || !value.get().is_empty() {
+            "form-input-hint is-hidden"
+        } else {
+            "form-input-hint"
+        }
+        .to_owned()
+    });
     Box::new(
         sapid::field(format!("{}-{key}", scope.id().slot()))
             .unstyled()
             .class("form-field")
             .label(item.label.clone())
+            .description(item.description.clone())
             .required(item.required)
             .readonly(item.readonly)
             .invalid(scope.bond(move || matches!(state.feedback.get(), Some(Err(_)))))
@@ -430,7 +451,7 @@ pub fn field(
                             .show_in(scope)
                     }));
                 }
-                if item.purpose == Purpose::Password {
+                let input: View = if item.purpose == Purpose::Password {
                     Box::new(
                         sapid::password_input()
                             .unstyled()
@@ -440,7 +461,6 @@ pub fn field(
                             .field(control)
                             .value(value)
                             .enabled(enabled.clone())
-                            .placeholder(item.placeholder.clone())
                             .on_value_change(move |new| value.revise(|old| *old = new)),
                     )
                 } else {
@@ -454,10 +474,18 @@ pub fn field(
                             .field(control)
                             .value(value)
                             .enabled(enabled.clone())
-                            .placeholder(item.placeholder.clone())
                             .on_value_change(move |new| value.revise(|old| *old = new)),
                     )
-                }
+                };
+                Box::new(
+                    view().class("form-input-hint-wrap").fill((
+                        input,
+                        text()
+                            .kind(TextKind::Inline)
+                            .class(hint_class)
+                            .content(item.placeholder.clone()),
+                    )),
+                )
             }),
     )
 }

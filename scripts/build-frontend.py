@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import tomllib
+from ui_dependencies import cargo_metadata, sapid_stylesheet, ui_provenance
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "crates" / "frontend"
@@ -73,9 +74,8 @@ def main():
     parser.add_argument("--out-dir", type=Path)
     args = parser.parse_args()
     env = build_environment()
-    metadata = json.loads(subprocess.check_output(
-        ["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"],
-        cwd=ROOT, env=env, text=True))
+    metadata = cargo_metadata(ROOT, env)
+    provenance = ui_provenance(metadata)
     target = Path(metadata["target_directory"]).resolve()
     output = (args.out_dir or target / "web").resolve()
     if os.name == "nt" and (target.drive.lower() != "d:" or output.drive.lower() != "d:"):
@@ -95,13 +95,14 @@ def main():
     with tempfile.TemporaryDirectory(prefix="coauth-web-", dir=target) as temporary:
         stage = Path(temporary)
         assets = stage / "assets"
+        (stage / "ui-build-info.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
         shutil.copytree(FRONTEND / "web", stage, dirs_exist_ok=True)
         shutil.copytree(FRONTEND / "assets", assets, dirs_exist_ok=True)
         subprocess.run([
             bindgen, str(target / "wasm32-unknown-unknown" / profile / "coauth_frontend.wasm"),
             "--target", "web", "--out-name", "coauth_frontend", "--out-dir", str(assets / "pkg"),
         ], cwd=ROOT, env=env, check=True, timeout=3600)
-        sapid = ROOT.parent.parent / "glory-rs" / "sapid" / "styles" / "sapid.css"
+        sapid = sapid_stylesheet(metadata)
         shutil.copy2(sapid, assets / "sapid.css")
         (stage / ".coauth-generated-web").write_text("Glory/Sapid frontend\n", encoding="utf-8")
         if output.exists() and any(output.iterdir()):
