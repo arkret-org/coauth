@@ -355,6 +355,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "arkret-deployment-contracts"
+version = "0.3.0"
+dependencies = [
+ "arkret-canonical",
+ "arkret-identifiers",
+ "arkret-models-collaboration",
+ "arkret-wire",
+ "chrono",
+ "salvo-oapi",
+ "serde",
+ "url",
+]
+
+[[package]]
 name = "arkret-egress-policy"
 version = "0.3.0"
 dependencies = [
@@ -1851,6 +1865,7 @@ dependencies = [
  "arkret-auth",
  "arkret-canonical",
  "arkret-crypto",
+ "arkret-deployment-contracts",
  "arkret-egress-reqwest",
  "arkret-http-client",
  "arkret-identifiers",
@@ -1887,10 +1902,8 @@ dependencies = [
  "coauth-storage-postgres",
  "coauth-tasks",
  "coauth-templates",
- "coland-contracts",
  "coland-http",
  "coland-services",
- "coland-storage",
  "coland-storage-postgres",
  "coland-test-support",
  "cookie",
@@ -2422,6 +2435,7 @@ dependencies = [
  "arkret-bootstrap",
  "arkret-canonical",
  "arkret-crypto",
+ "arkret-deployment-contracts",
  "arkret-egress-policy",
  "arkret-egress-reqwest",
  "arkret-event-draft",
@@ -2521,6 +2535,7 @@ version = "0.3.0"
 dependencies = [
  "arkret",
  "arkret-canonical",
+ "arkret-deployment-contracts",
  "arkret-event-draft",
  "arkret-identifiers",
  "arkret-identity",
@@ -2537,7 +2552,6 @@ dependencies = [
  "base64 0.23.1",
  "chrono",
  "chrono-tz",
- "coland-contracts",
  "coland-domain",
  "serde",
  "serde_json",

@@ -1177,12 +1177,12 @@ async fn station_content_authority(
     approval_evidence_refs: &[arkret_identifiers::EventId],
 ) -> Result<
     (
-        coland_contracts::agent_session_authority::AgentSessionAuthorityRequest,
-        coland_contracts::agent_session_authority::AgentSessionAuthorityView,
+        arkret_deployment_contracts::agent_session_authority::AgentSessionAuthorityRequest,
+        arkret_deployment_contracts::agent_session_authority::AgentSessionAuthorityView,
     ),
     AgentAuthRejection,
 > {
-    use coland_contracts::agent_session_authority::{
+    use arkret_deployment_contracts::agent_session_authority::{
         AGENT_SESSION_AUTHORITY_PATH, AgentSessionAuthorityRequest, AgentSessionAuthorityView,
     };
 
@@ -1269,8 +1269,8 @@ async fn station_content_scope(
 }
 
 fn qualify_station_content_scope(
-    outcome: coland_contracts::agent_session_authority::AgentSessionAuthorityView,
-    request: &coland_contracts::agent_session_authority::AgentSessionAuthorityRequest,
+    outcome: arkret_deployment_contracts::agent_session_authority::AgentSessionAuthorityView,
+    request: &arkret_deployment_contracts::agent_session_authority::AgentSessionAuthorityRequest,
 ) -> Result<EffectiveAgentSessionScope, AgentAuthRejection> {
     let requested_scope = &request.requested_scope;
     if outcome.approval_required
@@ -2048,7 +2048,7 @@ mod tests {
 
     #[test]
     fn authenticated_content_source_keeps_empty_grant_refs_and_exact_intent_binding() {
-        use coland_contracts::agent_session_authority::{
+        use arkret_deployment_contracts::agent_session_authority::{
             AgentSessionAuthorityRequest, AgentSessionAuthorityView,
         };
         let request: AgentSessionAuthorityRequest = serde_json::from_value(serde_json::json!({

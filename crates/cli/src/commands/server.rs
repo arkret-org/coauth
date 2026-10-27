@@ -200,32 +200,20 @@ impl Options {
             .await?;
         }
 
-        let third_party_invite_provider = if arkret_config.third_party_invite_provider.is_some() {
-            anyhow::ensure!(
-                !self.no_worker,
-                "IVS delegation requires its durable delivery worker"
+        let private_invite_custody = std::sync::Arc::new(
+            coauth_backend::services::third_party_invite::PrivateInviteCustody::new(
+                PgRepositoryFactory::new(pool.clone()),
+                encrypter.clone(),
+            ),
+        );
+        if !self.no_worker {
+            shutdown.task_tracker().spawn(
+                private_invite_custody
+                    .clone()
+                    .run(shutdown.soft_shutdown_token()),
             );
-            let notifications =
-                notification_center_from_config(&config.email, &config.sms, &templates)?;
-            let mailer = notifications
-                .email()
-                .cloned()
-                .context("IVS delegation requires an email transport")?;
-            let provider =
-                coauth_backend::services::third_party_invite::ThirdPartyInviteRuntime::connect(
-                    PgRepositoryFactory::new(pool.clone()),
-                    encrypter.clone(),
-                    arkret_config.clone(),
-                    mailer,
-                )
-                .await?;
-            shutdown
-                .task_tracker()
-                .spawn(provider.clone().run(shutdown.soft_shutdown_token()));
-            Some(provider)
-        } else {
-            None
-        };
+        }
+        let private_invite_custody = Some(private_invite_custody);
 
         let mut listeners_config = config.http.listeners.clone();
         if let Some(metrics_listener) = metrics_listener_from_env()? {
@@ -314,7 +302,7 @@ impl Options {
                 keyring,
                 cookie_manager,
                 encrypter,
-                third_party_invite_provider,
+                private_invite_custody,
                 url_builder,
                 station_admin,
                 connector_registry,

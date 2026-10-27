@@ -58,5 +58,7 @@ repository_impl! {
             -> Result<bool, Self::Error>;
         /// Claim one due delivery/cleanup record, skipping concurrent workers.
         async fn due(&mut self, now: DateTime<Utc>) -> Result<Option<PrivateInviteRecord>, Self::Error>;
+        /// Lock one expired local custody record without scheduling delivery.
+        async fn expired(&mut self, now: DateTime<Utc>) -> Result<Option<PrivateInviteRecord>, Self::Error>;
     }
 }

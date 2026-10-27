@@ -351,9 +351,9 @@ sha1 = "0.10.6"
 sha2 = { version = "0.10.9", features = ["oid"] }
 signature = { version = "2.2.0", features = ["std", "rand_core"] }
 socket2 = "0.6.5"
-# coland deployment-internal S2S contracts (capability fanout DTOs shared
+# SDK deployment-private HTTP carriers (capability fanout DTOs shared
 # with the Station; SOL-DRY-03).
-coland-contracts = { path = "../coland/crates/contracts" }
+arkret-deployment-contracts = { path = "../arkret-rust-sdk/crates/deployment-contracts" }
 spki = { version = "0.7.3", features = ["std"] }
 subtle = "2.6.1"
 tempfile = "3.23.0"

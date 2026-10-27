@@ -585,13 +585,13 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         .clone();
     let projection_principal = register.principal_id.clone();
     Mock::given(method("POST"))
-        .and(path(coland_contracts::ACCOUNT_PROJECTION_PATH))
+        .and(path(arkret_deployment_contracts::ACCOUNT_PROJECTION_PATH))
         .and(wiremock::matchers::header(
             "authorization",
             "Bearer registration-projection-bearer",
         ))
         .and(move |request: &wiremock::Request| {
-            let projection: coland_contracts::AccountProjectionRequestBody =
+            let projection: arkret_deployment_contracts::AccountProjectionRequestBody =
                 request.body_json().unwrap();
             projection.principal_id == projection_principal
         })
@@ -599,7 +599,7 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         .expect(1)
         .mount(&peer)
         .await;
-    let localparts_path = coland_contracts::account_localparts_endpoint(
+    let localparts_path = arkret_deployment_contracts::account_localparts_endpoint(
         peer.uri().parse().unwrap(),
         &register.principal_id,
     )

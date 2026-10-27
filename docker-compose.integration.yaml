@@ -108,14 +108,17 @@ services:
     container_name: arkret-coland
     profiles: ["downstream"]
     depends_on:
+      coland-postgres:
+        condition: service_healthy
       coauth:
         condition: service_healthy
     environment:
-      # coland reads `DATABASE_URL` (or `COLAND_DATABASE_URL`) and
-      # `COLAND_BIND`; it has no coauth-issuer environment setting.
-      DATABASE_URL: postgresql://arkret:arkret@postgres:5432/arkret
+      # The Station owns a separate database instance and account.
+      COLAND_DATABASE_URL: postgresql://coland:coland@coland-postgres:5432/coland
       COLAND_BIND: 0.0.0.0:8698
       RUST_LOG: info
+    volumes:
+      - coland_data:/var/lib/coland
     ports:
       - "58008:8698"
     # Same distroless reasoning as coauth — assume coland ships its own
@@ -127,6 +130,21 @@ services:
       timeout: 5s
       retries: 30
       start_period: 15s
+
+  coland-postgres:
+    image: postgres:16-alpine
+    profiles: ["downstream"]
+    environment:
+      POSTGRES_USER: coland
+      POSTGRES_PASSWORD: coland
+      POSTGRES_DB: coland
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coland -d coland"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - coland_pgdata:/var/lib/postgresql/data
 
   codmin:
     image: ${CODMIN_IMAGE:-codmin:dev}
@@ -154,3 +172,5 @@ services:
 volumes:
   coauth_keys:
   pgdata:
+  coland_pgdata:
+  coland_data:

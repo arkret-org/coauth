@@ -13,6 +13,7 @@
 // `coauth_admin_types::integration_manifest_admin` so the codmin admin SPA
 // decodes them through the same typed shape. The `integration_describe`
 // endpoint below returns the shared `IntegrationManifest` directly.
+use arkret_deployment_contracts::admin::AccountLocalpartAddRequestBody;
 use arkret_identifiers::{DeviceId, Did, DidCoreId};
 use arkret_models_collaboration::objects::account_status::AccountStatus;
 use coauth_admin_types::{
@@ -25,7 +26,6 @@ use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::{
     AccessTokenRequest, AccessTokenResponse, AuthorizationCodeGrant as OAuthAuthorizationCodeGrant,
 };
-use coland_contracts::admin::AccountLocalpartAddRequestBody;
 use http::header::ACCEPT;
 use mime::APPLICATION_JSON;
 use salvo::prelude::*;
@@ -128,7 +128,7 @@ fn validate_returned_nonce(grant_nonce: Option<&str>, expected_nonce: &str) -> R
 fn coland_account_register_endpoint(principal_endpoint: &str) -> Result<url::Url, String> {
     let base = url::Url::parse(principal_endpoint)
         .map_err(|error| format!("invalid Station endpoint: {error}"))?;
-    base.join(coland_contracts::ACCOUNT_PROJECTION_PATH)
+    base.join(arkret_deployment_contracts::ACCOUNT_PROJECTION_PATH)
         .map_err(|error| format!("invalid principal account register endpoint: {error}"))
 }
 
@@ -140,7 +140,7 @@ fn coland_account_localparts_endpoint(
         .map_err(|error| format!("invalid Station endpoint: {error}"))?;
     let principal_id = DidCoreId::new(principal_id.to_owned())
         .map_err(|error| format!("invalid principal id: {error}"))?;
-    coland_contracts::account_localparts_endpoint(endpoint, &principal_id)
+    arkret_deployment_contracts::account_localparts_endpoint(endpoint, &principal_id)
         .map_err(|error| error.to_string())
 }
 
@@ -148,8 +148,8 @@ fn coland_account_register_body(
     principal: &VerifiedPrincipalIdentity,
     display_name: Option<&str>,
     device_id: Option<&str>,
-) -> Result<coland_contracts::AccountProjectionRequestBody, String> {
-    Ok(coland_contracts::AccountProjectionRequestBody {
+) -> Result<arkret_deployment_contracts::AccountProjectionRequestBody, String> {
+    Ok(arkret_deployment_contracts::AccountProjectionRequestBody {
         principal_id: principal.principal_id.clone(),
         did: principal.did.clone(),
         display_name: display_name.map(ToOwned::to_owned),
@@ -166,7 +166,7 @@ async fn send_coland_account_register(
     http_client: &reqwest::Client,
     endpoint: &url::Url,
     bearer: &str,
-    body: &coland_contracts::AccountProjectionRequestBody,
+    body: &arkret_deployment_contracts::AccountProjectionRequestBody,
 ) -> Result<(reqwest::StatusCode, String), String> {
     let body_bytes = arkret_canonical::canonical_json_bytes(body)
         .map_err(|error| format!("canonicalize principal account register request: {error}"))?;
@@ -1400,7 +1400,7 @@ mod tests {
     const TEST_PRINCIPAL_DID: &str = "did:webvh:scid:local.host:webvh:01k";
     const TEST_DEVICE_ID: &str = "ak:device:01964137-0000-7000-8000-000000000001";
     const TEST_OPERATION_BEARER: &str = "account-operation-secret";
-    const ACCOUNT_REGISTER_PATH: &str = coland_contracts::ACCOUNT_PROJECTION_PATH;
+    const ACCOUNT_REGISTER_PATH: &str = arkret_deployment_contracts::ACCOUNT_PROJECTION_PATH;
 
     fn test_principal() -> VerifiedPrincipalIdentity {
         let principal_id = DidCoreId::new(TEST_PRINCIPAL_ID).unwrap();

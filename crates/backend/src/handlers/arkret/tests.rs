@@ -55,9 +55,11 @@ async fn invite_present_negative_fixture(
     let error = if req.query::<String>("failure").as_deref() == Some("rate_limited") {
         ArkretRouteError::rate_limited("invitation rate exceeded", 60_000)
     } else if req.query::<String>("failure").as_deref() == Some("unsupported_join_rule") {
-        third_party_invite::present_guard_failure(coland_storage::PersistenceError::Conflict(
-            "unsupported_join_rule: private gate detail".into(),
-        ))
+        ArkretRouteError::coded(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unsupported_join_rule",
+            "join rule is unsupported",
+        )
     } else {
         ArkretRouteError::coded(
             StatusCode::NOT_FOUND,

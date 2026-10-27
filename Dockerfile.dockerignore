@@ -15,6 +15,16 @@
 **/.env.*
 **/*.log
 
+# Repository-root evidence may contain private test custody. Formal Spec
+# artifacts under arkret-spec/spec/v1/artifacts remain source inputs.
+coauth/artifacts/
+coland/artifacts/
+cotest/artifacts/
+arkret-rust-sdk/artifacts/
+garth/artifacts/
+floria/artifacts/
+bridges/artifacts/
+
 # Locally provisioned credentials and generated integration configuration.
 # Credential mounts live at context/repository roots; nested Rust modules
 # named secrets are source inputs.
