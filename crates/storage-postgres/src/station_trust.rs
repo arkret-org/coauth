@@ -207,23 +207,6 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             .map_err(Into::into)
     }
 
-    #[tracing::instrument(name = "db.station_trust.find_by_name_for_share", skip_all, err)]
-    async fn find_by_name_for_share(
-        &mut self,
-        name: &str,
-    ) -> Result<Option<StationTrustEnrollment>, Self::Error> {
-        station_trust_enrollments::table
-            .find(name)
-            .select(EnrollmentRow::as_select())
-            .for_share()
-            .first::<EnrollmentRow>(self.conn)
-            .await
-            .optional()?
-            .map(TryInto::try_into)
-            .transpose()
-            .map_err(Into::into)
-    }
-
     #[tracing::instrument(name = "db.station_trust.enroll", skip_all, err)]
     async fn enroll(
         &mut self,

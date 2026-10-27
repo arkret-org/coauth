@@ -202,13 +202,6 @@ repository_impl! {
             name: &str,
         ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
 
-        /// Lock the original binding through the caller's transaction, so
-        /// issuer work serializes with explicit replacement or revocation.
-        async fn find_by_name_for_share(
-            &mut self,
-            name: &str,
-        ) -> Result<Option<StationTrustEnrollment>, Self::Error>;
-
         /// Insert a new enrollment without overwriting either unique key.
         /// Returns `None` when a concurrent insert won the name or endpoint;
         /// callers must re-read and compare the complete verified tuple.
