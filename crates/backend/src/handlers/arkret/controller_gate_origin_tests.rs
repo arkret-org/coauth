@@ -1,6 +1,5 @@
 //! Actual Account Authority issuance connected to the PostgreSQL Origin pipeline.
 use diesel_async::RunQueryDsl as _;
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 use super::*;
 use crate::handlers::test_utils::{TestState, setup, unique_test_nonce};
@@ -16,83 +15,123 @@ async fn origin_cut(pool: &coland_storage_postgres::PgPool) -> serde_json::Value
         .get_result::<Cut>(&mut *connection).await.unwrap().value
 }
 
-// This transport adapter delegates every request to the registered real router.
-// Only the adversarial response branch substitutes a correctly signed wrong binding.
-async fn serve_gate(listener: tokio::net::TcpListener, state: TestState, wrong_binding: bool) {
-    let (mut stream, _) = listener.accept().await.unwrap();
-    let mut bytes = Vec::new();
-    let mut buffer = [0; 4096];
-    let header_end = loop {
-        let count = stream.read(&mut buffer).await.unwrap();
-        assert!(count > 0);
-        bytes.extend_from_slice(&buffer[..count]);
-        assert!(bytes.len() < 16384);
-        if let Some(position) = bytes.windows(4).position(|value| value == b"\r\n\r\n") {
-            break position + 4;
-        }
-    };
-    let headers = String::from_utf8(bytes[..header_end].to_vec()).unwrap();
-    assert!(headers.starts_with("POST /_coauth/internal/controller-gate-attestations HTTP/1.1"));
-    let header = |name: &str| {
-        headers
-            .lines()
-            .find_map(|line| {
-                line.split_once(':')
-                    .filter(|(key, _)| key.eq_ignore_ascii_case(name))
-                    .map(|(_, value)| value.trim().to_owned())
-            })
-            .unwrap()
-    };
-    let length: usize = header("content-length").parse().unwrap();
-    assert!(length < 8192);
-    while bytes.len() < header_end + length {
-        let count = stream.read(&mut buffer).await.unwrap();
-        assert!(count > 0);
-        bytes.extend_from_slice(&buffer[..count]);
+// Component-only capability adapter to the actual issuer router and ledger.
+// The adversarial branch changes a real signed attestation's binding and signs
+// it with the component key; it never establishes native operation coverage.
+struct GateAuthority {
+    station_id: arkret_wire::DidCoreId,
+    namespace: String,
+    state: TestState,
+    wrong_binding: bool,
+}
+impl coland_contracts::account_authority::LocalAccountAuthority for GateAuthority {
+    fn stage_device_pairing(
+        &self,
+        _: arkret_models_collaboration::device_pairing::DevicePairingStageRequestBody,
+        _: String,
+    ) -> coland_contracts::account_authority::AccountAuthorityCall<
+        '_,
+        arkret_models_collaboration::device_pairing::DevicePairingStageResponseBody,
+        coland_contracts::account_authority::AccountAuthorityPairingError,
+    > {
+        Box::pin(async {
+            Err(coland_contracts::account_authority::AccountAuthorityPairingError::Unavailable)
+        })
     }
-    let body = String::from_utf8(bytes[header_end..header_end + length].to_vec()).unwrap();
-    let input: ControllerAccountGateIssuanceInput = serde_json::from_str(&body).unwrap();
-    assert_eq!(
-        body.as_bytes(),
-        arkret_canonical::canonical_json_bytes(&input).unwrap()
-    );
-    let response = state
-        .request(
-            hyper::Request::post("/_coauth/internal/controller-gate-attestations")
-                .header("Authorization", header("authorization"))
-                .header("Content-Type", "application/json")
-                .body(body)
-                .unwrap(),
-        )
-        .await;
-    let mut body = response.body().clone();
-    if wrong_binding {
-        assert_eq!(response.status(), hyper::StatusCode::OK);
-        let mut outcome: ControllerAccountGateAttestationIssueResponseBody =
-            serde_json::from_str(&body).unwrap();
-        let gate = &mut outcome.controller_account_gate_attestation;
-        gate.principal_id =
-            arkret_wire::DidCoreId::new("ak:did_core:web:wrong-controller.example").unwrap();
-        gate.basis_digest = gate.expected_basis_digest().unwrap();
-        gate.proof.jws = arkret_wire::NonEmptyString::new(
-            arkret_signatures::sign_ed25519_detached_jws(
-                &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
-                    &state.keyring.account_authority_seed().unwrap(),
-                ),
-                &gate.signing_bytes().unwrap(),
-            )
-            .unwrap(),
-        )
-        .unwrap();
-        body = arkret_canonical::canonical_json_string(&outcome).unwrap();
+    fn resolve_device_pairing(
+        &self,
+        _: arkret_models_collaboration::device_pairing::DevicePairingResolveRequestBody,
+    ) -> coland_contracts::account_authority::AccountAuthorityCall<
+        '_,
+        arkret_models_collaboration::device_pairing::DevicePairingBootstrap,
+        coland_contracts::account_authority::AccountAuthorityPairingError,
+    > {
+        Box::pin(async {
+            Err(coland_contracts::account_authority::AccountAuthorityPairingError::Unavailable)
+        })
     }
-    let head = format!(
-        "HTTP/1.1 {} fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response.status().as_u16(),
-        body.len()
-    );
-    stream.write_all(head.as_bytes()).await.unwrap();
-    stream.write_all(body.as_bytes()).await.unwrap();
+    fn device_pairing_status(
+        &self,
+        _: arkret_models_collaboration::device_pairing::DevicePairingStatusRequestBody,
+    ) -> coland_contracts::account_authority::AccountAuthorityCall<
+        '_,
+        arkret_models_collaboration::device_pairing::DevicePairingStatusResponseBody,
+        coland_contracts::account_authority::AccountAuthorityPairingError,
+    > {
+        Box::pin(async {
+            Err(coland_contracts::account_authority::AccountAuthorityPairingError::Unavailable)
+        })
+    }
+
+    fn station_id(&self) -> &arkret_wire::DidCoreId {
+        &self.station_id
+    }
+    fn cache_namespace(&self) -> &str {
+        &self.namespace
+    }
+    fn validate_session_grant(
+        &self,
+        _: arkret_models_collaboration::session_grants::SessionGrantValidationInput,
+    ) -> coland_contracts::account_authority::AccountAuthorityCall<
+        '_,
+        arkret_models_collaboration::session_grants::SessionGrantValidationResponseBody,
+    > {
+        Box::pin(async { Err(coland_contracts::account_authority::AccountAuthorityUnavailable) })
+    }
+    fn terminate_authentication_session(
+        &self,
+        _: arkret_models_collaboration::session_grants::AuthenticationSessionTerminationInput,
+    ) -> coland_contracts::account_authority::AccountAuthorityCall<
+        '_,
+        arkret_models_collaboration::session_grants::AuthenticationSessionTerminationResponseBody,
+    > {
+        Box::pin(async { Err(coland_contracts::account_authority::AccountAuthorityUnavailable) })
+    }
+    fn issue_controller_gate(
+        &self,
+        input: ControllerAccountGateIssuanceInput,
+    ) -> coland_contracts::account_authority::AccountAuthorityCall<
+        '_,
+        ControllerAccountGateAttestationIssueResponseBody,
+    > {
+        Box::pin(async move {
+            let body = arkret_canonical::canonical_json_string(&input).unwrap();
+            let response = self
+                .state
+                .request(
+                    hyper::Request::post("/_coauth/internal/controller-gate-attestations")
+                        .header(
+                            "Authorization",
+                            "Bearer public-connected-gate-fixture-token",
+                        )
+                        .header("Content-Type", "application/json")
+                        .body(body)
+                        .unwrap(),
+                )
+                .await;
+            assert_eq!(response.status(), hyper::StatusCode::OK);
+            let mut outcome: ControllerAccountGateAttestationIssueResponseBody =
+                serde_json::from_str(response.body()).unwrap();
+            if self.wrong_binding {
+                let gate = &mut outcome.controller_account_gate_attestation;
+                gate.principal_id =
+                    arkret_wire::DidCoreId::new("ak:did_core:web:wrong-controller.example")
+                        .unwrap();
+                gate.basis_digest = gate.expected_basis_digest().unwrap();
+                gate.proof.jws = arkret_wire::NonEmptyString::new(
+                    arkret_signatures::sign_ed25519_detached_jws(
+                        &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(
+                            &self.state.keyring.account_authority_seed().unwrap(),
+                        ),
+                        &gate.signing_bytes().unwrap(),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+            }
+            Ok(outcome)
+        })
+    }
 }
 
 #[tokio::test]
@@ -197,31 +236,29 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
     );
     let initial = origin_cut(&fixture.pool).await;
     let mut evidence = None;
-    for (credential, wrong_binding) in [
-        ("wrong-public-fixture-token", false),
-        (TOKEN, true),
-        (TOKEN, false),
-    ] {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let address = listener.local_addr().unwrap();
-        let mut config = coland_http::config::AppConfig {
+    for (configured, wrong_binding) in [(false, false), (true, true), (true, false)] {
+        let config = coland_http::config::AppConfig {
             seed_demo_data: false,
             development_mode: true,
             public_base_url: endpoint.to_string(),
-            account_authority_url: Some(format!("http://{address}")),
+            account_authority_url: Some("https://component-aa.example".to_owned()),
             ..coland_http::config::AppConfig::test_default()
         };
-        config.register_test_internal_authority_channel(credential);
         let origin = fixture.app_state(config).await;
-        let server = tokio::spawn(serve_gate(listener, authority.clone(), wrong_binding));
+        let origin = if configured {
+            origin
+                .with_local_account_authority(std::sync::Arc::new(GateAuthority {
+                    station_id: fixture.station.clone(),
+                    namespace: ulid::Ulid::generate().to_string(),
+                    state: authority.clone(),
+                    wrong_binding,
+                }))
+                .unwrap()
+        } else {
+            origin
+        };
         let result = coland_http::test_fresh_producer_agent_evidence(&origin, &event).await;
-        tokio::time::timeout(std::time::Duration::from_secs(20), server)
-            .await
-            .unwrap_or_else(|_| {
-                panic!("Origin did not complete the registered gate call: {result:?}")
-            })
-            .unwrap();
-        if credential != TOKEN || wrong_binding {
+        if !configured || wrong_binding {
             assert!(
                 result.is_err(),
                 "refusal or mismatched binding cannot mint evidence"

@@ -482,8 +482,8 @@ async fn mint_generates_independent_32_byte_salts_and_exact_token_commitments() 
             actual.update(secret.token.as_bytes());
             let expected = Hash::new(format!("sha256:{:x}", actual.finalize())).unwrap();
             assert_eq!(
-                custody.public.third_party_invite.token_commitment.as_ref(),
-                Some(&expected)
+                &custody.public.third_party_invite.token_commitment,
+                &expected
             );
             previous_salts.push(secret.salt);
             cold.cancel().await.unwrap();

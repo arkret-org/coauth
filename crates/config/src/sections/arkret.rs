@@ -165,12 +165,31 @@ impl std::fmt::Debug for ThirdPartyInviteProviderConfig {
     }
 }
 
+/// Explicit read-only delegation to the owning Station's actual erasure completions.
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AccountPrivateErasureCompletionConfig {
+    /// Exact owning Station database, never inferred from the issuer database.
+    pub database_url: String,
+}
+
+impl std::fmt::Debug for AccountPrivateErasureCompletionConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AccountPrivateErasureCompletionConfig")
+            .field("database_url", &"[redacted]")
+            .finish()
+    }
+}
+
 /// Arkret-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ArkretConfig {
+    /// Read-only completion index delegation; actual packages use registered receipt GET.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_private_erasure_completions: Option<AccountPrivateErasureCompletionConfig>,
     /// Explicit same-Station IVS delegation. Absence disables all IVS routes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub third_party_invite_provider: Option<ThirdPartyInviteProviderConfig>,
@@ -311,6 +330,7 @@ fn is_false(value: &bool) -> bool {
 impl Default for ArkretConfig {
     fn default() -> Self {
         Self {
+            account_private_erasure_completions: None,
             third_party_invite_provider: None,
             stations: Vec::new(),
             owning_station: None,
@@ -467,6 +487,16 @@ impl ConfigurationSection for ArkretConfig {
         &self,
         _figment: &figment::Figment,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
+        if let Some(delegation) = &self.account_private_erasure_completions {
+            let valid = url::Url::parse(&delegation.database_url)
+                .ok()
+                .is_some_and(|url| {
+                    matches!(url.scheme(), "postgres" | "postgresql") && url.fragment().is_none()
+                });
+            if !valid {
+                return Err(std::io::Error::other("arkret.account_private_erasure_completions.database_url must explicitly identify a PostgreSQL database").into());
+            }
+        }
         let min_ttl = Duration::try_seconds(SESSION_GRANT_TTL_MIN_SECONDS).unwrap();
         let max_ttl = Duration::try_seconds(SESSION_GRANT_TTL_MAX_SECONDS).unwrap();
         if self.session_grant_ttl < min_ttl || self.session_grant_ttl > max_ttl {
