@@ -149,31 +149,12 @@ impl RuntimeOwningStationIdentity {
     }
 }
 
-/// Explicit same-Station delegation to private IVS custody and delivery.
-#[derive(Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct ThirdPartyInviteProviderConfig {
-    /// Database of the explicitly delegated owning Station. Never inferred
-    /// from Coauth's private account database or from an HTTP caller.
-    pub governance_database_url: String,
-}
-impl std::fmt::Debug for ThirdPartyInviteProviderConfig {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ThirdPartyInviteProviderConfig")
-            .field("governance_database_url", &"[redacted]")
-            .finish()
-    }
-}
-
 /// Arkret-specific deployment settings layered on top of the generic OIDC
 /// and account-management configuration.
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ArkretConfig {
-    /// Explicit same-Station IVS delegation. Absence disables all IVS routes.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub third_party_invite_provider: Option<ThirdPartyInviteProviderConfig>,
     /// Station audiences trusted to consume session grants and admin
     /// tokens emitted by coauth. Every Station that configures an internal
     /// authority bearer must use a credential unique within this list.
@@ -311,7 +292,6 @@ fn is_false(value: &bool) -> bool {
 impl Default for ArkretConfig {
     fn default() -> Self {
         Self {
-            third_party_invite_provider: None,
             stations: Vec::new(),
             owning_station: None,
             deployment_profile: DeploymentProfileConfig::default(),
@@ -1114,5 +1094,23 @@ mod tests {
             ..ArkretConfig::default()
         };
         assert!(config.validate(&figment).is_err());
+    }
+}
+
+#[cfg(test)]
+mod service_isolation_tests {
+    use super::*;
+
+    #[test]
+    fn foreign_governance_database_configuration_is_rejected() {
+        let mut config = serde_json::to_value(ArkretConfig::default()).unwrap();
+        serde_json::from_value::<ArkretConfig>(config.clone())
+            .expect("existing HTTP-only configuration remains valid");
+        config["third_party_invite_provider"] = serde_json::json!({
+            "governance_database_url": "postgresql://unreachable.invalid/foreign"
+        });
+        let error = serde_json::from_value::<ArkretConfig>(config).unwrap_err();
+        assert!(error.to_string().contains("unknown field"));
+        assert!(error.to_string().contains("third_party_invite_provider"));
     }
 }

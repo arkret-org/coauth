@@ -1,47 +1,58 @@
-//! Deployment-private IVS custody. Wire DTOs and transcripts belong to the SDK.
-//! Callers authenticate before entering this module and commit its repository
-//! transaction before exposing a result. No function authors a Realm Event.
+//! Coauth-owned encrypted custody. The provider is withdrawn.
+//! Only expiry and local URL-credential scrubbing are production capabilities.
+//! Issuance/redemption helpers are compiled only for component regressions.
 
-use arkret_models_collaboration::governance::membership_invite::{
-    InviteClaimBindingProof, InviteClaimBindingProofBody,
-};
 use arkret_models_collaboration::governance::third_party_invite::*;
-use arkret_wire::{Did, DidUrl, Hash};
-use chrono::{DateTime, Duration, Utc};
+#[cfg(test)]
+use arkret_wire::Did;
+use arkret_wire::{DidUrl, Hash};
+use chrono::Utc;
+#[cfg(test)]
+use chrono::{DateTime, Duration};
 use coauth_data::storage::third_party_invite::PrivateInviteRecord;
 use coauth_data::{BoxRepository, RepositoryAccess};
 use coauth_keyring::Encrypter;
-use ed25519_dalek::{Signer, SigningKey};
+#[cfg(test)]
+use ed25519_dalek::SigningKey;
 use hmac::{Hmac, Mac};
+#[cfg(test)]
 use rand_core::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, Zeroizing};
-pub(crate) mod authentication;
 mod runtime;
 #[cfg(test)]
 mod tests;
-pub use runtime::ThirdPartyInviteRuntime;
+pub use runtime::PrivateInviteCustody;
 
 /// Deliberately opaque errors: no raw request, 3PID, token or crypto failure detail.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum InviteError {
+    #[cfg(test)]
     #[error("third-party invite unavailable")]
     NotFound,
+    #[cfg(test)]
     #[error("original invite intent differs")]
     DuplicateConflict,
+    #[cfg(test)]
     #[error("invite provisioning is already bound")]
     AlreadyBound,
+    #[cfg(test)]
     #[error("acceptance attestation is stale")]
     AcceptanceStale,
+    #[cfg(test)]
     #[error("invite provisioning activation expired")]
     ProvisioningExpired,
+    #[cfg(test)]
     #[error("accepted invite material differs")]
     MaterialMismatch,
+    #[cfg(test)]
     #[error("invitation issuance rate exceeded")]
     RateLimited,
+    #[cfg(test)]
     #[error("unactivated invite quota exceeded")]
     QuotaExceeded,
+    #[cfg(test)]
     #[error("delivery scheme is unsupported")]
     UnsupportedFeature,
     #[error("private invite custody failed")]
@@ -93,12 +104,14 @@ pub(crate) struct Custody {
 pub(crate) fn digest(bytes: impl AsRef<[u8]>) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
+#[cfg(test)]
 fn random_bytes(rng: &mut dyn RngCore) -> [u8; 32] {
     let mut b = [0; 32];
     rng.fill_bytes(&mut b);
     b
 }
 // No 0/O/1/I/L. Rejection sampling preserves uniform draws.
+#[cfg(test)]
 fn random_code(rng: &mut dyn RngCore, len: usize) -> String {
     const ALPHABET: &[u8] = b"23456789ABCDEFGHJKMNPQRSTUVWXYZ";
     (0..len)
@@ -113,6 +126,7 @@ fn random_code(rng: &mut dyn RngCore, len: usize) -> String {
         })
         .collect()
 }
+#[cfg(test)]
 fn token_mac(pepper: &[u8; 32], token: &str) -> String {
     let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(pepper).expect("fixed HMAC key");
     mac.update(token.as_bytes());
@@ -178,6 +192,7 @@ pub(crate) async fn update(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn delivery_address(
     target: &str,
 ) -> Result<coauth_messaging::email::Address, InviteError> {
@@ -199,6 +214,7 @@ pub(crate) fn delivery_address(
     address.parse().map_err(|_| InviteError::NotFound)
 }
 
+#[cfg(test)]
 pub(crate) async fn provision_verified(
     repo: &mut BoxRepository,
     encrypter: &Encrypter,
@@ -352,6 +368,7 @@ pub(crate) async fn provision_verified(
     Ok(public)
 }
 
+#[cfg(test)]
 pub(crate) async fn activate_verified(
     repo: &mut BoxRepository,
     encrypter: &Encrypter,
@@ -409,6 +426,7 @@ pub(crate) async fn activate_verified(
     Ok(outcome)
 }
 
+#[cfg(test)]
 pub(crate) fn status(c: &Custody) -> ThirdPartyInviteProvisioningStatusResponseBody {
     ThirdPartyInviteProvisioningStatusResponseBody {
         provisioning_id: c.public.provisioning_id.clone(),
@@ -434,67 +452,4 @@ pub(crate) fn matches_token(c: &Custody, token: &str) -> bool {
     let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&secret.pepper).expect("fixed HMAC key");
     mac.update(token.as_bytes());
     mac.verify_slice(&expected).is_ok()
-}
-
-/// Called only after the separate current authority guard has been acquired.
-pub(crate) async fn consume_locked(
-    repo: &mut BoxRepository,
-    row: PrivateInviteRecord,
-    mut c: Custody,
-    encrypter: &Encrypter,
-    request: &ThirdPartyInvitePresentRequestBody,
-    now: DateTime<Utc>,
-) -> Result<ThirdPartyInvitePresentResponseBody, InviteError> {
-    if c.state != ThirdPartyInviteProvisioningState::Activated
-        || now >= c.public.expires_at
-        || request.realm_id != c.public.realm_id
-        || request.validate_minimal().is_err()
-        || !matches_token(&c, &request.invite_token)
-    {
-        if c.public.third_party_invite.oob_code_kind == ThirdPartyInviteOobKind::Lookup
-            && c.state == ThirdPartyInviteProvisioningState::Activated
-        {
-            c.failed_lookup_attempts += 1;
-            if c.failed_lookup_attempts >= 3 {
-                c.state = ThirdPartyInviteProvisioningState::Revoked;
-                c.secrets = None;
-            }
-            update(repo, row, &c, encrypter).await?;
-        }
-        return Err(InviteError::NotFound);
-    }
-    let activation = c.activation.as_ref().ok_or(InviteError::Internal)?;
-    let commitment = c.public.third_party_invite.token_commitment.clone();
-    let mut proof = InviteClaimBindingProof::new(
-        c.public.third_party_invite.verification_id.clone(),
-        request.subject_account_id.clone(),
-        request.realm_id.clone(),
-        &request.claim_nonce,
-        arkret_canonical::format_timestamp_canonical(c.public.expires_at),
-        c.verification_method.clone(),
-        "unsigned",
-    );
-    let body = InviteClaimBindingProofBody::new(
-        &proof,
-        activation.invite_id.clone(),
-        commitment.clone(),
-        c.invite_digest.clone().ok_or(InviteError::Internal)?,
-    )
-    .map_err(|_| InviteError::Internal)?;
-    let secret = c.secrets.as_ref().ok_or(InviteError::NotFound)?;
-    proof.signature = arkret_canonical::base64url_encode(
-        SigningKey::from_bytes(&secret.signing_seed)
-            .sign(&body.canonical_bytes().map_err(|_| InviteError::Internal)?)
-            .to_bytes(),
-    );
-    let outcome = ThirdPartyInvitePresentResponseBody {
-        invite_id: activation.invite_id.clone(),
-        token_commitment: commitment,
-        binding_proof: proof,
-    };
-    c.state = ThirdPartyInviteProvisioningState::Consumed;
-    c.secrets = None;
-    // No optional proof replay window: consumed input is always exhausted.
-    update(repo, row, &c, encrypter).await?;
-    Ok(outcome)
 }

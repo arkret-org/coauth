@@ -1,6 +1,7 @@
 # Top-level build artefacts (cargo + dx).
 target/
 dist/
+artifacts/
 
 # Nested target/ wherever it lives — workspace member targets, claude
 # worktree targets, etc. The glob `target/` alone only matches the

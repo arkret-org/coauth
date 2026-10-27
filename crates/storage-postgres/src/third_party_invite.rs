@@ -147,6 +147,13 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             .bind::<Text,_>(bucket).bind::<Timestamptz,_>(window).bind::<BigInt,_>(maximum).load::<Count>(self.conn).await?;
         Ok(!rows.is_empty())
     }
+    async fn expired(
+        &mut self,
+        now: DateTime<Utc>,
+    ) -> Result<Option<PrivateInviteRecord>, Self::Error> {
+        Ok(sql_query("SELECT * FROM third_party_invite_private WHERE (state='provisioned' AND activation_expires_at<=$1) OR (state='activated' AND expires_at<=$1) ORDER BY expires_at FOR UPDATE SKIP LOCKED LIMIT 1")
+            .bind::<Timestamptz,_>(now).get_result::<Row>(self.conn).await.optional()?.map(Into::into))
+    }
     async fn due(
         &mut self,
         now: DateTime<Utc>,

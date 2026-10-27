@@ -115,9 +115,7 @@ sha1 = { workspace = true, features = ["oid"] }
 sha2 = { workspace = true }
 signature = { workspace = true }
 socket2 = { workspace = true }
-coland-contracts = { workspace = true }
-coland-storage = { path = "../../../coland/crates/storage" }
-coland-storage-postgres = { path = "../../../coland/crates/storage-postgres" }
+arkret-deployment-contracts = { workspace = true }
 subtle = { workspace = true }
 thiserror = { workspace = true }
 time = { workspace = true }

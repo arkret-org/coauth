@@ -1,268 +1,72 @@
-//! Explicit same-Station provider delegation and durable delivery recovery.
+//! Expiry cleanup for Coauth-owned invite custody; no foreign authority access.
 use std::sync::Arc;
 
 use coauth_data::RepositoryFactory;
-use coauth_messaging::email::Mailer;
 use coauth_storage_postgres::PgRepositoryFactory;
-use coland_storage::{
-    InviteCurrentStateStore, PersistenceError, ThirdPartyInviteProviderLivenessGuard,
-    ThirdPartyInviteProviderLivenessRequest,
-};
 
 use super::*;
 
-/// A configured provider shares the owning Station's authoritative storage,
-/// while private material remains in the separate Coauth database.
-pub struct ThirdPartyInviteRuntime {
+/// Coauth-owned encrypted custody cleanup; never a foreign authority provider.
+pub struct PrivateInviteCustody {
     pub(crate) factory: PgRepositoryFactory,
     pub(crate) encrypter: Encrypter,
-    pub(crate) config: coauth_config::ArkretConfig,
-    store: coland_storage_postgres::PgInviteCurrentStateStore,
-    mailer: Mailer,
 }
-impl ThirdPartyInviteRuntime {
-    /// Build only for explicit deployment delegation. The governing database
-    /// URL is never inferred from the account database or a request.
-    pub async fn connect(
-        factory: PgRepositoryFactory,
-        encrypter: Encrypter,
-        config: coauth_config::ArkretConfig,
-        mailer: Mailer,
-    ) -> anyhow::Result<Arc<Self>> {
-        anyhow::ensure!(
-            mailer.provider_binding_key() != "email.blackhole",
-            "IVS delegation requires actual out-of-band delivery"
-        );
-        let url = &config
-            .third_party_invite_provider
-            .as_ref()
-            .ok_or_else(|| anyhow::anyhow!("IVS delegation is absent"))?
-            .governance_database_url;
-        if url.trim().is_empty() {
-            anyhow::bail!("IVS governing database must be explicit");
-        }
-        let db = coland_storage_postgres::Db::connect(
-            Some(url),
-            coland_storage_postgres::PoolTuning {
-                max_size: Some(4),
-                acquire_timeout_seconds: Some(30),
-            },
-        )
-        .await?;
-        let pool = db
-            .pool
-            .ok_or_else(|| anyhow::anyhow!("IVS governing database unavailable"))?;
-        Ok(Arc::new(Self {
-            factory,
-            encrypter,
-            config,
-            store: coland_storage_postgres::PgInviteCurrentStateStore { pool },
-            mailer,
-        }))
+
+impl PrivateInviteCustody {
+    #[must_use]
+    /// Construct cleanup from this service's own repository and cipher.
+    pub fn new(factory: PgRepositoryFactory, encrypter: Encrypter) -> Self {
+        Self { factory, encrypter }
     }
-    pub(crate) async fn provision_guard(
-        &self,
-        request: &ThirdPartyInviteProvisionRequestBody,
-    ) -> Result<Box<dyn ThirdPartyInviteProviderLivenessGuard>, PersistenceError> {
-        let owning = self
-            .config
-            .runtime_owning_station_identity
-            .get()
-            .ok_or_else(|| {
-                PersistenceError::Conflict(
-                    "revision_unavailable: owning Station not verified".into(),
-                )
-            })?;
-        self.store
-            .acquire_third_party_invite_provision_device(request, &owning.station_id, &Utc::now)
-            .await
-    }
-    pub(crate) async fn guard(
-        &self,
-        c: &Custody,
-    ) -> Result<Box<dyn ThirdPartyInviteProviderLivenessGuard>, PersistenceError> {
-        let activation = c
-            .activation
-            .as_ref()
-            .ok_or_else(|| PersistenceError::NotFound("private invite unavailable".into()))?;
-        let owning = self
-            .config
-            .runtime_owning_station_identity
-            .get()
-            .ok_or_else(|| {
-                PersistenceError::Conflict(
-                    "revision_unavailable: owning Station not verified".into(),
-                )
-            })?;
-        if owning.station_id != c.public.third_party_invite.verification_id
-            || owning.station_id != c.public.inviter_account_id.station_id
-        {
-            return Err(PersistenceError::NotFound(
-                "private invite unavailable".into(),
-            ));
-        }
-        self.store
-            .acquire_third_party_invite_provider_liveness(
-                &ThirdPartyInviteProviderLivenessRequest {
-                    realm_id: c.public.realm_id.clone(),
-                    invite_id: activation.invite_id.clone(),
-                    inviter_account_id: c.public.inviter_account_id.clone(),
-                    third_party_invite: c.public.third_party_invite.clone(),
-                    expires_at: c.public.expires_at,
-                },
-                &owning.station_id,
-                &Utc::now,
-            )
-            .await
-    }
-    /// Run bounded polling under the server's managed cancellation lifecycle.
+
+    /// Expire local material under the managed shutdown lifecycle.
     pub async fn run(self: Arc<Self>, cancel: tokio_util::sync::CancellationToken) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
         loop {
             tokio::select! {
-                _=cancel.cancelled()=>return,
-                _=interval.tick()=>{
-                    if self.config.runtime_owning_station_identity.get().is_none() {continue;}
+                _ = cancel.cancelled() => return,
+                _ = interval.tick() => {
                     tokio::select! {
-                        _=cancel.cancelled()=>return,
-                        result=self.poll_once()=>{if result.is_err() {tracing::warn!("IVS delivery/cleanup attempt failed; durable intent retained");}}
+                        _ = cancel.cancelled() => return,
+                        result = self.poll_once() => {
+                            if result.is_err() {
+                                tracing::warn!("Private invite expiry cleanup failed");
+                            }
+                        }
                     }
                 }
             }
         }
     }
+
     async fn poll_once(&self) -> Result<(), InviteError> {
-        // Never hold the private row while acquiring a governance lock.
-        let mut preview = self.factory.create().await?;
-        let row = preview.third_party_invite().due(Utc::now()).await?;
-        preview.cancel().await?;
-        let Some(row) = row else {
-            return Ok(());
-        };
-        let c = decrypt(&row, &self.encrypter)?;
-        if c.state == ThirdPartyInviteProvisioningState::Provisioned {
-            let mut repo = self.factory.create().await?;
-            let Some(row) = repo.third_party_invite().find(&row.handle_digest).await? else {
-                return Ok(());
-            };
-            let mut c = decrypt(&row, &self.encrypter)?;
-            if c.state == ThirdPartyInviteProvisioningState::Provisioned
-                && Utc::now() >= c.public.activation_expires_at
-            {
-                c.state = ThirdPartyInviteProvisioningState::Expired;
-                c.secrets = None;
-                update(&mut repo, row, &c, &self.encrypter).await?;
-            }
-            repo.save().await?;
-            return Ok(());
-        }
-        if c.state != ThirdPartyInviteProvisioningState::Activated {
-            return Ok(());
-        }
-        // Private expiry cleanup does not depend on an available governance DB.
-        if Utc::now() >= c.public.expires_at {
-            let mut repo = self.factory.create().await?;
-            let found = repo.third_party_invite().find(&row.handle_digest).await?;
-            if let Some(row) = found {
-                let mut current = decrypt(&row, &self.encrypter)?;
-                if current.state == ThirdPartyInviteProvisioningState::Activated
-                    && Utc::now() >= current.public.expires_at
-                {
-                    current.state = ThirdPartyInviteProvisioningState::Expired;
-                    current.secrets = None;
-                    update(&mut repo, row, &current, &self.encrypter).await?;
-                }
-            }
-            repo.save().await?;
-            return Ok(());
-        }
-        let gate = self.guard(&c).await;
         let mut repo = self.factory.create().await?;
-        let Some(mut row) = repo.third_party_invite().find(&row.handle_digest).await? else {
-            return Ok(());
-        };
-        let mut c = decrypt(&row, &self.encrypter)?;
-        if c.state != ThirdPartyInviteProvisioningState::Activated {
+        let now = Utc::now();
+        let Some(row) = repo.third_party_invite().expired(now).await? else {
             repo.cancel().await?;
             return Ok(());
-        }
-        let guard = match gate {
-            Ok(guard) => guard,
-            Err(PersistenceError::NotFound(_)) => {
-                c.state = ThirdPartyInviteProvisioningState::Revoked;
-                c.secrets = None;
-                update(&mut repo, row, &c, &self.encrypter).await?;
-                repo.save().await?;
-                return Ok(());
-            }
-            Err(PersistenceError::Conflict(ref reason))
-                if reason.starts_with("unsupported_join_rule:") =>
-            {
-                // An unsupported policy pauses this handoff; it does not
-                // withdraw the accepted invite or destroy its original code.
-                row.deliver_after = Some(Utc::now() + Duration::seconds(30));
-                update(&mut repo, row, &c, &self.encrypter).await?;
-                repo.save().await?;
-                return Err(InviteError::UnsupportedFeature);
-            }
-            Err(_) => {
-                row.deliver_after = Some(Utc::now() + Duration::seconds(30));
-                update(&mut repo, row, &c, &self.encrypter).await?;
-                repo.save().await?;
-                return Err(InviteError::NotFound);
-            }
         };
-        let now = guard.observed_at();
-        if now >= c.public.expires_at {
-            c.state = ThirdPartyInviteProvisioningState::Expired;
-            c.secrets = None;
-        } else if c.delivery_state == Some(ThirdPartyInviteDeliveryState::Queued) {
-            let secret = c.secrets.as_ref().ok_or(InviteError::Internal)?;
-            let address = delivery_address(&secret.delivery_target)?;
-            let remaining = (c.public.expires_at - Utc::now())
-                .to_std()
-                .unwrap_or_default();
-            let deadline = remaining.min(std::time::Duration::from_secs(30));
-            let sent = tokio::time::timeout(
-                deadline,
-                self.mailer
-                    .send_third_party_invite_code(address.into(), &secret.token),
-            )
-            .await;
-
-            record_delivery_outcome(&mut c, &sent);
-            if !matches!(sent, Ok(Ok(_))) {
-                let (failure_class, provider_status) = delivery_failure_boundary(&sent);
-                // Never format provider errors: they may contain the target,
-                // request URL, code, raw response body or arbitrary extensions.
-                tracing::warn!(
-                    failure_class,
-                    provider_status,
-                    attempt = c.delivery_attempts,
-                    "IVS delivery transport did not confirm success; original retry schedule retained"
-                );
+        let mut custody = decrypt(&row, &self.encrypter)?;
+        let expired = match &custody.state {
+            ThirdPartyInviteProvisioningState::Provisioned => {
+                now >= custody.public.activation_expires_at
             }
+            ThirdPartyInviteProvisioningState::Activated => now >= custody.public.expires_at,
+            _ => false,
+        };
+        if expired {
+            custody.state = ThirdPartyInviteProvisioningState::Expired;
+            custody.secrets = None;
+            update(&mut repo, row, &custody, &self.encrypter).await?;
+            repo.save().await?;
+        } else {
+            repo.cancel().await?;
         }
-        if Utc::now() >= c.public.expires_at {
-            c.state = ThirdPartyInviteProvisioningState::Expired;
-            c.secrets = None;
-        }
-        row.deliver_after = Some(
-            now + Duration::seconds(
-                if c.delivery_state == Some(ThirdPartyInviteDeliveryState::Queued) {
-                    30 * (1_i64 << c.delivery_attempts.min(3))
-                } else {
-                    30
-                },
-            ),
-        );
-        update(&mut repo, row, &c, &self.encrypter).await?;
-        repo.save().await?;
-        guard.finish().await.map_err(|_| InviteError::Internal)?;
         Ok(())
     }
 }
 
+#[cfg(test)]
 fn record_delivery_outcome(
     custody: &mut Custody,
     result: &Result<
@@ -287,6 +91,7 @@ fn record_delivery_outcome(
     }
 }
 
+#[cfg(test)]
 fn delivery_outcome_uncertain(
     result: &Result<
         Result<coauth_messaging::email::SendResult, coauth_messaging::email::MailerError>,
@@ -308,6 +113,7 @@ fn delivery_outcome_uncertain(
 }
 
 /// A process-only diagnostic boundary with no private transport material.
+#[cfg(test)]
 fn delivery_failure_boundary(
     result: &Result<
         Result<coauth_messaging::email::SendResult, coauth_messaging::email::MailerError>,
@@ -341,44 +147,13 @@ mod private_custody_tests {
 
     // The real private poller is tested directly, without claiming a Station
     // current/Device gate or out-of-band send. The expiry branch must not reach
-    // the unconfigured governing authority or this inert mail transport.
+    // the any foreign authority or delivery transport.
     async fn expired_worker_scrubs_real_minted_custody(activated: bool) {
         let db = coauth_storage_postgres::test_utils::setup_test_pool()
             .await
             .expect("real isolated PostgreSQL required");
         let factory = PgRepositoryFactory::new(db.clone());
-        let workspace_root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..");
-        let templates = coauth_templates::Templates::load(
-            workspace_root.join("templates"),
-            coauth_data::UrlBuilder::new("https://example.com/".parse().unwrap(), None, None),
-            workspace_root.join("translations"),
-            coauth_templates::SiteBranding::new("example.com"),
-            coauth_templates::SiteFeatures {
-                password_login: true,
-                password_registration: true,
-                password_registration_contact_required: false,
-                account_recovery: true,
-                login_with_email_allowed: true,
-            },
-            true,
-        )
-        .await
-        .unwrap();
-        let runtime = ThirdPartyInviteRuntime {
-            factory: factory.clone(),
-            encrypter: Encrypter::new(&[0x42; 32]),
-            config: coauth_config::ArkretConfig::default(),
-            // No governance access is permitted in these expiry-only cases.
-            store: coland_storage_postgres::PgInviteCurrentStateStore { pool: db.clone() },
-            mailer: Mailer::new(
-                templates,
-                coauth_messaging::email::Transport::blackhole(),
-                "hello@example.com".parse().unwrap(),
-                "hello@example.com".parse().unwrap(),
-            ),
-        };
+        let runtime = PrivateInviteCustody::new(factory.clone(), Encrypter::new(&[0x42; 32]));
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(93303);
         for mode in [
             ThirdPartyInviteOobKind::OfflineToken,

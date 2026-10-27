@@ -12,50 +12,26 @@ or phone numbers. The wire form is either `offline_token` (`token_commitment`,
 `pepper_id`). See [Account lifecycle](../account-lifecycle.md) for the
 claim flow and its rejection codes.
 
-An explicitly configured owning Station may delegate its verification service
-to Coauth. Set `arkret.third_party_invite_provider.governance_database_url` to
-that Station's Coland database, and enable the matching Station provider
-binding. This connection is separate from Coauth's private database. The
-Station DID remains the verification identity; this deployment does not offer
-an independent cross-Station provider. A configured email transport and the
-managed worker are required. A blackhole transport cannot enable the provider.
+Coauth and Coland are independently deployed services. Coauth must never
+connect to Coland's database, load its configuration or keys, or link its
+business and storage implementation. The previous delegated provider violated
+this boundary and has been withdrawn. Its four POST routes (`provision`,
+`activate`, `status`, and `present`) return `501 unsupported_feature` until a
+separately reviewed network authority closure exists. No authority checks are
+removed to continue minting, delivery, or redemption.
 
-The four registered POST routes are `/_arkret/open/third-party-invites/provision`,
-`activate`, `status`, and `present`. Their bodies and proofs use the SDK's
-registered DTOs and signing transcripts. Provision authentication holds the
-current accepted PCR Device authority across the private mint transaction.
-It does not use a Principal root key or manufacture a Principal verification
-method. Activation verifies the Station's current service identity and the
-signed acceptance attestation, then binds the original public material and
-delivery intent in one transaction. An exact activation retry returns the first
-`activated_at`, including after restart.
+Existing encrypted private custody remains in Coauth's own database. The
+managed worker only expires locally held material; it neither sends invitation
+codes nor queries a foreign authority. Disabling workers also disables this
+expiry worker. URL-credential rejection may scrub known local custody without
+contacting Coland. Normal account registration, session introspection, logout,
+and receipt discovery continue over their existing HTTP channels.
 
-Token, per-invitation salt, lookup pepper, temporary signing seed and recipient
-URI remain encrypted in Coauth's private durable record. Public outcomes contain
-only the frozen invite material and the opaque provisioning credential.
-Status never returns a recipient digest or an opening signal. Delivery and
-present separately hold the owning Station's current governing invite gate;
-withdrawal, allowlist removal or loss of the inviter's authority stops them even
-while an earlier activation attestation remains within its signed validity.
-
-Offline codes have at least 128 bits of entropy. Lookup namespaces use a private
-HMAC index and become unusable after three wrong suffix attempts. Present is
-limited to five requests per minute and fifty per day for each source, subject
-and known inviter. URL query/path credentials are rejected before parsing the
-body or selecting an operation, and a recognized credential presented directly
-to Coauth is invalidated. Failure responses conceal token existence. Successful
-present consumes the code once and removes its private redemption material;
-this implementation provides no recovery window for a lost proof. The provider
-proof uses the frozen per-invitation key, while the subsequent Claim subject
-proof keeps the separate, existing native identity control purpose.
-
-The managed worker restores the same encrypted material and delivery intent
-after a process restart. It deletes redemption secrets on expiry, withdrawal,
-delivery failure or consumption. External transport acknowledgements are not
-atomic with the private database, so a crash may cause the same valid code to
-be delivered again; it never creates another redeemable code. The canonical
-`integration-third-party-invites.sh` suite checks both modes through the standard
-HTTP operations, actual delivery, Claim acceptance and controlled process death.
+The former governance database configuration is rejected. The test runner no
+longer injects a foreign database URL, and old provider results are not accepted
+as current native coverage. Shared private HTTP carriers belong to
+`arkret-deployment-contracts` in the SDK; they do not register canonical
+operations, schemas, or authority evidence.
 
 ## DID parsing
 
