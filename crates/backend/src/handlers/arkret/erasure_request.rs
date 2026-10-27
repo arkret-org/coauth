@@ -223,12 +223,14 @@ pub(crate) async fn accept_erasure_request(
     // ── Fresh high-risk action authentication (§8.1): judged locally from
     // this deployment's own authentication facts. No configured policy, no
     // authentication fact, or a stale one all fail closed with zero writes.
-    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let observed_now = clock.now();
+    let now = arkret_canonical::normalize_timestamp_canonical(observed_now);
     let fresh = arkret_config
         .erasure_request_max_auth_age
         .is_some_and(|max_age| {
             last_authenticated_at.is_some_and(|authenticated_at| {
-                now.signed_duration_since(authenticated_at) <= max_age
+                let age = observed_now.signed_duration_since(authenticated_at);
+                age >= chrono::Duration::zero() && age <= max_age
             })
         });
     if !fresh {
@@ -601,6 +603,13 @@ mod tests {
         let body = request_body();
         let stale = Some(Utc::now() - Duration::try_hours(2).unwrap());
         let error = call(&state, &config, &user, stale, &body)
+            .await
+            .unwrap_err();
+        assert_coded(&error, arkret_wire::ErrorCode::REAUTHENTICATION_REQUIRED);
+        assert_zero_writes(&state, &user, body.request_id.as_str()).await;
+
+        let future = Some(Utc::now() + Duration::try_minutes(1).unwrap());
+        let error = call(&state, &config, &user, future, &body)
             .await
             .unwrap_err();
         assert_coded(&error, arkret_wire::ErrorCode::REAUTHENTICATION_REQUIRED);

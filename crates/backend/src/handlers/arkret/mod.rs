@@ -9,6 +9,7 @@ use crate::services::session_grant::commit_session_grant_issuance;
 use crate::services::session_grant::issue_session_grant_for_audience;
 use crate::services::station_trust::{owning_station_id_for, required_audience_for};
 mod account_handoff;
+mod account_logout;
 mod account_register;
 mod account_status;
 pub(crate) mod canonical_response;
@@ -25,6 +26,7 @@ mod test_chaos;
 mod third_party_invite;
 
 pub use account_handoff::*;
+pub use account_logout::*;
 pub use account_register::*;
 pub use account_status::*;
 pub use canonical_response::ArkretCanonicalJson;

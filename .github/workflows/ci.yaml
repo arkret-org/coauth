@@ -240,7 +240,7 @@ jobs:
       postgres:
         image: docker.io/library/postgres:15.3
         env:
-          POSTGRES_DB: postgres
+          POSTGRES_DB: coauth_test
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
@@ -289,12 +289,12 @@ jobs:
 
       - name: Apply the current test database schema
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost/postgres
+          DATABASE_URL: postgresql://postgres:postgres@localhost/coauth_test
         run: psql "$DATABASE_URL" --set ON_ERROR_STOP=on --file crates/storage-postgres/migrations/00000000000000_initial/up.sql
 
       - name: Execute test partition
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost/postgres
+          DATABASE_URL: postgresql://postgres:postgres@localhost/coauth_test
         run: |
           ~/.cargo/bin/cargo-nextest nextest run \
             --archive-file nextest-archive.tar.zst \

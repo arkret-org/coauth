@@ -36,9 +36,9 @@ pub mod upstream_oauth;
 
 pub use self::account::AccountConfig;
 pub use self::arkret::{
-    ArkretConfig, DelegatedStationIdentity, DeploymentProfileConfig, IdentityRegistryConfig,
-    PrincipalMethodConfig, RuntimeOwningStationIdentity, StationConfig,
-    ThirdPartyInviteProviderConfig,
+    AccountPrivateErasureCompletionConfig, ArkretConfig, DelegatedStationIdentity,
+    DeploymentProfileConfig, IdentityRegistryConfig, PrincipalMethodConfig,
+    RuntimeOwningStationIdentity, StationConfig, ThirdPartyInviteProviderConfig,
 };
 pub use self::branding::BrandingConfig;
 pub use self::captcha::{CaptchaConfig, CaptchaServiceKind};

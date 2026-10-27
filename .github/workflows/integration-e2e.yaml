@@ -59,6 +59,7 @@ jobs:
       - name: Validate business scenario types
         run: |
           node ../cotest/e2e/node_modules/typescript/bin/tsc --project scripts/integration/tsconfig.json
+          node ../cotest/e2e/scripts/check-wire-type-ownership.mjs --project scripts/integration/tsconfig.json
           node --test scripts/integration/verify-results.test.mjs
 
       - name: Run accepted account, browser WebAuthn, and two-admin scenarios

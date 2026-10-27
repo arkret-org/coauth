@@ -1,0 +1,12 @@
+{
+  "native_coverage": false,
+  "purpose": "Public originals for isolated PostgreSQL continuity components, not new native coverage",
+  "source_artifact": "cotest/artifacts/native-operation-contracts-20261025/native-erasure-receipts-4/observations/account-erasure-status.json",
+  "source_sha256": "64dde1fe339cb33d84f547bfb16519ec31ecc1e845ec0a22672a3dc239b5a0e8",
+  "source_json_pointers": [
+    "/issuer_continuity/before/resolution",
+    "/issuer_continuity/after/resolution"
+  ],
+  "fixture_sha256": "9d80167f11d3003bd45d49a252b2819b733ea0e712050fd6a463efc8ee885efe",
+  "producer": "actual production service-identity migrate-base CLI followed by accepted native issuer binding and restart"
+}

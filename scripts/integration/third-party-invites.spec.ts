@@ -11,6 +11,7 @@ import { expect, test, type APIRequestContext, type APIResponse } from "../../..
 import { ProvisioningBridge } from "../../../cotest/e2e/helpers/provisioning-bridge";
 import { newDeviceId } from "../../../cotest/e2e/helpers/ids";
 import { canonicalJson, retypeEventDerivedId, uuidV7 } from "../../../cotest/e2e/helpers/coland-api";
+import type { CapabilityGrantPayload } from "../../../cotest/e2e/helpers/generated/spec-wire-objects";
 
 function required(key: string): string {
   const value = process.env[key]?.trim();
@@ -518,7 +519,7 @@ test("TP4 all six failure classes are indistinguishable and rejected bindings do
         subject: { kind: "account", account_id: delegate.founded.accountId }, actions: ["ak.invite.third_party"],
         resources: [{ kind: "realm", realm_id: delegatedRealm.realmId }], issued_at: new Date().toISOString(),
         issuer_authority_refs: [{ kind: "realm_root", realm_id: delegatedRealm.realmId,
-          authority_event_ref: delegatedRealm.genesisEventId, authority_generation: 0 }] } } });
+          authority_event_ref: delegatedRealm.genesisEventId, authority_generation: "0" }] } } satisfies CapabilityGrantPayload });
     const grantId = retypeEventDerivedId(String(grant.event_id), "grant");
     const delegatedValue = await provision(request, delegate, delegatedRealm.realmId, "offline_token");
     const delegatedBinding = await accepted(delegate, delegatedValue, grantId);
@@ -707,7 +708,7 @@ test("TP5 loss of the actual inviter capability stops present without relying on
         subject: { kind: "account", account_id: inviter.founded.accountId }, actions: ["ak.invite.third_party"],
         resources: [{ kind: "realm", realm_id: space.realmId }], issued_at: new Date().toISOString(),
         issuer_authority_refs: [{ kind: "realm_root", realm_id: space.realmId,
-          authority_event_ref: space.genesisEventId, authority_generation: 0 }] } } });
+          authority_event_ref: space.genesisEventId, authority_generation: "0" }] } } satisfies CapabilityGrantPayload });
     const grantId = retypeEventDerivedId(String(grant.event_id), "grant");
     const value = await provision(request, inviter, space.realmId, "offline_token");
     const binding = await accepted(inviter, value, grantId);

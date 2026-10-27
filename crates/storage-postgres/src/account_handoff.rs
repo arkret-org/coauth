@@ -3531,8 +3531,8 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         {
             return Ok(false);
         }
-        if binding_receipt.identity_creation_lease_id.as_deref() != Some(lease.lease_id.as_str())
-            || binding_receipt.lease_fence != Some(lease.fence)
+        if binding_receipt.identity_creation_lease_id.as_str() != lease.lease_id.as_str()
+            || binding_receipt.lease_fence != lease.fence
             || binding_receipt.registration_anchor_digest
                 != context.challenge.registration_anchor_digest
             || lease.log_head_digest.as_ref() != Some(&context.challenge.method_history_head)

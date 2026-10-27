@@ -50,6 +50,8 @@ use url::Url;
 
 use crate::outbound_http;
 
+pub(crate) mod native_delegation;
+
 /// Root-relative describe path served by every Arkret Station.
 pub(crate) const DESCRIBE_PATH: &str = "_arkret/describe";
 

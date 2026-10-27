@@ -241,6 +241,11 @@ fn account_api_subrouters() -> (Router, Router) {
                 .post(arkret::account_register_endpoint),
         )
         .push(
+            Router::with_path("gate/account/logout")
+                .options(oidc_preflight_handler)
+                .post(arkret::logout_account),
+        )
+        .push(
             Router::with_path("gate/account/session-grants/refresh")
                 .options(oidc_preflight_handler)
                 .post(arkret::refresh_session_grant),
@@ -601,6 +606,7 @@ fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
         | "/_arkret/gate/account/identity-binding-challenges"
         | "/_arkret/gate/account/identity-abandonments"
         | "/_arkret/gate/account/register"
+        | "/_arkret/gate/account/logout"
         | "/_arkret/gate/account/session-grants/refresh"
         | "/_arkret/gate/account/session-grants/revoke"
         | "/_arkret/gate/account/session-grants"

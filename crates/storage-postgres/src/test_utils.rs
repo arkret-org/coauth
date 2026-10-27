@@ -127,6 +127,9 @@ pub async fn setup_test_pool() -> Option<TestDatabase> {
         }
     };
 
+    let database_name = resettable_test_database_name(&database_url)
+        .unwrap_or_else(|error| panic!("refusing destructive test database reset: {error}"));
+
     let mut lock = AsyncPgConnection::establish(&database_url)
         .await
         .expect("could not connect to the test database");
@@ -136,7 +139,7 @@ pub async fn setup_test_pool() -> Option<TestDatabase> {
     .execute(&mut lock)
     .await
     .expect("could not acquire the test database advisory lock");
-    verify_schema_fingerprint(&mut lock, &database_url).await;
+    verify_schema_fingerprint(&mut lock, &database_name).await;
     reset_database(&mut lock).await;
 
     let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(&database_url);
@@ -145,6 +148,43 @@ pub async fn setup_test_pool() -> Option<TestDatabase> {
         .build()
         .expect("could not build test pool");
     Some(TestDatabase { pool, _lock: lock })
+}
+
+fn resettable_test_database_name(database_url: &str) -> Result<String, &'static str> {
+    let url = url::Url::parse(database_url).map_err(|_| "DATABASE_URL must be a PostgreSQL URL")?;
+    if !matches!(url.scheme(), "postgres" | "postgresql") {
+        return Err("DATABASE_URL must be a PostgreSQL URL");
+    }
+    let name = url.path().strip_prefix('/').unwrap_or_default();
+    if name.is_empty()
+        || !name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err("use one explicit ASCII scratch database name");
+    }
+    if matches!(
+        name.to_ascii_lowercase().as_str(),
+        "postgres" | "template0" | "template1"
+    ) {
+        return Err("PostgreSQL maintenance and template databases cannot be test reset targets");
+    }
+    if !name
+        .to_ascii_lowercase()
+        .split(['_', '-'])
+        .any(|part| matches!(part, "test" | "tests" | "scratch"))
+    {
+        return Err("database name must contain a separate test, tests or scratch component");
+    }
+    if url.query_pairs().any(|(key, _)| {
+        matches!(
+            key.as_ref(),
+            "dbname" | "database" | "service" | "servicefile"
+        )
+    }) {
+        return Err("database selection cannot be overridden in URL parameters");
+    }
+    Ok(name.to_owned())
 }
 
 #[derive(diesel::QueryableByName)]
@@ -173,6 +213,17 @@ struct FingerprintRow {
 /// slot is never a candidate. Here nothing can create the database for you, so
 /// the honest move is to fail with the commands that fix it.
 async fn verify_schema_fingerprint(connection: &mut AsyncPgConnection, database_url: &str) {
+    #[derive(diesel::QueryableByName)]
+    struct SchemaPresence {
+        #[diesel(sql_type = diesel::sql_types::Bool)]
+        present: bool,
+    }
+    let schema = diesel::sql_query("SELECT to_regclass('public.users') IS NOT NULL AND to_regclass('public.queue_workers') IS NOT NULL AND to_regclass('public.queue_jobs') IS NOT NULL AS present")
+        .get_result::<SchemaPresence>(&mut *connection).await.expect("could not inspect scratch database schema");
+    assert!(
+        schema.present,
+        "scratch database has not received the actual Coauth migration; refusing reset"
+    );
     let current: String = arkret_canonical::sha256_hex(INITIAL_MIGRATION_SQL.as_bytes())
         .chars()
         .take(8)
@@ -216,6 +267,43 @@ async fn verify_schema_fingerprint(connection: &mut AsyncPgConnection, database_
              exact commands.",
             row.fingerprint
         ),
+    }
+}
+
+#[cfg(test)]
+mod reset_target_tests {
+    use super::resettable_test_database_name;
+
+    #[test]
+    fn reset_only_accepts_explicit_test_database_names() {
+        for name in [
+            "coauth_test",
+            "arkret_test_ab12",
+            "scratch-authority",
+            "coauth_contract_tests",
+        ] {
+            assert_eq!(
+                resettable_test_database_name(&format!("postgresql://localhost/{name}")).unwrap(),
+                name
+            );
+        }
+        for target in [
+            "postgres",
+            "template0",
+            "template1",
+            "coauth",
+            "soland_dev",
+            "latest_production",
+            "%70ostgres",
+            "coauth_test?dbname=postgres",
+            "coauth_test?service=production",
+            "",
+        ] {
+            assert!(
+                resettable_test_database_name(&format!("postgresql://localhost/{target}")).is_err(),
+                "{target}"
+            );
+        }
     }
 }
 
@@ -361,8 +449,8 @@ pub fn account_binding_receipt(
         did_version_id: version_id.to_owned(),
         control_key_digest: arkret_identifiers::Hash::new(format!("sha256:{}", "2".repeat(64)))
             .unwrap(),
-        identity_creation_lease_id: Some("test-identity-creation-lease".to_owned()),
-        lease_fence: Some(1),
+        identity_creation_lease_id: "test-identity-creation-lease".to_owned(),
+        lease_fence: 1,
         operation_status: arkret_models_identity::IdentityCreationOperationStatus::Accepted,
         registration_anchor_digest: arkret_identifiers::Hash::new(format!(
             "sha256:{}",

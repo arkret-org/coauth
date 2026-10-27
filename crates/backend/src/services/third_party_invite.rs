@@ -290,7 +290,7 @@ pub(crate) async fn provision_verified(
         third_party_invite: ThirdPartyInvite {
             oob_code_kind: request.oob_code_kind,
             display_name_hint: None,
-            token_commitment: Some(commitment),
+            token_commitment: commitment,
             max_claim_count: 1,
             token_salt_id: (request.oob_code_kind == ThirdPartyInviteOobKind::OfflineToken)
                 .then(|| format!("salt-{namespace}")),
@@ -464,12 +464,7 @@ pub(crate) async fn consume_locked(
         return Err(InviteError::NotFound);
     }
     let activation = c.activation.as_ref().ok_or(InviteError::Internal)?;
-    let commitment = c
-        .public
-        .third_party_invite
-        .token_commitment
-        .clone()
-        .ok_or(InviteError::Internal)?;
+    let commitment = c.public.third_party_invite.token_commitment.clone();
     let mut proof = InviteClaimBindingProof::new(
         c.public.third_party_invite.verification_id.clone(),
         request.subject_account_id.clone(),
