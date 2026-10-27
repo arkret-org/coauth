@@ -39,8 +39,6 @@ pub struct DbConnectorAdmin {
     arkret_config: ArkretConfig,
     http_client: reqwest::Client,
     peer_signing: Option<PeerSigningContext>,
-    erasure_completions:
-        tokio::sync::OnceCell<coland_storage_postgres::PgAccountPrivateErasureCompletionStore>,
 }
 
 #[derive(Clone)]
@@ -66,7 +64,6 @@ impl DbConnectorAdmin {
             arkret_config,
             http_client,
             peer_signing: None,
-            erasure_completions: tokio::sync::OnceCell::new(),
         }
     }
 
@@ -332,98 +329,51 @@ impl ConnectorAdmin for DbConnectorAdmin {
         anyhow::Error,
     > {
         use arkret_models_collaboration::governance::erasure::{
-            ErasureStorageBoundary, ErasureSubjectKind,
+            ErasureStorageBoundary, ErasureSubjectKind, account_erasure_receipt_id,
         };
-        use coland_storage::AccountPrivateErasureCompletionStore as _;
+
+        use crate::services::peer_protocol_client::PeerProtocolClientError;
+
         let target = self
             .arkret_config
             .stations
             .iter()
             .find(|server| server.name == request.destination_name())
             .context("erasure-receipt destination Station is no longer configured")?;
-        let owning = self
-            .arkret_config
-            .owning_station()
-            .context("owning Station is not configured")?;
-        anyhow::ensure!(
-            target.name == owning.name,
-            "remote erasure completion requires an actually received peer receipt; local custody cannot answer for another executor"
-        );
         let signing = self
             .peer_signing
             .as_ref()
-            .context("erasure-receipt verification configuration is unavailable")?;
-        let (source_id, _) = owning_station_peer_identity(&self.arkret_config)?;
+            .context("erasure-receipt peer signing configuration is unavailable")?;
+        let (source_id, source_did) = owning_station_peer_identity(&self.arkret_config)?;
         let destination_id = crate::services::station_trust::effective_audience_shared(target)
             .context("owning Station identity is unavailable or stale")?;
-        anyhow::ensure!(
-            source_id == destination_id,
-            "local completion executor is not the owning Station"
-        );
-        let account: arkret_wire::AccountId = serde_json::from_str(request.account_id())?;
-        anyhow::ensure!(
-            &account.principal_id == request.principal_id(),
-            "receipt Account and principal disagree"
-        );
-        let store = self
-            .erasure_completions
-            .get_or_try_init(|| async {
-                let delegation = self
-                    .arkret_config
-                    .account_private_erasure_completions
-                    .as_ref()
-                    .context("read-only Account erasure completion delegation is absent")?;
-                anyhow::ensure!(
-                    !delegation.database_url.trim().is_empty(),
-                    "erasure completion database must be explicit"
-                );
-                let db = coland_storage_postgres::Db::connect(
-                    Some(&delegation.database_url),
-                    coland_storage_postgres::PoolTuning {
-                        max_size: Some(2),
-                        acquire_timeout_seconds: Some(30),
-                    },
-                )
-                .await?;
-                Ok::<_, anyhow::Error>(
-                    coland_storage_postgres::PgAccountPrivateErasureCompletionStore {
-                        pool: db.pool.context("erasure completion database unavailable")?,
-                    },
-                )
-            })
-            .await?;
-        let Some(receipt_id) = store
-            .receipt_id(
-                &account,
-                request.triggering_status_record_id(),
-                &destination_id,
-            )
-            .await?
-        else {
-            return Ok(None);
+        let identity = arkret_models_crypto::http_bodies::KeyPackagesClaimServiceBinding {
+            source_id,
+            destination_id,
         };
-        // The local capability supplies only the actual allocated reference.
-        // Public receipt custody and full proof verification remain on the
-        // registered submit/GET track required by account-lifecycle section 8.
-        let client =
-            crate::services::peer_protocol_client::PeerProtocolClient::new_for_owning_station(
-                &self.arkret_config,
-                &self.http_client,
-                &signing.keyring,
-            )?;
-        let package = match client.get_erasure_receipt(receipt_id.as_str()).await {
-            Ok(package) => package,
-            Err(crate::services::peer_protocol_client::PeerProtocolClientError::Status {
-                status: 404,
-                ..
-            }) => return Ok(None),
+        let client = crate::services::peer_protocol_client::PeerProtocolClient::new(
+            Some(&target.endpoint),
+            &self.http_client,
+            &signing.keyring,
+            source_did,
+            identity,
+            signing.source_trust_domain.clone(),
+            signing.source_trust_domain.clone(),
+        )?;
+        let receipt_id = account_erasure_receipt_id(
+            request.triggering_status_record_id(),
+            ErasureStorageBoundary::AccountPrivateStore,
+        );
+        let package = match client.get_erasure_receipt(&receipt_id).await {
+            Ok(resource) => resource,
+            Err(PeerProtocolClientError::Status { status: 404, .. }) => return Ok(None),
             Err(error) => return Err(error.into()),
         };
-        anyhow::ensure!(
-            package.receipt.receipt_id == receipt_id.as_str(),
-            "public receipt differs from the actual completion reference"
-        );
         package.validate_bindings()?;
+        anyhow::ensure!(
+            package.receipt.receipt_id == receipt_id,
+            "receipt id mismatch"
+        );
         anyhow::ensure!(
             package.receipt.trigger
                 == arkret_models_collaboration::events_payloads::event_wire::ErasureTrigger::AccountStatusRecord {
@@ -450,8 +400,6 @@ impl ConnectorAdmin for DbConnectorAdmin {
                 .receipt
                 .scope
                 .target_refs
-                .as_deref()
-                .unwrap_or_default()
                 .iter()
                 .any(|target| target == request.principal_id().as_str()),
             "receipt target refs do not cover the principal"

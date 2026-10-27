@@ -10,7 +10,6 @@ license.workspace = true
 cedar = ["dep:cedar-policy"]
 
 [dependencies]
-figment = { workspace = true }
 horme.workspace = true
 
 # Arkret v1 SDK: shared protocol DTOs, RFC 9421 signatures, and typed
