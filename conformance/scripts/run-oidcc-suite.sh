@@ -223,7 +223,7 @@ if [[ "${DRY_RUN}" != "1" ]]; then
     fi
     echo "[oidcc-suite] waiting up to 30s for ${HEALTH_URL}…"
     healthy=0
-    for attempt in $(sequence 1 30); do
+    for ((attempt = 1; attempt <= 30; attempt++)); do
         if curl -fsS -o /dev/null -m 2 "${HEALTH_URL}"; then
             echo "[oidcc-suite] coauth healthy after ${attempt}s"
             healthy=1

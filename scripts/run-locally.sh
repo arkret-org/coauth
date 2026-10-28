@@ -82,7 +82,11 @@ trap cleanup EXIT
 # 2. wait for /health
 step "step 2/6 — wait for /health 200 on host port 57080"
 ATTEMPTS="${HEALTH_ATTEMPTS:-60}"
-for attempt in $(sequence 1 "${ATTEMPTS}"); do
+if [[ ! "$ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[run-locally] HEALTH_ATTEMPTS must be a positive integer" >&2
+    exit 3
+fi
+for ((attempt = 1; attempt <= ATTEMPTS; attempt++)); do
     code="$(curl -fsS -o /dev/null -m 2 -w '%{http_code}' http://127.0.0.1:57080/health || echo "000")"
     if [[ "${code}" == "200" ]]; then
         echo "[run-locally] coauth /health 200 after ${attempt}s"
