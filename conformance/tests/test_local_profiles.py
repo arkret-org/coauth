@@ -3,6 +3,7 @@
 import base64
 import contextlib
 import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,76 @@ import yaml
 
 
 class LocalProfilesTests(unittest.TestCase):
+    def runner(self):
+        path = Path(__file__).resolve().parents[1] / "run-official-plan.py"
+        spec = importlib.util.spec_from_file_location("official_plan", path)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+        return runner
+
+    def test_official_denial_action_is_exact_and_diagnostics_are_sanitized(self):
+        runner = self.runner()
+        self.assertEqual(runner.consent_action("fapi2-security-profile-id2-user-rejects-authentication"), "deny")
+        for name in ("oidcc-login", "other-user-rejects-authentication", None):
+            self.assertEqual(runner.consent_action(name), "approve")
+        self.assertEqual(str(runner.BrowserFailure("https://private/?code=SECRET", "login-ui-error")), "unknown-module: login-ui-error")
+
+    def test_cleanup_preserves_original_failure_and_alone_fails_closed(self):
+        runner = self.runner()
+
+        class BrokenScope:
+            def stop_pending(self):
+                raise KeyError("PRIVATE_CLEANUP_SENTINEL")
+
+        log, public = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(public):
+            with self.assertRaisesRegex(ValueError, "original-browser-failure"):
+                try:
+                    raise ValueError("original-browser-failure")
+                finally:
+                    runner.cleanup_plan(BrokenScope(), log, True)
+        self.assertNotIn("PRIVATE_CLEANUP_SENTINEL", public.getvalue())
+        self.assertIn("PRIVATE_CLEANUP_SENTINEL", log.getvalue())
+        with self.assertRaisesRegex(RuntimeError, "local plan cleanup failed"):
+            runner.cleanup_plan(BrokenScope(), log, False)
+
+    def test_official_image_placeholder_requires_real_bytes_and_completion(self):
+        runner = self.runner()
+
+        class Reply:
+            def __init__(self, body):
+                self.body = body
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self.body
+
+        class API:
+            incomplete = False
+
+            def get(self, url, timeout):
+                self.asserted_url = url
+                return Reply([{"upload": "0123456789"}, {"img": "already-filled"}])
+
+            def post(self, url, data, headers, timeout):
+                self.upload = (url, data, headers)
+                return Reply({"upload": "0123456789"} if self.incomplete else {"img": data, "testId": "test-id"})
+
+        api = API()
+        screenshot = b"test-only-browser-image-bytes"
+        runner.upload_login_evidence(api, "https://localhost:8446", "test-id", screenshot)
+        self.assertEqual(api.asserted_url, "https://localhost:8446/api/log/test-id/images")
+        self.assertEqual(api.upload[0], "https://localhost:8446/api/log/test-id/images/0123456789")
+        self.assertEqual(base64.b64decode(api.upload[1].split(",", 1)[1]), screenshot)
+        self.assertEqual(api.upload[2], {"Content-Type": "text/plain"})
+        api.incomplete = True
+        with self.assertRaises(runner.BrowserFailure):
+            runner.upload_login_evidence(api, "https://localhost:8446", "test-id", screenshot)
+        with self.assertRaises(runner.BrowserFailure):
+            runner.upload_login_evidence(api, "https://localhost:8446", "test-id", b"x" * (500 * 1024 + 1))
+
     @contextlib.contextmanager
     def fixture(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -84,6 +155,8 @@ class LocalProfilesTests(unittest.TestCase):
                     return Reply(list(self.states))
                 test_id = url.rsplit("/", 1)[1]
                 self.read.append(test_id)
+                if "/api/info/" not in url:
+                    raise AssertionError("runner metadata has no status; use persisted official info")
                 return Reply({"status": self.states[test_id]})
 
             def delete(self, url, timeout):
@@ -119,6 +192,9 @@ class LocalProfilesTests(unittest.TestCase):
                     if name == "basic-op":
                         self.assertEqual(client["client_secret"], registration["client_secret"])
                         continue
+                    self.assertEqual(profile["resource"]["resourceUrl"], "https://localhost:8445/oauth/userinfo")
+                    if slot == "client2":
+                        self.assertIn(f'https://localhost:8446/test/a/{profile["alias"]}/callback?dummy1=lorem&dummy2=ipsum', registration["redirect_uris"])
                     key = client["jwks"]["keys"][0]
                     public = registration["jwks"]["keys"][0]
                     self.assertTrue({"d", "p", "q", "dp", "dq", "qi"}.isdisjoint(public))

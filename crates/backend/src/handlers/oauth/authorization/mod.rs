@@ -18,9 +18,10 @@ use thiserror::Error;
 
 use self::callback::CallbackDestination;
 use crate::salvo_utils::SessionInfoExt;
-use crate::salvo_utils::cookies::CookieJar;
+use crate::salvo_utils::cookies::{CookieJar, TimedCookie as _};
 
 pub(crate) mod callback;
+pub(crate) mod consent_cookie;
 
 #[derive(Debug, Error)]
 pub enum RouteError {
@@ -201,12 +202,15 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
 
     // Get the session info from the cookie
     let (session_info, cookie_jar) = cookie_jar.session_info();
+    let mut pending_consents = consent_cookie::PendingConsents::load(&cookie_jar);
+    let consent_clock = SystemClock::default();
 
     // One day, we will have try blocks
     let inner_result: Result<salvo::http::Response, RouteError> = ({
         let templates = templates.clone();
         let callback_destination = callback_destination.clone();
         let locale = locale.clone();
+        let pending_consents = &mut pending_consents;
         async move {
             let maybe_session = session_info.load_active_session(&mut repo).await?;
             let prompt = parameters.auth.prompt.as_deref().unwrap_or_default();
@@ -352,6 +356,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     Some(locale.to_string()),
                 )
                 .await?;
+            pending_consents.add(grant.id, maybe_session.as_ref(), &mut *rng);
             let continue_grant = PostAuthAction::continue_grant(grant.id);
 
             let redirect = match maybe_session {
@@ -444,5 +449,5 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
         }
     };
 
-    Ok((response, cookie_jar))
+    Ok((response, pending_consents.write(cookie_jar, &consent_clock)))
 }

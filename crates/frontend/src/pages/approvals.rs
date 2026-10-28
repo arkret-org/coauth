@@ -8,6 +8,86 @@ use crate::api::types::*;
 use crate::api::{self};
 use crate::ui::{self, *};
 
+#[cfg(target_arch = "wasm32")]
+fn submit_consent_form(grant: &str, action: &str, csrf: &str) -> Result<(), String> {
+    use web_sys::wasm_bindgen::JsCast as _;
+    let window = web_sys::window().ok_or("Browser window unavailable")?;
+    let url = format!(
+        "{}/self/oauth/authorization-grants/{grant}/decision",
+        crate::config::api_base_url()
+    );
+    let document = window.document().ok_or("Browser document unavailable")?;
+    let form = document
+        .create_element("form")
+        .map_err(|_| "Could not create callback form")?
+        .dyn_into::<web_sys::HtmlFormElement>()
+        .map_err(|_| "Invalid callback form")?;
+    form.set_method("post");
+    form.set_action(&url);
+    for (name, value) in [("action", action), ("csrf_token", csrf)] {
+        let input = document
+            .create_element("input")
+            .map_err(|_| "Could not create callback field")?
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .map_err(|_| "Invalid callback field")?;
+        input.set_type("hidden");
+        input.set_name(name);
+        input.set_value(value);
+        form.append_child(&input)
+            .map_err(|_| "Could not append callback field")?;
+    }
+    document
+        .body()
+        .ok_or("Browser body unavailable")?
+        .append_child(&form)
+        .map_err(|_| "Could not mount callback form")?;
+    form.submit()
+        .map_err(|_| "Could not submit callback form")?;
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn submit_consent_form(_grant: &str, _action: &str, _csrf: &str) -> Result<(), String> {
+    Err("Consent form submission requires a browser".to_owned())
+}
+
+async fn authorization_decision(
+    id: &str,
+    action: &str,
+    csrf_token: Option<String>,
+    form_post: bool,
+) -> Outcome {
+    let csrf_token = csrf_token.ok_or("Missing authorization continuation. Restart sign-in.")?;
+    if form_post {
+        return submit_consent_form(id, action, &csrf_token);
+    }
+    let path = format!("/self/oauth/authorization-grants/{}/decision", encode(id));
+    let response = api::api_post::<OAuthApprovalSubmitOutcome>(
+        &path,
+        serde_json::json!({"action": action, "csrf_token": csrf_token}),
+    )
+    .await?;
+    if response.error.as_deref() == Some("not_authenticated") {
+        go(&format!(
+            "/login?kind=continue_authorization_grant&id={}",
+            encode(id)
+        ))?;
+        return Ok(None);
+    }
+    if response.status != "success" {
+        return Err(response
+            .error
+            .unwrap_or_else(|| "Authorization failed.".into()));
+    }
+    if !matches!(response.response_mode.as_deref(), Some("query" | "fragment")) {
+        return Err("Unsupported callback mode".into());
+    }
+    go(&response
+        .redirect_url
+        .ok_or("No redirect URL in response.")?)?;
+    Ok(None)
+}
+
 pub fn approval(scope: &Scope, id: String, device: bool) -> View {
     let prefix = if device {
         "/self/device-grants"
@@ -40,6 +120,8 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
                 )],
             );
         }
+        let decision_csrf = response.csrf_token.clone();
+        let decision_form_post = response.response_mode.as_deref() == Some("form_post");
         let name = response
             .client
             .client_name
@@ -75,6 +157,7 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
         }
         body.push(state.messages());
         let request = grant.clone();
+        let csrf = decision_csrf.clone();
         body.push(ui::action(
             scope,
             if device { "Approve" } else { "Allow" },
@@ -82,9 +165,10 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
             state,
             move || {
                 let id = request.clone();
+                let csrf = csrf.clone();
                 async move {
-                    let path = format!("{prefix}/{}/decision", encode(&id));
                     if device {
+                        let path = format!("{prefix}/{}/decision", encode(&id));
                         let response = api::api_post::<DeviceApprovalOutcome>(
                             &path,
                             serde_json::json!({"action":"approve"}),
@@ -101,27 +185,7 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
                         });
                         Ok(None)
                     } else {
-                        let response = api::api_post::<OAuthApprovalSubmitOutcome>(
-                            &path,
-                            serde_json::json!({"action":"approve"}),
-                        )
-                        .await?;
-                        if response.error.as_deref() == Some("not_authenticated") {
-                            go(&format!(
-                                "/login?kind=continue_authorization_grant&id={}",
-                                encode(&id)
-                            ))?;
-                            return Ok(None);
-                        }
-                        if response.status != "success" {
-                            return Err(response
-                                .error
-                                .unwrap_or_else(|| "Authorization failed.".into()));
-                        }
-                        go(&response
-                            .redirect_url
-                            .ok_or("No redirect URL in response.")?)?;
-                        Ok(None)
+                        authorization_decision(&id, "approve", csrf, decision_form_post).await
                     }
                 }
             },
@@ -148,6 +212,21 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
                             *value = Some("Device authorization was rejected.".into());
                         });
                         Ok(None)
+                    }
+                },
+            ));
+        } else {
+            let request = grant.clone();
+            body.push(ui::action(
+                scope,
+                "Deny",
+                "btn btn-secondary btn-block",
+                state,
+                move || {
+                    let id = request.clone();
+                    let csrf = decision_csrf.clone();
+                    async move {
+                        authorization_decision(&id, "deny", csrf, decision_form_post).await
                     }
                 },
             ));

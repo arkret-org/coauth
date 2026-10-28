@@ -12,6 +12,7 @@ use coauth_data::{
     Client, Clock, PrincipalUser, RepositoryAccess, RepositoryError, Session, UrlBuilder,
 };
 use coauth_keyring::Keyring;
+use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::requests::AuthorizationResponse;
 use coauth_principal::ConnectorAdmin;
 use thiserror::Error;
@@ -39,6 +40,7 @@ pub struct ConsentScreen {
     pub grant_id: Ulid,
     pub client: Client,
     pub scope: String,
+    pub response_mode: Option<String>,
     pub user_principal_address: String,
     pub user_display_name: Option<String>,
     pub policy_violation: bool,
@@ -49,6 +51,7 @@ impl From<AuthorizationConsentInfo> for ConsentScreen {
         Self {
             grant_id: info.grant.id,
             scope: info.grant.scope.to_string(),
+            response_mode: Some(info.grant.response_mode.to_string()),
             client: info.client,
             user_principal_address: info.principal_user.principal_address,
             user_display_name: info.principal_user.display_name,
@@ -65,16 +68,6 @@ pub struct AuthorizationConsentDecision {
     pub session: Session,
     pub callback_destination: CallbackDestination,
     pub parameters: AuthorizationResponse,
-}
-
-impl AuthorizationConsentDecision {
-    /// Build the redirect URL string for JSON API responses.
-    pub fn redirect_url(&self) -> Result<String, OAuthAccessError> {
-        self.callback_destination
-            .redirect_url(&self.parameters)
-            .map(|info| info.url)
-            .map_err(|error| OAuthAccessError::Internal(Box::new(error)))
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +89,9 @@ pub enum OAuthAccessError {
 
     #[error("authorization grant is not pending")]
     GrantNotPending,
+
+    #[error("authorization redirect is no longer registered")]
+    InvalidRedirect,
 
     #[error("device grant is expired")]
     GrantExpired,
@@ -179,12 +175,9 @@ pub async fn accept_authorization_consent(
 ) -> Result<AuthorizationConsentDecision, OAuthAccessError> {
     let grant = repo
         .oauth_authorization_grant()
-        .lookup(grant_id)
+        .lookup_for_update(grant_id)
         .await?
         .ok_or(OAuthAccessError::NotFound)?;
-
-    let callback_destination = CallbackDestination::try_from(&grant)
-        .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;
 
     if !matches!(grant.stage, AuthorizationGrantStage::Pending) {
         return Err(OAuthAccessError::GrantNotPending);
@@ -195,6 +188,12 @@ pub async fn accept_authorization_consent(
         .lookup(grant.client_id)
         .await?
         .ok_or(OAuthAccessError::NotFound)?;
+
+    client
+        .resolve_redirect_uri(&Some(grant.redirect_uri.clone()))
+        .map_err(|_| OAuthAccessError::InvalidRedirect)?;
+    let callback_destination = CallbackDestination::try_from(&grant)
+        .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;
 
     if has_policy_violation(
         &mut repo,
@@ -271,6 +270,41 @@ pub async fn accept_authorization_consent(
     })
 }
 
+/// Consume a pending consent without issuing an OAuth session or credentials.
+pub async fn reject_authorization_consent(
+    mut repo: BoxRepository,
+    clock: &dyn Clock,
+    grant_id: Ulid,
+) -> Result<super::authorization::callback::BrowserCallback, OAuthAccessError> {
+    let grant = repo
+        .oauth_authorization_grant()
+        .lookup_for_update(grant_id)
+        .await?
+        .ok_or(OAuthAccessError::NotFound)?;
+    if !grant.is_pending() {
+        return Err(OAuthAccessError::GrantNotPending);
+    }
+    let client = repo
+        .oauth_client()
+        .lookup(grant.client_id)
+        .await?
+        .ok_or(OAuthAccessError::NotFound)?;
+    client
+        .resolve_redirect_uri(&Some(grant.redirect_uri.clone()))
+        .map_err(|_| OAuthAccessError::InvalidRedirect)?;
+    let destination = CallbackDestination::try_from(&grant)
+        .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;
+    let response = destination
+        .browser_callback(&ClientError::from(ClientErrorCode::AccessDenied))
+        .map_err(|error| OAuthAccessError::Internal(Box::new(error)))?;
+    repo.oauth_authorization_grant()
+        .cancel(clock, grant)
+        .await?;
+    // access_denied is a committed business outcome, never a transaction error.
+    repo.save().await?;
+    Ok(response)
+}
+
 pub async fn lookup_device_link(
     mut repo: BoxRepository,
     clock: &dyn Clock,
@@ -335,6 +369,7 @@ pub async fn load_device_consent(
         grant_id: grant.id,
         client,
         scope: grant.scope.to_string(),
+        response_mode: None,
         user_principal_address: station.principal_address(username),
         user_display_name,
         policy_violation,

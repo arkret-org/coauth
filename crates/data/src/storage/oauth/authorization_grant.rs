@@ -67,6 +67,17 @@ repository_impl! {
         /// Returns [`Self::Error`] if the underlying repository fails
         async fn lookup(&mut self, id: Ulid) -> Result<Option<AuthorizationGrant>, Self::Error>;
 
+        /// Look up an authorization grant and lock its row until this transaction ends.
+        ///
+        /// Use this when deciding whether to approve or cancel a pending grant so
+        /// concurrent decisions observe the stage committed by the first caller.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the underlying repository fails.
+        async fn lookup_for_update(&mut self, id: Ulid)
+        -> Result<Option<AuthorizationGrant>, Self::Error>;
+
         /// Find an authorization grant by its code
         ///
         /// Returns the authorization grant if found, `None` otherwise
@@ -121,6 +132,17 @@ repository_impl! {
             &mut self,
             clock: &dyn Clock,
             session: &Session,
+            authorization_grant: AuthorizationGrant,
+        ) -> Result<AuthorizationGrant, Self::Error>;
+
+        /// Cancel a pending grant without creating an OAuth session.
+        ///
+        /// # Errors
+        ///
+        /// Returns [`Self::Error`] if the grant is no longer pending or storage fails.
+        async fn cancel(
+            &mut self,
+            clock: &dyn Clock,
             authorization_grant: AuthorizationGrant,
         ) -> Result<AuthorizationGrant, Self::Error>;
 

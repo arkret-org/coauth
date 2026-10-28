@@ -1,14 +1,55 @@
 """Invoke the pinned OIDF API runner without ignored failures or skips."""
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import traceback
 from urllib.parse import urlsplit
+
+
+REJECT_MODULE = "fapi2-security-profile-id2-user-rejects-authentication"
+
+
+class BrowserFailure(RuntimeError):
+    """Only fixed phases and validated module names may enter public logs."""
+
+    def __init__(self, module, phase):
+        safe_module = module if isinstance(module, str) and re.fullmatch(r"[a-z0-9-]+", module) else "unknown-module"
+        super().__init__(f"{safe_module}: {phase}")
+
+
+def consent_action(module):
+    return "deny" if module == REJECT_MODULE else "approve"
+
+
+def upload_login_evidence(api, server, test_id, screenshot):
+    """Fill actual official placeholders with a real browser screenshot."""
+    response = api.get(f"{server}/api/log/{test_id}/images", timeout=30)
+    response.raise_for_status()
+    for document in response.json():
+        placeholder = document.get("upload")
+        if not placeholder:
+            continue
+        if not isinstance(placeholder, str) or not re.fullmatch(r"[A-Za-z0-9]{10}", placeholder):
+            raise BrowserFailure("oidcc-prompt-login", "invalid-image-placeholder")
+        if len(screenshot) > 500 * 1024:
+            raise BrowserFailure("oidcc-prompt-login", "screenshot-exceeds-official-limit")
+        image = "data:image/jpeg;base64," + base64.b64encode(screenshot).decode("ascii")
+        uploaded = api.post(
+            f"{server}/api/log/{test_id}/images/{placeholder}",
+            data=image,
+            headers={"Content-Type": "text/plain"}, timeout=30,
+        )
+        uploaded.raise_for_status()
+        completed = uploaded.json()
+        if not isinstance(completed, dict) or "upload" in completed or completed.get("testId") != test_id or completed.get("img") != image:
+            raise BrowserFailure("oidcc-prompt-login", "image-placeholder-not-completed")
 
 
 class LocalPlanScope:
@@ -33,7 +74,7 @@ class LocalPlanScope:
     def stop_pending(self):
         for test_id in self.test_ids():
             url = f"{self.server}/api/runner/{test_id}"
-            response = self.api.get(url, timeout=30)
+            response = self.api.get(f"{self.server}/api/info/{test_id}", timeout=30)
             if response.status_code == 404:
                 continue
             response.raise_for_status()
@@ -41,6 +82,16 @@ class LocalPlanScope:
                 response = self.api.delete(url, timeout=30)
                 if response.status_code != 404:
                     response.raise_for_status()
+
+
+def cleanup_plan(scope, log, failure_active):
+    try:
+        scope.stop_pending()
+    except Exception:
+        traceback.print_exc(file=log)
+        if not failure_active:
+            raise RuntimeError("local plan cleanup failed; private diagnostics were withheld") from None
+        print("::error::Local plan cleanup also failed; the original browser failure is preserved", flush=True)
 
 
 def drive_local_browser(process, scope):
@@ -59,6 +110,7 @@ def drive_local_browser(process, scope):
         browser = playwright.chromium.launch()
         contexts = {}
         visited = set()
+        login_screenshots = {}
         try:
             while process.poll() is None:
                 for test_id in scope.test_ids():
@@ -66,7 +118,11 @@ def drive_local_browser(process, scope):
                     if response.status_code in (404, 503):
                         continue
                     response.raise_for_status()
-                    for request in response.json().get("browser", {}).get("urlsWithMethod", []):
+                    metadata = response.json()
+                    module = metadata.get("name")
+                    if module == "oidcc-prompt-login" and test_id in login_screenshots:
+                        upload_login_evidence(api, server, test_id, login_screenshots[test_id])
+                    for request in metadata.get("browser", {}).get("urlsWithMethod", []):
                         url, method = request["url"], request["method"]
                         if method not in {"GET", "POST"}:
                             raise RuntimeError("unsupported official front-channel HTTP method")
@@ -79,6 +135,7 @@ def drive_local_browser(process, scope):
                             context.route("**/*", lambda route: route.continue_() if origin(route.request.url) in allowed else route.abort())
                             contexts[test_id] = context
                         page = contexts[test_id].new_page()
+                        phase = "navigation"
                         try:
                             if method == "POST":
                                 # Match upstream BrowserControl: move the supplied URL's
@@ -97,24 +154,43 @@ def drive_local_browser(process, scope):
                                 if navigation is not None and navigation.status >= 400:
                                     break
                                 if time.monotonic() > deadline:
-                                    raise RuntimeError("local browser could not finish login/consent")
+                                    raise BrowserFailure(module, "login-or-consent-timeout")
                                 if page.locator("#login-error").is_visible():
-                                    raise RuntimeError("the seeded local browser account could not log in")
+                                    raise BrowserFailure(module, "login-ui-error")
                                 if page.locator("#login-handle").is_visible():
                                     page.locator("#login-handle").fill(credentials["handle"])
                                     page.get_by_test_id("coauth-login-identifier-submit").click()
                                 elif page.locator("#login-password").is_visible():
+                                    phase = "password-login"
+                                    if module == "oidcc-prompt-login":
+                                        login_screenshots[test_id] = page.screenshot(type="jpeg", quality=65)
                                     page.locator("#login-password").fill(credentials["password"])
-                                    page.get_by_test_id("coauth-login-submit").click()
+                                    with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login", timeout=30000) as login:
+                                        page.get_by_test_id("coauth-login-submit").click()
+                                    login_body = login.value.json()
+                                    if login.value.status != 200 or login_body.get("status") != "success":
+                                        # Never interpolate response text, credentials or redirect URLs.
+                                        code = login_body.get("error")
+                                        known = {"invalid_credentials", "rate_limited", "account_deactivated", "account_locked", "password_login_disabled"}
+                                        raise BrowserFailure(module, "login-" + (code if code in known else "unexpected-response"))
                                 elif page.get_by_test_id("coauth-continue-as-current").is_visible():
                                     page.get_by_test_id("coauth-continue-as-current").click()
                                 elif page.get_by_test_id("coauth-oauth-approve").is_visible():
-                                    page.get_by_test_id("coauth-oauth-approve").click()
+                                    phase = "authorization-decision"
+                                    action = consent_action(module)
+                                    with page.expect_response(lambda reply: urlsplit(reply.url).path.endswith("/decision") and reply.request.method == "POST", timeout=30000) as decision:
+                                        page.get_by_test_id("coauth-oauth-" + action).click()
+                                    if decision.value.status != 200:
+                                        raise BrowserFailure(module, "consent-http-error")
                                 page.wait_for_timeout(250)
                             response = api.post(f"{server}/api/runner/browser/{test_id}/visit", params={"url": url}, timeout=30)
                             if response.status_code != 404:
                                 response.raise_for_status()
                             visited.add((test_id, url))
+                        except BrowserFailure:
+                            raise
+                        except Exception as error:
+                            raise BrowserFailure(module, phase + "-" + type(error).__name__) from error
                         finally:
                             page.close()
                 time.sleep(0.5)
@@ -166,12 +242,15 @@ def main():
             try:
                 try:
                     drive_local_browser(process, scope)
-                except Exception:
+                except Exception as error:
                     traceback.print_exc(file=log)
-                    raise RuntimeError("local real-browser automation failed; private URL diagnostics were withheld") from None
+                    if isinstance(error, BrowserFailure):
+                        raise RuntimeError(str(error)) from None
+                    raise RuntimeError("local real-browser automation failed (" + type(error).__name__ + "); private URL diagnostics were withheld") from None
                 if process.wait() != 0:
                     raise RuntimeError("the official conformance plan failed; inspect credential-free exported evidence")
             finally:
+                failure_active = sys.exc_info()[0] is not None
                 if process.poll() is None:
                     process.terminate()
                     try:
@@ -179,7 +258,7 @@ def main():
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
-                scope.stop_pending()
+                cleanup_plan(scope, log, failure_active)
     else:
         subprocess.run(command, cwd=config_path.parent, check=True)
     if not list(results.glob("*.zip")):

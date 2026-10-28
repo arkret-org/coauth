@@ -1,7 +1,8 @@
 #![allow(clippy::module_name_repetitions)]
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
+use base64ct::{Base64, Encoding as _};
 use coauth_data::AuthorizationGrant;
 use coauth_i18n::Locale;
 use coauth_oauth_types::requests::ResponseMode;
@@ -9,6 +10,7 @@ use coauth_templates::{FormPostContext, Templates};
 use salvo::prelude::*;
 use salvo::writing::{Redirect, Text};
 use serde::Serialize;
+use sha2::{Digest as _, Sha256};
 use thiserror::Error;
 use url::Url;
 
@@ -21,6 +23,70 @@ pub struct RedirectInfo {
     pub url: String,
     /// The OAuth response mode (`"query"`, `"fragment"`, or `"form_post"`).
     pub response_mode: &'static str,
+}
+
+/// A trusted callback for a browser navigation or an actual form POST.
+#[derive(Debug, Serialize, salvo::oapi::ToSchema)]
+pub struct BrowserCallback {
+    pub redirect_url: String,
+    pub response_mode: &'static str,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub form_parameters: Vec<(String, String)>,
+}
+
+impl BrowserCallback {
+    pub fn form_post_response(
+        &self,
+        templates: &Templates,
+        locale: &Locale,
+    ) -> Result<Response, CallbackDestinationError> {
+        if self.response_mode != "form_post" {
+            let mut response = Response::new();
+            response.render(Redirect::other(&self.redirect_url));
+            return Ok(response);
+        }
+        let redirect = self
+            .redirect_url
+            .parse()
+            .map_err(CallbackDestinationError::CallbackUrl)?;
+        let parameters = self
+            .form_parameters
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect::<BTreeMap<_, _>>();
+        render_form_post(templates, locale, redirect, parameters)
+    }
+}
+
+fn render_form_post<T: Serialize>(
+    templates: &Templates,
+    locale: &Locale,
+    redirect: Url,
+    parameters: T,
+) -> Result<Response, CallbackDestinationError> {
+    let origin = redirect.origin().ascii_serialization();
+    let context = FormPostContext::new_for_url(redirect, parameters).with_language(locale);
+    let rendered = templates.render_form_post(&context)?;
+    // Hash the rendered inline script, including its exact whitespace. HTML
+    // parsing normalizes CRLF/CR to LF before CSP checks inline script bytes.
+    let (_, tail) = rendered
+        .split_once("<script>")
+        .ok_or(CallbackDestinationError::FormPostScript)?;
+    let (script, rest) = tail
+        .split_once("</script>")
+        .ok_or(CallbackDestinationError::FormPostScript)?;
+    if rest.contains("<script") {
+        return Err(CallbackDestinationError::FormPostScript);
+    }
+    let script = script.replace("\r\n", "\n").replace('\r', "\n");
+    let hash = Base64::encode_string(&Sha256::digest(script.as_bytes()));
+    let policy = format!(
+        "default-src 'none'; script-src 'sha256-{hash}'; form-action {origin}; base-uri 'none'; frame-ancestors 'none'"
+    );
+    let mut response = Response::new();
+    response.render(Text::Html(rendered));
+    crate::server::override_response_csp(&mut response, &policy)?;
+    Ok(response)
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +124,15 @@ pub enum CallbackDestinationError {
 
     #[error("Failed to serialize parameters query string")]
     ParamsSerialization(#[from] serde_urlencoded::ser::Error),
+
+    #[error("form_post template must contain one inline submission script")]
+    FormPostScript,
+
+    #[error("invalid trusted callback URL")]
+    CallbackUrl(url::ParseError),
+
+    #[error("invalid form_post content security policy")]
+    FormPostCsp(#[from] http::header::InvalidHeaderValue),
 }
 
 impl TryFrom<&AuthorizationGrant> for CallbackDestination {
@@ -73,6 +148,39 @@ impl TryFrom<&AuthorizationGrant> for CallbackDestination {
 }
 
 impl CallbackDestination {
+    pub fn browser_callback<T: Serialize>(
+        &self,
+        parameters: &T,
+    ) -> Result<BrowserCallback, CallbackDestinationError> {
+        if matches!(self.mode, CallbackDestinationMode::FormPost) {
+            #[derive(Serialize)]
+            struct Parameters<'a, T> {
+                #[serde(skip_serializing_if = "Option::is_none")]
+                state: &'a Option<String>,
+                #[serde(flatten)]
+                parameters: T,
+            }
+            let encoded = serde_urlencoded::to_string(Parameters {
+                state: &self.state,
+                parameters,
+            })?;
+            Ok(BrowserCallback {
+                redirect_url: self.safe_redirect_uri.to_string(),
+                response_mode: "form_post",
+                form_parameters: url::form_urlencoded::parse(encoded.as_bytes())
+                    .into_owned()
+                    .collect(),
+            })
+        } else {
+            let redirect = self.redirect_url(parameters)?;
+            Ok(BrowserCallback {
+                redirect_url: redirect.url,
+                response_mode: redirect.response_mode,
+                form_parameters: Vec::new(),
+            })
+        }
+    }
+
     pub fn try_new(
         mode: &ResponseMode,
         mut redirect_uri: Url,
@@ -237,11 +345,7 @@ impl CallbackDestination {
                     state,
                     parameters,
                 };
-                let ctx = FormPostContext::new_for_url(redirect_uri, merged).with_language(locale);
-                let rendered = templates.render_form_post(&ctx)?;
-                let mut res = Response::new();
-                res.render(Text::Html(rendered));
-                Ok(res)
+                render_form_post(templates, locale, redirect_uri, merged)
             }
         }
     }

@@ -116,8 +116,12 @@ async function adminBearer(request: APIRequestContext, account: CoauthPasswordAc
   const approval = new URL(authorization.headers().location, coauth);
   expect(approval.pathname).toContain("/oauth/approval/");
   const id = approval.pathname.split("/").filter(Boolean).at(-1);
-  const decision = await jsonOk(await request.post(`${coauth}/_coauth/self/oauth/authorization-grants/${id}/decision`, {
-    data: { action: "approve" },
+  const consentUrl = `${coauth}/_coauth/self/oauth/authorization-grants/${id}/decision`;
+  const consent = await jsonOk(await request.get(consentUrl), "admin OAuth consent context");
+  expect(typeof consent.csrf_token).toBe("string");
+  const decision = await jsonOk(await request.post(consentUrl, {
+    headers: { Origin: new URL(coauth).origin },
+    data: { action: "approve", csrf_token: consent.csrf_token },
   }), "admin OAuth authorization decision");
   expect(decision.status).toBe("success");
   const callback = new URL(decision.redirect_url);
@@ -149,7 +153,7 @@ function approvalProof(account: CoauthPasswordAccount, proposalId: string, accou
   return JSON.parse(signed).approval_proof_jws;
 }
 
-test("S1 account → accepted PCR → signed Realm/Strand/Event → authenticated read", async ({ request }) => {
+test("S1 account → accepted PCR → signed Realm/Strand/Event → authenticated read", async ({ request, browser }) => {
   const account = await registerCoauthPasswordAccount(request, coauth, { handle: `int-s1-${randomUUID()}` });
   expect(account.pcrGenesisCommits).toHaveLength(2);
   expect(account.principalRegistrationCheckpoint.binding_receipt).toMatchObject({ binding_state: "bound", principal_id: account.id });
@@ -193,6 +197,44 @@ test("S1 account → accepted PCR → signed Realm/Strand/Event → authenticate
   const afterWrongSubject = await scanRealmStreamApi(request, token, realmId);
   expect(afterWrongSubject.events.map(event => event.event_id)).toEqual(before.events.map(event => event.event_id));
   expect(afterWrongSubject.commits.map(commit => commit.commit_id)).toEqual(before.commits.map(commit => commit.commit_id));
+
+  await test.step("real browser denial returns access_denied in query and form_post", async () => {
+    await productLogin(request, account);
+    const discovery = await jsonOk(await request.get(`${coauth}/.well-known/openid-configuration`), "denial OIDC discovery");
+    for (const mode of ["query", "form_post"]) {
+      const context = await browser.newContext({
+        storageState: await request.storageState(),
+        ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+      });
+      try {
+        // This route is the registered RP callback: observe the actual browser
+        // request after the product decision, without constructing its payload.
+        await context.route("http://127.0.0.1/auth/callback**", route => route.fulfill({ status: 200, body: "RP received callback" }));
+        const page = await context.newPage();
+        const state = randomBytes(24).toString("base64url");
+        const authorize = new URL(discovery.authorization_endpoint);
+        Object.entries({
+          response_type: "code", client_id: required("COTEST_OIDC_CLIENT_ID"),
+          redirect_uri: "http://127.0.0.1/auth/callback", scope: "openid",
+          response_mode: mode, state, nonce: randomBytes(24).toString("base64url"),
+          code_challenge: createHash("sha256").update(randomBytes(32)).digest("base64url"),
+          code_challenge_method: "S256",
+        }).forEach(([key, value]) => authorize.searchParams.set(key, value));
+        await page.goto(authorize.toString());
+        const callbackRequest = page.waitForRequest(reply => new URL(reply.url()).origin === "http://127.0.0.1");
+        await page.getByTestId("coauth-oauth-deny").click();
+        const callback = await callbackRequest;
+        expect(callback.method()).toBe(mode === "form_post" ? "POST" : "GET");
+        const parameters = mode === "form_post"
+          ? new URLSearchParams(callback.postData()!) : new URL(callback.url()).searchParams;
+        expect(parameters.get("state")).toBe(state);
+        expect(parameters.get("error")).toBe("access_denied");
+        for (const credential of ["code", "id_token", "access_token"]) expect(parameters.has(credential)).toBe(false);
+      } finally {
+        await context.close();
+      }
+    }
+  });
 });
 
 test("S2 browser WebAuthn registration/assertion, origin/session/challenge/expiry/replay rejection", async ({ browser }) => {

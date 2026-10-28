@@ -108,6 +108,13 @@ impl AuthorizationGrantStage {
         }
     }
 
+    fn cancel(self, cancelled_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
+        match self {
+            Self::Pending => Ok(Self::Cancelled { cancelled_at }),
+            _ => Err(InvalidTransitionError),
+        }
+    }
+
     /// Returns `true` if the authorization grant stage is [`Pending`].
     ///
     /// [`Pending`]: AuthorizationGrantStage::Pending
@@ -219,6 +226,16 @@ impl AuthorizationGrant {
         Ok(self)
     }
 
+    /// Cancel a pending authorization grant without creating a session.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the grant has already been fulfilled, exchanged or cancelled.
+    pub fn cancel(mut self, cancelled_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
+        self.stage = self.stage.cancel(cancelled_at)?;
+        Ok(self)
+    }
+
     #[doc(hidden)]
     pub fn sample(now: DateTime<Utc>, rng: &mut impl RngCore) -> Self {
         Self {
@@ -248,6 +265,67 @@ mod tests {
 
     use super::*;
     use crate::clock::{Clock, MockClock};
+
+    #[test]
+    fn cancel_pending_grant_preserves_request_and_preallocated_code() {
+        let clock = MockClock::default();
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let grant = AuthorizationGrant::sample(clock.now(), &mut rng);
+        clock.advance(chrono::Duration::seconds(1));
+        let cancelled_at = clock.now();
+        let mut expected = grant.clone();
+        expected.stage = AuthorizationGrantStage::Cancelled { cancelled_at };
+
+        assert_eq!(grant.cancel(cancelled_at).unwrap(), expected);
+    }
+
+    #[test]
+    fn cancelled_grant_cannot_be_cancelled_fulfilled_or_exchanged() {
+        let clock = MockClock::default();
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let grant = AuthorizationGrant::sample(clock.now(), &mut rng)
+            .cancel(clock.now())
+            .unwrap();
+        let session = grant_session(&grant, clock.now());
+
+        assert!(grant.clone().cancel(clock.now()).is_err());
+        assert!(grant.clone().fulfill(clock.now(), &session).is_err());
+        assert!(grant.exchange(clock.now()).is_err());
+    }
+
+    #[test]
+    fn fulfilled_and_exchanged_grants_cannot_be_cancelled() {
+        let clock = MockClock::default();
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let grant = AuthorizationGrant::sample(clock.now(), &mut rng);
+        let session = grant_session(&grant, clock.now());
+        let fulfilled = grant.fulfill(clock.now(), &session).unwrap();
+
+        assert!(fulfilled.clone().cancel(clock.now()).is_err());
+        assert!(
+            fulfilled
+                .exchange(clock.now())
+                .unwrap()
+                .cancel(clock.now())
+                .is_err()
+        );
+    }
+
+    fn grant_session(grant: &AuthorizationGrant, now: DateTime<Utc>) -> Session {
+        Session {
+            id: Ulid::from(1_u128),
+            state: crate::SessionState::default(),
+            created_at: now,
+            user_id: None,
+            user_session_id: None,
+            client_id: grant.client_id,
+            scope: grant.scope.clone(),
+            user_agent: None,
+            last_active_at: None,
+            last_active_ip: None,
+            human_name: None,
+        }
+    }
 
     #[test]
     fn no_login_hint() {

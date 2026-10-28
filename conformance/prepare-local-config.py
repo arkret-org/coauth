@@ -84,7 +84,9 @@ def main():
             "client_id": client_id, "client_name": "Local FAPI fixture",
             "client_auth_method": "private_key_jwt",
             "jwks": {"keys": [{name: value for name, value in key.items() if name not in {"d", "p", "q", "dp", "dq", "qi"}}]},
-            "redirect_uris": ["https://localhost:8446/test/a/coauth-fapi/callback"],
+            "redirect_uris": ["https://localhost:8446/test/a/coauth-fapi/callback"] + (
+                ["https://localhost:8446/test/a/coauth-fapi/callback?dummy1=lorem&dummy2=ipsum"] if index == 1 else []
+            ),
         })
     config["clients"] = clients
     config_path = out / "coauth.yaml"
@@ -128,7 +130,7 @@ def main():
                     "fapi_response_mode": "plain_response", "fapi_profile": "plain_fapi",
                     "sender_constrain": "dpop", "openid": "openid_connect", "authorization_request_type": "simple"},
         "client": fapi_clients[0], "client2": fapi_clients[1],
-        "resource": {"resourceUrl": "https://localhost:8445/oidc/userinfo"},
+        "resource": {"resourceUrl": "https://localhost:8445/oauth/userinfo"},
     })
     write_private(full_dir / "mtls-baseline.json", {
         "_unavailable": "Coauth does not implement RFC8705 client authentication or certificate-bound tokens; discovery and registration deliberately exclude tls_client_auth/self_signed_tls_client_auth. This profile remains a failing product capability obligation.",

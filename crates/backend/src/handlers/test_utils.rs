@@ -30,7 +30,7 @@ use cookie_store::{CookieStore, RawCookie};
 use diesel_async::AsyncPgConnection;
 use diesel_async::pooled_connection::deadpool::Pool as DieselPool;
 use headers::{Authorization, ContentType, HeaderMapExt, HeaderValue};
-use hyper::header::{CONTENT_TYPE, COOKIE};
+use hyper::header::{CONTENT_TYPE, COOKIE, SET_COOKIE};
 use hyper::{Request, Response, StatusCode};
 use rand_chacha::ChaChaRng;
 use rand_core::SeedableRng;
@@ -687,7 +687,31 @@ impl TestState {
 
         let mut salvo_res = test_req.send(&service).await;
         let status = salvo_res.status_code.unwrap_or(StatusCode::OK);
-        let response_headers = salvo_res.headers().clone();
+        let mut response_headers = salvo_res.headers().clone();
+        // Salvo's TestClient uses insert for cookie deltas, retaining only the
+        // last one. Preserve explicit headers and serialize every delta just
+        // like the production Response::into_hyper append path.
+        let cookie_delta = salvo_res
+            .cookies()
+            .delta()
+            .map(|cookie| {
+                cookie
+                    .encoded()
+                    .to_string()
+                    .parse::<hyper::header::HeaderValue>()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let explicit_cookies = response_headers
+            .get_all(SET_COOKIE)
+            .iter()
+            .filter(|value| !cookie_delta.contains(value))
+            .cloned()
+            .collect::<Vec<_>>();
+        response_headers.remove(SET_COOKIE);
+        for value in explicit_cookies.into_iter().chain(cookie_delta) {
+            response_headers.append(SET_COOKIE, value);
+        }
         let body_str = salvo_res.take_string().await.unwrap_or_default();
 
         let mut builder = Response::builder().status(status);
