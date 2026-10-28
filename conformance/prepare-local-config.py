@@ -3,6 +3,7 @@
 import argparse
 import base64
 import json
+import math
 import os
 from pathlib import Path
 
@@ -54,6 +55,16 @@ def main():
         "binds": [{"address": "127.0.0.1:7080"}],
         "proxy_protocol": False,
     }]
+    # Make the normal deployment quotas explicit so browser pacing follows
+    # the actual isolated fixture, including generated configs that omit
+    # default-valued sections. These are the shipped login defaults.
+    login_limits = config.setdefault("rate_limiting", {}).setdefault("login", {})
+    login_limits.setdefault("per_ip", {"burst": 3, "per_second": 3 / 60})
+    login_limits.setdefault("per_account", {"burst": 1800, "per_second": 1800 / 3600})
+    rates = [login_limits[key]["per_second"] for key in ("per_ip", "per_account")]
+    if any(isinstance(rate, bool) or not isinstance(rate, (int, float)) or not math.isfinite(rate) or rate <= 0 for rate in rates):
+        raise ValueError("local login pacing requires finite positive configured refill rates")
+    login_interval = max(1 / rate for rate in rates) + 1
     wrapping_key = out / "wrapping-key"
     wrapping_key.write_text(base64.b64encode(os.urandom(32)).decode())
     wrapping_key.chmod(0o600)
@@ -111,6 +122,7 @@ def main():
     plan_path.chmod(0o600)
     write_private(out / "browser-user.json", {
         "handle": LOCAL_HANDLE, "password": "Oidf!9" + base64.urlsafe_b64encode(os.urandom(32)).decode(),
+        "login_interval_seconds": login_interval,
     })
     full_dir = out / "full-plans"
     full_dir.mkdir()

@@ -3,6 +3,7 @@
 import argparse
 import base64
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -26,6 +27,23 @@ class BrowserFailure(RuntimeError):
 
 def consent_action(module):
     return "deny" if module == REJECT_MODULE else "approve"
+
+
+class LoginPacer:
+    """Respect the fixture's real quotas across modules and browser contexts."""
+
+    def __init__(self, interval, clock=time.monotonic, sleep=time.sleep):
+        if isinstance(interval, bool) or not isinstance(interval, (int, float)) or not math.isfinite(interval) or interval <= 0:
+            raise ValueError("invalid configured login interval")
+        self.interval, self.clock, self.sleep = interval, clock, sleep
+        # Another plan may have just used this same deployment/IP budget.
+        self.next_login = clock() + interval
+
+    def wait(self):
+        remaining = self.next_login - self.clock()
+        if remaining > 0:
+            self.sleep(remaining)
+        self.next_login = self.clock() + self.interval
 
 
 def upload_login_evidence(api, server, test_id, screenshot):
@@ -99,6 +117,7 @@ def drive_local_browser(process, scope):
     from playwright.sync_api import sync_playwright
 
     credentials = json.loads(Path(os.environ["COAUTH_CONFORMANCE_BROWSER_USER"]).read_text())
+    pacer = LoginPacer(credentials["login_interval_seconds"])
     server, api = scope.server, scope.api
     allowed = {"https://localhost:8445", server}
 
@@ -111,6 +130,7 @@ def drive_local_browser(process, scope):
         contexts = {}
         visited = set()
         login_screenshots = {}
+        password_submissions = {}
         try:
             while process.poll() is None:
                 for test_id in scope.test_ids():
@@ -136,6 +156,8 @@ def drive_local_browser(process, scope):
                             contexts[test_id] = context
                         page = contexts[test_id].new_page()
                         phase = "navigation"
+                        submitted_password = False
+                        submitted_decision = False
                         try:
                             if method == "POST":
                                 # Match upstream BrowserControl: move the supplied URL's
@@ -158,13 +180,22 @@ def drive_local_browser(process, scope):
                                 if page.locator("#login-error").is_visible():
                                     raise BrowserFailure(module, "login-ui-error")
                                 if page.locator("#login-handle").is_visible():
+                                    phase = "identifier-login"
                                     page.locator("#login-handle").fill(credentials["handle"])
                                     page.get_by_test_id("coauth-login-identifier-submit").click()
+                                    page.locator("#login-handle").wait_for(state="hidden", timeout=30000)
                                 elif page.locator("#login-password").is_visible():
                                     phase = "password-login"
+                                    if submitted_password:
+                                        raise BrowserFailure(module, "password-phase-did-not-advance")
+                                    pacer.wait()
                                     if module == "oidcc-prompt-login":
                                         login_screenshots[test_id] = page.screenshot(type="jpeg", quality=65)
                                     page.locator("#login-password").fill(credentials["password"])
+                                    submitted_password = True
+                                    ordinal = password_submissions.get(test_id, 0) + 1
+                                    password_submissions[test_id] = ordinal
+                                    print("::notice::OIDF " + str(BrowserFailure(module, f"password-submit-{ordinal}")), flush=True)
                                     with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login", timeout=30000) as login:
                                         page.get_by_test_id("coauth-login-submit").click()
                                     login_body = login.value.json()
@@ -173,15 +204,22 @@ def drive_local_browser(process, scope):
                                         code = login_body.get("error")
                                         known = {"invalid_credentials", "rate_limited", "account_deactivated", "account_locked", "password_login_disabled"}
                                         raise BrowserFailure(module, "login-" + (code if code in known else "unexpected-response"))
+                                    page.locator("#login-password").wait_for(state="hidden", timeout=30000)
                                 elif page.get_by_test_id("coauth-continue-as-current").is_visible():
+                                    phase = "continue-current-account"
                                     page.get_by_test_id("coauth-continue-as-current").click()
+                                    page.get_by_test_id("coauth-continue-as-current").wait_for(state="hidden", timeout=30000)
                                 elif page.get_by_test_id("coauth-oauth-approve").is_visible():
                                     phase = "authorization-decision"
+                                    if submitted_decision:
+                                        raise BrowserFailure(module, "consent-phase-did-not-advance")
                                     action = consent_action(module)
+                                    submitted_decision = True
                                     with page.expect_response(lambda reply: urlsplit(reply.url).path.endswith("/decision") and reply.request.method == "POST", timeout=30000) as decision:
                                         page.get_by_test_id("coauth-oauth-" + action).click()
                                     if decision.value.status != 200:
                                         raise BrowserFailure(module, "consent-http-error")
+                                    page.get_by_test_id("coauth-oauth-" + action).wait_for(state="hidden", timeout=30000)
                                 page.wait_for_timeout(250)
                             response = api.post(f"{server}/api/runner/browser/{test_id}/visit", params={"url": url}, timeout=30)
                             if response.status_code != 404:

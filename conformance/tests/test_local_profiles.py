@@ -89,11 +89,14 @@ class LocalProfilesTests(unittest.TestCase):
             runner.upload_login_evidence(api, "https://localhost:8446", "test-id", b"x" * (500 * 1024 + 1))
 
     @contextlib.contextmanager
-    def fixture(self):
+    def fixture(self, login_limits=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             generated = root / "generated.yaml"
-            generated.write_text(yaml.safe_dump({"database": {}, "http": {}}))
+            initial = {"database": {}, "http": {}}
+            if login_limits is not None:
+                initial["rate_limiting"] = {"login": login_limits}
+            generated.write_text(yaml.safe_dump(initial))
             subprocess.run([
                 sys.executable, str(Path(__file__).resolve().parents[1] / "prepare-local-config.py"),
                 str(generated), str(root),
@@ -104,6 +107,40 @@ class LocalProfilesTests(unittest.TestCase):
             })
             config = yaml.safe_load((root / "coauth.yaml").read_text())
             yield root, config
+
+    def test_login_pacing_preserves_real_quotas_and_derives_the_slower_refill(self):
+        with self.fixture() as (root, config):
+            login = config["rate_limiting"]["login"]
+            self.assertEqual(login["per_ip"], {"burst": 3, "per_second": 3 / 60})
+            self.assertEqual(login["per_account"], {"burst": 1800, "per_second": 1800 / 3600})
+            self.assertEqual(json.loads((root / "browser-user.json").read_text())["login_interval_seconds"], 21)
+        custom = {"per_ip": {"burst": 3, "per_second": 0.1}, "per_account": {"burst": 100, "per_second": 0.02},
+                  "lockout": {"consecutive_failures": 10, "lockout_seconds": 60, "failure_window_seconds": 300}}
+        with self.fixture(custom) as (root, config):
+            self.assertEqual(config["rate_limiting"]["login"], custom)
+            self.assertEqual(json.loads((root / "browser-user.json").read_text())["login_interval_seconds"], 51)
+
+    def test_login_pacer_spaces_contexts_and_starts_a_new_plan_conservatively(self):
+        runner = self.runner()
+        now, sleeps = [0.0], []
+
+        def sleep(delay):
+            sleeps.append(delay)
+            now[0] += delay
+
+        pacer = runner.LoginPacer(21, lambda: now[0], sleep)
+        pacer.wait()
+        self.assertEqual(now[0], 21)
+        now[0] += 3
+        pacer.wait()
+        self.assertEqual(now[0], 42)
+        next_plan = runner.LoginPacer(21, lambda: now[0], sleep)
+        next_plan.wait()
+        self.assertEqual(now[0], 63)
+        self.assertEqual(sleeps, [21, 18, 21])
+        for invalid in (0, -1, float("nan"), float("inf"), True):
+            with self.assertRaises(ValueError):
+                runner.LoginPacer(invalid, lambda: now[0], sleep)
 
     def test_login_hint_targets_the_registered_real_account(self):
         with self.fixture() as (root, _):
