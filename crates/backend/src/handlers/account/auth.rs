@@ -349,6 +349,7 @@ pub async fn providers(
         password_login_enabled: site_config.password_login_enabled,
         passkey_login_enabled: depot.webauthn_service().is_ok(),
         password_registration_enabled: site_config.password_registration_enabled,
+        password_registration_contact_required: site_config.password_registration_contact_required,
         account_recovery_allowed: site_config.account_recovery_allowed,
         login_hint,
         current_account,

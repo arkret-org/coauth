@@ -12,8 +12,15 @@ pub fn entry(scope: &Scope) -> View {
         let mut body = vec![];
         if providers.password_registration_enabled {
             let state = Action::new(scope);
+            let contact_required = providers.password_registration_contact_required;
             let action = crate::post_auth_continuation::current()
                 .or_else(crate::post_auth_continuation::load);
+            if contact_required {
+                body.push(copy(
+                    "text-secondary",
+                    t("coauth-register-contact-required"),
+                ));
+            }
             body.push(ui::form(
                 scope,
                 "register",
@@ -34,6 +41,9 @@ pub fn entry(scope: &Scope) -> View {
                 move |values| {
                     let action = action.clone();
                     async move {
+                        if contact_required && values[1].trim().is_empty() && values[2].trim().is_empty() {
+                            return Err(t("coauth-register-contact-required"));
+                        }
                         super::auth::validate_passwords(&values[3], &values[4])?;
                         let response = api::api_post::<RegisterOutcome>(
                             "/account/auth/register",
@@ -417,7 +427,7 @@ fn mask_email(email: &str) -> String {
 }
 fn error_message(code: &str) -> String {
     match code{
-    "invalid_code"=>"Incorrect code. Please try again.".into(),"invalid_display_name"=>t("coauth-errors-display-name-invalid"),"rate_limited"=>"Please wait a moment and try again.".into(),"registration_already_completed"=>"This registration has already been completed.".into(),"email_already_verified"=>"This email has already been verified.".into(),"email_invalid"=>"Please enter a valid email address.".into(),"email_in_use"=>"This email is already in use.".into(),"bootstrap_admin_token_invalid"=>"That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".into(),other=>other.into(),}
+    "email_or_phone_required"=>t("coauth-register-contact-required"),"invalid_code"=>"Incorrect code. Please try again.".into(),"invalid_display_name"=>t("coauth-errors-display-name-invalid"),"rate_limited"=>"Please wait a moment and try again.".into(),"registration_already_completed"=>"This registration has already been completed.".into(),"email_already_verified"=>"This email has already been verified.".into(),"email_invalid"=>"Please enter a valid email address.".into(),"email_in_use"=>"This email is already in use.".into(),"bootstrap_admin_token_invalid"=>"That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".into(),other=>other.into(),}
 }
 
 #[cfg(test)]
