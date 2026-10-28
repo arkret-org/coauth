@@ -12,9 +12,17 @@ Coauth WASM login and consent pages using the official runner's front-channel
 URLs and HTTP methods. Java and Coauth trust the temporary issuer certificate. Private configuration,
 wrapping keys and TLS keys are deleted after the run. The original official
 signed ZIP archives and service logs remain in the private temporary directory
-and are deleted with it. Only module/condition outcome summaries and JUnit
-outcomes without configuration, HTTP payloads or diagnostic messages are
-uploaded. Archive SHA-256 digests preserve a reference to the untouched originals;
+and are deleted with it. Filtered artifacts contain module/condition summaries,
+JUnit outcomes, and a narrow allowlist of original browser JPEGs for manual review:
+the second, empty-password login page for `oidcc-prompt-login` and `oidcc-max-age-1`,
+and the HTTP 400 error pages for missing response type and the two invalid-redirect
+modules. The driver verifies the fixed synthetic account, local origin, empty
+inputs, expected page text and absence of private configuration/query values in
+visible content before retaining an image. Only bytes confirmed by the official
+image-upload response are retained, with module/phase/SHA-256 metadata; screenshots
+are never edited, reconstructed, or treated as automatic approval. No raw ZIP,
+configuration, HTTP payload, query, or diagnostic message is included.
+Archive SHA-256 digests preserve a reference to the untouched originals;
 the sanitized summaries are not signed certification archives.
 
 ## Test scope

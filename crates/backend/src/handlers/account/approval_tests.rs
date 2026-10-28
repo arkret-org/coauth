@@ -474,7 +474,12 @@ async fn browser_form_with_expired_session_returns_to_login_without_consumption(
         )
         .await;
     assert!(response.status().is_redirection());
-    let destination = local_redirect(&fixture.state, &response);
+    let destination: url::Url = fixture
+        .state
+        .url_builder
+        .absolute_url("/")
+        .join(response.headers()["location"].to_str().unwrap())
+        .unwrap();
     assert_eq!(
         destination.origin().ascii_serialization(),
         "https://example.com"
@@ -689,16 +694,6 @@ async fn expired_browser_continuation_cannot_consume_a_pending_grant() {
     fixture.finish().await;
 }
 
-fn local_redirect(state: &TestState, response: &Response<String>) -> url::Url {
-    assert!(response.status().is_redirection());
-    let base = state.url_builder.absolute_url("/");
-    let destination = base
-        .join(response.headers()["location"].to_str().unwrap())
-        .unwrap();
-    assert_eq!(destination.origin(), base.origin());
-    destination
-}
-
 fn authorization_error(response: &Response<String>) -> String {
     let location: url::Url = response.headers()["location"]
         .to_str()
@@ -711,6 +706,16 @@ fn authorization_error(response: &Response<String>) -> String {
     assert_eq!(params["state"], "opaque&state=<safe>");
     assert!(!params.contains_key("code"));
     params["error"].to_string()
+}
+
+fn same_origin_location(state: &TestState, response: &Response<String>) -> url::Url {
+    assert!(response.status().is_redirection());
+    let base = state.url_builder.absolute_url("/");
+    let location = base
+        .join(response.headers()["location"].to_str().unwrap())
+        .unwrap();
+    assert_eq!(location.origin(), base.origin());
+    location
 }
 
 #[tokio::test]
@@ -855,7 +860,7 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             .browser
             .send(&fixture.state, Request::get(url.as_str()).empty())
             .await;
-        let location = local_redirect(&fixture.state, &response);
+        let location = same_origin_location(&fixture.state, &response);
         assert_eq!(location.path(), "/login");
         let grant: Ulid = location
             .query_pairs()
@@ -892,12 +897,12 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             )
             .await;
         assert!(denied.status().is_redirection());
-        let destination = local_redirect(&fixture.state, &denied);
-        assert_eq!(destination.path(), "/login");
+        let login = same_origin_location(&fixture.state, &denied);
+        assert_eq!(login.path(), "/login");
         assert!(
-            destination
+            login
                 .query_pairs()
-                .any(|(key, value)| { key == "id" && value == grant.to_string() })
+                .any(|(key, value)| key == "id" && value == grant.to_string())
         );
         assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
         grants.push((grant, csrf));
@@ -975,7 +980,7 @@ async fn invalid_id_token_hints_are_rejected_without_issuing_credentials() {
 #[tokio::test]
 async fn expired_signed_hint_binds_the_eventual_subject_without_logging_a_browser_in() {
     use coauth_iana::jose::JsonWebSignatureAlg;
-    let mut fixture = Fixture::new().await;
+    let fixture = Fixture::new().await;
     let subject = crate::handlers::arkret::oidc_subject_for_user(
         &fixture.state.arkret_config,
         &fixture.session.user,
@@ -992,7 +997,7 @@ async fn expired_signed_hint_binds_the_eventual_subject_without_logging_a_browse
     let response = anonymous
         .send(&fixture.state, Request::get(url.as_str()).empty())
         .await;
-    let location = local_redirect(&fixture.state, &response);
+    let location = same_origin_location(&fixture.state, &response);
     assert_eq!(location.path(), "/login");
     let grant: Ulid = location
         .query_pairs()
@@ -1011,16 +1016,23 @@ async fn expired_signed_hint_binds_the_eventual_subject_without_logging_a_browse
         .send(&fixture.state, Request::get(approval.as_str()).empty())
         .await
         .assert_status(StatusCode::UNAUTHORIZED);
-    let csrf = anonymous
-        .pending(&fixture.state)
-        .bind(grant, &fixture.other)
-        .unwrap();
+    let original_continuation = anonymous.clone();
+    let mut pending = anonymous.pending(&fixture.state);
+    let csrf = pending.bind(grant, &fixture.other).unwrap();
+    // Build a server-authenticated test envelope with a valid nonce and
+    // session binding, preserving the independently constrained subject.
+    // The POST must reject that subject rather than only an absent binding.
+    anonymous.import(pending.write(
+        fixture.state.cookie_jar().set_session(&fixture.other),
+        &coauth_data::SystemClock::default(),
+    ));
     anonymous
         .send(&fixture.state, Fixture::decision(grant, &csrf, "approve"))
         .await
         .assert_status(StatusCode::UNAUTHORIZED);
     assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
     assert_eq!(fixture.sessions().await, 0);
+    anonymous = original_continuation;
     anonymous.import(fixture.state.cookie_jar().set_session(&fixture.session));
     let response = anonymous
         .send(&fixture.state, Request::get(approval.as_str()).empty())
@@ -1050,7 +1062,7 @@ async fn recent_real_authentication_satisfies_nonzero_max_age_without_a_new_logi
         .browser
         .send(&fixture.state, Request::get(url.as_str()).empty())
         .await;
-    let location = local_redirect(&fixture.state, &response);
+    let location = same_origin_location(&fixture.state, &response);
     assert!(location.path().starts_with("/oauth/approval/"));
     let grant: Ulid = location.path().rsplit('/').next().unwrap().parse().unwrap();
     fixture
@@ -1064,5 +1076,217 @@ async fn recent_real_authentication_satisfies_nonzero_max_age_without_a_new_logi
         )
         .await
         .assert_status(StatusCode::OK);
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn malformed_authorization_queries_return_safe_400_pages_without_a_callback() {
+    let mut fixture = Fixture::new().await;
+    let original = fixture.authorization_url("query");
+    for missing in ["response_type", "client_id", "scope"] {
+        let mut url = original.clone();
+        url.query_pairs_mut()
+            .clear()
+            .extend_pairs(original.query_pairs().filter(|(key, _)| key != missing));
+        let response = fixture
+            .browser
+            .send(&fixture.state, Request::get(url.as_str()).empty())
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+        assert!(!response.headers().contains_key("location"));
+        assert_eq!(
+            response.body(),
+            if missing == "response_type" {
+                "missing required response_type parameter"
+            } else {
+                "invalid authorization parameters"
+            }
+        );
+    }
+    for (invalid, value) in [
+        ("max_age", "PRIVATE_AUTHORIZATION_VALUE_SENTINEL"),
+        ("max_age", "-1"),
+        ("redirect_uri", "PRIVATE_AUTHORIZATION_VALUE_SENTINEL"),
+        ("response_type", ""),
+    ] {
+        let mut url = original.clone();
+        url.query_pairs_mut()
+            .clear()
+            .extend_pairs(original.query_pairs().filter(|(key, _)| key != invalid))
+            .append_pair(invalid, value);
+        let response = fixture
+            .browser
+            .send(&fixture.state, Request::get(url.as_str()).empty())
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+        assert!(!response.headers().contains_key("location"));
+        assert_eq!(response.body(), "invalid authorization parameters");
+        assert!(
+            !response
+                .body()
+                .contains("PRIVATE_AUTHORIZATION_VALUE_SENTINEL")
+        );
+    }
+    assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn form_post_authorization_uses_the_same_bound_consent_and_callback_flow() {
+    for mode in ["query", "form_post"] {
+        let mut fixture = Fixture::new().await;
+        let parameters = fixture.authorization_url(mode);
+        let endpoint = fixture.state.url_builder.absolute_url("/authorize");
+        let response = fixture
+            .browser
+            .send(
+                &fixture.state,
+                Request::post(endpoint.as_str())
+                    .header(
+                        "content-type",
+                        "application/x-www-form-urlencoded; charset=UTF-8",
+                    )
+                    .body(parameters.query().unwrap().to_owned())
+                    .unwrap(),
+            )
+            .await;
+        assert!(response.status().is_redirection());
+        let location = same_origin_location(&fixture.state, &response);
+        assert!(location.path().starts_with("/oauth/approval/"));
+        let grant: Ulid = location.path().rsplit('/').next().unwrap().parse().unwrap();
+        let consent = fixture
+            .browser
+            .send(
+                &fixture.state,
+                Request::get(format!(
+                    "/_coauth/self/oauth/authorization-grants/{grant}/decision",
+                ))
+                .empty(),
+            )
+            .await;
+        consent.assert_status(StatusCode::OK);
+        let csrf = consent.json::<Value>()["csrf_token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let accepted = fixture
+            .browser
+            .send(&fixture.state, Fixture::decision(grant, &csrf, "approve"))
+            .await;
+        accepted.assert_status(StatusCode::OK);
+        let body = accepted.json::<Value>();
+        let callback: url::Url = body["redirect_url"].as_str().unwrap().parse().unwrap();
+        assert_eq!(
+            callback.origin().ascii_serialization(),
+            "https://client.example"
+        );
+        let values: Vec<(String, String)> = if mode == "form_post" {
+            assert_eq!(callback.as_str(), fixture.client.redirect_uris[0].as_str());
+            serde_json::from_value(body["form_parameters"].clone()).unwrap()
+        } else {
+            callback.query_pairs().into_owned().collect()
+        };
+        assert!(values.contains(&("state".to_owned(), "opaque&state=<safe>".to_owned())));
+        assert!(
+            values
+                .iter()
+                .any(|(key, value)| key == "code" && !value.is_empty())
+        );
+        assert!(!values.iter().any(|(key, _)| key == "error"));
+        assert!(fixture.stage(grant).await.is_fulfilled());
+        assert_eq!(fixture.sessions().await, 1);
+        fixture.finish().await;
+    }
+}
+
+#[tokio::test]
+async fn authorization_post_rejects_json_mixed_sources_and_duplicate_fields() {
+    let mut fixture = Fixture::new().await;
+    let parameters = fixture.authorization_url("query");
+    let endpoint = fixture.state.url_builder.absolute_url("/authorize");
+    let form = parameters.query().unwrap();
+    let mut requests = vec![
+        (
+            Request::post(endpoint.as_str()).json(json!({"response_type":"code"})),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            Request::post(endpoint.as_str())
+                .header("content-type", "text/plain")
+                .body(form.to_owned())
+                .unwrap(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            Request::post(endpoint.as_str())
+                .body(form.to_owned())
+                .unwrap(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+    ];
+    for query in ["client_id=other-client", "response_type=code"] {
+        requests.push((
+            Request::post(format!("{endpoint}?{query}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(form.to_owned())
+                .unwrap(),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    for extra in [
+        "client_id=other-client",
+        "response_type=code",
+        "max_age=PRIVATE_FORM_VALUE_SENTINEL",
+    ] {
+        requests.push((
+            Request::post(endpoint.as_str())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(format!("{form}&{extra}"))
+                .unwrap(),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    requests.push((
+        Request::get(format!("{parameters}&client_id=other-client")).empty(),
+        StatusCode::BAD_REQUEST,
+    ));
+    for (request, status) in requests {
+        let response = fixture.browser.send(&fixture.state, request).await;
+        response.assert_status(status);
+        assert!(!response.headers().contains_key("location"));
+        assert!(!response.body().contains("PRIVATE_FORM_VALUE_SENTINEL"));
+    }
+    assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn authorization_form_post_enforces_existing_pkce_and_authentication_requirements() {
+    let mut fixture = Fixture::new().await;
+    let original = fixture.authorization_url("query");
+    let endpoint = fixture.state.url_builder.absolute_url("/authorize");
+    for (name, value, error) in [
+        ("code_challenge_method", "plain", "invalid_request"),
+        ("prompt", "none", "login_required"),
+    ] {
+        let mut parameters = original.clone();
+        parameters
+            .query_pairs_mut()
+            .clear()
+            .extend_pairs(original.query_pairs().filter(|(key, _)| key != name))
+            .append_pair(name, value);
+        let response = fixture
+            .browser
+            .send(
+                &fixture.state,
+                Request::post(endpoint.as_str())
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(parameters.query().unwrap().to_owned())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(authorization_error(&response), error);
+    }
+    assert_eq!(fixture.sessions().await, 0);
     fixture.finish().await;
 }
