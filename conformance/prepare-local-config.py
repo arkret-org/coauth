@@ -138,8 +138,9 @@ def main():
     write_private(full_dir / "fapi2-baseline.json", {
         **common, "alias": "coauth-fapi", "description": "Local private_key_jwt and DPoP FAPI2",
         "_official_plan": "fapi2-security-profile-id2-test-plan",
-        "variant": {"client_auth_type": "private_key_jwt", "fapi_request_method": "unsigned",
-                    "fapi_response_mode": "plain_response", "fapi_profile": "plain_fapi",
+        # The official ID2 plan itself fixes unsigned/plain_response per module;
+        # supplying either fixed variant again is rejected by VariantService.
+        "variant": {"client_auth_type": "private_key_jwt", "fapi_profile": "plain_fapi",
                     "sender_constrain": "dpop", "openid": "openid_connect", "authorization_request_type": "simple"},
         "client": fapi_clients[0], "client2": fapi_clients[1],
         "resource": {"resourceUrl": "https://localhost:8445/oauth/userinfo"},
