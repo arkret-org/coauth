@@ -2,6 +2,7 @@
 
 import base64
 import contextlib
+import hashlib
 import importlib.util
 import io
 import json
@@ -20,6 +21,115 @@ import yaml
 
 
 class LocalProfilesTests(unittest.TestCase):
+    def test_review_dom_gate_rejects_private_values_filled_inputs_and_other_accounts(self):
+        runner = self.runner()
+
+        class Locator:
+            def __init__(self, text="", value="", kind="password", visible=True, count=1):
+                self.text, self.value, self.kind, self.visible, self.number = text, value, kind, visible, count
+                self.fields = []
+
+            def inner_text(self, **options):
+                return self.text
+
+            def input_value(self):
+                return self.value
+
+            def get_attribute(self, key):
+                return self.kind if key == "type" else None
+
+            def is_visible(self):
+                return self.visible
+
+            def count(self):
+                return self.number
+
+            def all(self):
+                return self.fields
+
+        body = Locator(text="Sign in Selected account oidf-conformance Password Continue")
+        password = Locator()
+        selected = Locator(text="oidf-conformance")
+        inputs = Locator()
+        inputs.fields = [password]
+        embeds = Locator(count=0)
+        selectors = {"body": body, "#login-password": password,
+                     ".login-selected-copy strong": selected, "input,textarea": inputs,
+                     "iframe,canvas,video,object,embed": embeds}
+        page = SimpleNamespace(url="https://localhost:8445/login?id=PRIVATE_GRANT_SENTINEL", locator=lambda key: selectors[key])
+        credentials = {"handle": "oidf-conformance", "password": "PRIVATE_PASSWORD_SENTINEL"}
+        url = "https://localhost:8445/authorize?state=PRIVATE_STATE_SENTINEL"
+        secrets = {"PRIVATE_CLIENT_SECRET_SENTINEL"}
+
+        def allowed(module="oidcc-prompt-login"):
+            return runner.review_dom_is_public(module, page, credentials, url, secrets)
+
+        self.assertTrue(allowed())
+        for secret in [credentials["password"], *secrets, "PRIVATE_STATE_SENTINEL", "PRIVATE_GRANT_SENTINEL"]:
+            original = body.text
+            body.text += secret
+            self.assertFalse(allowed())
+            body.text = original
+        password.value = credentials["password"]
+        self.assertFalse(allowed())
+        password.value, password.kind = "", "text"
+        self.assertFalse(allowed())
+        password.kind = "password"
+        selected.text = "a-real-person"
+        self.assertFalse(allowed())
+        selected.text = "oidf-conformance"
+        credentials["handle"] = "a-real-person"
+        self.assertFalse(allowed())
+        credentials["handle"] = "oidf-conformance"
+        embeds.number = 1
+        self.assertFalse(allowed())
+        embeds.number = 0
+        inputs.fields.append(Locator(value="PRIVATE_EXTRA_FIELD"))
+        self.assertFalse(allowed())
+        inputs.fields.pop()
+        page.url = "https://outside.example/login"
+        self.assertFalse(allowed())
+        page.url = "https://localhost:8445/authorize"
+        body.text = "invalid redirect uri"
+        self.assertTrue(allowed("oidcc-ensure-registered-redirect-uri"))
+        self.assertFalse(allowed("oidcc-server"))
+
+    def test_review_artifact_retains_only_verified_allowlisted_original_bytes_and_hashes(self):
+        runner = self.runner()
+        # Format-only writer fixtures are not browser evidence or certification.
+        original = b"\xff\xd8writer-unit-fixture\xff\xd9"
+        module = "oidcc-max-age-1"
+        with tempfile.TemporaryDirectory() as directory:
+            evidence = runner.ReviewEvidence(directory)
+            for arguments in [{"upload_verified": False, "dom_vetted": True},
+                              {"upload_verified": True, "dom_vetted": False}]:
+                with self.assertRaises(runner.BrowserFailure):
+                    evidence.preserve(module, original, **arguments)
+            for name, image in [("oidcc-server", original), (module, b"not-jpeg"),
+                                (module, b"\xff\xd8" + b"x" * (500 * 1024) + b"\xff\xd9")]:
+                with self.assertRaises(runner.BrowserFailure):
+                    evidence.preserve(name, image, upload_verified=True, dom_vetted=True)
+            evidence.preserve(module, original, upload_verified=True, dom_vetted=True)
+            root = Path(directory)
+            manifest = json.loads((root / "manifest.json").read_text())
+            record = manifest["images"][0]
+            self.assertEqual((root / record["filename"]).read_bytes(), original)
+            self.assertEqual(record["sha256"], hashlib.sha256(original).hexdigest())
+            self.assertEqual(record["module"], module)
+            self.assertEqual(record["phase"], "second-login-before-password")
+            self.assertEqual(set(record), {"module", "phase", "filename", "sha256", "official_upload_verified"})
+            self.assertEqual(manifest["review_status"], "not_automatically_approved")
+            self.assertEqual(len(list(root.iterdir())), 2)
+            with self.assertRaises(runner.BrowserFailure):
+                evidence.preserve(module, b"\xff\xd8different-image\xff\xd9", upload_verified=True, dom_vetted=True)
+            self.assertEqual((root / record["filename"]).read_bytes(), original)
+
+    def test_private_configuration_comparisons_are_kept_out_of_public_metadata(self):
+        runner = self.runner()
+        values = runner.private_config_values({"client": {"client_secret": "PRIVATE_SECRET", "client_id": "public-id"},
+                                               "jwks": {"keys": [{"d": "PRIVATE_RSA_D", "n": "public-modulus"}]}})
+        self.assertEqual(values, {"PRIVATE_SECRET", "PRIVATE_RSA_D"})
+
     def test_error_page_images_require_the_exact_real_http_error_and_origin(self):
         runner = self.runner()
 
@@ -47,7 +157,7 @@ class LocalProfilesTests(unittest.TestCase):
         with contextlib.redirect_stdout(output):
             for module in ["oidcc-ensure-registered-redirect-uri", "oidcc-ensure-request-object-with-redirect-uri"]:
                 self.assertEqual(runner.authorization_error_screenshot(module, response, page), b"actual-error-page-image")
-            page.body = "missing field `response_type`"
+            page.body = "missing required response_type parameter"
             module = "oidcc-response-type-missing"
             self.assertEqual(runner.authorization_error_screenshot(module, response, page), b"actual-error-page-image")
             self.assertEqual(page.calls, 3)
@@ -62,7 +172,7 @@ class LocalProfilesTests(unittest.TestCase):
             page.url = "https://localhost:8445/authorize"
             page.body = "PRIVATE_BODY_SENTINEL unexpected server error"
             self.assertIsNone(runner.authorization_error_screenshot(module, response, page))
-            page.body = "missing field `response_type`"
+            page.body = "missing required response_type parameter"
             response.request.redirected_from = object()
             self.assertIsNone(runner.authorization_error_screenshot(module, response, page))
             response.request.redirected_from = None

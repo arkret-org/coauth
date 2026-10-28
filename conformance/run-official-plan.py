@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import hashlib
 import importlib.util
 import io
 import json
@@ -13,7 +14,7 @@ import subprocess
 import sys
 import time
 import traceback
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 import zipfile
 
 
@@ -23,6 +24,12 @@ ERROR_PAGE_MODULES = {
     "oidcc-ensure-registered-redirect-uri": "redirect-uri",
     "oidcc-ensure-request-object-with-redirect-uri": "redirect-uri",
 }
+REVIEW_PHASES = {
+    "oidcc-prompt-login": "second-login-before-password",
+    "oidcc-max-age-1": "second-login-before-password",
+    **{module: "authorization-error" for module in ERROR_PAGE_MODULES},
+}
+LOCAL_REVIEW_HANDLE = "oidf-conformance"
 
 
 class EvidenceExportFailure(RuntimeError):
@@ -107,13 +114,92 @@ def authorization_error_screenshot(module, navigation, page):
         return None
     text = page.locator("body").inner_text(timeout=5000).lower()
     if expected == "response-type":
-        matches = "response_type" in text and ("missing" in text or "required" in text)
+        matches = text.strip() == "missing required response_type parameter"
     else:
         matches = text.strip() == "invalid redirect uri"
     if not matches:
         print("::notice::OIDF " + str(BrowserFailure(module, "unexpected-authorization-error-page")), flush=True)
         return None
     return page.screenshot(type="jpeg", quality=65)
+
+
+def private_config_values(value):
+    """Keep private comparison values in memory; never serialize them."""
+    private_keys = {"password", "client_secret", "d", "p", "q", "dp", "dq", "qi", "k", "private_key", "access_token", "refresh_token", "id_token"}
+    values = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in private_keys and isinstance(child, str) and child:
+                values.add(child)
+            values.update(private_config_values(child))
+    elif isinstance(value, list):
+        for child in value:
+            values.update(private_config_values(child))
+    return values
+
+
+def review_dom_is_public(module, page, credentials, authorization_url, private_values):
+    """Allow only the seeded local fixture and its inspected, empty-input UI."""
+    if module not in REVIEW_PHASES or credentials.get("handle") != LOCAL_REVIEW_HANDLE:
+        return False
+    parsed = urlsplit(page.url)
+    if (parsed.scheme, parsed.netloc) != ("https", "localhost:8445"):
+        return False
+    text = page.locator("body").inner_text(timeout=5000)
+    forbidden = set(private_values) | {credentials["password"]}
+    for source in (authorization_url, page.url):
+        forbidden.update(value for _, value in parse_qsl(urlsplit(source).query)
+                         if len(value) >= 12 and value != LOCAL_REVIEW_HANDLE)
+    if any(value and value in text for value in forbidden):
+        return False
+    if module in ERROR_PAGE_MODULES:
+        expected = "missing required response_type parameter" if module == "oidcc-response-type-missing" else "invalid redirect uri"
+        return parsed.path == "/authorize" and text.strip() == expected
+    if parsed.path != "/login":
+        return False
+    password = page.locator("#login-password")
+    if not password.is_visible() or password.get_attribute("type") != "password" or password.input_value():
+        return False
+    selected = page.locator(".login-selected-copy strong")
+    if selected.count() != 1 or selected.inner_text(timeout=5000).strip() != LOCAL_REVIEW_HANDLE:
+        return False
+    for field in page.locator("input,textarea").all():
+        if field.is_visible() and field.get_attribute("type") not in {"checkbox", "radio"}:
+            if field.input_value() not in {"", LOCAL_REVIEW_HANDLE}:
+                return False
+    return page.locator("iframe,canvas,video,object,embed").count() == 0
+
+
+class ReviewEvidence:
+    """Retain only allowlisted original JPEG bytes after verified official upload."""
+
+    def __init__(self, directory):
+        self.directory = Path(directory)
+        self.records = {}
+
+    def preserve(self, module, screenshot, *, upload_verified, dom_vetted):
+        if upload_verified is not True or dom_vetted is not True:
+            raise BrowserFailure(module, "review-image-not-verified")
+        if module not in REVIEW_PHASES or not isinstance(screenshot, bytes):
+            raise BrowserFailure(module, "review-image-not-allowlisted")
+        if not screenshot.startswith(b"\xff\xd8") or not screenshot.endswith(b"\xff\xd9") or len(screenshot) > 500 * 1024:
+            raise BrowserFailure(module, "review-original-jpeg-required")
+        digest = hashlib.sha256(screenshot).hexdigest()
+        filename = module + "-" + REVIEW_PHASES[module] + ".jpg"
+        if module in self.records and self.records[module]["sha256"] != digest:
+            raise BrowserFailure(module, "conflicting-review-image")
+        self.directory.mkdir(parents=True, exist_ok=True)
+        destination = self.directory / filename
+        if destination.exists() and destination.read_bytes() != screenshot:
+            raise BrowserFailure(module, "conflicting-review-image")
+        destination.write_bytes(screenshot)
+        self.records[module] = {"module": module, "phase": REVIEW_PHASES[module],
+                                "filename": filename, "sha256": digest, "official_upload_verified": True}
+        (self.directory / "manifest.json").write_text(json.dumps({
+            "scope": "Unmodified browser images for manual review; official outcomes are unchanged",
+            "review_status": "not_automatically_approved",
+            "images": [self.records[key] for key in sorted(self.records)],
+        }, indent=2) + "\n")
 
 
 class LoginPacer:
@@ -137,6 +223,7 @@ def upload_browser_evidence(api, server, test_id, screenshot, module):
     """Fill actual official placeholders with a real browser screenshot."""
     response = api.get(f"{server}/api/log/{test_id}/images", timeout=30)
     response.raise_for_status()
+    verified = False
     for document in response.json():
         placeholder = document.get("upload")
         if not placeholder:
@@ -155,6 +242,8 @@ def upload_browser_evidence(api, server, test_id, screenshot, module):
         completed = uploaded.json()
         if not isinstance(completed, dict) or "upload" in completed or completed.get("testId") != test_id or completed.get("img") != image:
             raise BrowserFailure(module, "image-placeholder-not-completed")
+        verified = True
+    return verified
 
 
 class LocalPlanScope:
@@ -199,7 +288,7 @@ def cleanup_plan(scope, log, failure_active):
         print("::error::Local plan cleanup also failed; the original browser failure is preserved", flush=True)
 
 
-def drive_local_browser(process, scope):
+def drive_local_browser(process, scope, private_values):
     """Visit the official runner's front-channel URLs with the real WASM UI."""
     from playwright.sync_api import sync_playwright
 
@@ -207,6 +296,8 @@ def drive_local_browser(process, scope):
     pacer = LoginPacer(credentials["login_interval_seconds"])
     server, api = scope.server, scope.api
     allowed = {"https://localhost:8445", server}
+    review_directory = os.environ.get("COAUTH_CONFORMANCE_REVIEW_DIR")
+    review = ReviewEvidence(review_directory) if review_directory else None
 
     def origin(url):
         parsed = urlsplit(url)
@@ -217,6 +308,7 @@ def drive_local_browser(process, scope):
         contexts = {}
         visited = set()
         browser_screenshots = {}
+        public_images = set()
         password_submissions = {}
         try:
             while process.poll() is None:
@@ -228,7 +320,9 @@ def drive_local_browser(process, scope):
                     metadata = response.json()
                     module = metadata.get("name")
                     if test_id in browser_screenshots:
-                        upload_browser_evidence(api, server, test_id, browser_screenshots[test_id], module)
+                        verified = upload_browser_evidence(api, server, test_id, browser_screenshots[test_id], module)
+                        if verified and review is not None and test_id in public_images:
+                            review.preserve(module, browser_screenshots[test_id], upload_verified=verified, dom_vetted=True)
                     for request in metadata.get("browser", {}).get("urlsWithMethod", []):
                         url, method = request["url"], request["method"]
                         if method not in {"GET", "POST"}:
@@ -256,10 +350,23 @@ def drive_local_browser(process, scope):
                                     headers={**route.request.headers, "content-type": "application/x-www-form-urlencoded"},
                                 ), times=1)
                             navigation = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                            if module == "oidcc-ensure-post-request-succeeds" and navigation is not None:
+                                initial = navigation.request
+                                while initial.redirected_from is not None:
+                                    initial = initial.redirected_from
+                                first_response = initial.response()
+                                initial_status = first_response.status if first_response is not None else navigation.status
+                                print("::notice::OIDF " + str(BrowserFailure(
+                                    module, f"front-channel-requested-{method}-first-http-{initial_status}"
+                                )), flush=True)
                             error_page = authorization_error_screenshot(module, navigation, page)
                             if error_page is not None:
                                 browser_screenshots[test_id] = error_page
-                                upload_browser_evidence(api, server, test_id, error_page, module)
+                                if review_dom_is_public(module, page, credentials, url, private_values):
+                                    public_images.add(test_id)
+                                verified = upload_browser_evidence(api, server, test_id, error_page, module)
+                                if verified and review is not None and test_id in public_images:
+                                    review.preserve(module, error_page, upload_verified=verified, dom_vetted=True)
                             deadline = time.monotonic() + 120
                             while origin(page.url) != server:
                                 # An OP error page can be the correct outcome of a negative module.
@@ -284,6 +391,8 @@ def drive_local_browser(process, scope):
                                     screenshot = second_login_screenshot(module, ordinal, page)
                                     if screenshot is not None:
                                         browser_screenshots[test_id] = screenshot
+                                        if review_dom_is_public(module, page, credentials, url, private_values):
+                                            public_images.add(test_id)
                                     page.locator("#login-password").fill(credentials["password"])
                                     submitted_password = True
                                     password_submissions[test_id] = ordinal
@@ -372,7 +481,7 @@ def main():
             process = subprocess.Popen(command, cwd=config_path.parent, stdout=log, stderr=subprocess.STDOUT)
             try:
                 try:
-                    drive_local_browser(process, scope)
+                    drive_local_browser(process, scope, private_config_values(config))
                 except Exception as error:
                     traceback.print_exc(file=log)
                     if isinstance(error, BrowserFailure):
