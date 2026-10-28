@@ -157,27 +157,6 @@ impl Mailer {
         self.transport.test_connection(&self.from).await
     }
 
-    /// Deliver an activated IVS code through the configured real transport.
-    /// No Realm name, member data, URL credential or tracking identifier is
-    /// included. The caller owns durable retries; external delivery may repeat.
-    ///
-    /// # Errors
-    /// Returns the transport error without logging the code or recipient.
-    pub async fn send_third_party_invite_code(
-        &self,
-        to: Mailbox,
-        code: &str,
-    ) -> Result<SendResult, MailerError> {
-        let email = self.outbound_email(
-            to,
-            "Your invitation code".to_owned(),
-            format!("Your invitation code is {code}.\nEnter it in your Arkret client.\n"),
-            None,
-            &BTreeMap::new(),
-        );
-        Ok(self.transport.send(&email).await?)
-    }
-
     /// Return the stable provider binding key for the configured transport.
     #[must_use]
     pub fn provider_binding_key(&self) -> &'static str {

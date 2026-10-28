@@ -146,8 +146,6 @@ pub mod queue;
 pub mod recovery_authority;
 /// Station trust enrollment repositories.
 pub mod station_trust;
-/// Private third-party invite verification-service custody.
-pub mod third_party_invite;
 /// Upstream OAuth repositories.
 pub mod upstream_oauth;
 /// User repositories.

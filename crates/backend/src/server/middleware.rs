@@ -151,17 +151,11 @@ fn otel_url_scheme(req: &Request) -> &'static str {
 
 // URL credential rejection must not itself copy credentials into telemetry.
 fn telemetry_path(path: &str) -> &str {
-    const FAMILY: &str = "/_arkret/open/third-party-invites";
-    if let Some(rest) = path.strip_prefix(&format!("{FAMILY}/")) {
-        return match rest.split('/').next() {
-            Some("provision") => "/_arkret/open/third-party-invites/provision",
-            Some("activate") => "/_arkret/open/third-party-invites/activate",
-            Some("status") => "/_arkret/open/third-party-invites/status",
-            Some("present") => "/_arkret/open/third-party-invites/present",
-            _ => FAMILY,
-        };
+    if path.starts_with("/_arkret/") {
+        "/_arkret"
+    } else {
+        path
     }
-    path
 }
 
 /// Middleware for logging responses
@@ -217,15 +211,8 @@ pub async fn tracing_middleware(
         .and_then(|ua| ua.to_str().ok())
         .map(String::from);
 
-    let query = if req
-        .uri()
-        .path()
-        .starts_with("/_arkret/open/third-party-invites/")
-    {
-        None
-    } else {
-        req.uri().query().map(String::from)
-    };
+    // Query inputs can contain credentials; never record raw query strings.
+    let query: Option<String> = None;
 
     let span = tracing::info_span!(
         "http.server.request",

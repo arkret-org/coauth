@@ -1,6 +1,5 @@
 {
   "_comment": "OIDC Core (OIDCC) certification test-plan matrix consumed by conformance/scripts/run-oidcc-suite.sh. The complementary FAPI 2.0 and mTLS plans live in conformance/plan-*.json and are driven by scripts/oidc-conformance.sh; this file is dedicated to the OpenID Connect Core certification plans defined by the OpenID Foundation conformance suite (https://gitlab.com/openid/conformance-suite). Each entry names a published plan id from https://openid.net/certification/ and pins the variant matrix that maps to coauth's static client registration. Adding a new plan: append an entry, then re-run conformance/scripts/run-oidcc-suite.sh --list to verify the runner picks it up.",
-  "schema_version": 1,
   "plans": [
     {
       "id": "oidcc-basic-certification-test-plan",
