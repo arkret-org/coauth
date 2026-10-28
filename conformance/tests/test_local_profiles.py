@@ -149,6 +149,15 @@ class LocalProfilesTests(unittest.TestCase):
                 profile = json.loads((root / "full-plans" / f"{name}.json").read_text())
                 self.assertEqual(profile["server"]["login_hint"], user["handle"])
 
+    def test_fapi_caller_only_supplies_selectable_variants(self):
+        with self.fixture() as (root, _):
+            profile = json.loads((root / "full-plans/fapi2-baseline.json").read_text())
+            self.assertEqual(profile["_official_plan"], "fapi2-security-profile-id2-test-plan")
+            self.assertEqual(profile["variant"], {
+                "client_auth_type": "private_key_jwt", "fapi_profile": "plain_fapi",
+                "sender_constrain": "dpop", "openid": "openid_connect", "authorization_request_type": "simple",
+            })
+
     def test_client_secret_post_uses_an_independent_registered_client(self):
         with self.fixture() as (root, config):
             profile = json.loads((root / "full-plans/basic-op.json").read_text())
