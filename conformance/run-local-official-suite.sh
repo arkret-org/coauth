@@ -11,6 +11,7 @@ target_dir=$(cargo metadata --locked --format-version 1 --no-deps --manifest-pat
 results_dir="${COAUTH_CONFORMANCE_RESULTS:-${target_dir}/conformance-results}"
 private_results_dir="$run_dir/official-results"
 mkdir -p "$results_dir" "$private_results_dir"
+export COAUTH_CONFORMANCE_REVIEW_DIR="$results_dir/review-images"
 coauth_pid=""
 suite_pid=""
 proxy_name="coauth-oidc-proxy-${GITHUB_RUN_ID:-$$}"
