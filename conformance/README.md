@@ -6,8 +6,10 @@ service, and invokes its `scripts/run-test-plan.py` API runner. No prebuilt
 `openid/conformance-suite` image is assumed.
 
 `run-local-official-suite.sh` prepares an isolated Coauth PostgreSQL fixture,
-two registered static clients, and HTTPS reverse proxies for Coauth and the
-suite. Java trusts the temporary issuer certificate. Private configuration,
+two shared-secret clients, two private-key clients, a real local user, and
+HTTPS reverse proxies for Coauth and the suite. Chromium drives the built
+Coauth WASM login and consent pages using the official runner's front-channel
+URLs and HTTP methods. Java and Coauth trust the temporary issuer certificate. Private configuration,
 wrapping keys and TLS keys are deleted after the run. The original official
 signed ZIP archives and service logs remain in the private temporary directory
 and are deleted with it. Only module/condition outcome summaries and JUnit
@@ -22,14 +24,21 @@ including the discovery endpoint validation module. Passing that selection
 proves the OIDCC Config profile only; it does not prove the full OP, FAPI or
 mTLS profiles.
 
-`all`, `basic-op`, `fapi2-baseline` and `mtls-baseline` require
-`COAUTH_CONFORMANCE_FULL_PLANS_JSON`: a JSON object with exactly those three
-profile names, each containing a real `_official_plan`, registered client
-credentials, HTTPS discovery configuration, and `browser` automation for
-real-user login and consent. The mTLS profile also needs the corresponding
-registered certificate and key fixture. Missing fixtures fail the full gate;
-plan inventory files are not a substitute for official execution. The default
-scheduled selection remains `all`.
+`basic-op` and `fapi2-baseline` receive generated private configurations and
+execute the complete upstream plans, without a filtered module list. This
+bootstrap does not imply that either protocol plan passes. An optional
+`COAUTH_CONFORMANCE_FULL_PLANS_JSON` override must contain all three profile
+names, with real `_official_plan`, registered clients, HTTPS discovery and
+`browser` login/consent automation.
+
+`mtls-baseline` remains a strict failure in the local fixture: production
+discovery and static/dynamic registration do not implement RFC8705 client
+authentication or certificate-bound access tokens. Generating certificates
+cannot supply that capability. `all` still attempts Basic OP and FAPI and
+fails on any protocol failure or the mTLS gap. The default scheduled selection
+remains `all`; these are unfinished acceptance obligations. Checked-in JSON
+files are selection inventory, not fake client configurations or a substitute
+for official execution.
 
 The integration smoke entry point is `scripts/oidc-conformance.sh`. Without
 `COAUTH_RUN_FULL_CONFORMANCE=1` it checks live discovery and reports the plan
