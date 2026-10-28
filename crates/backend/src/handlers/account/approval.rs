@@ -4,6 +4,7 @@
 //! responses. They replace the server-rendered HTML approval pages.
 
 use coauth_account_types::DeviceLinkOutcome;
+use coauth_data::user::BrowserSessionRepository as _;
 use coauth_data::{RepositoryAccess as _, UserProfilePatch};
 use salvo::oapi::ToSchema;
 use salvo::prelude::*;
@@ -158,6 +159,54 @@ async fn require_authenticated_session(
     Ok(Some(session))
 }
 
+async fn authorization_authentication_satisfied(
+    pending: &PendingConsents,
+    grant_id: Ulid,
+    session: &coauth_data::BrowserSession,
+    repo: &mut coauth_data::BoxRepository,
+    config: &coauth_config::ArkretConfig,
+    clock: &dyn coauth_data::Clock,
+) -> Result<bool, RouteError> {
+    let Some(requirements) = pending.requirements(grant_id) else {
+        return Err(RouteError::Unauthorized);
+    };
+    let authentication = repo
+        .browser_session()
+        .get_last_authentication(session)
+        .await?;
+    Ok(requirements.satisfied_by(
+        authentication
+            .as_ref()
+            .map(|authentication| authentication.created_at),
+        &crate::handlers::arkret::oidc_subject_for_user(config, &session.user),
+        clock.now(),
+    ))
+}
+
+fn require_login_response(
+    res: &mut Response,
+    browser_form: bool,
+    url_builder: &coauth_data::UrlBuilder,
+    grant_id: Ulid,
+) -> Result<(), RouteError> {
+    *res = Response::new();
+    if browser_form {
+        let continuation = serde_urlencoded::to_string(
+            coauth_account_types::PostAuthAction::continue_grant(grant_id),
+        )
+        .map_err(|error| RouteError::Internal(Box::new(error)))?;
+        res.render(salvo::writing::Redirect::other(
+            url_builder.relative_url(&format!("/login?{continuation}")),
+        ));
+    } else {
+        res.status_code(StatusCode::UNAUTHORIZED);
+        res.render(Json(
+            serde_json::json!({"status":"error", "error":"not_authenticated"}),
+        ));
+    }
+    Ok(())
+}
+
 // ── GET /_coauth/self/oauth/authorization-grants/:grant_id/decision ─
 
 /// Return the data needed to render an approval page for an OAuth authorization
@@ -189,6 +238,18 @@ pub async fn oauth_approval_get(
 
     let cookie_jar = depot.cookie_jar(req)?;
     let mut pending = PendingConsents::load(&cookie_jar).expire(clock.now());
+    if !authorization_authentication_satisfied(
+        &pending,
+        grant_id,
+        &session,
+        &mut repo,
+        &depot.arkret_config()?,
+        &*clock,
+    )
+    .await?
+    {
+        return require_login_response(res, false, &depot.url_builder()?, grant_id);
+    }
     let csrf = pending
         .bind(grant_id, &session)
         .ok_or(RouteError::Unauthorized)?;
@@ -258,17 +319,7 @@ pub async fn oauth_approval_post(
         require_authenticated_session(&session_info, &mut repo, &activity_tracker, &clock, res)
             .await?
     else {
-        if browser_form {
-            let continuation = serde_urlencoded::to_string(
-                coauth_account_types::PostAuthAction::continue_grant(grant_id),
-            )
-            .map_err(|error| RouteError::Internal(Box::new(error)))?;
-            *res = Response::new();
-            res.render(salvo::writing::Redirect::other(
-                url_builder.relative_url(&format!("/login?{continuation}")),
-            ));
-        }
-        return Ok(());
+        return require_login_response(res, browser_form, &url_builder, grant_id);
     };
 
     let origin = url_builder.absolute_url("/").origin().ascii_serialization();
@@ -279,6 +330,18 @@ pub async fn oauth_approval_post(
     let mut pending = PendingConsents::load(&cookie_jar).expire(clock.now());
     if !pending.permits(grant_id, &browser_session, &input.csrf_token) {
         return Err(RouteError::Unauthorized);
+    }
+    if !authorization_authentication_satisfied(
+        &pending,
+        grant_id,
+        &browser_session,
+        &mut repo,
+        &arkret_config,
+        &*clock,
+    )
+    .await?
+    {
+        return require_login_response(res, browser_form, &url_builder, grant_id);
     }
     if input.action == "deny" {
         let callback = reject_authorization_consent(repo, &*clock, grant_id)

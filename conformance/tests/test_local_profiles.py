@@ -40,6 +40,9 @@ class LocalProfilesTests(unittest.TestCase):
         self.assertEqual(page.options, {"type": "jpeg", "quality": 65})
         self.assertIsNone(runner.second_login_screenshot("oidcc-server", 2, page))
         self.assertEqual(page.calls, 1)
+        self.assertIsNone(runner.second_login_screenshot("oidcc-max-age-1", 1, page))
+        self.assertEqual(runner.second_login_screenshot("oidcc-max-age-1", 2, page), page.content)
+        self.assertEqual(page.calls, 2)
 
     def test_aborted_plan_download_preserves_the_original_signed_zip_bytes(self):
         runner = self.runner()

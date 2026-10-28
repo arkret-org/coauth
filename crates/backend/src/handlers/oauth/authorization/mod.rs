@@ -3,9 +3,12 @@ use coauth_data::oauth::{
     OAuthAuthorizationGrantRepository, OAuthClientRepository, OAuthSessionFilter,
     OAuthSessionRepository,
 };
+use coauth_data::user::BrowserSessionRepository as _;
 use coauth_data::{
     AuthorizationCode, BoxClock, BoxRepository, BoxRng, Pkce, RepositoryAccess, SystemClock,
 };
+use coauth_iana::jose::JsonWebSignatureAlg;
+use coauth_jose::claims;
 use coauth_oauth_types::errors::{ClientError, ClientErrorCode};
 use coauth_oauth_types::pkce;
 use coauth_oauth_types::requests::{AuthorizationRequest, GrantType, Prompt, ResponseMode};
@@ -144,6 +147,9 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
     // local one via the `From` impl above.
     let templates = depot.templates()?;
     let url_builder = depot.url_builder()?;
+    let keyring = depot.keyring()?;
+    let arkret_config = depot.arkret_config()?;
+    let policy_factory = depot.policy_factory()?;
     let mut repo: BoxRepository = depot.repo().await?;
     let activity_tracker = crate::handlers::account::extract_bound_activity_tracker(req, depot);
 
@@ -214,6 +220,103 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
         async move {
             let maybe_session = session_info.load_active_session(&mut repo).await?;
             let prompt = parameters.auth.prompt.as_deref().unwrap_or_default();
+            if prompt.contains(&Prompt::None) && prompt.len() != 1 {
+                return Ok(callback_destination.go(
+                    &templates,
+                    &locale,
+                    ClientError::from(ClientErrorCode::InvalidRequest),
+                )?);
+            }
+
+            let now = clock.now();
+            let subject_hint = if let Some(hint) = parameters.auth.id_token_hint.as_deref() {
+                let jwks = keyring.public_jwks();
+                let algorithm = client
+                    .id_token_signed_response_alg
+                    .clone()
+                    .unwrap_or(JsonWebSignatureAlg::Rs256);
+                let issuer = url_builder.oidc_issuer().to_string();
+                let verified = (|| {
+                    let token = crate::oidc_client::requests::jose::verify_signed_jwt(
+                        hint,
+                        crate::oidc_client::requests::jose::JwtVerificationData {
+                            issuer: Some(&issuer),
+                            jwks: &jwks,
+                            client_id: &client.client_id,
+                            signing_algorithm: &algorithm,
+                        },
+                    )
+                    .map_err(|_| ())?;
+                    let mut payload = token.payload().clone();
+                    // A hint may describe an expired session, but a future
+                    // issuance time or malformed registered claims is invalid.
+                    claims::IAT
+                        .extract_required_with_options(
+                            &mut payload,
+                            claims::TimeOptions::new(now).leeway(chrono::Duration::zero()),
+                        )
+                        .map_err(|_| ())?;
+                    let _: claims::Timestamp =
+                        serde_json::from_value(payload.remove("exp").ok_or(())?).map_err(|_| ())?;
+                    claims::SUB.extract_required(&mut payload).map_err(|_| ())
+                })();
+                match verified {
+                    Ok(subject) if !subject.is_empty() => Some(subject),
+                    _ => {
+                        return Ok(callback_destination.go(
+                            &templates,
+                            &locale,
+                            ClientError::from(ClientErrorCode::InvalidRequest),
+                        )?);
+                    }
+                }
+            } else {
+                None
+            };
+            let requirements = consent_cookie::AuthenticationRequirements {
+                required_auth_after: if prompt.contains(&Prompt::Login) {
+                    Some(now)
+                } else {
+                    parameters
+                        .auth
+                        .max_age
+                        .map(|seconds| now - chrono::Duration::seconds(i64::from(seconds)))
+                },
+                subject_hint,
+            };
+            if let Some(session) = maybe_session.as_ref()
+                && requirements.subject_hint.as_ref().is_some_and(|hint| {
+                    hint != &crate::handlers::arkret::oidc_subject_for_user(
+                        &arkret_config,
+                        &session.user,
+                    )
+                })
+            {
+                return Ok(callback_destination.go(
+                    &templates,
+                    &locale,
+                    ClientError::from(ClientErrorCode::LoginRequired),
+                )?);
+            }
+            let authentication_satisfied = if let Some(session) = maybe_session.as_ref() {
+                let authentication = repo
+                    .browser_session()
+                    .get_last_authentication(session)
+                    .await?;
+                (!prompt.contains(&Prompt::None) || authentication.is_some())
+                    && requirements.satisfied_by(
+                        authentication
+                            .as_ref()
+                            .map(|authentication| authentication.created_at),
+                        &crate::handlers::arkret::oidc_subject_for_user(
+                            &arkret_config,
+                            &session.user,
+                        ),
+                        now,
+                    )
+            } else {
+                false
+            };
 
             // Check if the request/request_uri/registration parameters are used. If so, reply
             // with the right error since we don't support them.
@@ -261,13 +364,28 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                 )?);
             }
 
-            // Fail early if prompt=none; we never let it go through
             if prompt.contains(&Prompt::None) {
-                return Ok(callback_destination.go(
-                    &templates,
-                    &locale,
-                    ClientError::from(ClientErrorCode::LoginRequired),
-                )?);
+                let error = if !authentication_satisfied {
+                    Some(ClientErrorCode::LoginRequired)
+                } else {
+                    let session = maybe_session
+                        .as_ref()
+                        .expect("authenticated browser session");
+                    let prior = OAuthSessionFilter::default()
+                        .for_browser_session(session)
+                        .for_client(&client)
+                        .with_scope(&parameters.auth.scope)
+                        .active_only();
+                    (repo.oauth_session().count(prior).await? == 0)
+                        .then_some(ClientErrorCode::ConsentRequired)
+                };
+                if let Some(error) = error {
+                    return Ok(callback_destination.go(
+                        &templates,
+                        &locale,
+                        ClientError::from(error),
+                    )?);
+                }
             }
 
             let code: Option<AuthorizationCode> = if response_type.has_code() {
@@ -357,7 +475,51 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                 )
                 .await?;
             pending_consents.add(grant.id, maybe_session.as_ref(), &mut *rng);
+            pending_consents.require(grant.id, requirements);
             let continue_grant = PostAuthAction::continue_grant(grant.id);
+
+            if prompt.contains(&Prompt::None) {
+                let session = maybe_session
+                    .as_ref()
+                    .expect("authenticated browser session");
+                let decision = super::access::accept_authorization_consent(
+                    repo,
+                    &mut rng,
+                    &clock,
+                    &keyring,
+                    &url_builder,
+                    &arkret_config,
+                    policy_factory.as_ref(),
+                    session,
+                    grant.id,
+                    activity_tracker.ip(),
+                    req.header("user-agent"),
+                )
+                .await;
+                // The service commits on success and rolls back on error.
+                // Neither outcome leaves a browser decision to continue.
+                pending_consents.consume(grant.id);
+                return match decision {
+                    Ok(decision) => {
+                        activity_tracker
+                            .record_oauth_session(&clock, &decision.session)
+                            .await;
+                        Ok(decision.callback_destination.go(
+                            &templates,
+                            &locale,
+                            decision.parameters,
+                        )?)
+                    }
+                    Err(super::access::OAuthAccessError::PolicyViolation) => {
+                        Ok(callback_destination.go(
+                            &templates,
+                            &locale,
+                            ClientError::from(ClientErrorCode::AccessDenied),
+                        )?)
+                    }
+                    Err(error) => Err(RouteError::Internal(Box::new(error))),
+                };
+            }
 
             let redirect = match maybe_session {
                 None if prompt.contains(&Prompt::Create) => {
@@ -391,7 +553,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
                     }
                 }
 
-                Some(_) if prompt.contains(&Prompt::Login) => {
+                Some(_) if !authentication_satisfied => {
                     // Client explicitly requested re-authentication.
                     // Redirect to the login page even though we have a session.
                     repo.save().await?;
