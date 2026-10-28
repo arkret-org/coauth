@@ -28,6 +28,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use sha1::Sha1;
 use sha2::Sha256;
+use signature::Verifier as _;
 use thiserror::Error;
 use url::Url;
 use x509_cert::Certificate;
