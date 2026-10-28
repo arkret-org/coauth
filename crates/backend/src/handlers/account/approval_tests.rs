@@ -474,12 +474,7 @@ async fn browser_form_with_expired_session_returns_to_login_without_consumption(
         )
         .await;
     assert!(response.status().is_redirection());
-    let destination: url::Url = fixture
-        .state
-        .url_builder
-        .absolute_url("/")
-        .join(response.headers()["location"].to_str().unwrap())
-        .unwrap();
+    let destination = local_redirect(&fixture.state, &response);
     assert_eq!(
         destination.origin().ascii_serialization(),
         "https://example.com"
@@ -694,6 +689,16 @@ async fn expired_browser_continuation_cannot_consume_a_pending_grant() {
     fixture.finish().await;
 }
 
+fn local_redirect(state: &TestState, response: &Response<String>) -> url::Url {
+    assert!(response.status().is_redirection());
+    let base = state.url_builder.absolute_url("/");
+    let destination = base
+        .join(response.headers()["location"].to_str().unwrap())
+        .unwrap();
+    assert_eq!(destination.origin(), base.origin());
+    destination
+}
+
 fn authorization_error(response: &Response<String>) -> String {
     let location: url::Url = response.headers()["location"]
         .to_str()
@@ -850,11 +855,7 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             .browser
             .send(&fixture.state, Request::get(url.as_str()).empty())
             .await;
-        let location: url::Url = response.headers()["location"]
-            .to_str()
-            .unwrap()
-            .parse()
-            .unwrap();
+        let location = local_redirect(&fixture.state, &response);
         assert_eq!(location.path(), "/login");
         let grant: Ulid = location
             .query_pairs()
@@ -891,11 +892,12 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             )
             .await;
         assert!(denied.status().is_redirection());
+        let destination = local_redirect(&fixture.state, &denied);
+        assert_eq!(destination.path(), "/login");
         assert!(
-            denied.headers()["location"]
-                .to_str()
-                .unwrap()
-                .starts_with("https://example.com/login?")
+            destination
+                .query_pairs()
+                .any(|(key, value)| { key == "id" && value == grant.to_string() })
         );
         assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
         grants.push((grant, csrf));
@@ -990,11 +992,7 @@ async fn expired_signed_hint_binds_the_eventual_subject_without_logging_a_browse
     let response = anonymous
         .send(&fixture.state, Request::get(url.as_str()).empty())
         .await;
-    let location: url::Url = response.headers()["location"]
-        .to_str()
-        .unwrap()
-        .parse()
-        .unwrap();
+    let location = local_redirect(&fixture.state, &response);
     assert_eq!(location.path(), "/login");
     let grant: Ulid = location
         .query_pairs()
@@ -1052,11 +1050,7 @@ async fn recent_real_authentication_satisfies_nonzero_max_age_without_a_new_logi
         .browser
         .send(&fixture.state, Request::get(url.as_str()).empty())
         .await;
-    let location: url::Url = response.headers()["location"]
-        .to_str()
-        .unwrap()
-        .parse()
-        .unwrap();
+    let location = local_redirect(&fixture.state, &response);
     assert!(location.path().starts_with("/oauth/approval/"));
     let grant: Ulid = location.path().rsplit('/').next().unwrap().parse().unwrap();
     fixture
