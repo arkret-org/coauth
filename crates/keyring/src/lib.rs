@@ -14,13 +14,15 @@ pub use coauth_jose::jwk::{JsonWebKey, JsonWebKeySet};
 use coauth_jose::jwk::{
     JsonWebKeyPublicParameters, ParametersInfo, PublicJsonWebKeySet, Thumbprint,
 };
+use coauth_jose::rng::CryptoRngCompat;
 use der::zeroize::Zeroizing;
 use der::{Decode, Encode, EncodePem};
-use elliptic_curve::pkcs8::EncodePrivateKey;
-use elliptic_curve::sec1::ToEncodedPoint;
+use elliptic_curve::Generate;
+use elliptic_curve::pkcs8::{AssociatedOid, DecodePrivateKey as _, EncodePrivateKey as _};
+use elliptic_curve::sec1::ToSec1Point;
 use pem_rfc7468::PemLabel;
 use pkcs1::EncodeRsaPrivateKey;
-use pkcs8::{AssociatedOid, DecodePrivateKey, PrivateKeyInfo};
+use pkcs8::{DecodePrivateKey, EncodePrivateKey as _, PrivateKeyInfo};
 use rand_core::{CryptoRng, RngCore};
 use rsa::BigUint;
 use thiserror::Error;
@@ -38,6 +40,18 @@ pub enum LoadError {
     Pem {
         #[from]
         inner: pem_rfc7468::Error,
+    },
+
+    #[error("Invalid EC private key encoding")]
+    EcDecode {
+        #[from]
+        inner: elliptic_curve::DecodeError,
+    },
+
+    #[error("Invalid EC PKCS8 key")]
+    EcPkcs8 {
+        #[from]
+        inner: elliptic_curve::pkcs8::Error,
     },
 
     #[error("Invalid RSA private key")]
@@ -158,15 +172,22 @@ fn parse_pkcs8_key_info(info: PrivateKeyInfo) -> Result<PrivateKey, LoadError> {
         return Ok(PrivateKey::Rsa(Box::new(info.try_into()?)));
     }
 
-    if algo_oid == elliptic_curve::ALGORITHM_OID {
+    if algo_oid.as_bytes() == elliptic_curve::ALGORITHM_OID.as_bytes() {
         let curve_oid = info.algorithm.parameters_oid()?;
+        let serialized = Zeroizing::new(info.to_der()?);
         return match curve_oid {
-            oid if oid == p256::NistP256::OID => Ok(PrivateKey::EcP256(Box::new(info.try_into()?))),
-            oid if oid == p384::NistP384::OID => Ok(PrivateKey::EcP384(Box::new(info.try_into()?))),
-            oid if oid == p521::NistP521::OID => Ok(PrivateKey::EcP521(Box::new(info.try_into()?))),
-            oid if oid == k256::Secp256k1::OID => {
-                Ok(PrivateKey::EcK256(Box::new(info.try_into()?)))
-            }
+            oid if oid.as_bytes() == p256::NistP256::OID.as_bytes() => Ok(PrivateKey::EcP256(
+                Box::new(elliptic_curve::SecretKey::from_pkcs8_der(&serialized)?),
+            )),
+            oid if oid.as_bytes() == p384::NistP384::OID.as_bytes() => Ok(PrivateKey::EcP384(
+                Box::new(elliptic_curve::SecretKey::from_pkcs8_der(&serialized)?),
+            )),
+            oid if oid.as_bytes() == p521::NistP521::OID.as_bytes() => Ok(PrivateKey::EcP521(
+                Box::new(elliptic_curve::SecretKey::from_pkcs8_der(&serialized)?),
+            )),
+            oid if oid.as_bytes() == k256::Secp256k1::OID.as_bytes() => Ok(PrivateKey::EcK256(
+                Box::new(elliptic_curve::SecretKey::from_pkcs8_der(&serialized)?),
+            )),
             other => Err(LoadError::UnknownEllipticCurveOid { oid: other }),
         };
     }
@@ -188,11 +209,20 @@ fn parse_sec1_ec_key(ec_key: sec1::EcPrivateKey) -> Result<PrivateKey, LoadError
         .named_curve()
         .ok_or(LoadError::MissingSec1CurveName)?;
 
+    let serialized = Zeroizing::new(ec_key.to_der()?);
     match curve_oid {
-        oid if oid == p256::NistP256::OID => Ok(PrivateKey::EcP256(Box::new(ec_key.try_into()?))),
-        oid if oid == p384::NistP384::OID => Ok(PrivateKey::EcP384(Box::new(ec_key.try_into()?))),
-        oid if oid == p521::NistP521::OID => Ok(PrivateKey::EcP521(Box::new(ec_key.try_into()?))),
-        oid if oid == k256::Secp256k1::OID => Ok(PrivateKey::EcK256(Box::new(ec_key.try_into()?))),
+        oid if oid.as_bytes() == p256::NistP256::OID.as_bytes() => Ok(PrivateKey::EcP256(
+            Box::new(elliptic_curve::SecretKey::from_sec1_der(&serialized)?),
+        )),
+        oid if oid.as_bytes() == p384::NistP384::OID.as_bytes() => Ok(PrivateKey::EcP384(
+            Box::new(elliptic_curve::SecretKey::from_sec1_der(&serialized)?),
+        )),
+        oid if oid.as_bytes() == p521::NistP521::OID.as_bytes() => Ok(PrivateKey::EcP521(
+            Box::new(elliptic_curve::SecretKey::from_sec1_der(&serialized)?),
+        )),
+        oid if oid.as_bytes() == k256::Secp256k1::OID.as_bytes() => Ok(PrivateKey::EcK256(
+            Box::new(elliptic_curve::SecretKey::from_sec1_der(&serialized)?),
+        )),
         other => Err(LoadError::UnknownEllipticCurveOid { oid: other }),
     }
 }
@@ -202,14 +232,16 @@ fn parse_sec1_ec_key(ec_key: sec1::EcPrivateKey) -> Result<PrivateKey, LoadError
 fn ec_to_sec1_der<C>(key: &elliptic_curve::SecretKey<C>) -> Result<Zeroizing<Vec<u8>>, der::Error>
 where
     C: elliptic_curve::Curve + elliptic_curve::CurveArithmetic + AssociatedOid,
-    elliptic_curve::PublicKey<C>: elliptic_curve::sec1::ToEncodedPoint<C>,
+    elliptic_curve::PublicKey<C>: elliptic_curve::sec1::ToSec1Point<C>,
     C::FieldBytesSize: elliptic_curve::sec1::ModulusSize,
 {
     let scalar_bytes = Zeroizing::new(key.to_bytes());
-    let pub_point = key.public_key().to_encoded_point(false);
+    let pub_point = key.public_key().to_sec1_point(false);
     let ec_private = sec1::EcPrivateKey {
         private_key: &scalar_bytes,
-        parameters: Some(sec1::EcParameters::NamedCurve(C::OID)),
+        parameters: Some(sec1::EcParameters::NamedCurve(
+            const_oid::ObjectIdentifier::from_bytes(C::OID.as_bytes())?,
+        )),
         public_key: Some(pub_point.as_bytes()),
     };
     Ok(Zeroizing::new(ec_private.to_der()?))
@@ -222,14 +254,16 @@ fn ec_to_sec1_pem<C>(
 ) -> Result<Zeroizing<String>, der::Error>
 where
     C: elliptic_curve::Curve + elliptic_curve::CurveArithmetic + AssociatedOid,
-    elliptic_curve::PublicKey<C>: elliptic_curve::sec1::ToEncodedPoint<C>,
+    elliptic_curve::PublicKey<C>: elliptic_curve::sec1::ToSec1Point<C>,
     C::FieldBytesSize: elliptic_curve::sec1::ModulusSize,
 {
     let scalar_bytes = Zeroizing::new(key.to_bytes());
-    let pub_point = key.public_key().to_encoded_point(false);
+    let pub_point = key.public_key().to_sec1_point(false);
     let ec_private = sec1::EcPrivateKey {
         private_key: &scalar_bytes,
-        parameters: Some(sec1::EcParameters::NamedCurve(C::OID)),
+        parameters: Some(sec1::EcParameters::NamedCurve(
+            const_oid::ObjectIdentifier::from_bytes(C::OID.as_bytes())?,
+        )),
         public_key: Some(pub_point.as_bytes()),
     };
     Ok(Zeroizing::new(ec_private.to_pem(line_ending)?))
@@ -262,15 +296,26 @@ impl PrivateKey {
     ///
     /// Returns an error if the encoding failed
     pub fn to_pkcs8_der(&self) -> Result<Zeroizing<Vec<u8>>, pkcs8::Error> {
-        let doc = match self {
-            Self::Rsa(k) => k.to_pkcs8_der()?,
-            Self::EcP256(k) => k.to_pkcs8_der()?,
-            Self::EcP384(k) => k.to_pkcs8_der()?,
-            Self::EcP521(k) => k.to_pkcs8_der()?,
-            Self::EcK256(k) => k.to_pkcs8_der()?,
-            Self::OkpEd25519(k) => k.to_pkcs8_der()?,
-        };
-        Ok(doc.to_bytes())
+        match self {
+            Self::Rsa(k) => Ok(k.to_pkcs8_der()?.to_bytes()),
+            Self::EcP256(k) => k
+                .to_pkcs8_der()
+                .map(|doc| doc.to_bytes())
+                .map_err(|_| pkcs8::Error::KeyMalformed),
+            Self::EcP384(k) => k
+                .to_pkcs8_der()
+                .map(|doc| doc.to_bytes())
+                .map_err(|_| pkcs8::Error::KeyMalformed),
+            Self::EcP521(k) => k
+                .to_pkcs8_der()
+                .map(|doc| doc.to_bytes())
+                .map_err(|_| pkcs8::Error::KeyMalformed),
+            Self::EcK256(k) => k
+                .to_pkcs8_der()
+                .map(|doc| doc.to_bytes())
+                .map_err(|_| pkcs8::Error::KeyMalformed),
+            Self::OkpEd25519(k) => Ok(k.to_pkcs8_der()?.to_bytes()),
+        }
     }
 
     /// Serialize the key as a PEM document
@@ -539,22 +584,30 @@ impl PrivateKey {
 
     /// Generate an Elliptic Curve key for the P-256 curve
     pub fn generate_ec_p256<R: RngCore + CryptoRng>(mut rng: R) -> Self {
-        Self::EcP256(Box::new(elliptic_curve::SecretKey::random(&mut rng)))
+        Self::EcP256(Box::new(elliptic_curve::SecretKey::generate_from_rng(
+            &mut CryptoRngCompat::new(&mut rng),
+        )))
     }
 
     /// Generate an Elliptic Curve key for the P-384 curve
     pub fn generate_ec_p384<R: RngCore + CryptoRng>(mut rng: R) -> Self {
-        Self::EcP384(Box::new(elliptic_curve::SecretKey::random(&mut rng)))
+        Self::EcP384(Box::new(elliptic_curve::SecretKey::generate_from_rng(
+            &mut CryptoRngCompat::new(&mut rng),
+        )))
     }
 
     /// Generate an Elliptic Curve key for the P-521 curve
     pub fn generate_ec_p521<R: RngCore + CryptoRng>(mut rng: R) -> Self {
-        Self::EcP521(Box::new(elliptic_curve::SecretKey::random(&mut rng)))
+        Self::EcP521(Box::new(elliptic_curve::SecretKey::generate_from_rng(
+            &mut CryptoRngCompat::new(&mut rng),
+        )))
     }
 
     /// Generate an Elliptic Curve key for the secp256k1 curve
     pub fn generate_ec_k256<R: RngCore + CryptoRng>(mut rng: R) -> Self {
-        Self::EcK256(Box::new(elliptic_curve::SecretKey::random(&mut rng)))
+        Self::EcK256(Box::new(elliptic_curve::SecretKey::generate_from_rng(
+            &mut CryptoRngCompat::new(&mut rng),
+        )))
     }
 
     /// Generate an Ed25519 key.

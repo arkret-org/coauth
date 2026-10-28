@@ -125,14 +125,19 @@ mod tests {
 
     #[test]
     fn roundtrip_sign_then_verify() {
+        use elliptic_curve::Generate as _;
+
+        use crate::jwa::{AsymmetricSigningKey, AsymmetricVerifyingKey, Signature};
+        use crate::rng::CryptoRngCompat;
+
         let hdr = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Es256);
         let body = serde_json::json!({"hello": "world"});
 
-        let sk = ecdsa::SigningKey::<p256::NistP256>::random(&mut signature::rand_core::OsRng);
-        let signed = Jwt::sign::<_, ecdsa::Signature<_>>(hdr, body, &sk).unwrap();
-
-        signed
-            .verify::<_, ecdsa::Signature<_>>(sk.verifying_key())
-            .unwrap();
+        let sk = ecdsa::SigningKey::<p256::NistP256>::generate_from_rng(&mut CryptoRngCompat::new(
+            &mut signature::rand_core::OsRng,
+        ));
+        let vk = AsymmetricVerifyingKey::from(*sk.verifying_key());
+        let signed = Jwt::sign::<_, Signature>(hdr, body, &AsymmetricSigningKey::from(sk)).unwrap();
+        signed.verify::<_, Signature>(&vk).unwrap();
     }
 }

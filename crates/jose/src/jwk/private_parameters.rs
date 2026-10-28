@@ -267,7 +267,7 @@ impl From<EcPrivateParameters> for super::public_parameters::EcPublicParameters 
 }
 
 mod ec_impls {
-    use elliptic_curve::sec1::{Coordinates, FromEncodedPoint, ModulusSize, ToEncodedPoint};
+    use elliptic_curve::sec1::{Coordinates, FromSec1Point, ModulusSize, ToSec1Point};
     use elliptic_curve::{AffinePoint, Curve, SecretKey};
 
     use super::super::JwkEcCurve;
@@ -298,7 +298,7 @@ mod ec_impls {
     impl<C> From<SecretKey<C>> for EcPrivateParameters
     where
         C: elliptic_curve::CurveArithmetic + JwkEcCurve,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
+        AffinePoint<C>: FromSec1Point<C> + ToSec1Point<C>,
         C::FieldBytesSize: ModulusSize,
     {
         fn from(key: SecretKey<C>) -> Self {
@@ -309,11 +309,11 @@ mod ec_impls {
     impl<C> From<&SecretKey<C>> for EcPrivateParameters
     where
         C: elliptic_curve::CurveArithmetic + JwkEcCurve,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
+        AffinePoint<C>: FromSec1Point<C> + ToSec1Point<C>,
         C::FieldBytesSize: ModulusSize,
     {
         fn from(key: &SecretKey<C>) -> Self {
-            let point = key.public_key().to_encoded_point(false);
+            let point = key.public_key().to_sec1_point(false);
             let Coordinates::Uncompressed { x, y } = point.coordinates() else {
                 unreachable!()
             };
