@@ -37,6 +37,12 @@ pub enum RouteError {
     #[error("invalid response mode")]
     InvalidResponseMode,
 
+    #[error("missing required response_type parameter")]
+    MissingResponseType,
+
+    #[error("invalid authorization parameters")]
+    InvalidParameters,
+
     #[error("invalid parameters")]
     IntoCallbackDestination(#[from] self::callback::IntoCallbackDestinationError),
 
@@ -55,6 +61,8 @@ impl Scribe for RouteError {
             }
             Self::ClientNotFound
             | Self::InvalidResponseMode
+            | Self::MissingResponseType
+            | Self::InvalidParameters
             | Self::IntoCallbackDestination(_)
             | Self::UnknownRedirectUri(_) => {
                 res.status_code(StatusCode::BAD_REQUEST);
@@ -159,10 +167,15 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
         ChaChaRng::from_rng(rand_core::OsRng).map_err(|e| RouteError::Internal(Box::new(e)))?,
     );
 
-    // Parse form parameters
+    // Malformed caller input is a request error. Do not reflect parser errors
+    // containing caller-controlled values or redirect before validating a
+    // client and its registered callback.
+    if !req.queries().contains_key("response_type") {
+        return Err(RouteError::MissingResponseType);
+    }
     let parameters: Params = req
         .parse_queries()
-        .map_err(|e| RouteError::Internal(Box::new(e)))?;
+        .map_err(|_| RouteError::InvalidParameters)?;
 
     // OIDC `ui_locales` is a space-separated preference list; hand it over
     // verbatim, because the shared resolver parses that syntax directly. The

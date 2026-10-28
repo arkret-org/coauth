@@ -1077,3 +1077,55 @@ async fn recent_real_authentication_satisfies_nonzero_max_age_without_a_new_logi
         .assert_status(StatusCode::OK);
     fixture.finish().await;
 }
+
+#[tokio::test]
+async fn malformed_authorization_queries_return_safe_400_pages_without_a_callback() {
+    let mut fixture = Fixture::new().await;
+    let original = fixture.authorization_url("query");
+    for missing in ["response_type", "client_id", "scope"] {
+        let mut url = original.clone();
+        url.query_pairs_mut()
+            .clear()
+            .extend_pairs(original.query_pairs().filter(|(key, _)| key != missing));
+        let response = fixture
+            .browser
+            .send(&fixture.state, Request::get(url.as_str()).empty())
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+        assert!(!response.headers().contains_key("location"));
+        assert_eq!(
+            response.body(),
+            if missing == "response_type" {
+                "missing required response_type parameter"
+            } else {
+                "invalid authorization parameters"
+            }
+        );
+    }
+    for (invalid, value) in [
+        ("max_age", "PRIVATE_AUTHORIZATION_VALUE_SENTINEL"),
+        ("max_age", "-1"),
+        ("redirect_uri", "PRIVATE_AUTHORIZATION_VALUE_SENTINEL"),
+        ("response_type", ""),
+    ] {
+        let mut url = original.clone();
+        url.query_pairs_mut()
+            .clear()
+            .extend_pairs(original.query_pairs().filter(|(key, _)| key != invalid))
+            .append_pair(invalid, value);
+        let response = fixture
+            .browser
+            .send(&fixture.state, Request::get(url.as_str()).empty())
+            .await;
+        response.assert_status(StatusCode::BAD_REQUEST);
+        assert!(!response.headers().contains_key("location"));
+        assert_eq!(response.body(), "invalid authorization parameters");
+        assert!(
+            !response
+                .body()
+                .contains("PRIVATE_AUTHORIZATION_VALUE_SENTINEL")
+        );
+    }
+    assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
+}
