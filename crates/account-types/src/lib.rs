@@ -503,6 +503,8 @@ pub struct ProvidersOutcome {
     #[serde(default)]
     pub passkey_login_enabled: bool,
     pub password_registration_enabled: bool,
+    pub password_registration_contact_required: bool,
+    pub phone_verification_enabled: bool,
     #[serde(default)]
     pub account_recovery_allowed: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
