@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import traceback
 from urllib.parse import urlsplit
 
 
@@ -130,7 +131,11 @@ def main():
         with (results / "runner-private.log").open("w") as log:
             process = subprocess.Popen(command, cwd=config_path.parent, stdout=log, stderr=subprocess.STDOUT)
             try:
-                drive_local_browser(process)
+                try:
+                    drive_local_browser(process)
+                except Exception:
+                    traceback.print_exc(file=log)
+                    raise RuntimeError("local real-browser automation failed; private URL diagnostics were withheld") from None
                 if process.wait() != 0:
                     raise RuntimeError("the official conformance plan failed; inspect credential-free exported evidence")
             finally:
