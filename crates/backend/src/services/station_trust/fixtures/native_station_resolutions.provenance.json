@@ -1,6 +1,4 @@
 {
-  "kind": "derived_public_resolution_fixture",
-  "native_coverage": false,
   "source_artifact": "cotest/artifacts/native-operation-contracts-20261025/native-erasure-receipts-3/observations/account-erasure-status.json",
   "source_sha256": "7f6f6a2fa6e38ca4c6a58a8e4dde4582ec1ebb58ca42d5ad56da8c8ecd35b936",
   "source_json_pointers": [

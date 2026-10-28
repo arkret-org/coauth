@@ -23,7 +23,6 @@ mod identity;
 mod recovery_authority;
 mod session_grant;
 mod test_chaos;
-mod third_party_invite;
 
 pub use account_handoff::*;
 pub use account_logout::*;
@@ -39,7 +38,6 @@ pub use handle_claim::*;
 pub use identity::*;
 pub use recovery_authority::*;
 pub use session_grant::*;
-pub use third_party_invite::*;
 
 #[cfg(test)]
 mod tests;

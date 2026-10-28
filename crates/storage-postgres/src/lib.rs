@@ -114,8 +114,6 @@ pub mod recovery_authority;
 /// Diesel schema definitions generated from the database
 pub mod schema;
 mod session_grant_codec;
-/// PostgreSQL custody for third-party invite private material.
-pub mod third_party_invite;
 /// PostgreSQL upstream OAuth repositories.
 pub mod upstream_oauth;
 /// PostgreSQL user repositories.

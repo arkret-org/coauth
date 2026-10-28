@@ -1,5 +1,3 @@
-DROP TABLE third_party_invite_rate;
-DROP TABLE third_party_invite_private;
 
 -- Squashed initial migration. This drops all tables. Only use in development.
 DROP TABLE IF EXISTS account_claims CASCADE;

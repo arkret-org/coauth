@@ -200,21 +200,6 @@ impl Options {
             .await?;
         }
 
-        let private_invite_custody = std::sync::Arc::new(
-            coauth_backend::services::third_party_invite::PrivateInviteCustody::new(
-                PgRepositoryFactory::new(pool.clone()),
-                encrypter.clone(),
-            ),
-        );
-        if !self.no_worker {
-            shutdown.task_tracker().spawn(
-                private_invite_custody
-                    .clone()
-                    .run(shutdown.soft_shutdown_token()),
-            );
-        }
-        let private_invite_custody = Some(private_invite_custody);
-
         let mut listeners_config = config.http.listeners.clone();
         if let Some(metrics_listener) = metrics_listener_from_env()? {
             info!(
@@ -302,7 +287,6 @@ impl Options {
                 keyring,
                 cookie_manager,
                 encrypter,
-                private_invite_custody,
                 url_builder,
                 station_admin,
                 connector_registry,

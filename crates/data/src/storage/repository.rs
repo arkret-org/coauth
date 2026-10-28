@@ -215,8 +215,6 @@ repository_access! {
     /// Get an [`AccountHandoffRepository`].
     account_handoff: AccountHandoffRepository,
 
-    /// Access private IVS custody and rate counters.
-    third_party_invite: crate::storage::third_party_invite::ThirdPartyInviteRepository,
 
     /// Get the Account Authority issuer ledger.
     account_status_ledger: crate::AccountStatusLedgerRepository,
