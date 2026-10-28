@@ -10,6 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 import zipfile
 
@@ -19,6 +20,58 @@ import yaml
 
 
 class LocalProfilesTests(unittest.TestCase):
+    def test_error_page_images_require_the_exact_real_http_error_and_origin(self):
+        runner = self.runner()
+
+        class Page:
+            url = "https://localhost:8445/authorize?private=PRIVATE_QUERY_SENTINEL"
+            body = "invalid redirect uri"
+            calls = 0
+
+            def locator(self, selector):
+                if selector != "body":
+                    raise AssertionError("error evidence must describe the real document body")
+                return self
+
+            def inner_text(self, **options):
+                return self.body
+
+            def screenshot(self, **options):
+                self.calls += 1
+                self.options = options
+                return b"actual-error-page-image"
+
+        page = Page()
+        response = SimpleNamespace(status=400, request=SimpleNamespace(redirected_from=None))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            for module in ["oidcc-ensure-registered-redirect-uri", "oidcc-ensure-request-object-with-redirect-uri"]:
+                self.assertEqual(runner.authorization_error_screenshot(module, response, page), b"actual-error-page-image")
+            page.body = "missing field `response_type`"
+            module = "oidcc-response-type-missing"
+            self.assertEqual(runner.authorization_error_screenshot(module, response, page), b"actual-error-page-image")
+            self.assertEqual(page.calls, 3)
+            for status in [200, 403, 500]:
+                response.status = status
+                self.assertIsNone(runner.authorization_error_screenshot(module, response, page))
+            response.status = 400
+            page.url = "https://outside.example/authorize"
+            self.assertIsNone(runner.authorization_error_screenshot(module, response, page))
+            page.url = "https://localhost:8445/login"
+            self.assertIsNone(runner.authorization_error_screenshot(module, response, page))
+            page.url = "https://localhost:8445/authorize"
+            page.body = "PRIVATE_BODY_SENTINEL unexpected server error"
+            self.assertIsNone(runner.authorization_error_screenshot(module, response, page))
+            page.body = "missing field `response_type`"
+            response.request.redirected_from = object()
+            self.assertIsNone(runner.authorization_error_screenshot(module, response, page))
+            response.request.redirected_from = None
+            self.assertIsNone(runner.authorization_error_screenshot("oidcc-server", response, page))
+            self.assertEqual(page.calls, 3)
+        self.assertIn("authorization-error-http-500", output.getvalue())
+        self.assertNotIn("PRIVATE_BODY_SENTINEL", output.getvalue())
+        self.assertNotIn("PRIVATE_QUERY_SENTINEL", output.getvalue())
+
     def test_prompt_login_evidence_captures_only_the_actual_second_login_page(self):
         runner = self.runner()
 
@@ -166,16 +219,16 @@ class LocalProfilesTests(unittest.TestCase):
 
         api = API()
         screenshot = b"test-only-browser-image-bytes"
-        runner.upload_login_evidence(api, "https://localhost:8446", "test-id", screenshot)
+        runner.upload_browser_evidence(api, "https://localhost:8446", "test-id", screenshot, "oidcc-prompt-login")
         self.assertEqual(api.asserted_url, "https://localhost:8446/api/log/test-id/images")
         self.assertEqual(api.upload[0], "https://localhost:8446/api/log/test-id/images/0123456789")
         self.assertEqual(base64.b64decode(api.upload[1].split(",", 1)[1]), screenshot)
         self.assertEqual(api.upload[2], {"Content-Type": "text/plain"})
         api.incomplete = True
         with self.assertRaises(runner.BrowserFailure):
-            runner.upload_login_evidence(api, "https://localhost:8446", "test-id", screenshot)
+            runner.upload_browser_evidence(api, "https://localhost:8446", "test-id", screenshot, "oidcc-prompt-login")
         with self.assertRaises(runner.BrowserFailure):
-            runner.upload_login_evidence(api, "https://localhost:8446", "test-id", b"x" * (500 * 1024 + 1))
+            runner.upload_browser_evidence(api, "https://localhost:8446", "test-id", b"x" * (500 * 1024 + 1), "oidcc-prompt-login")
 
     @contextlib.contextmanager
     def fixture(self, login_limits=None):
