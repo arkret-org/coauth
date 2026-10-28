@@ -438,12 +438,12 @@ mod tests {
                     .request(hyper::Request::get("/_coauth/account/auth/providers").empty())
                     .await;
                 response.assert_status(hyper::StatusCode::OK);
-                let providers = response.json::<ProvidersOutcome>();
+                let capabilities = response.json::<ProvidersOutcome>();
                 assert_eq!(
-                    providers.password_registration_contact_required,
+                    capabilities.password_registration_contact_required,
                     contact_required
                 );
-                assert_eq!(providers.phone_verification_enabled, phone_enabled);
+                assert_eq!(capabilities.phone_verification_enabled, phone_enabled);
                 if !phone_enabled {
                     let response = state
                         .request(hyper::Request::post("/_coauth/account/auth/register").json(
