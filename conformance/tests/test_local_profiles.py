@@ -1,6 +1,8 @@
 """Local official profiles must match real registrations and private keys."""
 
 import base64
+import contextlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -15,7 +17,8 @@ import yaml
 
 
 class LocalProfilesTests(unittest.TestCase):
-    def test_real_registrations_keys_and_unavailable_mtls(self):
+    @contextlib.contextmanager
+    def fixture(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             generated = root / "generated.yaml"
@@ -29,6 +32,80 @@ class LocalProfilesTests(unittest.TestCase):
                 "COAUTH_CONFORMANCE_FULL_PLANS_JSON": "",
             })
             config = yaml.safe_load((root / "coauth.yaml").read_text())
+            yield root, config
+
+    def test_login_hint_targets_the_registered_real_account(self):
+        with self.fixture() as (root, _):
+            user = json.loads((root / "browser-user.json").read_text())
+            for name in ("basic-op", "fapi2-baseline"):
+                profile = json.loads((root / "full-plans" / f"{name}.json").read_text())
+                self.assertEqual(profile["server"]["login_hint"], user["handle"])
+
+    def test_client_secret_post_uses_an_independent_registered_client(self):
+        with self.fixture() as (root, config):
+            profile = json.loads((root / "full-plans/basic-op.json").read_text())
+            post = profile["client_secret_post"]
+            self.assertNotIn(post["client_id"], {profile["client"]["client_id"], profile["client2"]["client_id"]})
+            clients = {client["client_id"]: client for client in config["clients"]}
+            registration = clients[post["client_id"]]
+            self.assertEqual(registration["client_auth_method"], "client_secret_post")
+            self.assertEqual(registration["client_secret"], post["client_secret"])
+            self.assertIn(f'https://localhost:8446/test/a/{profile["alias"]}/callback', registration["redirect_uris"])
+            self.assertEqual(clients[profile["client"]["client_id"]]["client_auth_method"], "client_secret_basic")
+
+    def test_local_plan_never_drives_or_cancels_previous_profile_ids(self):
+        path = Path(__file__).resolve().parents[1] / "run-official-plan.py"
+        spec = importlib.util.spec_from_file_location("official_plan", path)
+        runner = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runner)
+
+        class Reply:
+            status_code = 200
+
+            def __init__(self, body):
+                self.body = body
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return self.body
+
+        class API:
+            states = {"previous-waiting": "WAITING", "previous-finished": "FINISHED"}
+
+            def __init__(self):
+                self.states = dict(self.states)
+                self.stopped = []
+                self.read = []
+
+            def get(self, url, timeout):
+                if url.endswith("/running"):
+                    return Reply(list(self.states))
+                test_id = url.rsplit("/", 1)[1]
+                self.read.append(test_id)
+                return Reply({"status": self.states[test_id]})
+
+            def delete(self, url, timeout):
+                test_id = url.rsplit("/", 1)[1]
+                self.stopped.append(test_id)
+                self.states[test_id] = "INTERRUPTED"
+                return Reply({})
+
+        api = API()
+        scope = runner.LocalPlanScope(api, "https://localhost:8446")
+        api.states.update({"current-waiting": "WAITING", "current-finished": "FINISHED"})
+        self.assertEqual(scope.test_ids(), ["current-finished", "current-waiting"])
+        scope.stop_pending()
+        self.assertEqual(api.stopped, ["current-waiting"])
+        self.assertEqual(api.states["previous-waiting"], "WAITING")
+        self.assertNotIn("previous-waiting", api.read)
+        api.states["../unexpected"] = "WAITING"
+        with self.assertRaises(RuntimeError):
+            scope.test_ids()
+
+    def test_real_registrations_keys_and_unavailable_mtls(self):
+        with self.fixture() as (root, config):
             clients = {client["client_id"]: client for client in config["clients"]}
             resources = config["http"]["listeners"][0]["resources"]
             self.assertIn({"name": "restapi"}, resources)

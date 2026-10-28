@@ -11,33 +11,57 @@ import traceback
 from urllib.parse import urlsplit
 
 
-def drive_local_browser(process):
+class LocalPlanScope:
+    """Own only tests created after this isolated local plan starts."""
+
+    def __init__(self, api, server):
+        self.api = api
+        self.server = server
+        self.baseline = self.running_ids()
+
+    def running_ids(self):
+        response = self.api.get(self.server + "/api/runner/running", timeout=30)
+        response.raise_for_status()
+        ids = response.json()
+        if not isinstance(ids, list) or not all(isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9-]+", value) for value in ids):
+            raise RuntimeError("unexpected official test identifiers")
+        return set(ids)
+
+    def test_ids(self):
+        return sorted(self.running_ids() - self.baseline)
+
+    def stop_pending(self):
+        for test_id in self.test_ids():
+            url = f"{self.server}/api/runner/{test_id}"
+            response = self.api.get(url, timeout=30)
+            if response.status_code == 404:
+                continue
+            response.raise_for_status()
+            if response.json()["status"] not in {"FINISHED", "INTERRUPTED"}:
+                response = self.api.delete(url, timeout=30)
+                if response.status_code != 404:
+                    response.raise_for_status()
+
+
+def drive_local_browser(process, scope):
     """Visit the official runner's front-channel URLs with the real WASM UI."""
-    import requests
     from playwright.sync_api import sync_playwright
 
     credentials = json.loads(Path(os.environ["COAUTH_CONFORMANCE_BROWSER_USER"]).read_text())
-    server = os.environ["CONFORMANCE_SERVER"].rstrip("/")
-    if server != "https://localhost:8446" or not os.environ.get("CONFORMANCE_DEV_MODE"):
-        raise RuntimeError("the local browser driver requires the isolated local suite")
+    server, api = scope.server, scope.api
     allowed = {"https://localhost:8445", server}
 
     def origin(url):
         parsed = urlsplit(url)
         return f"{parsed.scheme}://{parsed.netloc}"
 
-    with requests.Session() as api, sync_playwright() as playwright:
-        api.verify = os.environ["CURL_CA_BUNDLE"]
+    with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         contexts = {}
         visited = set()
         try:
             while process.poll() is None:
-                response = api.get(server + "/api/runner/running", timeout=30)
-                response.raise_for_status()
-                for test_id in response.json():
-                    if not re.fullmatch(r"[A-Za-z0-9-]+", test_id):
-                        raise RuntimeError("unexpected official test identifier")
+                for test_id in scope.test_ids():
                     response = api.get(f"{server}/api/runner/{test_id}", timeout=30)
                     if response.status_code in (404, 503):
                         continue
@@ -126,13 +150,22 @@ def main():
         "--no-parallel", "--export-dir", str(results), plan, config_path.name,
     ]
     if config.get("_browser_driver") == "chromium":
+        import requests
+
+        server = os.environ["CONFORMANCE_SERVER"].rstrip("/")
+        if server != "https://localhost:8446" or not os.environ.get("CONFORMANCE_DEV_MODE"):
+            raise RuntimeError("the local browser driver requires the isolated local suite")
         # Raw runner output can contain redirect codes; it stays in the private
         # results tree and never becomes a public evidence artifact.
-        with (results / "runner-private.log").open("w") as log:
+        with requests.Session() as api, (results / "runner-private.log").open("w") as log:
+            api.verify = os.environ["CURL_CA_BUNDLE"]
+            # Snapshot before starting the runner: an earlier failed profile's
+            # pending browser requests must never drive this plan's credentials.
+            scope = LocalPlanScope(api, server)
             process = subprocess.Popen(command, cwd=config_path.parent, stdout=log, stderr=subprocess.STDOUT)
             try:
                 try:
-                    drive_local_browser(process)
+                    drive_local_browser(process, scope)
                 except Exception:
                     traceback.print_exc(file=log)
                     raise RuntimeError("local real-browser automation failed; private URL diagnostics were withheld") from None
@@ -146,6 +179,7 @@ def main():
                     except subprocess.TimeoutExpired:
                         process.kill()
                         process.wait()
+                scope.stop_pending()
     else:
         subprocess.run(command, cwd=config_path.parent, check=True)
     if not list(results.glob("*.zip")):

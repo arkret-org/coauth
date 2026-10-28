@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+LOCAL_HANDLE = "oidf-conformance"
+
 
 def write_private(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
@@ -68,6 +70,13 @@ def main():
             "redirect_uris": ["https://localhost:8446/test/a/coauth-basic/callback"],
         })
     fapi_clients = []
+    secret_post_client = {
+        "client_id": "01GFWR4BNFDCC4QDG6AMSP1VRR", "client_name": "Local OIDCC POST fixture",
+        "client_auth_method": "client_secret_post",
+        "client_secret": base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("="),
+        "redirect_uris": ["https://localhost:8446/test/a/coauth-basic/callback"],
+    }
+    clients.append(secret_post_client)
     for index, client_id in enumerate(["01GFWR3WHR93Y5HK389H28VHZ9", "01GFWR43R2ZZ8HX9CVBNW9TJWG"]):
         key = signing_key(f"coauth-fapi-{index}")
         fapi_clients.append({"client_id": client_id, "scope": "openid profile", "jwks": {"keys": [key]}, "dpop_signing_alg": "ES256"})
@@ -99,17 +108,18 @@ def main():
     plan_path.write_text(json.dumps(plan, indent=2) + "\n")
     plan_path.chmod(0o600)
     write_private(out / "browser-user.json", {
-        "handle": "oidf-conformance", "password": "Oidf!9" + base64.urlsafe_b64encode(os.urandom(32)).decode(),
+        "handle": LOCAL_HANDLE, "password": "Oidf!9" + base64.urlsafe_b64encode(os.urandom(32)).decode(),
     })
     full_dir = out / "full-plans"
     full_dir.mkdir()
-    common = {"publish": "none", "server": plan["server"], "browser": [], "_browser_driver": "chromium"}
+    common = {"publish": "none", "server": {**plan["server"], "login_hint": LOCAL_HANDLE}, "browser": [], "_browser_driver": "chromium"}
     write_private(full_dir / "basic-op.json", {
         **common, "alias": "coauth-basic", "description": "Local real-client Basic OP",
         "_official_plan": "oidcc-basic-certification-test-plan",
         "variant": {"server_metadata": "discovery", "client_registration": "static_client"},
         "client": {**plan["client"], "scope": "openid profile"},
         "client2": {**plan["client2"], "scope": "openid profile"},
+        "client_secret_post": {**{key: secret_post_client[key] for key in ["client_id", "client_secret"]}, "scope": "openid profile"},
     })
     write_private(full_dir / "fapi2-baseline.json", {
         **common, "alias": "coauth-fapi", "description": "Local private_key_jwt and DPoP FAPI2",
