@@ -392,60 +392,57 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: 1abbf74976504a00903282f5aa9a5edf3750f291
+          ref: 81619ef0d4d266cae58a18002809e231908eaa7b
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: cd74e04e0596e7c23b34e2f5487273fbf7aa5f5f
+          ref: 7ee3e497d7f1d767367dbdf0a781645f93166d3f
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/cotest
           path: arkret-org/cotest
-          ref: 18635ad2bc76bcf837dd7c1af44531347a77275a
+          ref: 9cbfda42244716a334d3ebf035e994ed975615fd
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout garth
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/garth
           path: arkret-org/garth
-          ref: 22be3c9765ba0bad21deb06923a09347a0ef5718
+          ref: 401dd7d9102e550457f8867410bf67c7bf839952
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout floria
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/floria
           path: arkret-org/floria
-          ref: 9d9ee6e5ebfef35bae56d9d79a8a23157486bccb
+          ref: 8140a98952ecca14173c3a1eedf3e62454e1420a
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout arkret-spec
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-org/arkret-spec
-          ref: 0ac6a6eaed76129caab0c9817fac9722e2d96461
+          ref: 68a195f0f26ac892de46a588d2dcb10770bcb8e4
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout bridges
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/bridges
           path: arkret-org/bridges
-          ref: 75ca53df073c4b4c21e38fb4a508bb569bc90c0c
+          ref: 683cd0c2cf2f6b7fbfd16c63c73d4ee091c3ba4b
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout savfox
         uses: actions/checkout@v6
         with:
           repository: savfox-ai/savfox
           path: savfox-ai/savfox
-          ref: 8924d19b7e0e9097f1d6d9d0d9a11cf1926217cb
+          ref: 506aebcf7521f46913782f503eb7e4ef16da93c0
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - name: Checkout Glory and Sapid
-        shell: bash
-        run: bash .ci/checkout-ui-dependencies.sh
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -458,11 +455,17 @@ jobs:
           key: release-frontend
       - name: Install frontend tools
         run: |
-          bash .ci/checkout-ui-dependencies.sh
-          version=$(python -c 'import pathlib,tomllib; print(next(p["version"] for p in tomllib.loads(pathlib.Path("Cargo.lock").read_text())["package"] if p["name"] == "wasm-bindgen"))')
-          cargo install wasm-bindgen-cli --version "$version" --locked
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+          cargo install dioxus-cli --version 0.7.10 --locked
       - name: Build frontend
-        run: python scripts/build-frontend.py --release --out-dir frontend-dist
+        run: dx build -p coauth-frontend --release --debug-symbols false --locked
+      - name: Locate frontend assets
+        shell: bash
+        run: |
+          target_dir=$(cargo metadata --locked --no-deps --format-version 1 | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
+          test -f "$target_dir/dx/coauth-frontend/release/web/public/index.html"
+          cp -R "$target_dir/dx/coauth-frontend/release/web/public" frontend-dist
       - uses: actions/upload-artifact@v4
         with:
           name: coauth-frontend
@@ -506,60 +509,57 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: 1abbf74976504a00903282f5aa9a5edf3750f291
+          ref: 81619ef0d4d266cae58a18002809e231908eaa7b
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: cd74e04e0596e7c23b34e2f5487273fbf7aa5f5f
+          ref: 7ee3e497d7f1d767367dbdf0a781645f93166d3f
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/cotest
           path: arkret-org/cotest
-          ref: 18635ad2bc76bcf837dd7c1af44531347a77275a
+          ref: 9cbfda42244716a334d3ebf035e994ed975615fd
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout garth
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/garth
           path: arkret-org/garth
-          ref: 22be3c9765ba0bad21deb06923a09347a0ef5718
+          ref: 401dd7d9102e550457f8867410bf67c7bf839952
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout floria
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/floria
           path: arkret-org/floria
-          ref: 9d9ee6e5ebfef35bae56d9d79a8a23157486bccb
+          ref: 8140a98952ecca14173c3a1eedf3e62454e1420a
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout arkret-spec
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-org/arkret-spec
-          ref: 0ac6a6eaed76129caab0c9817fac9722e2d96461
+          ref: 68a195f0f26ac892de46a588d2dcb10770bcb8e4
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout bridges
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/bridges
           path: arkret-org/bridges
-          ref: 75ca53df073c4b4c21e38fb4a508bb569bc90c0c
+          ref: 683cd0c2cf2f6b7fbfd16c63c73d4ee091c3ba4b
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout savfox
         uses: actions/checkout@v6
         with:
           repository: savfox-ai/savfox
           path: savfox-ai/savfox
-          ref: 8924d19b7e0e9097f1d6d9d0d9a11cf1926217cb
+          ref: 506aebcf7521f46913782f503eb7e4ef16da93c0
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
-      - name: Checkout Glory and Sapid
-        shell: bash
-        run: bash .ci/checkout-ui-dependencies.sh
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
