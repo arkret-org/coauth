@@ -15,11 +15,16 @@
 set -euo pipefail
 
 ATTEMPT_BUDGET="${SMOKE_ATTEMPT_BUDGET:-30}"
+if [[ ! "$ATTEMPT_BUDGET" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[smoke] SMOKE_ATTEMPT_BUDGET must be a positive integer" >&2
+    exit 3
+fi
 
 probe() {
     local name="$1"
     local url="$2"
-    for attempt in $(sequence 1 "${ATTEMPT_BUDGET}"); do
+    local attempt
+    for ((attempt = 1; attempt <= ATTEMPT_BUDGET; attempt++)); do
         local code
         code="$(curl -fsS -o /dev/null -m 2 -w '%{http_code}' "${url}" || echo "000")"
         if [[ "${code}" == "200" ]]; then

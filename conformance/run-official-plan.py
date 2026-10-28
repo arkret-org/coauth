@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import importlib.util
 import json
 import math
 import os
@@ -260,7 +261,8 @@ def main():
     results = args.results.resolve()
     results.mkdir(parents=True, exist_ok=True)
     command = [
-        os.environ.get("PYTHON", "python3"), str(source / "scripts/run-test-plan.py"),
+        os.environ.get("PYTHON", "python3"), str(Path(__file__).with_name("official-runner-diagnostics.py")),
+        str(source / "scripts/run-test-plan.py"),
         "--no-parallel", "--export-dir", str(results), plan, config_path.name,
     ]
     if config.get("_browser_driver") == "chromium":
@@ -286,6 +288,13 @@ def main():
                         raise RuntimeError(str(error)) from None
                     raise RuntimeError("local real-browser automation failed (" + type(error).__name__ + "); private URL diagnostics were withheld") from None
                 if process.wait() != 0:
+                    log.flush()
+                    diagnostics_path = Path(__file__).with_name("official-runner-diagnostics.py")
+                    spec = importlib.util.spec_from_file_location("official_diagnostics", diagnostics_path)
+                    diagnostics = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(diagnostics)
+                    for diagnostic in diagnostics.public_failure_diagnostics(results / "runner-private.log"):
+                        print("::error::OIDF " + diagnostic, flush=True)
                     raise RuntimeError("the official conformance plan failed; inspect credential-free exported evidence")
             finally:
                 failure_active = sys.exc_info()[0] is not None
