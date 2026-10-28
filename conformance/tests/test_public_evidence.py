@@ -15,6 +15,28 @@ spec.loader.exec_module(evidence)
 
 
 class PublicEvidenceTests(unittest.TestCase):
+    def test_review_and_uncreated_results_remain_distinct_from_passed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, output = Path(directory), Path(directory) / "public"
+            output.mkdir()
+            archive = root / "official-review.zip"
+            with zipfile.ZipFile(archive, "w") as bundle:
+                for result, status in (("REVIEW", "FINISHED"), ("UNKNOWN", "NOT_YET_CREATED"), ("FAILED", "FINISHED")):
+                    bundle.writestr(f"test-log-{result}.json", json.dumps({
+                        "testInfo": {"testName": "oidcc-prompt-login", "status": status, "result": result,
+                                     "config": {"client_secret": "PRIVATE_REVIEW_SENTINEL"}},
+                        "results": [{"src": "ExpectSecondLoginPage", "result": "REVIEW", "img": "PRIVATE_REVIEW_SENTINEL"}],
+                    }))
+            original = archive.read_bytes()
+            evidence.export_modules(root, output, "1" * 40)
+            report = (output / "modules.json").read_text()
+            modules = json.loads(report)["modules"]
+            self.assertEqual({module["result"] for module in modules}, {"REVIEW", "UNKNOWN", "FAILED"})
+            self.assertFalse(any(module["result"] == "PASSED" for module in modules))
+            self.assertTrue(all(module["counts"]["REVIEW"] == 1 for module in modules))
+            self.assertNotIn("PRIVATE_REVIEW_SENTINEL", report)
+            self.assertEqual(archive.read_bytes(), original)
+
     def test_module_outcomes_preserved_without_configuration_or_payloads(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
