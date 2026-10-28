@@ -428,6 +428,21 @@ mod tests {
     };
     use crate::salvo_utils::SessionInfoExt as _;
 
+    fn assert_acceptance_outcome(outcome: &serde_json::Value) {
+        let accepted: AccountRequestErasureResponseBody =
+            serde_json::from_value(outcome.clone()).unwrap();
+        accepted.validate().unwrap();
+        assert_eq!(
+            outcome
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<std::collections::BTreeSet<_>>(),
+            std::collections::BTreeSet::from(["request_id", "principal_id", "recorded_at"]),
+        );
+    }
+
     fn fresh_config(state: &TestState) -> ArkretConfig {
         let mut config = state.arkret_config.clone();
         config.erasure_request_max_auth_age = Duration::try_minutes(10);
@@ -628,7 +643,7 @@ mod tests {
             .await
             .unwrap();
         let outcome: serde_json::Value = serde_json::from_slice(&first).unwrap();
-        assert_eq!(outcome["status"], "accepted");
+        assert_acceptance_outcome(&outcome);
         assert_eq!(outcome["request_id"], body.request_id.as_str());
         assert!(
             outcome.get("withdrawal_window_ends_at").is_none(),
@@ -805,7 +820,7 @@ mod tests {
         .await
         .unwrap();
         let outcome: serde_json::Value = serde_json::from_slice(&accepted).unwrap();
-        assert_eq!(outcome["status"], "accepted");
+        assert_acceptance_outcome(&outcome);
 
         // soft_logged_out: admitted.
         let user = seed_account(&state).await;
@@ -814,7 +829,7 @@ mod tests {
             .await
             .unwrap();
         let outcome: serde_json::Value = serde_json::from_slice(&accepted).unwrap();
-        assert_eq!(outcome["status"], "accepted");
+        assert_acceptance_outcome(&outcome);
 
         // locked: refused at the authentication layer with account_locked and
         // zero writes.
@@ -906,7 +921,7 @@ mod tests {
         response.assert_status(hyper::StatusCode::OK);
         let first_body = response.body().to_owned();
         let outcome: serde_json::Value = serde_json::from_str(&first_body).unwrap();
-        assert_eq!(outcome["status"], "accepted");
+        assert_acceptance_outcome(&outcome);
         assert_eq!(outcome["request_id"], request_id);
         assert!(outcome.get("withdrawal_window_ends_at").is_none());
 

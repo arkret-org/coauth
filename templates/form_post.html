@@ -19,7 +19,7 @@ Auto-submits parameters back to the client's redirect URI via POST.
       method="post"
       {% if redirect_uri is not none %}action="{{ redirect_uri }}"{% endif %}
     >
-      {% for key, value in params|items %}
+      {% for key, value in parameters|items %}
         <input type="hidden" name="{{ key }}" value="{{ value }}" />
       {% endfor %}
 
