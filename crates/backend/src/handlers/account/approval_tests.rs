@@ -708,6 +708,15 @@ fn authorization_error(response: &Response<String>) -> String {
     params["error"].to_string()
 }
 
+fn same_origin_location(state: &TestState, response: &Response<String>) -> url::Url {
+    let base = state.url_builder.absolute_url("/");
+    let location = base
+        .join(response.headers()["location"].to_str().unwrap())
+        .unwrap();
+    assert_eq!(location.origin(), base.origin());
+    location
+}
+
 #[tokio::test]
 async fn silent_authorization_reuses_only_current_client_scope_and_active_consent() {
     let mut fixture = Fixture::new().await;
@@ -850,11 +859,7 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             .browser
             .send(&fixture.state, Request::get(url.as_str()).empty())
             .await;
-        let location: url::Url = response.headers()["location"]
-            .to_str()
-            .unwrap()
-            .parse()
-            .unwrap();
+        let location = same_origin_location(&fixture.state, &response);
         assert_eq!(location.path(), "/login");
         let grant: Ulid = location
             .query_pairs()
@@ -891,11 +896,12 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             )
             .await;
         assert!(denied.status().is_redirection());
+        let login = same_origin_location(&fixture.state, &denied);
+        assert_eq!(login.path(), "/login");
         assert!(
-            denied.headers()["location"]
-                .to_str()
-                .unwrap()
-                .starts_with("https://example.com/login?")
+            login
+                .query_pairs()
+                .any(|(key, value)| key == "id" && value == grant.to_string())
         );
         assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
         grants.push((grant, csrf));
@@ -990,11 +996,7 @@ async fn expired_signed_hint_binds_the_eventual_subject_without_logging_a_browse
     let response = anonymous
         .send(&fixture.state, Request::get(url.as_str()).empty())
         .await;
-    let location: url::Url = response.headers()["location"]
-        .to_str()
-        .unwrap()
-        .parse()
-        .unwrap();
+    let location = same_origin_location(&fixture.state, &response);
     assert_eq!(location.path(), "/login");
     let grant: Ulid = location
         .query_pairs()
@@ -1013,16 +1015,23 @@ async fn expired_signed_hint_binds_the_eventual_subject_without_logging_a_browse
         .send(&fixture.state, Request::get(approval.as_str()).empty())
         .await
         .assert_status(StatusCode::UNAUTHORIZED);
-    let csrf = anonymous
-        .pending(&fixture.state)
-        .bind(grant, &fixture.other)
-        .unwrap();
+    let original_continuation = anonymous.clone();
+    let mut pending = anonymous.pending(&fixture.state);
+    let csrf = pending.bind(grant, &fixture.other).unwrap();
+    // Build a server-authenticated test envelope with a valid nonce and
+    // session binding, preserving the independently constrained subject.
+    // The POST must reject that subject rather than only an absent binding.
+    anonymous.import(pending.write(
+        fixture.state.cookie_jar().set_session(&fixture.other),
+        &coauth_data::SystemClock::default(),
+    ));
     anonymous
         .send(&fixture.state, Fixture::decision(grant, &csrf, "approve"))
         .await
         .assert_status(StatusCode::UNAUTHORIZED);
     assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
     assert_eq!(fixture.sessions().await, 0);
+    anonymous = original_continuation;
     anonymous.import(fixture.state.cookie_jar().set_session(&fixture.session));
     let response = anonymous
         .send(&fixture.state, Request::get(approval.as_str()).empty())
@@ -1052,11 +1061,7 @@ async fn recent_real_authentication_satisfies_nonzero_max_age_without_a_new_logi
         .browser
         .send(&fixture.state, Request::get(url.as_str()).empty())
         .await;
-    let location: url::Url = response.headers()["location"]
-        .to_str()
-        .unwrap()
-        .parse()
-        .unwrap();
+    let location = same_origin_location(&fixture.state, &response);
     assert!(location.path().starts_with("/oauth/approval/"));
     let grant: Ulid = location.path().rsplit('/').next().unwrap().parse().unwrap();
     fixture
