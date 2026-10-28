@@ -232,6 +232,7 @@ ARG TARGETARCH
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   libpq5 \
+  libssl3 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/bin/coauth-${TARGETARCH} /tmp/coauth
