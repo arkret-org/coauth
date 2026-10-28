@@ -54,13 +54,17 @@ def export_failed_plan_evidence(api, server, results, private_log, returncode):
                 raise EvidenceExportFailure("zip-integrity-failed")
             names = set(bundle.namelist())
             records = [name for name in names if name.startswith("test-log-") and name.endswith(".json")]
-            if not records or any(name + ".sig" not in names for name in records):
-                raise EvidenceExportFailure("original-signed-module-records-required")
+            # LogApi.exportLogsOfPlan pairs X.json with X.sig.
+            signed_records = bool(records) and all(name.removesuffix(".json") + ".sig" in names for name in records)
     except zipfile.BadZipFile:
         raise EvidenceExportFailure("invalid-zip-response") from None
     # No ZIP entries, signatures, or outcome fields are reconstructed here.
     with (results / "failed-official-plan.zip").open("xb") as destination:
         destination.write(archive)
+    # A shape mismatch must fail without discarding the original private bytes
+    # or the authoritative condition failures available to the privacy filter.
+    if not signed_records:
+        raise EvidenceExportFailure("original-signed-module-records-required")
     return True
 
 

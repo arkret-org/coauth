@@ -46,7 +46,7 @@ class LocalProfilesTests(unittest.TestCase):
         original = io.BytesIO()
         with zipfile.ZipFile(original, "w") as bundle:
             bundle.writestr("test-log-fixture.json", '{"testInfo":{"result":null},"private":"PRIVATE_EXPORT_SENTINEL"}')
-            bundle.writestr("test-log-fixture.json.sig", "unit-test-signature-fixture")
+            bundle.writestr("test-log-fixture.sig", "unit-test-signature-fixture")
 
         class API:
             def get(self, url, timeout, allow_redirects):
@@ -99,7 +99,10 @@ class LocalProfilesTests(unittest.TestCase):
                 with self.assertRaises(runner.EvidenceExportFailure) as caught:
                     runner.export_failed_plan_evidence(API(), "https://localhost:8446", root, log, 1)
                 self.assertNotIn("PRIVATE_SENTINEL", str(caught.exception))
-                self.assertFalse(list(root.glob("*.zip")))
+                if body == unsigned.getvalue():
+                    self.assertEqual((root / "failed-official-plan.zip").read_bytes(), body)
+                else:
+                    self.assertFalse(list(root.glob("*.zip")))
 
     def runner(self):
         path = Path(__file__).resolve().parents[1] / "run-official-plan.py"
