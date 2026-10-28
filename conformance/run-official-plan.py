@@ -81,8 +81,8 @@ def consent_action(module):
 
 
 def second_login_screenshot(module, ordinal, page):
-    """The official prompt-login placeholder requires the second login page."""
-    if module == "oidcc-prompt-login" and ordinal == 2:
+    """These official placeholders require the actual second login page."""
+    if module in {"oidcc-prompt-login", "oidcc-max-age-1"} and ordinal == 2:
         return page.screenshot(type="jpeg", quality=65)
     return None
 
@@ -198,7 +198,7 @@ def drive_local_browser(process, scope):
                     response.raise_for_status()
                     metadata = response.json()
                     module = metadata.get("name")
-                    if module == "oidcc-prompt-login" and test_id in login_screenshots:
+                    if module in {"oidcc-prompt-login", "oidcc-max-age-1"} and test_id in login_screenshots:
                         upload_login_evidence(api, server, test_id, login_screenshots[test_id])
                     for request in metadata.get("browser", {}).get("urlsWithMethod", []):
                         url, method = request["url"], request["method"]

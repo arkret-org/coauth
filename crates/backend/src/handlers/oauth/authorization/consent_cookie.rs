@@ -16,6 +16,31 @@ struct Consent {
     csrf_token: String,
     user_id: Option<Ulid>,
     session_id: Option<Ulid>,
+    requirements: AuthenticationRequirements,
+}
+
+/// Constraints carried by the authenticated authorization continuation, not by
+/// editable login/approval parameters. A hint never authenticates a browser.
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub(crate) struct AuthenticationRequirements {
+    pub(crate) required_auth_after: Option<DateTime<Utc>>,
+    pub(crate) subject_hint: Option<String>,
+}
+
+impl AuthenticationRequirements {
+    pub(crate) fn satisfied_by(
+        &self,
+        authenticated_at: Option<DateTime<Utc>>,
+        subject: &str,
+        now: DateTime<Utc>,
+    ) -> bool {
+        self.subject_hint
+            .as_deref()
+            .is_none_or(|hint| hint == subject)
+            && self
+                .required_auth_after
+                .is_none_or(|after| authenticated_at.is_some_and(|at| at >= after && at <= now))
+    }
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -51,12 +76,23 @@ impl PendingConsents {
                 csrf_token: arkret_canonical::base64url_encode(nonce),
                 user_id: session.map(|session| session.user.id),
                 session_id: session.map(|session| session.id),
+                requirements: AuthenticationRequirements::default(),
             },
         );
         // Eight continuations remain below the encrypted cookie size limit.
         while self.0.len() > 8 {
             self.0.pop_first();
         }
+    }
+
+    pub(crate) fn require(&mut self, id: Ulid, requirements: AuthenticationRequirements) {
+        if let Some(consent) = self.0.get_mut(&id) {
+            consent.requirements = requirements;
+        }
+    }
+
+    pub(crate) fn requirements(&self, id: Ulid) -> Option<&AuthenticationRequirements> {
+        self.0.get(&id).map(|consent| &consent.requirements)
     }
 
     pub(crate) fn bind(&mut self, id: Ulid, session: &BrowserSession) -> Option<String> {
@@ -92,5 +128,32 @@ impl PendingConsents {
                 CookieExpiration::MaxAge(Self::max_age()),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authentication_constraints_require_a_real_fresh_matching_subject() {
+        let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let constraints = AuthenticationRequirements {
+            required_auth_after: Some(now - Duration::seconds(10)),
+            subject_hint: Some("did:web:alice.example".to_owned()),
+        };
+        assert!(constraints.satisfied_by(Some(now), "did:web:alice.example", now));
+        assert!(!constraints.satisfied_by(None, "did:web:alice.example", now));
+        assert!(!constraints.satisfied_by(
+            Some(now - Duration::seconds(11)),
+            "did:web:alice.example",
+            now
+        ));
+        assert!(!constraints.satisfied_by(
+            Some(now + Duration::seconds(1)),
+            "did:web:alice.example",
+            now
+        ));
+        assert!(!constraints.satisfied_by(Some(now), "did:web:mallory.example", now));
     }
 }
