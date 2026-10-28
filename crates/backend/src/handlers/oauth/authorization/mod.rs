@@ -43,6 +43,9 @@ pub enum RouteError {
     #[error("invalid authorization parameters")]
     InvalidParameters,
 
+    #[error("authorization POST requires application/x-www-form-urlencoded")]
+    UnsupportedContentType,
+
     #[error("invalid parameters")]
     IntoCallbackDestination(#[from] self::callback::IntoCallbackDestinationError),
 
@@ -58,6 +61,10 @@ impl Scribe for RouteError {
             Self::Internal(ref e) => {
                 res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
                 res.render(Text::Plain(e.to_string()));
+            }
+            Self::UnsupportedContentType => {
+                res.status_code(StatusCode::UNSUPPORTED_MEDIA_TYPE);
+                res.render(Text::Plain(self.to_string()));
             }
             Self::ClientNotFound
             | Self::InvalidResponseMode
@@ -94,6 +101,51 @@ pub(crate) struct Params {
 
     #[serde(flatten)]
     pkce: Option<pkce::AuthorizationRequest>,
+}
+
+fn validate_parameter_fields<'a>(
+    fields: impl Iterator<Item = (&'a String, &'a Vec<String>)>,
+) -> Result<(), RouteError> {
+    let mut has_response_type = false;
+    for (name, values) in fields {
+        if values.len() != 1 {
+            return Err(RouteError::InvalidParameters);
+        }
+        has_response_type |= name == "response_type";
+    }
+    if !has_response_type {
+        return Err(RouteError::MissingResponseType);
+    }
+    Ok(())
+}
+
+async fn parse_parameters(req: &mut Request) -> Result<Params, RouteError> {
+    if req.method() == salvo::http::Method::POST {
+        if req.content_type().is_none_or(|content_type| {
+            !content_type
+                .essence_str()
+                .eq_ignore_ascii_case("application/x-www-form-urlencoded")
+        }) {
+            return Err(RouteError::UnsupportedContentType);
+        }
+        // Authorization parameters have one source: the form body. Never
+        // combine a caller's query with differently interpreted body values.
+        if !req.queries().is_empty() {
+            return Err(RouteError::InvalidParameters);
+        }
+        let form = req
+            .form_data()
+            .await
+            .map_err(|_| RouteError::InvalidParameters)?;
+        validate_parameter_fields(form.fields.iter_all())?;
+        req.parse_form()
+            .await
+            .map_err(|_| RouteError::InvalidParameters)
+    } else {
+        validate_parameter_fields(req.queries().iter_all())?;
+        req.parse_queries()
+            .map_err(|_| RouteError::InvalidParameters)
+    }
 }
 
 fn localized_post_auth_path(
@@ -135,9 +187,9 @@ fn resolve_response_mode(
 }
 
 #[handler]
-#[tracing::instrument(name = "handlers.oauth.authorization.get", skip_all)]
-pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
-    match handle_get(req, depot).await {
+#[tracing::instrument(name = "handlers.oauth.authorization", skip_all)]
+pub async fn authorize(req: &mut Request, depot: &Depot, res: &mut Response) {
+    match handle_authorization(req, depot).await {
         Ok((response, cookie_jar)) => {
             *res = response;
             cookie_jar.write_to_response(res);
@@ -146,7 +198,10 @@ pub async fn get(req: &mut Request, depot: &Depot, res: &mut Response) {
     }
 }
 
-async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, CookieJar), RouteError> {
+async fn handle_authorization(
+    req: &mut Request,
+    depot: &Depot,
+) -> Result<(Response, CookieJar), RouteError> {
     use crate::handlers::common::DepotExt as _;
 
     // Pull infrastructure off the depot via the typed extension trait so a
@@ -170,12 +225,7 @@ async fn handle_get(req: &mut Request, depot: &Depot) -> Result<(Response, Cooki
     // Malformed caller input is a request error. Do not reflect parser errors
     // containing caller-controlled values or redirect before validating a
     // client and its registered callback.
-    if !req.queries().contains_key("response_type") {
-        return Err(RouteError::MissingResponseType);
-    }
-    let parameters: Params = req
-        .parse_queries()
-        .map_err(|_| RouteError::InvalidParameters)?;
+    let parameters = parse_parameters(req).await?;
 
     // OIDC `ui_locales` is a space-separated preference list; hand it over
     // verbatim, because the shared resolver parses that syntax directly. The

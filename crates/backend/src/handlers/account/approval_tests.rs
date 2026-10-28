@@ -1129,3 +1129,163 @@ async fn malformed_authorization_queries_return_safe_400_pages_without_a_callbac
     assert_eq!(fixture.sessions().await, 0);
     fixture.finish().await;
 }
+
+#[tokio::test]
+async fn form_post_authorization_uses_the_same_bound_consent_and_callback_flow() {
+    for mode in ["query", "form_post"] {
+        let mut fixture = Fixture::new().await;
+        let parameters = fixture.authorization_url(mode);
+        let endpoint = fixture.state.url_builder.absolute_url("/authorize");
+        let response = fixture
+            .browser
+            .send(
+                &fixture.state,
+                Request::post(endpoint.as_str())
+                    .header(
+                        "content-type",
+                        "application/x-www-form-urlencoded; charset=UTF-8",
+                    )
+                    .body(parameters.query().unwrap().to_owned())
+                    .unwrap(),
+            )
+            .await;
+        assert!(response.status().is_redirection());
+        let location = same_origin_location(&fixture.state, &response);
+        assert!(location.path().starts_with("/oauth/approval/"));
+        let grant: Ulid = location.path().rsplit('/').next().unwrap().parse().unwrap();
+        let consent = fixture
+            .browser
+            .send(
+                &fixture.state,
+                Request::get(format!(
+                    "/_coauth/self/oauth/authorization-grants/{grant}/decision",
+                ))
+                .empty(),
+            )
+            .await;
+        consent.assert_status(StatusCode::OK);
+        let csrf = consent.json::<Value>()["csrf_token"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let accepted = fixture
+            .browser
+            .send(&fixture.state, Fixture::decision(grant, &csrf, "approve"))
+            .await;
+        accepted.assert_status(StatusCode::OK);
+        let body = accepted.json::<Value>();
+        let callback: url::Url = body["redirect_url"].as_str().unwrap().parse().unwrap();
+        assert_eq!(
+            callback.origin().ascii_serialization(),
+            "https://client.example"
+        );
+        let values: Vec<(String, String)> = if mode == "form_post" {
+            assert_eq!(callback.as_str(), fixture.client.redirect_uris[0].as_str());
+            serde_json::from_value(body["form_parameters"].clone()).unwrap()
+        } else {
+            callback.query_pairs().into_owned().collect()
+        };
+        assert!(values.contains(&("state".to_owned(), "opaque&state=<safe>".to_owned())));
+        assert!(
+            values
+                .iter()
+                .any(|(key, value)| key == "code" && !value.is_empty())
+        );
+        assert!(!values.iter().any(|(key, _)| key == "error"));
+        assert!(fixture.stage(grant).await.is_fulfilled());
+        assert_eq!(fixture.sessions().await, 1);
+        fixture.finish().await;
+    }
+}
+
+#[tokio::test]
+async fn authorization_post_rejects_json_mixed_sources_and_duplicate_fields() {
+    let mut fixture = Fixture::new().await;
+    let parameters = fixture.authorization_url("query");
+    let endpoint = fixture.state.url_builder.absolute_url("/authorize");
+    let form = parameters.query().unwrap();
+    let mut requests = vec![
+        (
+            Request::post(endpoint.as_str()).json(json!({"response_type":"code"})),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            Request::post(endpoint.as_str())
+                .header("content-type", "text/plain")
+                .body(form.to_owned())
+                .unwrap(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+        (
+            Request::post(endpoint.as_str())
+                .body(form.to_owned())
+                .unwrap(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+        ),
+    ];
+    for query in ["client_id=other-client", "response_type=code"] {
+        requests.push((
+            Request::post(format!("{endpoint}?{query}"))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(form.to_owned())
+                .unwrap(),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    for extra in [
+        "client_id=other-client",
+        "response_type=code",
+        "max_age=PRIVATE_FORM_VALUE_SENTINEL",
+    ] {
+        requests.push((
+            Request::post(endpoint.as_str())
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(format!("{form}&{extra}"))
+                .unwrap(),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    requests.push((
+        Request::get(format!("{parameters}&client_id=other-client")).empty(),
+        StatusCode::BAD_REQUEST,
+    ));
+    for (request, status) in requests {
+        let response = fixture.browser.send(&fixture.state, request).await;
+        response.assert_status(status);
+        assert!(!response.headers().contains_key("location"));
+        assert!(!response.body().contains("PRIVATE_FORM_VALUE_SENTINEL"));
+    }
+    assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn authorization_form_post_enforces_existing_pkce_and_authentication_requirements() {
+    let mut fixture = Fixture::new().await;
+    let original = fixture.authorization_url("query");
+    let endpoint = fixture.state.url_builder.absolute_url("/authorize");
+    for (name, value, error) in [
+        ("code_challenge_method", "plain", "invalid_request"),
+        ("prompt", "none", "login_required"),
+    ] {
+        let mut parameters = original.clone();
+        parameters
+            .query_pairs_mut()
+            .clear()
+            .extend_pairs(original.query_pairs().filter(|(key, _)| key != name))
+            .append_pair(name, value);
+        let response = fixture
+            .browser
+            .send(
+                &fixture.state,
+                Request::post(endpoint.as_str())
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(parameters.query().unwrap().to_owned())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(authorization_error(&response), error);
+    }
+    assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
+}
