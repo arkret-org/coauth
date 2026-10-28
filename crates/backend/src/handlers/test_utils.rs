@@ -428,6 +428,17 @@ fn test_arkret_config(stations: Vec<coauth_config::StationConfig>) -> ArkretConf
 }
 
 impl TestState {
+    /// Drain final activity writes before releasing a test's database lease.
+    pub async fn shutdown(self) {
+        let tasks = self.task_tracker.clone();
+        tasks.close();
+        // The existing cancellation guard asks workers to finish their pending
+        // records. Await their actual exit while the caller still holds its
+        // TestDatabase guard, rather than racing the next test's TRUNCATE.
+        drop(self);
+        tasks.wait().await;
+    }
+
     /// Create a new test state from the given database pool
     pub async fn from_pool(pool: DieselPool<AsyncPgConnection>) -> Result<Self, anyhow::Error> {
         Self::from_pool_with_site_config(pool, test_site_config()).await

@@ -77,6 +77,16 @@ struct Fixture {
 }
 
 impl Fixture {
+    async fn finish(self) {
+        let Self {
+            state,
+            _database: database,
+            ..
+        } = self;
+        state.shutdown().await;
+        drop(database);
+    }
+
     async fn new() -> Self {
         setup();
         let pool = coauth_storage_postgres::test_utils::setup_test_pool()
@@ -292,6 +302,7 @@ async fn denial_commits_query_and_form_post_without_credentials_and_replays_fail
             );
         }
         assert_eq!(fixture.sessions().await, 0);
+        fixture.finish().await;
     }
 }
 
@@ -362,6 +373,7 @@ async fn browser_form_denial_uses_exact_callback_and_rendered_script_csp() {
         AuthorizationGrantStage::Cancelled { .. }
     ));
     assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
 }
 
 #[tokio::test]
@@ -404,6 +416,7 @@ async fn browser_form_with_expired_session_returns_to_login_without_consumption(
     );
     assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
     assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
 }
 
 #[tokio::test]
@@ -453,6 +466,7 @@ async fn wrong_user_nonce_origin_and_redirect_override_do_not_consume_grant() {
         .assert_status(StatusCode::BAD_REQUEST);
     assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
     assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
 }
 
 #[tokio::test]
@@ -489,6 +503,7 @@ async fn withdrawn_redirect_registration_never_consumes_or_redirects_the_request
     );
     assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
     assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
 }
 
 #[tokio::test]
@@ -520,6 +535,7 @@ async fn independent_pending_requests_can_approve_and_deny_concurrently() {
         AuthorizationGrantStage::Cancelled { .. }
     ));
     assert_eq!(fixture.sessions().await, 1);
+    fixture.finish().await;
 }
 
 #[tokio::test]
@@ -550,6 +566,7 @@ async fn competing_decisions_consume_one_pending_grant_once() {
         AuthorizationGrantStage::Cancelled { .. } => assert_eq!(fixture.sessions().await, 0),
         stage => panic!("unexpected terminal consent: {stage:?}"),
     }
+    fixture.finish().await;
 }
 
 #[tokio::test]
@@ -598,4 +615,5 @@ async fn expired_browser_continuation_cannot_consume_a_pending_grant() {
         AuthorizationGrantStage::Pending
     );
     assert_eq!(fixture.sessions().await, 0);
+    fixture.finish().await;
 }
