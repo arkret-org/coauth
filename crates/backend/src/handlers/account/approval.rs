@@ -17,8 +17,11 @@ use super::{
 use crate::handlers::oauth::access::{
     ConsentScreen, DeviceConsentAction, DeviceConsentStatus, OAuthAccessError,
     accept_authorization_consent, load_authorization_consent, load_device_consent,
-    lookup_device_link, submit_device_consent,
+    lookup_device_link, reject_authorization_consent, submit_device_consent,
 };
+use crate::handlers::oauth::authorization::callback::BrowserCallback;
+use crate::handlers::oauth::authorization::consent_cookie::PendingConsents;
+use crate::salvo_utils::cookies::TimedCookie as _;
 
 // ── Response types ─────────────────────────────────────────────
 
@@ -48,17 +51,24 @@ pub struct ApprovalGetOutcome {
     pub scope: String,
     pub user: UserInfo,
     pub policy_violation: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub csrf_token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_mode: Option<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ApprovalPostRequestBody {
     pub action: String,
+    pub csrf_token: String,
 }
 
 #[derive(Serialize, ToSchema)]
 pub struct ApprovalPostOutcome {
     pub status: &'static str,
-    pub redirect_url: String,
+    #[serde(flatten)]
+    pub callback: BrowserCallback,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -93,7 +103,7 @@ fn client_info(client: &coauth_data::Client) -> ClientInfo {
     }
 }
 
-fn approval_get_response(screen: ConsentScreen) -> ApprovalGetOutcome {
+fn approval_get_response(screen: ConsentScreen, csrf_token: Option<String>) -> ApprovalGetOutcome {
     ApprovalGetOutcome {
         grant_id: screen.grant_id.to_string(),
         client: client_info(&screen.client),
@@ -103,6 +113,8 @@ fn approval_get_response(screen: ConsentScreen) -> ApprovalGetOutcome {
             display_name: screen.user_display_name,
         },
         policy_violation: screen.policy_violation,
+        csrf_token,
+        response_mode: screen.response_mode,
     }
 }
 
@@ -110,6 +122,7 @@ fn map_oauth_access_error(error: OAuthAccessError) -> RouteError {
     match error {
         OAuthAccessError::NotFound => RouteError::NotFound,
         OAuthAccessError::GrantNotPending => RouteError::BadRequest("grant is not pending".into()),
+        OAuthAccessError::InvalidRedirect => RouteError::BadRequest("invalid redirect".into()),
         OAuthAccessError::GrantExpired => RouteError::BadRequest("grant is expired".into()),
         OAuthAccessError::PolicyViolation => RouteError::BadRequest("policy_violation".into()),
         OAuthAccessError::Repository(error) => RouteError::from(error),
@@ -174,6 +187,12 @@ pub async fn oauth_approval_get(
         return Ok(());
     };
 
+    let cookie_jar = depot.cookie_jar(req)?;
+    let mut pending = PendingConsents::load(&cookie_jar).expire(clock.now());
+    let csrf = pending
+        .bind(grant_id, &session)
+        .ok_or(RouteError::Unauthorized)?;
+
     let info = load_authorization_consent(
         repo,
         policy_factory.as_ref(),
@@ -187,7 +206,9 @@ pub async fn oauth_approval_get(
     .await
     .map_err(map_oauth_access_error)?;
 
-    res.render(Json(approval_get_response(info.into())));
+    pending
+        .write(cookie_jar, &*clock)
+        .finalize(res, Json(approval_get_response(info.into(), Some(csrf))));
     Ok(())
 }
 
@@ -216,12 +237,20 @@ pub async fn oauth_approval_post(
         .param("grant_id")
         .ok_or_else(|| RouteError::BadRequest("missing grant_id".into()))?;
 
-    let input: ApprovalPostRequestBody = req
-        .parse_json()
-        .await
-        .map_err(|_| RouteError::BadRequest("invalid json body".into()))?;
+    let browser_form = req
+        .header::<String>("content-type")
+        .is_some_and(|value| value.split(';').next() == Some("application/x-www-form-urlencoded"));
+    let input: ApprovalPostRequestBody = if browser_form {
+        req.parse_form()
+            .await
+            .map_err(|_| RouteError::BadRequest("invalid form body".into()))?
+    } else {
+        req.parse_json()
+            .await
+            .map_err(|_| RouteError::BadRequest("invalid json body".into()))?
+    };
 
-    if input.action != "approve" {
+    if input.action != "approve" && input.action != "deny" {
         return Err(RouteError::BadRequest("invalid action".into()));
     }
 
@@ -229,8 +258,51 @@ pub async fn oauth_approval_post(
         require_authenticated_session(&session_info, &mut repo, &activity_tracker, &clock, res)
             .await?
     else {
+        if browser_form {
+            let continuation = serde_urlencoded::to_string(
+                coauth_account_types::PostAuthAction::continue_grant(grant_id),
+            )
+            .map_err(|error| RouteError::Internal(Box::new(error)))?;
+            *res = Response::new();
+            res.render(salvo::writing::Redirect::other(
+                url_builder.relative_url(&format!("/login?{continuation}")),
+            ));
+        }
         return Ok(());
     };
+
+    let origin = url_builder.absolute_url("/").origin().ascii_serialization();
+    if req.header::<String>("origin").as_deref() != Some(origin.as_str()) {
+        return Err(RouteError::Unauthorized);
+    }
+    let cookie_jar = depot.cookie_jar(req)?;
+    let mut pending = PendingConsents::load(&cookie_jar).expire(clock.now());
+    if !pending.permits(grant_id, &browser_session, &input.csrf_token) {
+        return Err(RouteError::Unauthorized);
+    }
+    if input.action == "deny" {
+        let callback = reject_authorization_consent(repo, &*clock, grant_id)
+            .await
+            .map_err(map_oauth_access_error)?;
+        pending.consume(grant_id);
+        if browser_form {
+            let templates = depot.templates()?;
+            let locale = crate::handlers::preferred_language(req, depot);
+            *res = callback
+                .form_post_response(&templates, &locale)
+                .map_err(|error| RouteError::Internal(Box::new(error)))?;
+            pending.write(cookie_jar, &*clock).write_to_response(res);
+        } else {
+            pending.write(cookie_jar, &*clock).finalize(
+                res,
+                Json(ApprovalPostOutcome {
+                    status: "success",
+                    callback,
+                }),
+            );
+        }
+        return Ok(());
+    }
 
     // The language switch is usable before the browser has an authenticated
     // session, so its earlier best-effort profile PATCH normally received a
@@ -275,12 +347,28 @@ pub async fn oauth_approval_post(
         .record_oauth_session(&clock, &decision.session)
         .await;
 
-    let redirect_url = decision.redirect_url().map_err(map_oauth_access_error)?;
+    let callback = decision
+        .callback_destination
+        .browser_callback(&decision.parameters)
+        .map_err(|error| RouteError::Internal(Box::new(error)))?;
 
-    res.render(Json(ApprovalPostOutcome {
-        status: "success",
-        redirect_url,
-    }));
+    pending.consume(grant_id);
+    if browser_form {
+        let templates = depot.templates()?;
+        let locale = crate::handlers::preferred_language(req, depot);
+        *res = callback
+            .form_post_response(&templates, &locale)
+            .map_err(|error| RouteError::Internal(Box::new(error)))?;
+        pending.write(cookie_jar, &*clock).write_to_response(res);
+    } else {
+        pending.write(cookie_jar, &*clock).finalize(
+            res,
+            Json(ApprovalPostOutcome {
+                status: "success",
+                callback,
+            }),
+        );
+    }
     Ok(())
 }
 
@@ -384,7 +472,7 @@ pub async fn device_approval_get(
     .await
     .map_err(map_oauth_access_error)?;
 
-    res.render(Json(approval_get_response(screen)));
+    res.render(Json(approval_get_response(screen, None)));
     Ok(())
 }
 
@@ -448,3 +536,7 @@ pub async fn device_approval_post(
     }));
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "approval_tests.rs"]
+mod tests;

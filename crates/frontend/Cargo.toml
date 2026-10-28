@@ -29,7 +29,7 @@ ulid.workspace = true
 unic-langid = { workspace = true }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true, features = ["CredentialCreationOptions", "CredentialRequestOptions", "CredentialsContainer", "HtmlDocument", "Navigator", "NodeList", "PublicKeyCredential"] }
+web-sys = { workspace = true, features = ["CredentialCreationOptions", "CredentialRequestOptions", "CredentialsContainer", "HtmlDocument", "HtmlFormElement", "Navigator", "NodeList", "PublicKeyCredential"] }
 webauthn-rs-proto = { workspace = true, features = ["wasm"] }
 zxcvbn = { workspace = true }
 

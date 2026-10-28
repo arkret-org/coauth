@@ -290,6 +290,29 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         Ok(Some(res.try_into()?))
     }
 
+    #[tracing::instrument(
+        name = "db.oauth_authorization_grant.lookup_for_update",
+        skip_all,
+        fields(grant.id = %id),
+        err,
+    )]
+    async fn lookup_for_update(
+        &mut self,
+        id: Ulid,
+    ) -> Result<Option<AuthorizationGrant>, Self::Error> {
+        let res = oauth_authorization_grants::table
+            .find(Uuid::from(id))
+            .for_update()
+            .select(GrantLookup::as_select())
+            .first::<GrantLookup>(self.conn)
+            .await
+            .optional()?;
+
+        let Some(res) = res else { return Ok(None) };
+
+        Ok(Some(res.try_into()?))
+    }
+
     #[tracing::instrument(name = "db.oauth_authorization_grant.find_by_code", skip_all, err)]
     async fn find_by_code(
         &mut self,
@@ -346,21 +369,57 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         grant: AuthorizationGrant,
     ) -> Result<AuthorizationGrant, Self::Error> {
         let fulfilled_at = clock.now();
-        let rows_affected =
-            diesel::update(oauth_authorization_grants::table.find(Uuid::from(grant.id)))
-                .set((
-                    oauth_authorization_grants::fulfilled_at.eq(Some(fulfilled_at)),
-                    oauth_authorization_grants::oauth_session_id.eq(Some(Uuid::from(session.id))),
-                ))
-                .execute(self.conn)
-                .await?;
-
-        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
-
-        // TODO: check affected rows & new methods
         let grant = grant
             .fulfill(fulfilled_at, session)
             .map_err(DatabaseError::to_invalid_operation)?;
+        let rows_affected = diesel::update(
+            oauth_authorization_grants::table
+                .find(Uuid::from(grant.id))
+                .filter(oauth_authorization_grants::fulfilled_at.is_null())
+                .filter(oauth_authorization_grants::exchanged_at.is_null())
+                .filter(oauth_authorization_grants::cancelled_at.is_null())
+                .filter(oauth_authorization_grants::oauth_session_id.is_null()),
+        )
+        .set((
+            oauth_authorization_grants::fulfilled_at.eq(Some(fulfilled_at)),
+            oauth_authorization_grants::oauth_session_id.eq(Some(Uuid::from(session.id))),
+        ))
+        .execute(self.conn)
+        .await?;
+
+        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
+
+        Ok(grant)
+    }
+
+    #[tracing::instrument(
+        name = "db.oauth_authorization_grant.cancel",
+        skip_all,
+        fields(%grant.id, client.id = %grant.client_id),
+        err,
+    )]
+    async fn cancel(
+        &mut self,
+        clock: &dyn Clock,
+        grant: AuthorizationGrant,
+    ) -> Result<AuthorizationGrant, Self::Error> {
+        let cancelled_at = clock.now();
+        let grant = grant
+            .cancel(cancelled_at)
+            .map_err(DatabaseError::to_invalid_operation)?;
+        let rows_affected = diesel::update(
+            oauth_authorization_grants::table
+                .find(Uuid::from(grant.id))
+                .filter(oauth_authorization_grants::fulfilled_at.is_null())
+                .filter(oauth_authorization_grants::exchanged_at.is_null())
+                .filter(oauth_authorization_grants::cancelled_at.is_null())
+                .filter(oauth_authorization_grants::oauth_session_id.is_null()),
+        )
+        .set(oauth_authorization_grants::cancelled_at.eq(Some(cancelled_at)))
+        .execute(self.conn)
+        .await?;
+
+        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
 
         Ok(grant)
     }
@@ -452,4 +511,179 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
 struct UuidRow {
     #[diesel(sql_type = diesel::sql_types::Uuid)]
     id: Uuid,
+}
+
+#[cfg(test)]
+mod tests {
+    use coauth_data::clock::MockClock;
+    use coauth_data::oauth::OAuthSessionFilter;
+    use coauth_data::user::UserRepository as _;
+    use coauth_data::{BoxRepository, RepositoryAccess as _, RepositoryFactory as _};
+    use coauth_iana::oauth::OAuthClientAuthenticationMethod;
+    use coauth_oauth_types::scope::OPENID;
+    use rand_chacha::ChaChaRng;
+    use rand_core::SeedableRng;
+
+    use super::*;
+    use crate::PgRepositoryFactory;
+
+    async fn pending_grant(
+        repo: &mut BoxRepository,
+        rng: &mut ChaChaRng,
+        clock: &MockClock,
+        client: &Client,
+    ) -> AuthorizationGrant {
+        let code = new_id(clock.now(), rng).to_string();
+        repo.oauth_authorization_grant()
+            .add(
+                rng,
+                clock,
+                client,
+                client.redirect_uris[0].clone(),
+                Scope::from_iter([OPENID]),
+                Some(AuthorizationCode { code, pkce: None }),
+                Some("original-state".to_owned()),
+                None,
+                ResponseMode::Query,
+                false,
+                None,
+                None,
+            )
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn cancellation_persists_and_stale_decisions_cannot_change_terminal_grants() {
+        let pool = crate::test_utils::setup_test_pool()
+            .await
+            .expect("authorization cancellation requires real PostgreSQL");
+        let clock = MockClock::default();
+        let mut rng = ChaChaRng::seed_from_u64(42);
+        let factory = PgRepositoryFactory::new(pool.clone());
+        let mut repo = factory.create().await.unwrap();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, "cancel-regression".to_owned())
+            .await
+            .unwrap();
+        let client = repo
+            .oauth_client()
+            .upsert_static(
+                new_id(clock.now(), &mut rng),
+                None,
+                OAuthClientAuthenticationMethod::None,
+                None,
+                None,
+                None,
+                vec!["https://client.example/callback".parse().unwrap()],
+            )
+            .await
+            .unwrap();
+        let pending = pending_grant(&mut repo, &mut rng, &clock, &client).await;
+        repo.save().await.unwrap();
+
+        let mut repo = factory.create().await.unwrap();
+        let locked = repo
+            .oauth_authorization_grant()
+            .lookup_for_update(pending.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(locked, pending);
+        let cancelled = repo
+            .oauth_authorization_grant()
+            .cancel(&clock, locked)
+            .await
+            .unwrap();
+        assert_eq!(
+            repo.oauth_session()
+                .count(OAuthSessionFilter::new())
+                .await
+                .unwrap(),
+            0
+        );
+        repo.save().await.unwrap();
+
+        let mut repo = factory.create().await.unwrap();
+        let by_code = repo
+            .oauth_authorization_grant()
+            .find_by_code_for_update(&pending.code.as_ref().unwrap().code)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(by_code, cancelled);
+        assert!(by_code.clone().exchange(clock.now()).is_err());
+        assert!(
+            repo.oauth_authorization_grant()
+                .cancel(&clock, by_code)
+                .await
+                .is_err()
+        );
+        // A caller that read Pending before cancellation must also lose, even
+        // when its in-memory transition remains valid.
+        assert!(
+            repo.oauth_authorization_grant()
+                .cancel(&clock, pending.clone())
+                .await
+                .is_err()
+        );
+        let session = repo
+            .oauth_session()
+            .add(
+                &mut rng,
+                &clock,
+                &client,
+                Some(&user),
+                None,
+                pending.scope.clone(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            repo.oauth_authorization_grant()
+                .fulfill(&clock, &session, pending.clone())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            repo.oauth_authorization_grant()
+                .lookup_for_update(pending.id)
+                .await
+                .unwrap(),
+            Some(cancelled)
+        );
+
+        let other_pending = pending_grant(&mut repo, &mut rng, &clock, &client).await;
+        let fulfilled = repo
+            .oauth_authorization_grant()
+            .fulfill(&clock, &session, other_pending.clone())
+            .await
+            .unwrap();
+        assert!(
+            repo.oauth_authorization_grant()
+                .cancel(&clock, other_pending.clone())
+                .await
+                .is_err()
+        );
+        let exchanged = repo
+            .oauth_authorization_grant()
+            .exchange(&clock, fulfilled)
+            .await
+            .unwrap();
+        assert!(
+            repo.oauth_authorization_grant()
+                .cancel(&clock, other_pending)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            repo.oauth_authorization_grant()
+                .lookup_for_update(exchanged.id)
+                .await
+                .unwrap(),
+            Some(exchanged)
+        );
+        repo.save().await.unwrap();
+    }
 }

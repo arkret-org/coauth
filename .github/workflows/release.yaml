@@ -399,14 +399,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 7ee3e497d7f1d767367dbdf0a781645f93166d3f
+          ref: 5182d9caefdde5223e98df6a33e6af1df0104c8a
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/cotest
           path: arkret-org/cotest
-          ref: 9cbfda42244716a334d3ebf035e994ed975615fd
+          ref: 4d775f2618e3147a9e420c851afede687058b803
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout garth
         uses: actions/checkout@v6
@@ -516,14 +516,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 7ee3e497d7f1d767367dbdf0a781645f93166d3f
+          ref: 5182d9caefdde5223e98df6a33e6af1df0104c8a
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/cotest
           path: arkret-org/cotest
-          ref: 9cbfda42244716a334d3ebf035e994ed975615fd
+          ref: 4d775f2618e3147a9e420c851afede687058b803
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout garth
         uses: actions/checkout@v6

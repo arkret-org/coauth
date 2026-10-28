@@ -197,6 +197,10 @@ pub struct ApprovalDataOutcome {
     #[serde(default)]
     pub policy_violation: bool,
     #[serde(default)]
+    pub csrf_token: Option<String>,
+    #[serde(default)]
+    pub response_mode: Option<String>,
+    #[serde(default)]
     pub status: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
@@ -207,6 +211,10 @@ pub struct OAuthApprovalSubmitOutcome {
     pub status: String,
     #[serde(default)]
     pub redirect_url: Option<String>,
+    #[serde(default)]
+    pub response_mode: Option<String>,
+    #[serde(default)]
+    pub form_parameters: Vec<(String, String)>,
     #[serde(default)]
     pub error: Option<String>,
 }

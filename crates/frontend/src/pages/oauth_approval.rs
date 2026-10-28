@@ -7,14 +7,70 @@ use crate::components::loading::LoadingScreen;
 use crate::pages::Route;
 
 #[cfg(target_arch = "wasm32")]
-fn navigate_to_redirect_url(url: &str) {
-    if let Some(win) = web_sys::window() {
-        let _ = win.location().assign(url);
+fn submit_consent_form(grant: &str, action: &str, csrf: &str) -> Result<(), String> {
+    use web_sys::wasm_bindgen::JsCast as _;
+    let window = web_sys::window().ok_or("Browser window unavailable")?;
+    let url = format!(
+        "{}/self/oauth/authorization-grants/{grant}/decision",
+        crate::config::api_base_url()
+    );
+    let document = window.document().ok_or("Browser document unavailable")?;
+    let form = document
+        .create_element("form")
+        .map_err(|_| "Could not create callback form")?
+        .dyn_into::<web_sys::HtmlFormElement>()
+        .map_err(|_| "Invalid callback form")?;
+    form.set_method("post");
+    form.set_action(&url);
+    for (name, value) in [("action", action), ("csrf_token", csrf)] {
+        let input = document
+            .create_element("input")
+            .map_err(|_| "Could not create callback field")?
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .map_err(|_| "Invalid callback field")?;
+        input.set_type("hidden");
+        input.set_name(name);
+        input.set_value(value);
+        form.append_child(&input)
+            .map_err(|_| "Could not append callback field")?;
     }
+    document
+        .body()
+        .ok_or("Browser body unavailable")?
+        .append_child(&form)
+        .map_err(|_| "Could not mount callback form")?;
+    form.submit()
+        .map_err(|_| "Could not submit callback form")?;
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn finish_authorization(outcome: &OAuthApprovalSubmitOutcome) -> Result<(), String> {
+    let window = web_sys::window().ok_or("Browser window unavailable")?;
+    let url = outcome
+        .redirect_url
+        .as_deref()
+        .ok_or("Missing callback URL")?;
+    if matches!(outcome.response_mode.as_deref(), Some("query" | "fragment")) {
+        window
+            .location()
+            .assign(url)
+            .map_err(|_| "Could not navigate to callback")?;
+    } else {
+        return Err("Unsupported callback mode".to_owned());
+    }
+    Ok(())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn navigate_to_redirect_url(_url: &str) {}
+fn submit_consent_form(_grant: &str, _action: &str, _csrf: &str) -> Result<(), String> {
+    Err("Consent form submission requires a browser".to_owned())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn finish_authorization(_outcome: &OAuthApprovalSubmitOutcome) -> Result<(), String> {
+    Ok(())
+}
 
 /// OAuth approval page — shows what permissions a client is requesting.
 #[component]
@@ -74,6 +130,54 @@ pub fn OAuthApproval(grant_id: String) -> Element {
 fn OAuthApprovalForm(data: ApprovalDataOutcome, grant_id: String) -> Element {
     let mut submitting = use_signal(|| false);
     let mut error = use_signal(|| None::<String>);
+    let decision_csrf = data.csrf_token.clone();
+    let decision_grant = grant_id.clone();
+    let decision_form_post = data.response_mode.as_deref() == Some("form_post");
+    let navigation = navigator();
+    let decide = use_callback(move |action: &'static str| {
+        let Some(csrf_token) = decision_csrf.clone() else {
+            error.set(Some(
+                "Missing authorization continuation. Restart sign-in.".to_owned(),
+            ));
+            return;
+        };
+        submitting.set(true);
+        error.set(None);
+        let gid = decision_grant.clone();
+        if decision_form_post {
+            if let Err(message) = submit_consent_form(&gid, action, &csrf_token) {
+                submitting.set(false);
+                error.set(Some(message));
+            }
+            return;
+        }
+        spawn(async move {
+            let result = crate::api::api_post::<OAuthApprovalSubmitOutcome>(
+                &format!("/self/oauth/authorization-grants/{gid}/decision"),
+                serde_json::json!({ "action": action, "csrf_token": csrf_token }),
+            )
+            .await;
+            submitting.set(false);
+            match result {
+                Ok(resp) if resp.status == "success" => {
+                    if let Err(message) = finish_authorization(&resp) {
+                        error.set(Some(message));
+                    }
+                }
+                Ok(resp) if resp.error.as_deref() == Some("not_authenticated") => {
+                    navigation.push(Route::Login {});
+                }
+                Err(message) if message == "not_authenticated" => {
+                    navigation.push(Route::Login {});
+                }
+                Ok(resp) => error.set(Some(
+                    resp.error
+                        .unwrap_or_else(|| "Authorization failed.".to_owned()),
+                )),
+                Err(message) => error.set(Some(message)),
+            }
+        });
+    });
 
     let client_name = data
         .client
@@ -135,44 +239,15 @@ fn OAuthApprovalForm(data: ApprovalDataOutcome, grant_id: String) -> Element {
                         onmounted: move |event| async move {
                             let _ = event.set_focus(true).await;
                         },
-                        onclick: {
-                            let gid = grant_id.clone();
-                            move |_| {
-                                submitting.set(true);
-                                error.set(None);
-                                let gid = gid.clone();
-
-                                spawn(async move {
-                                    let result = crate::api::api_post::<OAuthApprovalSubmitOutcome>(
-                                        &format!("/self/oauth/authorization-grants/{gid}/decision"),
-                                        serde_json::json!({ "action": "approve" }),
-                                    ).await;
-                                    submitting.set(false);
-                                    match result {
-                                        Ok(resp) if resp.status == "success" => {
-                                            if let Some(url) = resp.redirect_url {
-                                                // Navigate browser to the OAuth callback URL
-                                                // with assign() for a full navigation.
-                                                navigate_to_redirect_url(&url);
-                                            } else {
-                                                error.set(Some("No redirect URL in response.".to_owned()));
-                                            }
-                                        }
-                                        Ok(resp) if resp.error.as_deref() == Some("not_authenticated") => {
-                                            // Session expired — redirect to login so
-                                            // the user can re-authenticate and retry.
-                                            let nav = navigator();
-                                            nav.push(Route::Login {});
-                                        }
-                                        Ok(resp) => {
-                                            error.set(Some(resp.error.unwrap_or_else(|| "Authorization failed.".to_owned())));
-                                        }
-                                        Err(e) => error.set(Some(e)),
-                                    }
-                                });
-                            }
-                        },
+                        onclick: move |_| decide.call("approve"),
                         "Allow"
+                    }
+                    button {
+                        class: "btn btn-secondary btn-block",
+                        "data-testid": "coauth-oauth-deny",
+                        disabled: submitting(),
+                        onclick: move |_| decide.call("deny"),
+                        "Deny"
                     }
                 }
 
