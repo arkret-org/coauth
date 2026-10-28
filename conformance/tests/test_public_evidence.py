@@ -15,6 +15,46 @@ spec.loader.exec_module(evidence)
 
 
 class PublicEvidenceTests(unittest.TestCase):
+    def test_unsupported_outcome_fails_closed_after_preserving_verified_condition_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, output = Path(directory), Path(directory) / "public"
+            output.mkdir()
+            with zipfile.ZipFile(root / "official-malformed.zip", "w") as bundle:
+                for index, result in enumerate(("FAILED", "PRIVATE_OUTCOME_SENTINEL", {"private": "PRIVATE_OUTCOME_SENTINEL"})):
+                    bundle.writestr(f"test-log-{index}.json", json.dumps({
+                        "testInfo": {"testName": "oidcc-server", "status": "FINISHED", "result": result},
+                        "results": [{"src": "CheckConfiguration", "result": "FAILURE"}],
+                    }))
+            with self.assertRaisesRegex(ValueError, "safe field/type diagnostics"):
+                evidence.export_modules(root, output, "1" * 40)
+            raw = (output / "modules.json").read_text()
+            report = json.loads(raw)
+            self.assertFalse(report["evidence_complete"])
+            self.assertEqual(report["modules"][0]["result"], "FAILED")
+            self.assertTrue(all(module["counts"]["FAILURE"] == 1 for module in report["modules"]))
+            self.assertTrue(all("result" not in module for module in report["modules"][1:]))
+            self.assertEqual({error["source_type"] for error in report["evidence_errors"]}, {"str", "dict"})
+            self.assertNotIn("PRIVATE_OUTCOME_SENTINEL", raw)
+
+    def test_official_nullable_persisted_result_is_preserved_without_a_synthetic_outcome(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, output = Path(directory), Path(directory) / "public"
+            output.mkdir()
+            with zipfile.ZipFile(root / "official-unset.zip", "w") as bundle:
+                bundle.writestr("test-log-unset.json", json.dumps({
+                    "testInfo": {"testName": "oidcc-server", "status": "CREATED", "result": None,
+                                 "config": {"client_secret": "PRIVATE_NULL_SENTINEL"}},
+                    "results": [{"src": "CheckConfiguration", "result": "FAILURE", "msg": "PRIVATE_NULL_SENTINEL"}],
+                }))
+            evidence.export_modules(root, output, "1" * 40)
+            report = (output / "modules.json").read_text()
+            module = json.loads(report)["modules"][0]
+            self.assertIsNone(module["result"])
+            self.assertTrue(module["result_unset"])
+            self.assertEqual(module["status"], "CREATED")
+            self.assertEqual(module["counts"]["FAILURE"], 1)
+            self.assertNotIn("PRIVATE_NULL_SENTINEL", report)
+
     def test_review_and_uncreated_results_remain_distinct_from_passed(self):
         with tempfile.TemporaryDirectory() as directory:
             root, output = Path(directory), Path(directory) / "public"
