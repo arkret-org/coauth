@@ -229,11 +229,31 @@ COPY --from=frontend-assets /frontend-dist/ /share/assets
 FROM docker.io/library/debian:${DEBIAN_VERSION_NAME}-slim AS runtime-rootfs
 
 ARG TARGETARCH
+ARG LIBSSL3_MIN_VERSION=3.0.22-1~deb12u2
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  libpq5 \
-  libssl3 \
-  && rm -rf /var/lib/apt/lists/*
+# Export complete runtime packages together with their matching Distroless
+# metadata. Copying only ldd libraries leaves the base image's old package
+# versions in status.d, and omits OpenSSL providers from the installed package.
+# The minimum security revision also invalidates an older cached apt layer.
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends libpq5 libssl3; \
+  installed_ssl="$(dpkg-query --show --showformat='${Version}' libssl3)"; \
+  dpkg --compare-versions "$installed_ssl" ge "$LIBSSL3_MIN_VERSION"; \
+  mkdir -p /runtime-deps/var/lib/dpkg/status.d /tmp/runtime-packages; \
+  cd /tmp/runtime-packages; \
+  for package in libpq5 libssl3; do \
+    installed="$(dpkg-query --show --showformat='${Version}' "$package")"; \
+    apt-get download "$package=$installed"; \
+    set -- "$package"_*.deb; \
+    test "$#" -eq 1; \
+    dpkg-deb --extract "$1" /runtime-deps; \
+    dpkg-deb --field "$1" > "/runtime-deps/var/lib/dpkg/status.d/$package"; \
+    dpkg-deb --control "$1" "$package-control"; \
+    cp "$package-control/md5sums" "/runtime-deps/var/lib/dpkg/status.d/$package.md5sums"; \
+  done; \
+  cd /; \
+  rm -rf /tmp/runtime-packages /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/bin/coauth-${TARGETARCH} /tmp/coauth
 
