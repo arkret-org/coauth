@@ -6,7 +6,7 @@ service, and invokes its `scripts/run-test-plan.py` API runner. No prebuilt
 `openid/conformance-suite` image is assumed.
 
 `run-local-official-suite.sh` prepares an isolated Coauth PostgreSQL fixture,
-two shared-secret clients, two private-key clients, a real local user, and
+two Basic clients, a distinct POST client, two private-key clients, a real local user, and
 HTTPS reverse proxies for Coauth and the suite. Chromium drives the built
 Coauth WASM login and consent pages using the official runner's front-channel
 URLs and HTTP methods. Java and Coauth trust the temporary issuer certificate. Private configuration,
@@ -39,6 +39,12 @@ fails on any protocol failure or the mTLS gap. The default scheduled selection
 remains `all`; these are unfinished acceptance obligations. Checked-in JSON
 files are selection inventory, not fake client configurations or a substitute
 for official execution.
+
+The upstream `server.login_hint` points to the seeded account, and
+`client_secret_post` names its independently registered POST client. Browser
+automation only drives test IDs created by its current plan, and stops its
+unfinished tests on exit; a failed earlier plan cannot supply a later plan's
+login requests. The upstream module list and protocol assertions remain intact.
 
 The integration smoke entry point is `scripts/oidc-conformance.sh`. Without
 `COAUTH_RUN_FULL_CONFORMANCE=1` it checks live discovery and reports the plan
