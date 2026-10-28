@@ -973,7 +973,7 @@ async fn invalid_id_token_hints_are_rejected_without_issuing_credentials() {
 #[tokio::test]
 async fn expired_signed_hint_binds_the_eventual_subject_without_logging_a_browser_in() {
     use coauth_iana::jose::JsonWebSignatureAlg;
-    let mut fixture = Fixture::new().await;
+    let fixture = Fixture::new().await;
     let subject = crate::handlers::arkret::oidc_subject_for_user(
         &fixture.state.arkret_config,
         &fixture.session.user,
