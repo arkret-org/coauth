@@ -18,6 +18,11 @@ import zipfile
 
 
 REJECT_MODULE = "fapi2-security-profile-id2-user-rejects-authentication"
+ERROR_PAGE_MODULES = {
+    "oidcc-response-type-missing": "response-type",
+    "oidcc-ensure-registered-redirect-uri": "redirect-uri",
+    "oidcc-ensure-request-object-with-redirect-uri": "redirect-uri",
+}
 
 
 class EvidenceExportFailure(RuntimeError):
@@ -87,6 +92,30 @@ def second_login_screenshot(module, ordinal, page):
     return None
 
 
+def authorization_error_screenshot(module, navigation, page):
+    """Preserve only a real, directly rendered, expected authorization error."""
+    expected = ERROR_PAGE_MODULES.get(module)
+    if expected is None or navigation is None:
+        return None
+    status = navigation.status
+    if type(status) is not int or status < 400:
+        return None
+    print("::notice::OIDF " + str(BrowserFailure(module, f"authorization-error-http-{status}")), flush=True)
+    parsed = urlsplit(page.url)
+    if (status != 400 or (parsed.scheme, parsed.netloc, parsed.path) != ("https", "localhost:8445", "/authorize")
+            or navigation.request.redirected_from is not None):
+        return None
+    text = page.locator("body").inner_text(timeout=5000).lower()
+    if expected == "response-type":
+        matches = "response_type" in text and ("missing" in text or "required" in text)
+    else:
+        matches = text.strip() == "invalid redirect uri"
+    if not matches:
+        print("::notice::OIDF " + str(BrowserFailure(module, "unexpected-authorization-error-page")), flush=True)
+        return None
+    return page.screenshot(type="jpeg", quality=65)
+
+
 class LoginPacer:
     """Respect the fixture's real quotas across modules and browser contexts."""
 
@@ -104,7 +133,7 @@ class LoginPacer:
         self.next_login = self.clock() + self.interval
 
 
-def upload_login_evidence(api, server, test_id, screenshot):
+def upload_browser_evidence(api, server, test_id, screenshot, module):
     """Fill actual official placeholders with a real browser screenshot."""
     response = api.get(f"{server}/api/log/{test_id}/images", timeout=30)
     response.raise_for_status()
@@ -113,9 +142,9 @@ def upload_login_evidence(api, server, test_id, screenshot):
         if not placeholder:
             continue
         if not isinstance(placeholder, str) or not re.fullmatch(r"[A-Za-z0-9]{10}", placeholder):
-            raise BrowserFailure("oidcc-prompt-login", "invalid-image-placeholder")
+            raise BrowserFailure(module, "invalid-image-placeholder")
         if len(screenshot) > 500 * 1024:
-            raise BrowserFailure("oidcc-prompt-login", "screenshot-exceeds-official-limit")
+            raise BrowserFailure(module, "screenshot-exceeds-official-limit")
         image = "data:image/jpeg;base64," + base64.b64encode(screenshot).decode("ascii")
         uploaded = api.post(
             f"{server}/api/log/{test_id}/images/{placeholder}",
@@ -125,7 +154,7 @@ def upload_login_evidence(api, server, test_id, screenshot):
         uploaded.raise_for_status()
         completed = uploaded.json()
         if not isinstance(completed, dict) or "upload" in completed or completed.get("testId") != test_id or completed.get("img") != image:
-            raise BrowserFailure("oidcc-prompt-login", "image-placeholder-not-completed")
+            raise BrowserFailure(module, "image-placeholder-not-completed")
 
 
 class LocalPlanScope:
@@ -187,7 +216,7 @@ def drive_local_browser(process, scope):
         browser = playwright.chromium.launch()
         contexts = {}
         visited = set()
-        login_screenshots = {}
+        browser_screenshots = {}
         password_submissions = {}
         try:
             while process.poll() is None:
@@ -198,8 +227,8 @@ def drive_local_browser(process, scope):
                     response.raise_for_status()
                     metadata = response.json()
                     module = metadata.get("name")
-                    if module in {"oidcc-prompt-login", "oidcc-max-age-1"} and test_id in login_screenshots:
-                        upload_login_evidence(api, server, test_id, login_screenshots[test_id])
+                    if test_id in browser_screenshots:
+                        upload_browser_evidence(api, server, test_id, browser_screenshots[test_id], module)
                     for request in metadata.get("browser", {}).get("urlsWithMethod", []):
                         url, method = request["url"], request["method"]
                         if method not in {"GET", "POST"}:
@@ -227,6 +256,10 @@ def drive_local_browser(process, scope):
                                     headers={**route.request.headers, "content-type": "application/x-www-form-urlencoded"},
                                 ), times=1)
                             navigation = page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                            error_page = authorization_error_screenshot(module, navigation, page)
+                            if error_page is not None:
+                                browser_screenshots[test_id] = error_page
+                                upload_browser_evidence(api, server, test_id, error_page, module)
                             deadline = time.monotonic() + 120
                             while origin(page.url) != server:
                                 # An OP error page can be the correct outcome of a negative module.
@@ -250,7 +283,7 @@ def drive_local_browser(process, scope):
                                     ordinal = password_submissions.get(test_id, 0) + 1
                                     screenshot = second_login_screenshot(module, ordinal, page)
                                     if screenshot is not None:
-                                        login_screenshots[test_id] = screenshot
+                                        browser_screenshots[test_id] = screenshot
                                     page.locator("#login-password").fill(credentials["password"])
                                     submitted_password = True
                                     password_submissions[test_id] = ordinal
