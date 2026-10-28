@@ -76,6 +76,13 @@ def consent_action(module):
     return "deny" if module == REJECT_MODULE else "approve"
 
 
+def second_login_screenshot(module, ordinal, page):
+    """The official prompt-login placeholder requires the second login page."""
+    if module == "oidcc-prompt-login" and ordinal == 2:
+        return page.screenshot(type="jpeg", quality=65)
+    return None
+
+
 class LoginPacer:
     """Respect the fixture's real quotas across modules and browser contexts."""
 
@@ -236,11 +243,12 @@ def drive_local_browser(process, scope):
                                     if submitted_password:
                                         raise BrowserFailure(module, "password-phase-did-not-advance")
                                     pacer.wait()
-                                    if module == "oidcc-prompt-login":
-                                        login_screenshots[test_id] = page.screenshot(type="jpeg", quality=65)
+                                    ordinal = password_submissions.get(test_id, 0) + 1
+                                    screenshot = second_login_screenshot(module, ordinal, page)
+                                    if screenshot is not None:
+                                        login_screenshots[test_id] = screenshot
                                     page.locator("#login-password").fill(credentials["password"])
                                     submitted_password = True
-                                    ordinal = password_submissions.get(test_id, 0) + 1
                                     password_submissions[test_id] = ordinal
                                     print("::notice::OIDF " + str(BrowserFailure(module, f"password-submit-{ordinal}")), flush=True)
                                     with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login", timeout=30000) as login:

@@ -19,6 +19,28 @@ import yaml
 
 
 class LocalProfilesTests(unittest.TestCase):
+    def test_prompt_login_evidence_captures_only_the_actual_second_login_page(self):
+        runner = self.runner()
+
+        class Page:
+            content = b"first-login-page"
+            calls = 0
+
+            def screenshot(self, **options):
+                self.calls += 1
+                self.options = options
+                return self.content
+
+        page = Page()
+        self.assertIsNone(runner.second_login_screenshot("oidcc-prompt-login", 1, page))
+        self.assertEqual(page.calls, 0)
+        page.content = b"real-second-login-page"
+        self.assertEqual(runner.second_login_screenshot("oidcc-prompt-login", 2, page), page.content)
+        self.assertEqual(page.calls, 1)
+        self.assertEqual(page.options, {"type": "jpeg", "quality": 65})
+        self.assertIsNone(runner.second_login_screenshot("oidcc-server", 2, page))
+        self.assertEqual(page.calls, 1)
+
     def test_aborted_plan_download_preserves_the_original_signed_zip_bytes(self):
         runner = self.runner()
         original = io.BytesIO()
