@@ -460,7 +460,7 @@ fn mask_email(email: &str) -> String {
 }
 fn error_message(code: &str) -> String {
     match code{
-    "email_or_phone_required"=>t("coauth-register-contact-required"),"invalid_code"=>"Incorrect code. Please try again.".into(),"invalid_display_name"=>t("coauth-errors-display-name-invalid"),"rate_limited"=>"Please wait a moment and try again.".into(),"registration_already_completed"=>"This registration has already been completed.".into(),"email_already_verified"=>"This email has already been verified.".into(),"email_invalid"=>"Please enter a valid email address.".into(),"email_in_use"=>"This email is already in use.".into(),"bootstrap_admin_token_invalid"=>"That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".into(),other=>other.into(),}
+    "handle_invalid"=>t("coauth-register-handle-invalid"),"email_or_phone_required"=>t("coauth-register-contact-required"),"invalid_code"=>"Incorrect code. Please try again.".into(),"invalid_display_name"=>t("coauth-errors-display-name-invalid"),"rate_limited"=>"Please wait a moment and try again.".into(),"registration_already_completed"=>"This registration has already been completed.".into(),"email_already_verified"=>"This email has already been verified.".into(),"email_invalid"=>"Please enter a valid email address.".into(),"email_in_use"=>"This email is already in use.".into(),"bootstrap_admin_token_invalid"=>"That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".into(),other=>other.into(),}
 }
 
 #[cfg(test)]
