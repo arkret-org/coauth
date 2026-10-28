@@ -2,14 +2,16 @@ use coauth_iana::jose::{
     JsonWebKeyEcEllipticCurve, JsonWebKeyOkpEllipticCurve, JsonWebSignatureAlg,
 };
 use digest::Digest;
-use elliptic_curve::sec1::ToEncodedPoint;
+use ecdsa::signature::{RandomizedSigner as _, Verifier as _};
+use elliptic_curve::sec1::ToSec1Point;
 use sha2::{Sha256, Sha384, Sha512};
-use signature::Signer as _;
 use signature::rand_core::CryptoRngCore;
+use signature::{SignatureEncoding as _, Signer as _};
 use thiserror::Error;
 
 use super::signature::Signature;
 use crate::jwk::{InvalidOkpParameters, JsonWebKeyPrivateParameters, JsonWebKeyPublicParameters};
+use crate::rng::CryptoRngCompat;
 
 #[derive(Debug, Error)]
 pub enum AsymmetricKeyFromJwkError {
@@ -311,20 +313,28 @@ impl signature::RandomizedSigner<Signature> for AsymmetricSigningKey {
                 Ok(Signature::from_signature(&signature))
             }
             Self::Es256(key) => {
-                let signature: ecdsa::Signature<_> = key.try_sign_with_rng(rng, msg)?;
-                Ok(Signature::from_signature(&signature))
+                let signature: ecdsa::Signature<_> = key
+                    .try_sign_with_rng(&mut CryptoRngCompat::new(rng), msg)
+                    .map_err(|_| signature::Error::new())?;
+                Ok(Signature::new(signature.to_bytes().to_vec()))
             }
             Self::Es384(key) => {
-                let signature: ecdsa::Signature<_> = key.try_sign_with_rng(rng, msg)?;
-                Ok(Signature::from_signature(&signature))
+                let signature: ecdsa::Signature<_> = key
+                    .try_sign_with_rng(&mut CryptoRngCompat::new(rng), msg)
+                    .map_err(|_| signature::Error::new())?;
+                Ok(Signature::new(signature.to_bytes().to_vec()))
             }
             Self::Es512(key) => {
-                let signature: ecdsa::Signature<_> = key.try_sign_with_rng(rng, msg)?;
-                Ok(Signature::from_signature(&signature))
+                let signature: ecdsa::Signature<_> = key
+                    .try_sign_with_rng(&mut CryptoRngCompat::new(rng), msg)
+                    .map_err(|_| signature::Error::new())?;
+                Ok(Signature::new(signature.to_bytes().to_vec()))
             }
             Self::Es256K(key) => {
-                let signature: ecdsa::Signature<_> = key.try_sign_with_rng(rng, msg)?;
-                Ok(Signature::from_signature(&signature))
+                let signature: ecdsa::Signature<_> = key
+                    .try_sign_with_rng(&mut CryptoRngCompat::new(rng), msg)
+                    .map_err(|_| signature::Error::new())?;
+                Ok(Signature::new(signature.to_bytes().to_vec()))
             }
             Self::Ed25519(key) => {
                 let signature: ed25519_dalek::Signature = key.sign(msg);
@@ -411,7 +421,7 @@ impl AsymmetricVerifyingKey {
     /// ECDSA public key.
     #[must_use]
     pub fn es512(key: elliptic_curve::PublicKey<p521::NistP521>) -> Self {
-        let encoded = key.to_encoded_point(false);
+        let encoded = key.to_sec1_point(false);
         // Infallible in practice: `key` is already a valid P-521 public key,
         // so its uncompressed SEC1 encoding always parses back into a verifying
         // key. Keeping this constructor infallible (`-> Self`) avoids forcing
@@ -567,7 +577,7 @@ impl From<super::Ed25519VerifyingKey> for AsymmetricVerifyingKey {
 }
 
 impl signature::Verifier<Signature> for AsymmetricVerifyingKey {
-    fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), ecdsa::Error> {
+    fn verify(&self, msg: &[u8], signature: &Signature) -> Result<(), signature::Error> {
         match self {
             Self::Rs256(key) => {
                 let signature = signature.to_signature()?;
@@ -594,20 +604,32 @@ impl signature::Verifier<Signature> for AsymmetricVerifyingKey {
                 key.verify(msg, &signature)
             }
             Self::Es256(key) => {
-                let signature: ecdsa::Signature<_> = signature.to_signature()?;
+                let signature: ecdsa::Signature<_> =
+                    ecdsa::Signature::from_slice(&signature.to_bytes())
+                        .map_err(|_| signature::Error::new())?;
                 key.verify(msg, &signature)
+                    .map_err(|_| signature::Error::new())
             }
             Self::Es384(key) => {
-                let signature: ecdsa::Signature<_> = signature.to_signature()?;
+                let signature: ecdsa::Signature<_> =
+                    ecdsa::Signature::from_slice(&signature.to_bytes())
+                        .map_err(|_| signature::Error::new())?;
                 key.verify(msg, &signature)
+                    .map_err(|_| signature::Error::new())
             }
             Self::Es512(key) => {
-                let signature: ecdsa::Signature<_> = signature.to_signature()?;
+                let signature: ecdsa::Signature<_> =
+                    ecdsa::Signature::from_slice(&signature.to_bytes())
+                        .map_err(|_| signature::Error::new())?;
                 key.verify(msg, &signature)
+                    .map_err(|_| signature::Error::new())
             }
             Self::Es256K(key) => {
-                let signature: ecdsa::Signature<_> = signature.to_signature()?;
+                let signature: ecdsa::Signature<_> =
+                    ecdsa::Signature::from_slice(&signature.to_bytes())
+                        .map_err(|_| signature::Error::new())?;
                 key.verify(msg, &signature)
+                    .map_err(|_| signature::Error::new())
             }
             Self::Ed25519(key) => {
                 let signature: ed25519_dalek::Signature = signature.to_signature()?;

@@ -19,6 +19,7 @@ use hmac::{Hmac, Mac};
 use http::HeaderMap;
 use p256::ecdsa::signature::Verifier as _;
 use p256::ecdsa::{Signature as P256Signature, VerifyingKey as P256VerifyingKey};
+use p256::pkcs8::DecodePublicKey as _;
 use pkcs8::DecodePublicKey;
 use rand_core::RngCore;
 use rsa::RsaPublicKey;

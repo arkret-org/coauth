@@ -121,6 +121,12 @@ macro_rules! asymmetric_jwt_test {
                         .unwrap();
 
                     let jwt: Jwt<'_, Payload> = Jwt::sign_with_rng(&mut rng, header, payload, &key).unwrap();
+                    let public = public_jwks();
+                    let verifier = public.find_key(&template.header().into()).unwrap();
+                    let verifier = coauth_jose::jwa::AsymmetricVerifyingKey::from_jwk_and_alg(
+                        verifier.parameters(), &alg,
+                    ).unwrap();
+                    jwt.verify(&verifier).unwrap();
                     insta::assert_snapshot!(jwt.as_str());
                 }
 

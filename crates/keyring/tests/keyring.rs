@@ -238,12 +238,15 @@ fn generate_sign_and_verify() {
     insta::assert_snapshot!(&*rsa_key.to_pem(LineEnding::LF).unwrap());
 
     let p256_key = PrivateKey::generate_ec_p256(&mut rng);
+    roundtrip_generated_key(&p256_key, "EcP256");
     insta::assert_snapshot!(&*p256_key.to_pem(LineEnding::LF).unwrap());
 
     let p384_key = PrivateKey::generate_ec_p384(&mut rng);
+    roundtrip_generated_key(&p384_key, "EcP384");
     insta::assert_snapshot!(&*p384_key.to_pem(LineEnding::LF).unwrap());
 
     let k256_key = PrivateKey::generate_ec_k256(&mut rng);
+    roundtrip_generated_key(&k256_key, "EcK256");
     insta::assert_snapshot!(&*k256_key.to_pem(LineEnding::LF).unwrap());
 
     // Use a separate seed so that earlier key-gen changes don't cascade.
@@ -285,10 +288,9 @@ fn generate_sign_and_verify() {
         let signer = matched.parameters().signing_key_for_alg(&alg).unwrap();
         let hdr = JsonWebSignatureHeader::new(alg.clone());
         let token = Jwt::sign_with_rng(&mut rng, hdr, "", &signer).unwrap();
-        insta::assert_snapshot!(format!("jwt_{alg}"), token.as_str());
-
         // Verify from the public side only.
         token.verify_with_jwks(&public_jwks).unwrap();
+        insta::assert_snapshot!(format!("jwt_{alg}"), token.as_str());
     }
 }
 

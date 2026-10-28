@@ -22,7 +22,7 @@ use coauth_data::UpstreamOAuthProvider;
 use coauth_data::upstream_oauth::provider;
 use coauth_iana::jose::JsonWebSignatureAlg;
 use coauth_keyring::{DecryptError, Encrypter, Keyring};
-use pkcs8::DecodePrivateKey;
+use elliptic_curve::pkcs8::DecodePrivateKey;
 use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
@@ -65,7 +65,7 @@ pub(crate) enum ProviderCredentialsError {
     #[error("Could not parse PEM encoded private key")]
     InvalidPrivateKey {
         #[from]
-        inner: pkcs8::Error,
+        inner: elliptic_curve::pkcs8::Error,
     },
 }
 

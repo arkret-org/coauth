@@ -2,4 +2,4 @@
 source: crates/keyring/tests/keyring.rs
 expression: token.as_str()
 ---
-eyJhbGciOiJFUzM4NCJ9.IiI.p9Otttjs3JOxZCeuIKwkql3YM-nfdxo__EVt84sex_PcokYjY47sa0qsvCqUUhpUoLSBihdchynuYqc5lOFuAM3Pi2pjg-ZrTqrzI23UlzFonlr4Zag9Qo3IYD10HKFq
+eyJhbGciOiJFUzM4NCJ9.IiI.J_qgT2702liViqwQCVSrdcvHLu87ozl6qt27qTYzbqKgJ5-CKCnfp0soP5Ju2m1_cS0tGSl2Gpk565K6AGORwpbfuz6a_FPiRkkNzpaLsDrhCc2sGcAgM0vhzp-z3KnF

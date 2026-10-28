@@ -1,11 +1,10 @@
 ---
 source: crates/keyring/tests/keyring.rs
-expression: "ec_p384.to_pem(LineEnding::LF).unwrap()"
+expression: "&*p384_key.to_pem(LineEnding::LF).unwrap()"
 ---
 -----BEGIN EC PRIVATE KEY-----
-MIGkAgEBBDAl3R97SR8hWLuMH6737YdvXVb7P7T9pKSIhQozmzN+r+V5Ncvjn+DQ
-Q/QxYr9nLwOgBwYFK4EEACKhZANiAASa86XQW7CDF9GhvcBY53sJ4lP0z9rfrjwo
-nwixQJIWBROjlpsm5hdIwLfj46IUPYCNEoD8VP8eR2s/uzlgEv1hnz/2wmLlMqU0
-2R5QcY7Gc9CyDTO1bh5V2FFYjks4xfs=
+MIGkAgEBBDADL2e/YjH0Q9Dgn+PLNXnlr34zmzMKhYikpP20P/tWXW+H7feuH4y7
+WCEfSXsf3SWgBwYFK4EEACKhZANiAAS5IcSI1qzHb5ufg0D1SxrlWyJEekb6nj/X
+ZP2vuAKvNRMpZzZGkgp5qSSgyLuJXbRlI5ioEpi/EyRJtsEno+tdV3/mEfaL8Mw9
+/+HNh7bCWVOfFKjVURSs4CythvKmSHE=
 -----END EC PRIVATE KEY-----
-
