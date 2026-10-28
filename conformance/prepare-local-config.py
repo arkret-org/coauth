@@ -7,6 +7,29 @@ import os
 from pathlib import Path
 
 import yaml
+from cryptography.hazmat.primitives.asymmetric import rsa
+
+
+def write_private(path, value):
+    path.write_text(json.dumps(value, indent=2) + "\n")
+    path.chmod(0o600)
+
+
+def signing_key(kid):
+    """Generate an ephemeral RSA JWK through the maintained crypto library."""
+    numbers = rsa.generate_private_key(public_exponent=65537, key_size=2048).private_numbers()
+
+    def encode(value):
+        return base64.urlsafe_b64encode(value.to_bytes((value.bit_length() + 7) // 8, "big")).decode().rstrip("=")
+
+    return {
+        "kty": "RSA", "kid": kid, "use": "sig", "alg": "PS256",
+        **{name: encode(value) for name, value in {
+            "n": numbers.public_numbers.n, "e": numbers.public_numbers.e,
+            "d": numbers.d, "p": numbers.p, "q": numbers.q,
+            "dp": numbers.dmp1, "dq": numbers.dmq1, "qi": numbers.iqmp,
+        }.items()},
+    }
 
 
 def main():
@@ -22,7 +45,10 @@ def main():
     config["http"]["issuer"] = "https://localhost:8445/"
     config["http"]["listeners"] = [{
         "name": "conformance",
-        "resources": [{"name": name} for name in ["discovery", "oauth", "human", "health"]],
+        "resources": [
+            *[{"name": name} for name in ["discovery", "oauth", "human", "restapi", "health"]],
+            {"name": "assets", "path": os.environ["COAUTH_CONFORMANCE_ASSETS"]},
+        ],
         "binds": [{"address": "127.0.0.1:7080"}],
         "proxy_protocol": False,
     }]
@@ -39,7 +65,17 @@ def main():
             "client_id": client_id, "client_name": "Local OIDCC fixture",
             "client_auth_method": "client_secret_basic",
             "client_secret": base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip("="),
-            "redirect_uris": ["https://localhost:8446/test/a/coauth/callback"],
+            "redirect_uris": ["https://localhost:8446/test/a/coauth-basic/callback"],
+        })
+    fapi_clients = []
+    for index, client_id in enumerate(["01GFWR3WHR93Y5HK389H28VHZ9", "01GFWR43R2ZZ8HX9CVBNW9TJWG"]):
+        key = signing_key(f"coauth-fapi-{index}")
+        fapi_clients.append({"client_id": client_id, "scope": "openid profile", "jwks": {"keys": [key]}, "dpop_signing_alg": "ES256"})
+        clients.append({
+            "client_id": client_id, "client_name": "Local FAPI fixture",
+            "client_auth_method": "private_key_jwt",
+            "jwks": {"keys": [{name: value for name, value in key.items() if name not in {"d", "p", "q", "dp", "dq", "qi"}}]},
+            "redirect_uris": ["https://localhost:8446/test/a/coauth-fapi/callback"],
         })
     config["clients"] = clients
     config_path = out / "coauth.yaml"
@@ -62,13 +98,36 @@ def main():
     plan_path = out / "discovery.json"
     plan_path.write_text(json.dumps(plan, indent=2) + "\n")
     plan_path.chmod(0o600)
+    write_private(out / "browser-user.json", {
+        "handle": "oidf-conformance", "password": "Oidf!9" + base64.urlsafe_b64encode(os.urandom(32)).decode(),
+    })
+    full_dir = out / "full-plans"
+    full_dir.mkdir()
+    common = {"publish": "none", "server": plan["server"], "browser": [], "_browser_driver": "chromium"}
+    write_private(full_dir / "basic-op.json", {
+        **common, "alias": "coauth-basic", "description": "Local real-client Basic OP",
+        "_official_plan": "oidcc-basic-certification-test-plan",
+        "variant": {"server_metadata": "discovery", "client_registration": "static_client"},
+        "client": {**plan["client"], "scope": "openid profile"},
+        "client2": {**plan["client2"], "scope": "openid profile"},
+    })
+    write_private(full_dir / "fapi2-baseline.json", {
+        **common, "alias": "coauth-fapi", "description": "Local private_key_jwt and DPoP FAPI2",
+        "_official_plan": "fapi2-security-profile-id2-test-plan",
+        "variant": {"client_auth_type": "private_key_jwt", "fapi_request_method": "unsigned",
+                    "fapi_response_mode": "plain_response", "fapi_profile": "plain_fapi",
+                    "sender_constrain": "dpop", "openid": "openid_connect", "authorization_request_type": "simple"},
+        "client": fapi_clients[0], "client2": fapi_clients[1],
+        "resource": {"resourceUrl": "https://localhost:8445/oidc/userinfo"},
+    })
+    write_private(full_dir / "mtls-baseline.json", {
+        "_unavailable": "Coauth does not implement RFC8705 client authentication or certificate-bound tokens; discovery and registration deliberately exclude tls_client_auth/self_signed_tls_client_auth. This profile remains a failing product capability obligation.",
+    })
     if os.environ.get("COAUTH_CONFORMANCE_FULL_PLANS_JSON"):
         plans = json.loads(os.environ["COAUTH_CONFORMANCE_FULL_PLANS_JSON"])
         allowed = {"basic-op", "fapi2-baseline", "mtls-baseline"}
         if not isinstance(plans, dict) or set(plans) != allowed:
             raise ValueError("full plan fixtures must contain exactly the three requested profiles")
-        full_dir = out / "full-plans"
-        full_dir.mkdir()
         for name, profile in plans.items():
             if not isinstance(profile, dict) or not profile.get("_official_plan"):
                 raise ValueError(f"{name} must identify its real official plan")

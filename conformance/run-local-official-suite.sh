@@ -36,11 +36,11 @@ cleanup() {
 }
 trap cleanup EXIT
 binary="${COAUTH_BINARY:-${target_dir}/debug/coauth}"
+export COAUTH_CONFORMANCE_ASSETS="${COAUTH_CONFORMANCE_ASSETS:-${target_dir}/dx/coauth-frontend/release/web/public}"
+test -f "$COAUTH_CONFORMANCE_ASSETS/index.html"
 "$binary" config generate > "$run_dir/generated.yaml"
 python3 "${repo_root}/conformance/prepare-local-config.py" "$run_dir/generated.yaml" "$run_dir"
-if [[ -n "${COAUTH_CONFORMANCE_FULL_PLANS_JSON:-}" ]]; then
-    export COAUTH_CONFORMANCE_FULL_PLAN_DIR="$run_dir/full-plans"
-fi
+export COAUTH_CONFORMANCE_FULL_PLAN_DIR="$run_dir/full-plans"
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -keyout "$run_dir/tls.key" \
     -out "$run_dir/tls.crt" -subj '/CN=localhost' -addext 'subjectAltName=DNS:localhost' \
     > /dev/null 2>&1
@@ -77,7 +77,7 @@ docker run --detach --name "$proxy_name" --network host \
     --mount "type=bind,source=$run_dir,target=/fixture,readonly" \
     --mount "type=bind,source=$run_dir/nginx.conf,target=/etc/nginx/nginx.conf,readonly" \
     nginx:1.28-alpine > /dev/null
-"$binary" server --first-provisioning --config "$run_dir/coauth.yaml" \
+SSL_CERT_FILE="$run_dir/tls.crt" "$binary" server --first-provisioning --config "$run_dir/coauth.yaml" \
     > "$private_results_dir/coauth-server.log" 2>&1 &
 coauth_pid=$!
 java -Xmx2g -Djavax.net.ssl.trustStore="$run_dir/truststore" \
@@ -99,6 +99,22 @@ for endpoint in https://localhost:8445/health https://localhost:8446/api/runner/
     done
     if [[ "$ready" != 1 ]]; then echo "::error::Service unavailable: $endpoint" >&2; exit 2; fi
 done
+# Register a genuine local user through the product CLI after provisioning.
+# Keep argv construction and all command output out of public CI evidence.
+python3 - "$binary" "$run_dir" <<'PY'
+import json
+from pathlib import Path
+import subprocess
+import sys
+binary, directory = sys.argv[1:]
+directory = Path(directory)
+user = json.loads((directory / "browser-user.json").read_text())
+with (directory / "register-user-private.log").open("w") as log:
+    result = subprocess.run([binary, "--config", str(directory / "coauth.yaml"), "manage", "register-user", user["handle"], "--password", user["password"], "--yes", "--no-admin"], stdout=log, stderr=subprocess.STDOUT)
+if result.returncode:
+    raise SystemExit("Could not register the isolated conformance account")
+PY
+export COAUTH_CONFORMANCE_BROWSER_USER="$run_dir/browser-user.json"
 export RESULTS_DIR="$private_results_dir"
 export COAUTH_SKIP_BOOT=1 COAUTH_RUN_FULL_CONFORMANCE=1
 export COAUTH_CONFORMANCE_ISSUER=https://localhost:8445

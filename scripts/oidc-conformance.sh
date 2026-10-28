@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # OIDC conformance against the official OIDF Java/Mongo API server.
 # `discovery` runs the complete OIDCC Config profile; it is not OP/FAPI/mTLS
-# certification. `all` retains the full-profile request and fails if the
-# protected real-client/login/certificate plan fixtures are unavailable.
+# certification. `all` retains every requested profile and fails on any
+# protocol failure or unavailable production capability.
 # Local fixture bootstrap: conformance/run-local-official-suite.sh.
 # Existing running servers: set COAUTH_SKIP_BOOT=1, COAUTH_CONFORMANCE_SOURCE,
 # CONFORMANCE_SERVER and COAUTH_CONFORMANCE_DISCOVERY_CONFIG.
@@ -197,17 +197,30 @@ fi
 # Full authorization profiles additionally need registered clients and an
 # automated real-user login/consent configuration. The old committed files
 # contain placeholder client ids and are not runnable official suite plans.
-# Keep all/full requests fail-closed until these protected fixtures are supplied.
-: "${COAUTH_CONFORMANCE_FULL_PLAN_DIR:?full OP/FAPI/mTLS profiles require real registered clients, automated login/consent and matching certificate/key fixtures; set COAUTH_CONFORMANCE_FULL_PLAN_DIR}"
+# The local harness generates real clients, private keys and login fixtures.
+: "${COAUTH_CONFORMANCE_FULL_PLAN_DIR:?provide the generated real-client profile directory}"
 profiles=("${PLAN_SELECTION}")
 if [[ "${PLAN_SELECTION}" == "all" ]]; then
     profiles=(basic-op fapi2-baseline mtls-baseline)
 fi
+failed=0
 for profile in "${profiles[@]}"; do
     config="${COAUTH_CONFORMANCE_FULL_PLAN_DIR}/${profile}.json"
-    test -f "${config}"
+    if [[ ! -f "${config}" ]]; then
+        echo "::error::Missing real profile: ${profile}" >&2
+        failed=1
+        continue
+    fi
+    if jq -e '._unavailable' "${config}" >/dev/null; then
+        jq -r '"::error::" + ._unavailable' "${config}" >&2
+        failed=1
+        continue
+    fi
     plan=$(jq -er '._official_plan' "${config}")
-    python3 "${repo_root}/conformance/run-official-plan.py" \
+    if ! python3 "${repo_root}/conformance/run-official-plan.py" \
         --source "${COAUTH_CONFORMANCE_SOURCE}" --config "${config}" \
-        --plan "${plan}" --results "${RESULTS_DIR}/${profile}"
+        --plan "${plan}" --results "${RESULTS_DIR}/${profile}"; then
+        failed=1
+    fi
 done
+exit "$failed"

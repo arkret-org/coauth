@@ -74,6 +74,7 @@ jobs:
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
+          targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
@@ -105,9 +106,6 @@ jobs:
           ref: ${{ env.OPENID_CONFORMANCE_REF }}
           path: official-oidf-suite
 
-      - name: Test the public evidence credential boundary
-        run: python3 -m unittest discover -s conformance/tests
-
       - name: Apply the literal metadata member regression fix
         run: |
           test "$(git -C official-oidf-suite rev-parse HEAD)" = "$OPENID_CONFORMANCE_REF"
@@ -133,7 +131,19 @@ jobs:
         run: mvn -B -Dtest=CheckDiscEndpointAllEndpointsAreHttps_UnitTest test
 
       - name: Install official Python runner dependencies
-        run: python3 -m pip install -r official-oidf-suite/scripts/requirements.txt pyyaml
+        run: |
+          python3 -m pip install -r official-oidf-suite/scripts/requirements.txt pyyaml cryptography playwright
+          python3 -m playwright install --with-deps chromium
+
+      - name: Test real local registrations and the public evidence boundary
+        run: python3 -m unittest discover -s conformance/tests
+
+      - name: Build the real browser frontend
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+          cargo install dioxus-cli --version 0.7.10 --locked
+          dx build -p coauth-frontend --release --debug-symbols false --locked
 
       - name: Build Coauth
         run: |
