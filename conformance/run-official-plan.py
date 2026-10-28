@@ -294,7 +294,7 @@ def main():
                     diagnostics = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(diagnostics)
                     for diagnostic in diagnostics.public_failure_diagnostics(results / "runner-private.log"):
-                        print("::error::OIDF " + diagnostic, flush=True)
+                        print("::notice::OIDF diagnostic: " + diagnostic, flush=True)
                     raise RuntimeError("the official conformance plan failed; inspect credential-free exported evidence")
             finally:
                 failure_active = sys.exc_info()[0] is not None

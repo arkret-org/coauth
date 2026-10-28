@@ -35,9 +35,45 @@ class RunnerDiagnosticsTests(unittest.TestCase):
         )
         for error, category in cases:
             value = DIAGNOSTICS.plan_diagnostic(Reply({"error": error, "config": "PRIVATE_SENTINEL"}))
-            self.assertEqual(value, {"http_status": 400, "category": category})
+            self.assertEqual(value, {"phase": "plan-create", "http_status": 400, "category": category})
             self.assertNotIn("PRIVATE_SENTINEL", json.dumps(value))
         self.assertEqual(DIAGNOSTICS.plan_diagnostic(Reply(None))["category"], "unclassified-response")
+
+    def test_official_timestamp_prefix_and_safe_exception_field_survive_redaction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "runner-private.log"
+            path.write_text("2026-10-28 16:01:27 " + DIAGNOSTICS.PREFIX + json.dumps({
+                "phase": "module-create", "http_status": 400, "category": "unclassified-response",
+            }) + "\nKeyError: 'test_name'\nKeyError: 'PRIVATE_SENTINEL'\nException: PRIVATE_SENTINEL\n")
+            public = list(DIAGNOSTICS.public_failure_diagnostics(path))
+            self.assertEqual(public, [
+                "official-module-create: HTTP 400; unclassified-response",
+                "official-runner-exception: KeyError; field=test_name",
+                "official-runner-exception: KeyError",
+                "official-runner-exception: Exception",
+            ])
+            self.assertNotIn("PRIVATE_SENTINEL", str(public))
+
+    def test_plan_creation_is_an_http_observation_not_a_protocol_result(self):
+        class Reply:
+            status_code = 201
+
+            def json(self):
+                raise AssertionError("Accepted response payload must not be inspected or published")
+
+        self.assertEqual(DIAGNOSTICS.plan_diagnostic(Reply()), {
+            "phase": "plan-create", "http_status": 201, "category": "accepted",
+        })
+
+    def test_module_diagnostic_accepts_only_fixed_family_identifiers(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "runner-private.log"
+            values = [{"phase": "module-create", "http_status": 400, "category": "unclassified-response", "module": name}
+                      for name in ("fapi2-security-profile-id2-happy-flow", "PRIVATE_SENTINEL", "https://private/?code=secret", [])]
+            path.write_text("\n".join(DIAGNOSTICS.PREFIX + json.dumps(value) for value in values))
+            self.assertEqual(list(DIAGNOSTICS.public_failure_diagnostics(path)), [
+                "official-module-create [fapi2-security-profile-id2-happy-flow]: HTTP 400; unclassified-response",
+            ])
 
     def test_public_log_reader_rejects_raw_values_and_malformed_diagnostics(self):
         values = [
