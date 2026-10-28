@@ -30,13 +30,13 @@ def export_modules(archives, output, source_ref):
                 info = document["testInfo"]
                 result = info["result"]
                 status = info["status"]
-                if result not in {"PASSED", "FAILED", "WARNING", "UNKNOWN", "SKIPPED"}:
+                if result not in {"PASSED", "FAILED", "WARNING", "REVIEW", "UNKNOWN", "SKIPPED"}:
                     raise ValueError("unknown official module outcome")
-                if status not in {"CREATED", "CONFIGURED", "RUNNING", "WAITING", "FINISHED", "INTERRUPTED", "UNKNOWN"}:
+                if status not in {"NOT_YET_CREATED", "CREATED", "CONFIGURED", "RUNNING", "WAITING", "FINISHED", "INTERRUPTED", "UNKNOWN"}:
                     raise ValueError("unknown official module status")
                 conditions = []
                 for row in document["results"]:
-                    if row.get("result") not in {"SUCCESS", "FAILURE", "WARNING"}:
+                    if row.get("result") not in {"SUCCESS", "FAILURE", "WARNING", "REVIEW"}:
                         continue
                     conditions.append({
                         "condition": identifier(row["src"]),
@@ -48,7 +48,7 @@ def export_modules(archives, output, source_ref):
                     "status": status,
                     "result": result,
                     "conditions": conditions,
-                    "counts": {key: counts[key] for key in ("SUCCESS", "FAILURE", "WARNING")},
+                    "counts": {key: counts[key] for key in ("SUCCESS", "FAILURE", "WARNING", "REVIEW")},
                     "original_archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
                 })
     (output / "modules.json").write_text(json.dumps({
