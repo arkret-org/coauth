@@ -2,6 +2,8 @@
 
 import argparse
 import base64
+import importlib.util
+import io
 import json
 import math
 import os
@@ -12,9 +14,58 @@ import sys
 import time
 import traceback
 from urllib.parse import urlsplit
+import zipfile
 
 
 REJECT_MODULE = "fapi2-security-profile-id2-user-rejects-authentication"
+
+
+class EvidenceExportFailure(RuntimeError):
+    """Only fixed stages and HTTP status codes cross the private-log boundary."""
+
+
+def export_failed_plan_evidence(api, server, results, private_log, returncode):
+    """Read the original signed export when an aborted official queue never exported."""
+    if type(returncode) is not int:
+        raise EvidenceExportFailure("official-runner-exit-required")
+    if returncode == 0 or any(results.glob("*.zip")):
+        return False
+    if server != "https://localhost:8446":
+        raise EvidenceExportFailure("isolated-suite-origin-required")
+    # The pinned runner prints this exact line after successful plan creation.
+    # Multiple references are ambiguous even when they repeat the same ID.
+    ids = re.findall(
+        r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} Created test plan, new id: (.*)$",
+        private_log.read_text(), re.MULTILINE,
+    )
+    if len(ids) != 1 or not re.fullmatch(r"[A-Za-z0-9]{13}", ids[0]):
+        raise EvidenceExportFailure("single-created-plan-reference-required")
+    # LogApi.exportLogsOfPlan uses owner-scoped getTestPlan; public defaults
+    # to false. Reuse the browser driver's existing authenticated/TLS session.
+    response = api.get(f"{server}/api/plan/export/{ids[0]}", timeout=30, allow_redirects=False)
+    if response.status_code != 200:
+        raise EvidenceExportFailure(f"http-status-{response.status_code}")
+    if response.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/zip":
+        raise EvidenceExportFailure("zip-content-type-required")
+    archive = response.content
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+            if bundle.testzip() is not None:
+                raise EvidenceExportFailure("zip-integrity-failed")
+            names = set(bundle.namelist())
+            records = [name for name in names if name.startswith("test-log-") and name.endswith(".json")]
+            # LogApi.exportLogsOfPlan pairs X.json with X.sig.
+            signed_records = bool(records) and all(name.removesuffix(".json") + ".sig" in names for name in records)
+    except zipfile.BadZipFile:
+        raise EvidenceExportFailure("invalid-zip-response") from None
+    # No ZIP entries, signatures, or outcome fields are reconstructed here.
+    with (results / "failed-official-plan.zip").open("xb") as destination:
+        destination.write(archive)
+    # A shape mismatch must fail without discarding the original private bytes
+    # or the authoritative condition failures available to the privacy filter.
+    if not signed_records:
+        raise EvidenceExportFailure("original-signed-module-records-required")
+    return True
 
 
 class BrowserFailure(RuntimeError):
@@ -27,6 +78,13 @@ class BrowserFailure(RuntimeError):
 
 def consent_action(module):
     return "deny" if module == REJECT_MODULE else "approve"
+
+
+def second_login_screenshot(module, ordinal, page):
+    """These official placeholders require the actual second login page."""
+    if module in {"oidcc-prompt-login", "oidcc-max-age-1"} and ordinal == 2:
+        return page.screenshot(type="jpeg", quality=65)
+    return None
 
 
 class LoginPacer:
@@ -140,7 +198,7 @@ def drive_local_browser(process, scope):
                     response.raise_for_status()
                     metadata = response.json()
                     module = metadata.get("name")
-                    if module == "oidcc-prompt-login" and test_id in login_screenshots:
+                    if module in {"oidcc-prompt-login", "oidcc-max-age-1"} and test_id in login_screenshots:
                         upload_login_evidence(api, server, test_id, login_screenshots[test_id])
                     for request in metadata.get("browser", {}).get("urlsWithMethod", []):
                         url, method = request["url"], request["method"]
@@ -189,11 +247,12 @@ def drive_local_browser(process, scope):
                                     if submitted_password:
                                         raise BrowserFailure(module, "password-phase-did-not-advance")
                                     pacer.wait()
-                                    if module == "oidcc-prompt-login":
-                                        login_screenshots[test_id] = page.screenshot(type="jpeg", quality=65)
+                                    ordinal = password_submissions.get(test_id, 0) + 1
+                                    screenshot = second_login_screenshot(module, ordinal, page)
+                                    if screenshot is not None:
+                                        login_screenshots[test_id] = screenshot
                                     page.locator("#login-password").fill(credentials["password"])
                                     submitted_password = True
-                                    ordinal = password_submissions.get(test_id, 0) + 1
                                     password_submissions[test_id] = ordinal
                                     print("::notice::OIDF " + str(BrowserFailure(module, f"password-submit-{ordinal}")), flush=True)
                                     with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login", timeout=30000) as login:
@@ -260,7 +319,8 @@ def main():
     results = args.results.resolve()
     results.mkdir(parents=True, exist_ok=True)
     command = [
-        os.environ.get("PYTHON", "python3"), str(source / "scripts/run-test-plan.py"),
+        os.environ.get("PYTHON", "python3"), str(Path(__file__).with_name("official-runner-diagnostics.py")),
+        str(source / "scripts/run-test-plan.py"),
         "--no-parallel", "--export-dir", str(results), plan, config_path.name,
     ]
     if config.get("_browser_driver") == "chromium":
@@ -285,7 +345,22 @@ def main():
                     if isinstance(error, BrowserFailure):
                         raise RuntimeError(str(error)) from None
                     raise RuntimeError("local real-browser automation failed (" + type(error).__name__ + "); private URL diagnostics were withheld") from None
-                if process.wait() != 0:
+                returncode = process.wait()
+                if returncode != 0:
+                    log.flush()
+                    diagnostics_path = Path(__file__).with_name("official-runner-diagnostics.py")
+                    spec = importlib.util.spec_from_file_location("official_diagnostics", diagnostics_path)
+                    diagnostics = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(diagnostics)
+                    for diagnostic in diagnostics.public_failure_diagnostics(results / "runner-private.log"):
+                        print("::notice::OIDF diagnostic: " + diagnostic, flush=True)
+                    try:
+                        if export_failed_plan_evidence(api, server, results, results / "runner-private.log", returncode):
+                            print("::notice::Downloaded original official aborted-plan evidence; runner failure is retained", flush=True)
+                    except Exception as error:
+                        traceback.print_exc(file=log)
+                        diagnostic = str(error) if isinstance(error, EvidenceExportFailure) else type(error).__name__
+                        print("::notice::OIDF aborted-plan export: " + diagnostic, flush=True)
                     raise RuntimeError("the official conformance plan failed; inspect credential-free exported evidence")
             finally:
                 failure_active = sys.exc_info()[0] is not None

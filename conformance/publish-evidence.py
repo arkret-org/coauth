@@ -21,6 +21,7 @@ def export_modules(archives, output, source_ref):
     if not re.fullmatch(r"[a-f0-9]{40}", source_ref):
         raise ValueError("invalid pinned suite source")
     modules = []
+    errors = []
     for archive in sorted(archives.rglob("*.zip")):
         with zipfile.ZipFile(archive) as bundle:
             for name in bundle.namelist():
@@ -30,33 +31,45 @@ def export_modules(archives, output, source_ref):
                 info = document["testInfo"]
                 result = info["result"]
                 status = info["status"]
-                if result not in {"PASSED", "FAILED", "WARNING", "UNKNOWN", "SKIPPED"}:
-                    raise ValueError("unknown official module outcome")
-                if status not in {"CREATED", "CONFIGURED", "RUNNING", "WAITING", "FINISHED", "INTERRUPTED", "UNKNOWN"}:
+                # The official TestInfo constructor persists a null result until
+                # an outcome is recorded. Preserve it instead of inventing a pass.
+                valid_result = result is None or (isinstance(result, str) and result in {"PASSED", "FAILED", "WARNING", "REVIEW", "UNKNOWN", "SKIPPED"})
+                if status not in {"NOT_YET_CREATED", "CREATED", "CONFIGURED", "RUNNING", "WAITING", "FINISHED", "INTERRUPTED", "UNKNOWN"}:
                     raise ValueError("unknown official module status")
                 conditions = []
                 for row in document["results"]:
-                    if row.get("result") not in {"SUCCESS", "FAILURE", "WARNING"}:
+                    if row.get("result") not in {"SUCCESS", "FAILURE", "WARNING", "REVIEW"}:
                         continue
                     conditions.append({
                         "condition": identifier(row["src"]),
                         "result": row["result"],
                     })
                 counts = Counter(condition["result"] for condition in conditions)
-                modules.append({
+                module = {
                     "test_name": identifier(info["testName"]),
                     "status": status,
-                    "result": result,
                     "conditions": conditions,
-                    "counts": {key: counts[key] for key in ("SUCCESS", "FAILURE", "WARNING")},
+                    "counts": {key: counts[key] for key in ("SUCCESS", "FAILURE", "WARNING", "REVIEW")},
                     "original_archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
-                })
+                }
+                if valid_result:
+                    module.update(result=result, result_unset=result is None)
+                else:
+                    # Keep verified condition failures and other module records,
+                    # but never publish an unsupported source value or invent one.
+                    module["evidence_error"] = {"field": "testInfo.result", "source_type": type(result).__name__}
+                    errors.append({"test_name": module["test_name"], **module["evidence_error"]})
+                modules.append(module)
     (output / "modules.json").write_text(json.dumps({
-        "scope": "Official modules executed; full certification is not inferred from Discovery",
+        "scope": "Official module records and original outcomes; full certification is not inferred from Discovery",
         "suite_source": source_ref,
         "local_suite_repair": "literal metadata member lookup",
         "modules": modules,
+        "evidence_complete": not errors,
+        "evidence_errors": errors,
     }, indent=2) + "\n")
+    if errors:
+        raise ValueError("unsupported official outcome; safe field/type diagnostics are in modules.json")
 
 
 def export_junit(reports, output):

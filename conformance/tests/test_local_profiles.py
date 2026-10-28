@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zipfile
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
@@ -18,6 +19,94 @@ import yaml
 
 
 class LocalProfilesTests(unittest.TestCase):
+    def test_prompt_login_evidence_captures_only_the_actual_second_login_page(self):
+        runner = self.runner()
+
+        class Page:
+            content = b"first-login-page"
+            calls = 0
+
+            def screenshot(self, **options):
+                self.calls += 1
+                self.options = options
+                return self.content
+
+        page = Page()
+        self.assertIsNone(runner.second_login_screenshot("oidcc-prompt-login", 1, page))
+        self.assertEqual(page.calls, 0)
+        page.content = b"real-second-login-page"
+        self.assertEqual(runner.second_login_screenshot("oidcc-prompt-login", 2, page), page.content)
+        self.assertEqual(page.calls, 1)
+        self.assertEqual(page.options, {"type": "jpeg", "quality": 65})
+        self.assertIsNone(runner.second_login_screenshot("oidcc-server", 2, page))
+        self.assertEqual(page.calls, 1)
+        self.assertIsNone(runner.second_login_screenshot("oidcc-max-age-1", 1, page))
+        self.assertEqual(runner.second_login_screenshot("oidcc-max-age-1", 2, page), page.content)
+        self.assertEqual(page.calls, 2)
+
+    def test_aborted_plan_download_preserves_the_original_signed_zip_bytes(self):
+        runner = self.runner()
+        original = io.BytesIO()
+        with zipfile.ZipFile(original, "w") as bundle:
+            bundle.writestr("test-log-fixture.json", '{"testInfo":{"result":null},"private":"PRIVATE_EXPORT_SENTINEL"}')
+            bundle.writestr("test-log-fixture.sig", "unit-test-signature-fixture")
+
+        class API:
+            def get(self, url, timeout, allow_redirects):
+                self.call = (url, timeout, allow_redirects)
+                return type("Reply", (), {"status_code": 200, "headers": {"content-type": "application/zip"}, "content": original.getvalue()})()
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "runner-private.log"
+            log.write_text("2026-10-28 16:42:00 Created test plan, new id: A123456789012\n")
+            api = API()
+            self.assertTrue(runner.export_failed_plan_evidence(api, "https://localhost:8446", root, log, 1))
+            self.assertEqual(api.call, ("https://localhost:8446/api/plan/export/A123456789012", 30, False))
+            self.assertEqual((root / "failed-official-plan.zip").read_bytes(), original.getvalue())
+            self.assertFalse(runner.export_failed_plan_evidence(None, "https://localhost:8446", root, log, 1))
+
+    def test_aborted_plan_export_requires_one_unambiguous_owned_run_reference(self):
+        runner = self.runner()
+        valid = "2026-10-28 16:42:00 Created test plan, new id: A123456789012\n"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "runner-private.log"
+            malformed = valid.replace("A123456789012", "../PRIVATE")
+            for contents in ("", valid + valid, malformed, valid + malformed):
+                log.write_text(contents)
+                with self.assertRaisesRegex(runner.EvidenceExportFailure, "single-created-plan-reference-required"):
+                    runner.export_failed_plan_evidence(None, "https://localhost:8446", root, log, 1)
+            self.assertFalse(runner.export_failed_plan_evidence(None, "https://localhost:8446", root, log, 0))
+            with self.assertRaisesRegex(runner.EvidenceExportFailure, "official-runner-exit-required"):
+                runner.export_failed_plan_evidence(None, "https://localhost:8446", root, log, None)
+
+    def test_aborted_plan_export_rejects_http_errors_and_unsigned_or_non_zip_content(self):
+        runner = self.runner()
+        unsigned = io.BytesIO()
+        with zipfile.ZipFile(unsigned, "w") as bundle:
+            bundle.writestr("test-log-fixture.json", "{}")
+        cases = ((403, "application/zip", b"PRIVATE_SENTINEL"),
+                 (200, "application/json", b"PRIVATE_SENTINEL"),
+                 (200, "application/zip", b"PRIVATE_SENTINEL"),
+                 (200, "application/zip", unsigned.getvalue().replace(b"{}", b"[]", 1)),
+                 (200, "application/zip", unsigned.getvalue()))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "runner-private.log"
+            log.write_text("2026-10-28 16:42:00 Created test plan, new id: A123456789012\n")
+            for status, content_type, body in cases:
+                class API:
+                    def get(self, url, timeout, allow_redirects):
+                        return type("Reply", (), {"status_code": status, "headers": {"content-type": content_type}, "content": body})()
+                with self.assertRaises(runner.EvidenceExportFailure) as caught:
+                    runner.export_failed_plan_evidence(API(), "https://localhost:8446", root, log, 1)
+                self.assertNotIn("PRIVATE_SENTINEL", str(caught.exception))
+                if body == unsigned.getvalue():
+                    self.assertEqual((root / "failed-official-plan.zip").read_bytes(), body)
+                else:
+                    self.assertFalse(list(root.glob("*.zip")))
+
     def runner(self):
         path = Path(__file__).resolve().parents[1] / "run-official-plan.py"
         spec = importlib.util.spec_from_file_location("official_plan", path)

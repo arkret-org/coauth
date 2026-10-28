@@ -41,7 +41,6 @@ if [[ "${1:-}" == "--business" ]]; then
         *) export CARGO_BUILD_JOBS=4 ;;
     esac
     selection_args=()
-    binary_args=()
     custom_grep=0
     custom_required=0
     custom_coauth=0
@@ -70,21 +69,20 @@ if [[ "${1:-}" == "--business" ]]; then
         [[ -n "${selected_coauth_bin}" && "${coauth_argument_pending}" == 0 ]] || { echo "-CoauthBin requires a binary path" >&2; exit 2; }
         COAUTH_INTEGRATION_COAUTH_BIN="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "${selected_coauth_bin}")"
         export COAUTH_INTEGRATION_COAUTH_BIN
+    else
+        for dependency in just dx; do
+            command -v "${dependency}" >/dev/null || { echo "missing ${dependency} for the canonical Coauth frontend build" >&2; exit 2; }
+        done
     fi
     cargo build --manifest-path "${REPO_ROOT}/Cargo.toml" -p coauth-backend --example integration-approval -j "${CARGO_BUILD_JOBS}"
-    if (( custom_coauth == 0 )); then
-        pwsh -NoProfile -File "${REPO_ROOT}/../cotest/scripts/prepare-cargo-artifact.ps1" \
-            -ManifestPath "${REPO_ROOT}/Cargo.toml" -BinaryName coauth -Jobs "${CARGO_BUILD_JOBS}"
-        cargo_target="$(cargo metadata --manifest-path "${REPO_ROOT}/Cargo.toml" --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')"
-        export COAUTH_INTEGRATION_COAUTH_BIN="${cargo_target}/debug/coauth"
-        binary_args+=("-CoauthBin" "${COAUTH_INTEGRATION_COAUTH_BIN}")
-    fi
+    # Leave the default binary selection to the canonical runner so its
+    # frontend and backend freshness gates both run. The post-provision hook
+    # resolves that same binary through Cargo metadata.
     # The hook executes inside the canonical runner's exported deployment and
     # must finish successfully before the selected joint checks.
     exec pwsh -NoProfile -File "${REPO_ROOT}/../cotest/scripts/run-joint-e2e.ps1" \
         -RunProfile joint-api -StartCoauth -StartMockEmail -ClientKind garth \
         ${selection_args[@]+"${selection_args[@]}"} \
-        ${binary_args[@]+"${binary_args[@]}"} \
         -ForbidSkippedTests \
         -PostProvisionCommand "bash '../coauth/scripts/integration-e2e.sh'" "$@"
 fi

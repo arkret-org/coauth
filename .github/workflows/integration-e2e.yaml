@@ -40,6 +40,12 @@ jobs:
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: 1.98.0
+          targets: wasm32-unknown-unknown
+
+      - name: Install frontend task runner
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: "1.46.0"
 
       - uses: actions/setup-node@v4
         with:
@@ -51,7 +57,12 @@ jobs:
           sudo apt-get install -y libssl-dev pkg-config curl jq
           npm ci --prefix ../cotest/e2e
           cd ../cotest/e2e
+          test "$(node_modules/.bin/esbuild --version)" = "0.28.2"
+          printf '%s\n' "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
           npx playwright install --with-deps chromium
+
+      - name: Install canonical frontend tools
+        run: cargo install dioxus-cli --version 0.7.10 --locked
 
       - name: Prepare canonical TLS and isolated deployment prerequisites
         run: bash ../cotest/scripts/prepare-linux-joint-e2e.sh setup

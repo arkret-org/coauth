@@ -202,37 +202,64 @@ test("S1 account → accepted PCR → signed Realm/Strand/Event → authenticate
     await productLogin(request, account);
     const discovery = await jsonOk(await request.get(`${coauth}/.well-known/openid-configuration`), "denial OIDC discovery");
     for (const mode of ["query", "form_post"]) {
-      const context = await browser.newContext({
-        storageState: await request.storageState(),
-        ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+      await test.step(`real ${mode} denial callback`, async () => {
+        const context = await browser.newContext({
+          storageState: await request.storageState(),
+          ignoreHTTPSErrors: process.env.COTEST_IGNORE_HTTPS === "1",
+        });
+        try {
+          // This route is the registered RP callback: observe the actual browser
+          // request after the product decision, without constructing its payload.
+          const callbackUrl = new URL("http://127.0.0.1/auth/callback");
+          await context.route(`${callbackUrl}**`, route => route.fulfill({ status: 200, body: "RP received callback" }));
+          const page = await context.newPage();
+          const state = randomBytes(24).toString("base64url");
+          const authorize = new URL(discovery.authorization_endpoint);
+          Object.entries({
+            response_type: "code", client_id: required("COTEST_OIDC_CLIENT_ID"),
+            redirect_uri: callbackUrl.toString(), scope: "openid",
+            response_mode: mode, state, nonce: randomBytes(24).toString("base64url"),
+            code_challenge: createHash("sha256").update(randomBytes(32)).digest("base64url"),
+            code_challenge_method: "S256",
+          }).forEach(([key, value]) => authorize.searchParams.set(key, value));
+          const navigation = await page.goto(authorize.toString());
+          expect(navigation?.status(), `${mode} approval page`).toBe(200);
+          const scriptSrc = await page.locator('script[type="module"][src]').getAttribute("src");
+          expect(scriptSrc, `${mode} real frontend entry`).toBeTruthy();
+          const scriptUrl = new URL(scriptSrc!, page.url());
+          expect(scriptUrl.origin).toBe(new URL(coauth).origin);
+          expect(scriptUrl.pathname).toMatch(/^\/(?:assets|wasm)\/coauth-frontend(?:-[^/]+)?\.js$/);
+          const asset = await context.request.get(scriptUrl.toString());
+          expect(asset.status(), `${mode} served frontend JavaScript`).toBe(200);
+          expect(asset.headers()["content-type"]).toMatch(/^(?:text|application)\/(?:javascript|ecmascript)(?:;|$)/);
+          const deny = page.getByTestId("coauth-oauth-deny");
+          await expect(deny, `${mode} real consent control`).toBeVisible({ timeout: 30_000 });
+          const [callback] = await Promise.all([
+            page.waitForRequest(reply => {
+              const url = new URL(reply.url());
+              return reply.isNavigationRequest() && url.origin === callbackUrl.origin && url.pathname === callbackUrl.pathname;
+            }, { timeout: 30_000 }),
+            (async () => {
+              const [decision] = await Promise.all([
+                page.waitForResponse(reply => {
+                  const url = new URL(reply.url());
+                  return url.origin === new URL(coauth).origin && url.pathname.endsWith("/decision") && reply.request().method() === "POST";
+                }, { timeout: 30_000 }),
+                deny.click({ timeout: 30_000 }),
+              ]);
+              expect(decision.status(), `${mode} real denial decision`).toBe(200);
+            })(),
+          ]);
+          expect(callback.method()).toBe(mode === "form_post" ? "POST" : "GET");
+          const parameters = mode === "form_post"
+            ? new URLSearchParams(callback.postData()!) : new URL(callback.url()).searchParams;
+          expect(parameters.get("state")).toBe(state);
+          expect(parameters.get("error")).toBe("access_denied");
+          for (const credential of ["code", "id_token", "access_token"]) expect(parameters.has(credential)).toBe(false);
+        } finally {
+          await context.close();
+        }
       });
-      try {
-        // This route is the registered RP callback: observe the actual browser
-        // request after the product decision, without constructing its payload.
-        await context.route("http://127.0.0.1/auth/callback**", route => route.fulfill({ status: 200, body: "RP received callback" }));
-        const page = await context.newPage();
-        const state = randomBytes(24).toString("base64url");
-        const authorize = new URL(discovery.authorization_endpoint);
-        Object.entries({
-          response_type: "code", client_id: required("COTEST_OIDC_CLIENT_ID"),
-          redirect_uri: "http://127.0.0.1/auth/callback", scope: "openid",
-          response_mode: mode, state, nonce: randomBytes(24).toString("base64url"),
-          code_challenge: createHash("sha256").update(randomBytes(32)).digest("base64url"),
-          code_challenge_method: "S256",
-        }).forEach(([key, value]) => authorize.searchParams.set(key, value));
-        await page.goto(authorize.toString());
-        const callbackRequest = page.waitForRequest(reply => new URL(reply.url()).origin === "http://127.0.0.1");
-        await page.getByTestId("coauth-oauth-deny").click();
-        const callback = await callbackRequest;
-        expect(callback.method()).toBe(mode === "form_post" ? "POST" : "GET");
-        const parameters = mode === "form_post"
-          ? new URLSearchParams(callback.postData()!) : new URL(callback.url()).searchParams;
-        expect(parameters.get("state")).toBe(state);
-        expect(parameters.get("error")).toBe("access_denied");
-        for (const credential of ["code", "id_token", "access_token"]) expect(parameters.has(credential)).toBe(false);
-      } finally {
-        await context.close();
-      }
     }
   });
 });

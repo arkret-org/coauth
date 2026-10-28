@@ -102,7 +102,7 @@ fi
 
 # Wait up to 30s for /health.
 echo "[oidc-conformance] waiting for ${HEALTH_URL}…"
-for attempt in $(sequence 1 30); do
+for ((attempt = 1; attempt <= 30; attempt++)); do
     if curl -fsS -o /dev/null -m 2 "${HEALTH_URL}"; then
         echo "[oidc-conformance] coauth healthy after ${attempt}s"
         break
