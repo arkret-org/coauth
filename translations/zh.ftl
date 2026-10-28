@@ -82,3 +82,4 @@ coauth-register-call-to-login = 已有账户？
 coauth-register-create-account-heading = 创建账户
 coauth-register-phone-optional = 手机号（可选）
 coauth-register-contact-required = 请填写邮箱地址或手机号，用于验证账号。
+coauth-register-email-required = 请填写邮箱地址，用于验证账号。

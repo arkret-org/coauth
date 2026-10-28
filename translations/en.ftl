@@ -99,3 +99,4 @@ coauth-register-call-to-login = Already have an account?
 coauth-register-create-account-heading = Create an account
 coauth-register-phone-optional = Phone (optional)
 coauth-register-contact-required = Provide an email address or phone number to verify your account.
+coauth-register-email-required = Provide an email address to verify your account.
