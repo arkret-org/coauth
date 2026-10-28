@@ -173,6 +173,7 @@ fn LoginFormBasic(error_msg: Option<String>) -> Element {
                 password_login_enabled: true,
                 passkey_login_enabled: false,
                 password_registration_enabled: false,
+                password_registration_contact_required: true,
                 account_recovery_allowed: true,
                 login_hint: None,
                 current_account: None,

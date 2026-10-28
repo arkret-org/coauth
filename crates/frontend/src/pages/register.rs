@@ -44,17 +44,7 @@ pub fn Register() -> Element {
         },
         None => rsx! {
             Layout {
-                RegisterPage {
-                    providers: ProvidersOutcome {
-                        providers: vec![],
-                        password_login_enabled: true,
-                        passkey_login_enabled: false,
-                        password_registration_enabled: true,
-                        account_recovery_allowed: true,
-                        login_hint: None,
-                        current_account: None,
-                    },
-                }
+                LoadingSpinner {}
             }
         },
     }
@@ -72,6 +62,7 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
     let nav = navigator();
     let has_providers = !providers.providers.is_empty();
     let reg_enabled = providers.password_registration_enabled;
+    let contact_required = providers.password_registration_contact_required;
     // Freeze the OAuth continuation when this page is mounted.  The backend
     // stores it on the registration record, so later verification/finish
     // routes do not depend on browser URL or sessionStorage survival.
@@ -101,6 +92,10 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
 
                             if user.is_empty() {
                                 error.set(Some("Username is required.".to_owned()));
+                                return;
+                            }
+                            if contact_required && em.trim().is_empty() && ph.trim().is_empty() {
+                                error.set(Some(crate::translations::t("coauth-register-contact-required")));
                                 return;
                             }
                             if pw.is_empty() {
@@ -198,6 +193,10 @@ fn RegisterPage(providers: ProvidersOutcome) -> Element {
                                 value: "{phone}",
                                 oninput: move |e| phone.set(e.value()),
                             }
+                        }
+
+                        if contact_required {
+                            p { class: "text-secondary", {crate::translations::t("coauth-register-contact-required")} }
                         }
 
                         PasswordCreationDoubleInput {
@@ -537,6 +536,7 @@ fn mask_email_address(email: &str) -> String {
 
 fn registration_error_message(code: &str) -> String {
     match code {
+        "email_or_phone_required" => crate::translations::t("coauth-register-contact-required"),
         "invalid_code" => "Incorrect code. Please try again.".to_owned(),
         "invalid_display_name" => {
             crate::translations::t("coauth-errors-display-name-invalid")
