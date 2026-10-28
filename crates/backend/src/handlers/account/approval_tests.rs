@@ -474,12 +474,7 @@ async fn browser_form_with_expired_session_returns_to_login_without_consumption(
         )
         .await;
     assert!(response.status().is_redirection());
-    let destination: url::Url = fixture
-        .state
-        .url_builder
-        .absolute_url("/")
-        .join(response.headers()["location"].to_str().unwrap())
-        .unwrap();
+    let destination = local_redirect(&fixture.state, &response);
     assert_eq!(
         destination.origin().ascii_serialization(),
         "https://example.com"
@@ -692,6 +687,16 @@ async fn expired_browser_continuation_cannot_consume_a_pending_grant() {
     );
     assert_eq!(fixture.sessions().await, 0);
     fixture.finish().await;
+}
+
+fn local_redirect(state: &TestState, response: &Response<String>) -> url::Url {
+    assert!(response.status().is_redirection());
+    let base = state.url_builder.absolute_url("/");
+    let destination = base
+        .join(response.headers()["location"].to_str().unwrap())
+        .unwrap();
+    assert_eq!(destination.origin(), base.origin());
+    destination
 }
 
 fn authorization_error(response: &Response<String>) -> String {
