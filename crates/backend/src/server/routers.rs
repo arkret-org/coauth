@@ -13,7 +13,11 @@ pub(crate) fn build_human_router(router: Router, _templates: Templates) -> Route
     router
         .push(Router::with_path("/webhooks/email/{provider}").post(email_webhooks::post))
         // ── OAuth protocol endpoints (server-side redirects) ──
-        .push(Router::with_path("/authorize").get(authorization::get))
+        .push(
+            Router::with_path("/authorize")
+                .get(authorization::authorize)
+                .post(authorization::authorize),
+        )
         // ── Upstream OAuth (server-side redirect & callback) ──
         .push(
             Router::with_path("/upstream/authorize/{provider_id}")
