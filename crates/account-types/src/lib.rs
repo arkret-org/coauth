@@ -221,7 +221,9 @@ pub struct AnonymousViewer {
 pub struct ViewerUser {
     pub id: String,
     pub username: String,
-    pub principal_id: String,
+    /// Account-first registration precedes publication of the principal binding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub principal_id: Option<String>,
     pub handle: String,
     pub can_request_admin: bool,
     pub has_password: bool,
