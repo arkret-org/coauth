@@ -3,6 +3,7 @@
 import argparse
 import base64
 import importlib.util
+import io
 import json
 import math
 import os
@@ -13,9 +14,54 @@ import sys
 import time
 import traceback
 from urllib.parse import urlsplit
+import zipfile
 
 
 REJECT_MODULE = "fapi2-security-profile-id2-user-rejects-authentication"
+
+
+class EvidenceExportFailure(RuntimeError):
+    """Only fixed stages and HTTP status codes cross the private-log boundary."""
+
+
+def export_failed_plan_evidence(api, server, results, private_log, returncode):
+    """Read the original signed export when an aborted official queue never exported."""
+    if type(returncode) is not int:
+        raise EvidenceExportFailure("official-runner-exit-required")
+    if returncode == 0 or any(results.glob("*.zip")):
+        return False
+    if server != "https://localhost:8446":
+        raise EvidenceExportFailure("isolated-suite-origin-required")
+    # The pinned runner prints this exact line after successful plan creation.
+    # Multiple references are ambiguous even when they repeat the same ID.
+    ids = re.findall(
+        r"^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} Created test plan, new id: (.*)$",
+        private_log.read_text(), re.MULTILINE,
+    )
+    if len(ids) != 1 or not re.fullmatch(r"[A-Za-z0-9]{13}", ids[0]):
+        raise EvidenceExportFailure("single-created-plan-reference-required")
+    # LogApi.exportLogsOfPlan uses owner-scoped getTestPlan; public defaults
+    # to false. Reuse the browser driver's existing authenticated/TLS session.
+    response = api.get(f"{server}/api/plan/export/{ids[0]}", timeout=30, allow_redirects=False)
+    if response.status_code != 200:
+        raise EvidenceExportFailure(f"http-status-{response.status_code}")
+    if response.headers.get("content-type", "").split(";", 1)[0].strip().lower() != "application/zip":
+        raise EvidenceExportFailure("zip-content-type-required")
+    archive = response.content
+    try:
+        with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+            if bundle.testzip() is not None:
+                raise EvidenceExportFailure("zip-integrity-failed")
+            names = set(bundle.namelist())
+            records = [name for name in names if name.startswith("test-log-") and name.endswith(".json")]
+            if not records or any(name + ".sig" not in names for name in records):
+                raise EvidenceExportFailure("original-signed-module-records-required")
+    except zipfile.BadZipFile:
+        raise EvidenceExportFailure("invalid-zip-response") from None
+    # No ZIP entries, signatures, or outcome fields are reconstructed here.
+    with (results / "failed-official-plan.zip").open("xb") as destination:
+        destination.write(archive)
+    return True
 
 
 class BrowserFailure(RuntimeError):
@@ -287,7 +333,8 @@ def main():
                     if isinstance(error, BrowserFailure):
                         raise RuntimeError(str(error)) from None
                     raise RuntimeError("local real-browser automation failed (" + type(error).__name__ + "); private URL diagnostics were withheld") from None
-                if process.wait() != 0:
+                returncode = process.wait()
+                if returncode != 0:
                     log.flush()
                     diagnostics_path = Path(__file__).with_name("official-runner-diagnostics.py")
                     spec = importlib.util.spec_from_file_location("official_diagnostics", diagnostics_path)
@@ -295,6 +342,13 @@ def main():
                     spec.loader.exec_module(diagnostics)
                     for diagnostic in diagnostics.public_failure_diagnostics(results / "runner-private.log"):
                         print("::notice::OIDF diagnostic: " + diagnostic, flush=True)
+                    try:
+                        if export_failed_plan_evidence(api, server, results, results / "runner-private.log", returncode):
+                            print("::notice::Downloaded original official aborted-plan evidence; runner failure is retained", flush=True)
+                    except Exception as error:
+                        traceback.print_exc(file=log)
+                        diagnostic = str(error) if isinstance(error, EvidenceExportFailure) else type(error).__name__
+                        print("::notice::OIDF aborted-plan export: " + diagnostic, flush=True)
                     raise RuntimeError("the official conformance plan failed; inspect credential-free exported evidence")
             finally:
                 failure_active = sys.exc_info()[0] is not None
