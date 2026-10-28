@@ -4,6 +4,23 @@ use crate::api::{self};
 use crate::translations::t;
 use crate::ui::{self, *};
 
+fn registration_contact_missing(
+    required: bool,
+    phone_enabled: bool,
+    email: &str,
+    phone: &str,
+) -> bool {
+    required && email.trim().is_empty() && (!phone_enabled || phone.trim().is_empty())
+}
+
+fn registration_contact_message_key(phone_enabled: bool) -> &'static str {
+    if phone_enabled {
+        "coauth-register-contact-required"
+    } else {
+        "coauth-register-email-required"
+    }
+}
+
 pub fn entry(scope: &Scope) -> View {
     let providers = ui::resource(scope, || {
         api::api_get::<ProvidersOutcome>("/account/auth/providers")
@@ -13,57 +30,73 @@ pub fn entry(scope: &Scope) -> View {
         if providers.password_registration_enabled {
             let state = Action::new(scope);
             let contact_required = providers.password_registration_contact_required;
+            let phone_enabled = providers.phone_verification_enabled;
+            let contact_message_key = registration_contact_message_key(phone_enabled);
             let action = crate::post_auth_continuation::current()
                 .or_else(crate::post_auth_continuation::load);
             if contact_required {
-                body.push(copy(
-                    "text-secondary",
-                    t("coauth-register-contact-required"),
-                ));
+                body.push(copy("text-secondary", t(contact_message_key)));
             }
+            let mut fields = vec![
+                Field::new(scope, t("common-handle"), "")
+                    .required()
+                    .placeholder("Choose a username"),
+                Field::new(scope, t("common-email-address"), "").email(),
+            ];
+            if phone_enabled {
+                fields.push(Field::new(scope, t("coauth-register-phone-optional"), ""));
+            }
+            let password_index = fields.len();
+            fields.push(Field::new(scope, "New password", "").password().required());
+            fields.push(
+                Field::new(scope, "Confirm password", "")
+                    .password()
+                    .required(),
+            );
             body.push(ui::form(
                 scope,
                 "register",
-                vec![
-                    Field::new(scope, t("common-handle"), "")
-                        .required()
-                        .placeholder("Choose a username"),
-                    Field::new(scope, t("common-email-address"), "").email(),
-                    Field::new(scope, t("coauth-register-phone-optional"), ""),
-                    Field::new(scope, "New password", "").password().required(),
-                    Field::new(scope, "Confirm password", "")
-                        .password()
-                        .required(),
-                ],
+                fields,
                 t("action-create-account"),
                 "btn btn-primary btn-block",
                 state,
                 move |values| {
                     let action = action.clone();
                     async move {
-                        if contact_required && values[1].trim().is_empty() && values[2].trim().is_empty() {
-                            return Err(t("coauth-register-contact-required"));
+                        let phone = if phone_enabled { values[2].trim() } else { "" };
+                        if registration_contact_missing(
+                            contact_required,
+                            phone_enabled,
+                            &values[1],
+                            phone,
+                        ) {
+                            return Err(t(contact_message_key));
                         }
-                        super::auth::validate_passwords(&values[3], &values[4])?;
+                        super::auth::validate_passwords(
+                            &values[password_index],
+                            &values[password_index + 1],
+                        )?;
                         let response = api::api_post::<RegisterOutcome>(
                             "/account/auth/register",
                             RegisterInput {
                                 handle: values[0].trim().into(),
                                 email: (!values[1].trim().is_empty())
                                     .then(|| values[1].trim().into()),
-                                phone: (!values[2].trim().is_empty())
-                                    .then(|| values[2].trim().into()),
-                                password: values[3].clone(),
-                                password_confirm: values[4].clone(),
+                                phone: (phone_enabled && !phone.is_empty()).then(|| phone.into()),
+                                password: values[password_index].clone(),
+                                password_confirm: values[password_index + 1].clone(),
                                 captcha_token: None,
                                 post_auth_action: action,
                             },
                         )
                         .await?;
                         if response.status != "success" {
-                            return Err(error_message(
-                                response.error.as_deref().unwrap_or("Registration failed."),
-                            ));
+                            let code = response.error.as_deref().unwrap_or("Registration failed.");
+                            return Err(if code == "email_or_phone_required" {
+                                t(contact_message_key)
+                            } else {
+                                error_message(code)
+                            });
                         }
                         let id = response.id.ok_or("Registration did not provide an ID")?;
                         next_step(&id, response.next_step.as_deref())?;
@@ -438,5 +471,21 @@ mod tests {
         assert_eq!(mask_email("alice@example.test"), "al***@example.test");
         assert_eq!(mask_email("a@example.test"), "a***@example.test");
         assert_eq!(mask_email("unavailable"), "unavailable");
+    }
+
+    #[test]
+    fn required_contact_ignores_a_phone_when_verification_is_disabled() {
+        assert!(registration_contact_missing(true, false, "", "+12025550123"));
+        assert!(registration_contact_missing(true, false, " ", "+12025550123"));
+        assert!(!registration_contact_missing(true, false, "alice@example.com", ""));
+        assert!(!registration_contact_missing(true, true, "", "+12025550123"));
+        assert!(registration_contact_missing(true, true, " ", " "));
+    }
+
+    #[test]
+    fn optional_contact_stays_optional_with_either_phone_policy() {
+        for phone_enabled in [false, true] {
+            assert!(!registration_contact_missing(false, phone_enabled, "", ""));
+        }
     }
 }
