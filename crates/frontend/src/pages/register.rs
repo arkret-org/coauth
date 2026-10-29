@@ -604,6 +604,7 @@ fn mask_email_address(email: &str) -> String {
 
 fn registration_error_message(code: &str) -> String {
     match code {
+        "handle_invalid" => crate::translations::t("coauth-register-handle-invalid"),
         "email_or_phone_required" => crate::translations::t("coauth-register-contact-required"),
         "invalid_code" => "Incorrect code. Please try again.".to_owned(),
         "invalid_display_name" => {

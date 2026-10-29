@@ -286,6 +286,131 @@ async fn test_user_repo() {
 }
 
 #[tokio::test]
+async fn handle_length_boundary_localparts_survive_repository_reopen() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool.clone());
+    let mut rng = ChaChaRng::seed_from_u64(0x4844_4c32);
+    let clock = MockClock::default();
+    for handle in [
+        "a".repeat(64),
+        "a".repeat(65),
+        "a".repeat(128),
+        "\u{20000}".repeat(128),
+    ] {
+        assert_eq!(
+            arkret_wire::prepare_handle_localpart(&handle).unwrap(),
+            handle
+        );
+        let mut repo = factory.create().await.unwrap();
+        let user = repo
+            .user()
+            .add(&mut rng, &clock, handle.clone())
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        let mut reopened = factory.create().await.unwrap();
+        let stored = reopened
+            .user()
+            .find_by_handle(&handle)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.id, user.id);
+        assert_eq!(stored.localpart, handle);
+        reopened.cancel().await.unwrap();
+    }
+
+    let mut repo = factory.create().await.unwrap();
+    assert!(
+        repo.user()
+            .add(&mut rng, &clock, "a".repeat(129))
+            .await
+            .is_err()
+    );
+    assert_eq!(repo.user().count(UserFilter::new()).await.unwrap(), 4);
+    repo.cancel().await.unwrap();
+}
+
+#[tokio::test]
+async fn handle_length_boundary_canonical_preference_retains_verified_claim() {
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool.clone());
+    let mut rng = ChaChaRng::seed_from_u64(0x4844_4c33);
+    let clock = MockClock::default();
+    let localpart = "\u{20000}".repeat(128);
+    let domain = [
+        "a".repeat(63),
+        "b".repeat(63),
+        "c".repeat(63),
+        "d".repeat(61),
+    ]
+    .join(".");
+    let handle = format!("{localpart}:{domain}");
+    assert_eq!(handle.chars().count(), 382);
+    assert_eq!(handle.len(), 766);
+    assert_eq!(
+        arkret_models_identity::Handle::parse(&handle)
+            .unwrap()
+            .canonical(),
+        handle
+    );
+
+    let mut repo = factory.create().await.unwrap();
+    let user = repo.user().add(&mut rng, &clock, localpart).await.unwrap();
+    let claim = repo
+        .handle_audit()
+        .record(
+            &mut rng,
+            &clock,
+            NewHandleAuditEvent::new(HandleAuditEventType::ClaimIssued)
+                .with_user(user.id)
+                .with_handle(&handle),
+        )
+        .await
+        .unwrap();
+    let verified = repo
+        .user_primary_handle_preference()
+        .verified_handle_claim(user.id, &handle, clock.now())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(verified.id, claim.id);
+    let preference = repo
+        .user_primary_handle_preference()
+        .set(
+            &mut rng,
+            &clock,
+            NewUserPrimaryHandlePreference::self_service(
+                user.id,
+                Some(handle.clone()),
+                Some(&verified),
+                user.id,
+            ),
+        )
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let mut reopened = factory.create().await.unwrap();
+    let stored = reopened
+        .user_primary_handle_preference()
+        .current(user.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.id, preference.id);
+    assert_eq!(stored.handle.as_deref(), Some(handle.as_str()));
+    assert_eq!(stored.source_claim_id, Some(claim.id));
+    assert_eq!(stored.actor_user_id, Some(user.id));
+    reopened.cancel().await.unwrap();
+}
+
+#[tokio::test]
 async fn primary_handle_preference_versions_current_and_as_of() {
     let Some(pool) = crate::test_utils::setup_test_pool().await else {
         return;
