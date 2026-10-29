@@ -205,14 +205,7 @@ pub async fn get_viewer(
 
             let has_password = profile.has_password;
             let principal_id =
-                arkret::published_principal_id_for_user(&mut repo, &arkret_config, user)
-                    .await?
-                    .ok_or_else(|| {
-                        RouteError::Internal(Box::new(std::io::Error::other(format!(
-                            "missing principal DID for user {}",
-                            user.id
-                        ))))
-                    })?;
+                arkret::published_principal_id_for_user(&mut repo, &arkret_config, user).await?;
 
             let sessions =
                 load_viewer_session_connections(&mut repo, user, &session_page(req)?).await?;
@@ -235,7 +228,7 @@ pub async fn get_viewer(
             let viewer_user = ViewerUser {
                 id: NodeType::User.serialize(user.id),
                 username: user.localpart.clone(),
-                principal_id: principal_id.to_string(),
+                principal_id: principal_id.map(|principal_id| principal_id.to_string()),
                 handle: arkret::user_handle(&url_builder, user),
                 can_request_admin: user.can_request_admin,
                 has_password,
@@ -472,6 +465,56 @@ mod tests {
     };
     use crate::salvo_utils::SessionInfoExt;
 
+    #[tokio::test]
+    async fn viewer_supports_unbound_account_without_publishing_principal() {
+        setup();
+        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
+            return;
+        };
+        let state = TestState::from_pool_with_station(pool.clone())
+            .await
+            .unwrap();
+        let unique = unique_test_nonce();
+        state.clock.advance(Duration::seconds(unique as i64));
+        let mut rng = ChaChaRng::seed_from_u64(unique);
+        let mut repo = state.repository().await.unwrap();
+        let username = format!("unbound{}", Ulid::generate().to_string().to_lowercase());
+        let user = repo
+            .user()
+            .add(&mut rng, &state.clock, username.clone())
+            .await
+            .unwrap();
+        let session = repo
+            .browser_session()
+            .add(&mut rng, &state.clock, &user, None)
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+
+        let cookies = CookieHelper::new();
+        cookies.import(state.cookie_jar().set_session(&session));
+        let response = state
+            .request(cookies.with_cookies(Request::get("/_coauth/self/viewer").empty()))
+            .await;
+        response.assert_status(StatusCode::OK);
+        let body: coauth_account_types::ViewerOutcome = response.json();
+        let viewer = body.viewer.as_user().unwrap();
+        assert_eq!(viewer.username, username);
+        assert!(viewer.principal_id.is_none());
+        assert_eq!(viewer.browser_sessions.as_ref().unwrap().total_count, 1);
+
+        let anonymous = state
+            .request(Request::get("/_coauth/self/viewer").empty())
+            .await;
+        anonymous.assert_status(StatusCode::OK);
+        let body: coauth_account_types::ViewerOutcome = anonymous.json();
+        assert!(matches!(
+            body.viewer,
+            coauth_account_types::Viewer::Anonymous(_)
+        ));
+        state.shutdown().await;
+    }
+
     /// Three sessions have to come back as three, and a smaller page as fewer
     /// edges with the same total.
     ///
@@ -522,6 +565,11 @@ mod tests {
             .await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
+        assert!(
+            body["viewer"]["principal_id"]
+                .as_str()
+                .is_some_and(|principal| principal.starts_with("ak:did_core:"))
+        );
         let connection = &body["viewer"]["browser_sessions"];
         assert_eq!(connection["total_count"], 3, "body: {body}");
         assert_eq!(connection["edges"].as_array().unwrap().len(), 3);
