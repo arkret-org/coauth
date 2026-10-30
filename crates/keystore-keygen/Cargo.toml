@@ -6,7 +6,9 @@ rust-version.workspace = true
 description = "Cross-platform master-key generator for the Coauth encrypted-file KeyStore."
 license.workspace = true
 repository.workspace = true
-publish = false
+publish.workspace = true
+authors.workspace = true
+homepage.workspace = true
 
 [dependencies]
 anyhow.workspace = true
