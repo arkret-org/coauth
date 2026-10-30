@@ -709,6 +709,7 @@ fn authorization_error(response: &Response<String>) -> String {
 }
 
 fn same_origin_location(state: &TestState, response: &Response<String>) -> url::Url {
+    assert!(response.status().is_redirection());
     let base = state.url_builder.absolute_url("/");
     let location = base
         .join(response.headers()["location"].to_str().unwrap())

@@ -349,6 +349,8 @@ pub async fn providers(
         password_login_enabled: site_config.password_login_enabled,
         passkey_login_enabled: depot.webauthn_service().is_ok(),
         password_registration_enabled: site_config.password_registration_enabled,
+        password_registration_contact_required: site_config.password_registration_contact_required,
+        phone_verification_enabled: site_config.phone_verification_enabled,
         account_recovery_allowed: site_config.account_recovery_allowed,
         login_hint,
         current_account,
@@ -401,7 +403,9 @@ mod tests {
     use rand_core::SeedableRng;
 
     use super::*;
-    use crate::handlers::test_utils::test_site_config;
+    use crate::handlers::test_utils::{
+        RequestBuilderExt as _, ResponseExt as _, TestState, setup, test_site_config,
+    };
 
     fn grant_with_hint(login_hint: &str) -> AuthorizationGrant {
         let now = MockClock::default().now();
@@ -414,6 +418,63 @@ mod tests {
 
     fn test_url_builder() -> UrlBuilder {
         UrlBuilder::new("https://auth.local.host/".parse().unwrap(), None, None)
+    }
+
+    #[tokio::test]
+    async fn providers_report_registration_contact_policy_and_supported_phone_verification() {
+        setup();
+        let Some(database) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
+            return;
+        };
+        for contact_required in [false, true] {
+            for phone_enabled in [false, true] {
+                let mut config = test_site_config();
+                config.password_registration_contact_required = contact_required;
+                config.phone_verification_enabled = phone_enabled;
+                let state = TestState::from_pool_with_site_config(database.clone(), config)
+                    .await
+                    .unwrap();
+                let response = state
+                    .request(hyper::Request::get("/_coauth/account/auth/providers").empty())
+                    .await;
+                response.assert_status(hyper::StatusCode::OK);
+                let capabilities = response.json::<ProvidersOutcome>();
+                assert_eq!(
+                    capabilities.password_registration_contact_required,
+                    contact_required
+                );
+                assert_eq!(capabilities.phone_verification_enabled, phone_enabled);
+                if !phone_enabled {
+                    let response = state
+                        .request(hyper::Request::post("/_coauth/account/auth/register").json(
+                            serde_json::json!({
+                                "handle": format!("contact-policy-{contact_required}"),
+                                "email": null,
+                                "phone": "+12025550123",
+                                "password": "1amTester!",
+                                "password_confirm": "1amTester!",
+                                "captcha_token": null,
+                                "post_auth_action": null
+                            }),
+                        ))
+                        .await;
+                    response.assert_status(hyper::StatusCode::OK);
+                    let registration = response.json::<coauth_account_types::RegisterOutcome>();
+                    if contact_required {
+                        assert_eq!(registration.status, "error");
+                        assert_eq!(
+                            registration.error.as_deref(),
+                            Some("email_or_phone_required")
+                        );
+                    } else {
+                        assert_eq!(registration.status, "success");
+                        assert!(registration.error.is_none());
+                        assert_eq!(registration.next_step.as_deref(), Some("display_name"));
+                    }
+                }
+                state.shutdown().await;
+            }
+        }
     }
 
     #[test]

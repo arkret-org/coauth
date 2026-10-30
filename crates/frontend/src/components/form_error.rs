@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 #[component]
 pub fn FormError(message: String, #[props(default)] title: Option<String>) -> Element {
     rsx! {
-        div { class: "alert alert-critical",
+        div { class: "alert alert-critical", role: "alert", "aria-live": "assertive",
             if let Some(title) = title {
                 p { class: "alert-title", "{title}" }
             }
