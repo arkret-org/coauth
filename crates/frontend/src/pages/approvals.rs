@@ -9,7 +9,7 @@ use crate::api::{self};
 use crate::ui::{self, *};
 
 #[cfg(target_arch = "wasm32")]
-fn submit_consent_form(grant: &str, action: &str, csrf: &str) -> Result<(), String> {
+fn submit_consent_form(grant: &str, action: &str, csrf: &str) -> std::result::Result<(), String> {
     use web_sys::wasm_bindgen::JsCast as _;
     let window = web_sys::window().ok_or("Browser window unavailable")?;
     let url = format!(
@@ -47,7 +47,11 @@ fn submit_consent_form(grant: &str, action: &str, csrf: &str) -> Result<(), Stri
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn submit_consent_form(_grant: &str, _action: &str, _csrf: &str) -> Result<(), String> {
+fn submit_consent_form(
+    _grant: &str,
+    _action: &str,
+    _csrf: &str,
+) -> std::result::Result<(), String> {
     Err("Consent form submission requires a browser".to_owned())
 }
 
@@ -59,7 +63,8 @@ async fn authorization_decision(
 ) -> Outcome {
     let csrf_token = csrf_token.ok_or("Missing authorization continuation. Restart sign-in.")?;
     if form_post {
-        return submit_consent_form(id, action, &csrf_token);
+        submit_consent_form(id, action, &csrf_token)?;
+        return Ok(None);
     }
     let path = format!("/self/oauth/authorization-grants/{}/decision", encode(id));
     let response = api::api_post::<OAuthApprovalSubmitOutcome>(
