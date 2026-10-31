@@ -79,7 +79,10 @@ async fn authorization_decision(
             .error
             .unwrap_or_else(|| "Authorization failed.".into()));
     }
-    if !matches!(response.response_mode.as_deref(), Some("query" | "fragment")) {
+    if !matches!(
+        response.response_mode.as_deref(),
+        Some("query" | "fragment")
+    ) {
         return Err("Unsupported callback mode".into());
     }
     go(&response

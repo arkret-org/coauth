@@ -475,10 +475,30 @@ mod tests {
 
     #[test]
     fn required_contact_ignores_a_phone_when_verification_is_disabled() {
-        assert!(registration_contact_missing(true, false, "", "+12025550123"));
-        assert!(registration_contact_missing(true, false, " ", "+12025550123"));
-        assert!(!registration_contact_missing(true, false, "alice@example.com", ""));
-        assert!(!registration_contact_missing(true, true, "", "+12025550123"));
+        assert!(registration_contact_missing(
+            true,
+            false,
+            "",
+            "+12025550123"
+        ));
+        assert!(registration_contact_missing(
+            true,
+            false,
+            " ",
+            "+12025550123"
+        ));
+        assert!(!registration_contact_missing(
+            true,
+            false,
+            "alice@example.com",
+            ""
+        ));
+        assert!(!registration_contact_missing(
+            true,
+            true,
+            "",
+            "+12025550123"
+        ));
         assert!(registration_contact_missing(true, true, " ", " "));
     }
 
