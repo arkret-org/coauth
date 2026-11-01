@@ -228,11 +228,18 @@ test("S1 account → accepted PCR → signed Realm/Strand/Event → authenticate
           expect(scriptSrc, `${mode} real frontend entry`).toBeTruthy();
           const scriptUrl = new URL(scriptSrc!, page.url());
           expect(scriptUrl.origin).toBe(new URL(coauth).origin);
-          expect(scriptUrl.pathname).toMatch(/^\/(?:assets|wasm)\/coauth-frontend(?:-[^/]+)?\.js$/);
+          expect(scriptUrl.pathname).toBe("/assets/bootstrap.js");
           const asset = await context.request.get(scriptUrl.toString());
           expect(asset.status(), `${mode} served frontend JavaScript`).toBe(200);
           expect(asset.headers()["content-type"]).toMatch(/^(?:text|application)\/(?:javascript|ecmascript)(?:;|$)/);
-          const deny = page.getByTestId("coauth-oauth-deny");
+          const entrySource = await asset.text();
+          expect(entrySource).toContain("from './pkg/coauth_frontend.js'");
+          const bindingsUrl = new URL("./pkg/coauth_frontend.js", scriptUrl);
+          const bindings = await context.request.get(bindingsUrl.toString());
+          expect(bindings.status(), `${mode} served frontend bindings`).toBe(200);
+          expect(bindings.headers()["content-type"]).toMatch(/^(?:text|application)\/(?:javascript|ecmascript)(?:;|$)/);
+          expect((await bindings.body()).byteLength, `${mode} nonempty frontend bindings`).toBeGreaterThan(0);
+          const deny = page.getByRole("button", { name: "Deny", exact: true });
           await expect(deny, `${mode} real consent control`).toBeVisible({ timeout: 30_000 });
           const [callback] = await Promise.all([
             page.waitForRequest(reply => {
