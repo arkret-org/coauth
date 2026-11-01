@@ -70,7 +70,7 @@ if [[ "${1:-}" == "--business" ]]; then
         COAUTH_INTEGRATION_COAUTH_BIN="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "${selected_coauth_bin}")"
         export COAUTH_INTEGRATION_COAUTH_BIN
     else
-        for dependency in just wasm-bindgen; do
+        for dependency in just; do
             command -v "${dependency}" >/dev/null || { echo "missing ${dependency} for the canonical Coauth frontend build" >&2; exit 2; }
         done
     fi
