@@ -35,6 +35,7 @@ jobs:
           for repository in arkret-rust-sdk arkret-spec coland cotest garth chime inkson floria; do
             bash .ci/checkout-sibling.sh "$repository" "../$repository"
           done
+          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up Rust 1.98.0
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master

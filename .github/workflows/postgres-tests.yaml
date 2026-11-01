@@ -65,6 +65,7 @@ jobs:
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
           bash .ci/checkout-sibling.sh floria ../floria
+          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
