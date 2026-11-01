@@ -155,7 +155,14 @@ jobs:
           bash coauth/.ci/checkout-sibling.sh cotest cotest
           bash coauth/.ci/checkout-sibling.sh garth garth
           bash coauth/.ci/checkout-sibling.sh floria floria
-          bash coauth/.ci/checkout-ui-dependencies.sh
+
+      - name: Set up stable Rust for UI provenance
+        uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
+        with:
+          toolchain: stable
+
+      - name: Verify locked UI dependency provenance
+        run: bash coauth/.ci/checkout-ui-dependencies.sh
 
       - name: Configure Docker Buildx
         uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
@@ -393,7 +400,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: 81619ef0d4d266cae58a18002809e231908eaa7b
+          ref: 606676ba0fb7208f87994314c4054779424833e2
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
@@ -458,15 +465,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y binaryen
-          cargo install dioxus-cli --version 0.7.10 --locked
+          python3 scripts/install-wasm-bindgen.py
       - name: Build frontend
-        run: dx build -p coauth-frontend --release --debug-symbols false --locked
+        run: python3 scripts/build-frontend.py --release --out-dir frontend-dist
       - name: Locate frontend assets
         shell: bash
         run: |
-          target_dir=$(cargo metadata --locked --no-deps --format-version 1 | python -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
-          test -f "$target_dir/dx/coauth-frontend/release/web/public/index.html"
-          cp -R "$target_dir/dx/coauth-frontend/release/web/public" frontend-dist
+          test -f frontend-dist/index.html
+          test -f frontend-dist/assets/pkg/coauth_frontend.js
+          test -f frontend-dist/assets/pkg/coauth_frontend_bg.wasm
+          test -f frontend-dist/assets/sapid.css
+          test -f frontend-dist/ui-build-info.json
       - uses: actions/upload-artifact@v4
         with:
           name: coauth-frontend
@@ -510,7 +519,7 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: 81619ef0d4d266cae58a18002809e231908eaa7b
+          ref: 606676ba0fb7208f87994314c4054779424833e2
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
@@ -564,6 +573,22 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Configure Windows build and cache directories
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $coauthCacheRoot = 'D:/BuildCache/coauth-glory'
+          $coauthCargoHome = 'D:/BuildCache/cargo'
+          $coauthTargetDir = Join-Path $coauthCacheRoot 'target'
+          $coauthTmpDir = Join-Path $coauthCacheRoot 'tmp'
+          foreach ($coauthDirectory in @($coauthCargoHome, $coauthTargetDir, $coauthTmpDir)) {
+            New-Item -ItemType Directory -Force -Path $coauthDirectory | Out-Null
+          }
+          "CARGO_HOME=$coauthCargoHome" >> $env:GITHUB_ENV
+          "CARGO_TARGET_DIR=$coauthTargetDir" >> $env:GITHUB_ENV
+          "TEMP=$coauthTmpDir" >> $env:GITHUB_ENV
+          "TMP=$coauthTmpDir" >> $env:GITHUB_ENV
+          "TMPDIR=$coauthTmpDir" >> $env:GITHUB_ENV
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}

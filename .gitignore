@@ -51,3 +51,4 @@ conformance/test-config.yaml.raw
 /release-assets/
 
 !scripts/ui_dependencies.py
+!scripts/install-wasm-bindgen.py

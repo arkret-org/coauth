@@ -69,13 +69,15 @@ jobs:
           bash .ci/checkout-sibling.sh cotest ../cotest
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh floria ../floria
-          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
           targets: wasm32-unknown-unknown
+
+      - name: Verify locked UI dependency provenance
+        run: bash .ci/checkout-ui-dependencies.sh
 
       - name: Cache cargo registry
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
@@ -144,8 +146,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y binaryen
-          cargo install dioxus-cli --version 0.7.10 --locked
-          dx build -p coauth-frontend --release --debug-symbols false --locked
+          python3 scripts/install-wasm-bindgen.py
+          python3 scripts/build-frontend.py --release
 
       - name: Build Coauth
         run: |

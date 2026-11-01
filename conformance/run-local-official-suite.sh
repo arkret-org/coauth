@@ -37,7 +37,7 @@ cleanup() {
 }
 trap cleanup EXIT
 binary="${COAUTH_BINARY:-${target_dir}/debug/coauth}"
-export COAUTH_CONFORMANCE_ASSETS="${COAUTH_CONFORMANCE_ASSETS:-${target_dir}/dx/coauth-frontend/release/web/public}"
+export COAUTH_CONFORMANCE_ASSETS="${COAUTH_CONFORMANCE_ASSETS:-${target_dir}/web}"
 test -f "$COAUTH_CONFORMANCE_ASSETS/index.html"
 "$binary" config generate > "$run_dir/generated.yaml"
 python3 "${repo_root}/conformance/prepare-local-config.py" "$run_dir/generated.yaml" "$run_dir"

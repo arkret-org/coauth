@@ -365,7 +365,7 @@ pub fn field(
     scope: &Scope,
     key: &str,
     item: Field,
-    enabled: impl Into<Lotus<bool>>,
+    enabled: impl Into<Vary<bool>>,
     state: Action,
 ) -> View {
     let value = item.value;

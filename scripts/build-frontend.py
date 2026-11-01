@@ -57,6 +57,9 @@ def find_bindgen(env):
             Path(f"D:/BuildCache/tools/wasm-bindgen/{version}/bin/wasm-bindgen.exe"),
         ) if path.is_file())
     if not env.get("WASM_BINDGEN"):
+        if env.get("CARGO_HOME"):
+            executable = "wasm-bindgen.exe" if os.name == "nt" else "wasm-bindgen"
+            candidates.insert(0, str(Path(env["CARGO_HOME"]) / "bin" / executable))
         candidates.append(shutil.which("wasm-bindgen") or "wasm-bindgen")
     for candidate in candidates:
         try:
