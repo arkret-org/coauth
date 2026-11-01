@@ -12,7 +12,6 @@ ARG DEBIAN_VERSION=12
 ARG DEBIAN_VERSION_NAME=bookworm
 ARG CARGO_AUDITABLE_VERSION=0.7.0
 ARG CARGO_CHEF_VERSION=0.1.77
-ARG WASM_BINDGEN_VERSION=0.2.129
 ARG FRONTEND_DIST_SOURCE=frontend-build
 
 ############################################
@@ -20,7 +19,6 @@ ARG FRONTEND_DIST_SOURCE=frontend-build
 ############################################
 FROM --platform=${BUILDPLATFORM} docker.io/library/rust:${DEBIAN_VERSION_NAME} AS frontend-toolchain
 
-ARG WASM_BINDGEN_VERSION
 ARG CARGO_CHEF_VERSION
 
 ENV CARGO_HOME=/usr/local/cargo
@@ -38,12 +36,19 @@ RUN --network=default \
   --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
   --mount=type=cache,id=frontend-cargo-git,target=/usr/local/cargo/git,sharing=locked \
   for i in 1 2 3 4 5; do rustup target add wasm32-unknown-unknown && break || sleep 10; done && \
-  cargo install --locked wasm-bindgen-cli@${WASM_BINDGEN_VERSION} && \
   cargo install --locked cargo-chef@=${CARGO_CHEF_VERSION}
 
 # Cargo metadata and frontend bundle packaging use Python.
 RUN --network=default \
   apt-get update && apt-get install -y python3 && rm -rf /var/lib/apt/lists/*
+
+# Select the CLI from this workspace lock instead of a second version constant.
+COPY ./coauth/Cargo.lock /ui-tool-inputs/Cargo.lock
+COPY ./coauth/scripts/ui_dependencies.py ./coauth/scripts/install-wasm-bindgen.py /ui-tool-inputs/
+RUN --network=default \
+  --mount=type=cache,id=frontend-cargo-registry,target=/usr/local/cargo/registry,sharing=locked \
+  --mount=type=cache,id=frontend-cargo-git,target=/usr/local/cargo/git,sharing=locked \
+  python3 /ui-tool-inputs/install-wasm-bindgen.py --lockfile /ui-tool-inputs/Cargo.lock
 
 ############################################
 ## Build stage that builds the frontend   ##

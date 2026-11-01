@@ -35,13 +35,15 @@ jobs:
           for repository in arkret-rust-sdk arkret-spec coland cotest garth chime inkson floria; do
             bash .ci/checkout-sibling.sh "$repository" "../$repository"
           done
-          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up Rust 1.98.0
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: 1.98.0
           targets: wasm32-unknown-unknown
+
+      - name: Verify locked UI dependency provenance
+        run: bash .ci/checkout-ui-dependencies.sh
 
       - name: Install frontend task runner
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
@@ -63,7 +65,7 @@ jobs:
           npx playwright install --with-deps chromium
 
       - name: Install canonical frontend tools
-        run: cargo install dioxus-cli --version 0.7.10 --locked
+        run: python3 scripts/install-wasm-bindgen.py
 
       - name: Prepare canonical TLS and isolated deployment prerequisites
         run: bash ../cotest/scripts/prepare-linux-joint-e2e.sh setup

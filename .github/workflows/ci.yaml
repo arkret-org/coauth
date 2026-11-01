@@ -51,13 +51,18 @@ jobs:
           bash .ci/checkout-sibling.sh floria ../floria
           bash .ci/checkout-sibling.sh inkson ../inkson
           bash .ci/checkout-sibling.sh chime ../chime
-          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up nightly Rust for rustfmt
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: nightly
           components: rustfmt
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+
+      - name: Verify locked UI dependency provenance
+        run: bash .ci/checkout-ui-dependencies.sh
 
       - name: Verify formatting
         run: cargo +nightly fmt --all -- --check
@@ -84,7 +89,6 @@ jobs:
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
           bash .ci/checkout-sibling.sh floria ../floria
-          bash .ci/checkout-ui-dependencies.sh
 
       - name: Verify Rust toolchain policy
         run: |
@@ -110,6 +114,9 @@ jobs:
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+
+      - name: Verify locked UI dependency provenance
+        run: bash .ci/checkout-ui-dependencies.sh
 
       - name: Execute Clippy lints
         run: |
@@ -161,12 +168,14 @@ jobs:
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
           bash .ci/checkout-sibling.sh floria ../floria
-          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
+
+      - name: Verify locked UI dependency provenance
+        run: bash .ci/checkout-ui-dependencies.sh
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
@@ -200,7 +209,6 @@ jobs:
           bash .ci/checkout-sibling.sh garth ../garth
           bash .ci/checkout-sibling.sh arkret-spec ../arkret-spec
           bash .ci/checkout-sibling.sh floria ../floria
-          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
@@ -209,6 +217,9 @@ jobs:
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+
+      - name: Verify locked UI dependency provenance
+        run: bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up nextest
         uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
@@ -272,12 +283,14 @@ jobs:
           bash .ci/checkout-sibling.sh floria ../floria
           bash .ci/checkout-sibling.sh inkson ../inkson
           bash .ci/checkout-sibling.sh chime ../chime
-          bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
           toolchain: stable
+
+      - name: Verify locked UI dependency provenance
+        run: bash .ci/checkout-ui-dependencies.sh
 
       - name: Set up nextest
         uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853 # v2
