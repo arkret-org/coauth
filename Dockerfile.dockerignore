@@ -3,7 +3,8 @@
 **/target/
 **/.shared-target/
 **/node_modules/
-**/artifacts/
+artifacts/
+*/artifacts/
 **/release-assets/
 **/.sqlx/
 **/.git/
