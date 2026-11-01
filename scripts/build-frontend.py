@@ -15,31 +15,7 @@ FRONTEND = ROOT / "crates" / "frontend"
 
 
 def build_environment():
-    env = os.environ.copy()
-    cache = None
-    if os.name == "nt":
-        cache = Path("D:/BuildCache/coauth-glory")
-    elif env.get("WSL_DISTRO_NAME"):
-        mounts = Path("/proc/mounts").read_text().splitlines()
-        if not any(line.split()[1] == "/mnt/d" and line.split()[0].upper().startswith("D:") for line in mounts):
-            raise SystemExit("Verify /mnt/d is mounted from D: before building in WSL")
-        cache = Path("/mnt/d/BuildCache/coauth-glory")
-    if cache:
-        temporary = cache / "tmp"
-        temporary.mkdir(parents=True, exist_ok=True)
-        env.setdefault("CARGO_TARGET_DIR", str(cache / "target"))
-        env.setdefault("CARGO_HOME", str(cache.parent / "cargo"))
-        env["TEMP"] = env["TMP"] = env["TMPDIR"] = str(temporary)
-        tempfile.tempdir = str(temporary)
-    if os.name == "nt":
-        for key in ("CARGO_HOME", "CARGO_TARGET_DIR"):
-            if Path(env[key]).resolve().drive.lower() != "d:":
-                raise SystemExit(f"{key} must be on D:")
-    elif env.get("WSL_DISTRO_NAME"):
-        for key in ("CARGO_HOME", "CARGO_TARGET_DIR"):
-            if not Path(env[key]).resolve().is_relative_to("/mnt/d"):
-                raise SystemExit(f"{key} must be on the verified /mnt/d mount")
-    return env
+    return os.environ.copy()
 
 
 def find_bindgen(env):
@@ -49,18 +25,11 @@ def find_bindgen(env):
         raise SystemExit(f"Expected one locked wasm-bindgen version, got {sorted(versions)}")
     version = versions.pop()
     candidates = [env["WASM_BINDGEN"]] if env.get("WASM_BINDGEN") else []
-    if os.name == "nt" and not candidates:
-        candidates.extend(str(path) for path in Path("D:/BuildCache").glob(
-            f"*/tools/wasm-bindgen-{version}-*/wasm-bindgen.exe"))
-        candidates.extend(str(path) for path in (
-            Path("D:/BuildCache/coauth-glory/tools/bin/wasm-bindgen.exe"),
-            Path(f"D:/BuildCache/tools/wasm-bindgen/{version}/bin/wasm-bindgen.exe"),
-        ) if path.is_file())
     if not env.get("WASM_BINDGEN"):
-        if env.get("CARGO_HOME"):
-            executable = "wasm-bindgen.exe" if os.name == "nt" else "wasm-bindgen"
-            candidates.insert(0, str(Path(env["CARGO_HOME"]) / "bin" / executable))
-        candidates.append(shutil.which("wasm-bindgen") or "wasm-bindgen")
+        cargo_home = Path(env["CARGO_HOME"]) if env.get("CARGO_HOME") else Path.home() / ".cargo"
+        executable = "wasm-bindgen.exe" if os.name == "nt" else "wasm-bindgen"
+        candidates.append(str(cargo_home / "bin" / executable))
+        candidates.append(shutil.which("wasm-bindgen", path=env.get("PATH")) or "wasm-bindgen")
     for candidate in candidates:
         try:
             actual = subprocess.check_output([candidate, "--version"], env=env, text=True).strip()
@@ -68,7 +37,7 @@ def find_bindgen(env):
             continue
         if actual == f"wasm-bindgen {version}":
             return candidate
-    raise SystemExit(f"Install wasm-bindgen-cli {version} on D: or set WASM_BINDGEN to a matching CLI")
+    raise SystemExit(f"Install wasm-bindgen-cli {version} or set WASM_BINDGEN to a matching CLI")
 
 
 def main():
@@ -81,10 +50,6 @@ def main():
     provenance = ui_provenance(metadata)
     target = Path(metadata["target_directory"]).resolve()
     output = (args.out_dir or target / "web").resolve()
-    if os.name == "nt" and (target.drive.lower() != "d:" or output.drive.lower() != "d:"):
-        raise SystemExit(f"Build and web output must be on D:, got {target}, {output}")
-    if env.get("WSL_DISTRO_NAME") and not all(path.is_relative_to("/mnt/d") for path in (target, output)):
-        raise SystemExit("Build and web output must stay on the verified /mnt/d mount")
     if output == ROOT or output in ROOT.parents or output == FRONTEND or FRONTEND in output.parents:
         raise SystemExit(f"Refusing to overwrite source directory: {output}")
     print(f"Cargo target directory: {target}", flush=True)

@@ -1,12 +1,9 @@
 # Frontend build and browser checks
 
 The account UI uses the local Glory and Sapid workspaces. Run commands from the
-Coauth root with Cargo, temporary files, and npm caches on D:.
+Coauth root with the existing Cargo and temporary-file environment.
 
 ```powershell
-$env:CARGO_TARGET_DIR = 'D:/BuildCache/coauth-glory/target'
-$env:CARGO_HOME = 'D:/BuildCache/cargo'
-$env:TEMP = $env:TMP = 'D:/BuildCache/coauth-glory/tmp'
 cargo metadata --no-deps --format-version 1
 cargo +nightly fmt -p coauth-frontend --check
 cargo test -p coauth-frontend --lib
@@ -22,7 +19,6 @@ WASM module by `src/translations.rs`.
 Serve the web directory with SPA fallback, then run the fixture browser suite:
 
 ```powershell
-$env:npm_config_cache = 'D:/BuildCache/coauth-glory/npm'
 npm --prefix crates/frontend ci --ignore-scripts
 $env:COAUTH_TEST_URL = 'http://127.0.0.1:4183'
 npm --prefix crates/frontend test

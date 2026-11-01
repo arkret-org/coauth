@@ -39,11 +39,6 @@ def main():
     parser.add_argument('--web-dir', type=Path)
     parser.add_argument('--crates', action='store_true')
     args = parser.parse_args()
-    if os.name == "nt":
-        cache = Path("D:/BuildCache/coauth-glory/tmp")
-        cache.mkdir(parents=True, exist_ok=True)
-        tempfile.tempdir = str(cache)
-        os.environ["TEMP"] = os.environ["TMP"] = str(cache)
     root = Path.cwd()
     project = root.name
     tag = os.environ.get('GITHUB_REF_NAME', 'verification')

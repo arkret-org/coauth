@@ -2,7 +2,7 @@
 
 The `glory` branch replaces the account SPA renderer and controls with the local Glory and Sapid crates. Typed authentication/account APIs and continuation, WebAuthn, registration, approval and recovery flows remain in the account SPA.
 
-Build with `python scripts/build-frontend.py --release`. The generated directory is `<cargo-target>/web`; pass `--out-dir` for a deployment directory. The backend loads `assets/bootstrap.js` and prefixes module/style URLs with the configured base path. Stable JS/WASM/CSS names revalidate after deployment. Windows builds use `D:/BuildCache/coauth-glory`; the build script checks Cargo’s resolved target. CI recreates the sibling Glory/Sapid layout using `.ci/checkout-ui-dependencies.sh`.
+Build with `python scripts/build-frontend.py --release`. The generated directory is `<cargo-target>/web`; pass `--out-dir` for a deployment directory. The backend loads `assets/bootstrap.js` and prefixes module/style URLs with the configured base path. Stable JS/WASM/CSS names revalidate after deployment. Builds inherit the current environment and use Cargo’s resolved target directory. CI recreates the sibling Glory/Sapid layout using `.ci/checkout-ui-dependencies.sh`.
 
 The original implementation at `8cdfa931` supplied the reference stylesheet, real WASM baseline and 56 populated screenshots. The migrated application has 96 route/theme/viewport captures, 23 interaction/request-contract scenarios, 8 modal/CSP checks, 4 axe checks and 2 direct mobile control-size comparisons. Mobile password/exit controls match reference widths/heights within 1 px. The email action wraps inside narrow viewports, fixing the original overflow.
 
