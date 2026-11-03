@@ -370,26 +370,6 @@ pub fn field(
 ) -> View {
     let value = item.value;
     let enabled = enabled.into();
-    let reference = scope.cage(None::<glory::render::NodeId>);
-    if matches!(
-        key,
-        "login-identifier-0" | "login-password-0" | "register-0" | "registration-verify-0"
-    ) {
-        let weak = scope.downgrade();
-        scope.effect(move || {
-            if let Some(node) = reference.get()
-                && let Some(scope) = weak.upgrade()
-            {
-                let weak = weak.clone();
-                let _ = scope.owner().spawn(async move {
-                    gloo_timers::future::TimeoutFuture::new(0).await;
-                    if let Some(scope) = weak.upgrade() {
-                        let _ = scope.action(glory::render::Action::Focus(node));
-                    }
-                });
-            }
-        });
-    }
     let select_key = format!("select-{}-{key}", scope.id().slot());
     let hint_empty = item.placeholder.is_empty();
     let hint_class = scope.bond(move || {
@@ -457,7 +437,6 @@ pub fn field(
                             .unstyled()
                             .class("form-input")
                             .name(item.label.clone())
-                            .node_ref(reference)
                             .field(control)
                             .value(value)
                             .enabled(enabled.clone())
@@ -469,7 +448,6 @@ pub fn field(
                             .unstyled()
                             .class("form-input")
                             .name(item.label.clone())
-                            .node_ref(reference)
                             .purpose(item.purpose)
                             .field(control)
                             .value(value)
@@ -535,7 +513,7 @@ where
             .enabled(can_submit),
     ));
     let weak = scope.downgrade();
-    Box::new(
+    let form: View = Box::new(
         sapid::form(format!("{}-{key}", scope.id().slot()))
             .unstyled()
             .class(if key == "add-email" {
@@ -553,7 +531,25 @@ where
                 let snapshot = values.iter().map(|value| value.get_untracked()).collect();
                 state.run(&weak, submit(snapshot));
             }),
-    )
+    );
+    if matches!(
+        key,
+        "login-identifier" | "login-password" | "register" | "registration-verify"
+    ) {
+        // Apply initial focus with the mounted form instead of stealing a
+        // field from a user who started typing before a deferred focus task.
+        Box::new(
+            sapid::focus_scope()
+                .active(true)
+                .auto_focus(true)
+                .contain_focus(false)
+                .loop_tab(false)
+                .restore_focus(false)
+                .fill(vec![form]),
+        )
+    } else {
+        form
+    }
 }
 fn password_strength(scope: &Scope, value: Cage<String>) -> View {
     let policy = resource(scope, || {
