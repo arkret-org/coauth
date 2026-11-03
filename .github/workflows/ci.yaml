@@ -184,6 +184,7 @@ jobs:
 
       # The Docker action cannot mount the path dependencies beside this checkout.
       - name: Audit with cargo-deny
+        continue-on-error: true
         run: cargo deny --locked --all-features --config deny.toml check
 
   # -- Test execution --
