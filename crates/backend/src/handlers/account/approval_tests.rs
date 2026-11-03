@@ -882,11 +882,19 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             .pending(&fixture.state)
             .bind(grant, &fixture.session)
             .unwrap();
+        // A forced account choice remains unbound in the browser's cookie
+        // until a freshly authenticated approval GET. Age-only grants retain
+        // the original account binding and reach the authentication check.
+        let forced_account_choice = parameter == "prompt";
         fixture
             .browser
             .send(&fixture.state, Fixture::decision(grant, &csrf, "approve"))
             .await
-            .assert_status(StatusCode::UNAUTHORIZED);
+            .assert_status(if forced_account_choice {
+                StatusCode::FORBIDDEN
+            } else {
+                StatusCode::UNAUTHORIZED
+            });
         let denied = fixture
             .browser
             .send(
@@ -896,14 +904,17 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
                     .form(json!({"action":"deny", "csrf_token":csrf})),
             )
             .await;
-        assert!(denied.status().is_redirection());
-        let login = same_origin_location(&fixture.state, &denied);
-        assert_eq!(login.path(), "/login");
-        assert!(
-            login
-                .query_pairs()
-                .any(|(key, value)| key == "id" && value == grant.to_string())
-        );
+        if forced_account_choice {
+            denied.assert_status(StatusCode::FORBIDDEN);
+        } else {
+            let login = same_origin_location(&fixture.state, &denied);
+            assert_eq!(login.path(), "/login");
+            assert!(
+                login
+                    .query_pairs()
+                    .any(|(key, value)| key == "id" && value == grant.to_string())
+            );
+        }
         assert_eq!(fixture.stage(grant).await, AuthorizationGrantStage::Pending);
         grants.push((grant, csrf));
     }
@@ -930,6 +941,64 @@ async fn requested_reauthentication_cannot_be_bypassed_at_the_approval_api() {
             .assert_status(StatusCode::OK);
         assert!(fixture.stage(grant).await.is_fulfilled());
     }
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn explicit_login_can_approve_with_a_different_freshly_authenticated_account() {
+    let mut fixture = Fixture::new().await;
+    let old = coauth_data::clock::MockClock::default();
+    fixture.authenticate_at(&fixture.session, &old).await;
+    fixture.authenticate_at(&fixture.other, &old).await;
+    let mut url = fixture.authorization_url("query");
+    url.query_pairs_mut().append_pair("prompt", "login");
+    let response = fixture
+        .browser
+        .send(&fixture.state, Request::get(url.as_str()).empty())
+        .await;
+    let login = same_origin_location(&fixture.state, &response);
+    assert_eq!(login.path(), "/login");
+    let grant: Ulid = login
+        .query_pairs()
+        .find(|(key, _)| key == "id")
+        .unwrap()
+        .1
+        .parse()
+        .unwrap();
+    let approval_path = format!("/_coauth/self/oauth/authorization-grants/{grant}/decision");
+    fixture
+        .browser
+        .import(fixture.state.cookie_jar().set_session(&fixture.other));
+    fixture
+        .browser
+        .send(&fixture.state, Request::get(approval_path.as_str()).empty())
+        .await
+        .assert_status(StatusCode::UNAUTHORIZED);
+    assert_eq!(fixture.sessions().await, 0);
+
+    fixture
+        .authenticate_at(&fixture.other, &coauth_data::SystemClock::default())
+        .await;
+    let approval = fixture
+        .browser
+        .send(&fixture.state, Request::get(approval_path.as_str()).empty())
+        .await;
+    approval.assert_status(StatusCode::OK);
+    let body: Value = serde_json::from_str(approval.body()).unwrap();
+    let csrf = body["csrf_token"].as_str().unwrap();
+    fixture
+        .browser
+        .send(&fixture.state, Fixture::decision(grant, csrf, "approve"))
+        .await
+        .assert_status(StatusCode::OK);
+    assert!(fixture.stage(grant).await.is_fulfilled());
+    assert_eq!(fixture.sessions().await, 1);
+    let mut repo = fixture.state.repository().await.unwrap();
+    let selected = OAuthSessionFilter::new()
+        .for_client(&fixture.client)
+        .for_browser_session(&fixture.other);
+    assert_eq!(repo.oauth_session().count(selected).await.unwrap(), 1);
+    repo.cancel().await.unwrap();
     fixture.finish().await;
 }
 

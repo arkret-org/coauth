@@ -537,7 +537,12 @@ async fn handle_authorization(
                     Some(locale.to_string()),
                 )
                 .await?;
-            pending_consents.add(grant.id, maybe_session.as_ref(), &mut *rng);
+            // An explicit login without an authenticated subject hint may
+            // select another account. Bind its consent only after fresh login.
+            let consent_session = maybe_session.as_ref().filter(|_| {
+                !prompt.contains(&Prompt::Login) || requirements.subject_hint.is_some()
+            });
+            pending_consents.add(grant.id, consent_session, &mut *rng);
             pending_consents.require(grant.id, requirements);
             let continue_grant = PostAuthAction::continue_grant(grant.id);
 
