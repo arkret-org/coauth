@@ -53,10 +53,15 @@ class LocalProfilesTests(unittest.TestCase):
         inputs = Locator()
         inputs.fields = [password]
         embeds = Locator(count=0)
-        selectors = {"body": body, "#login-password": password,
-                     ".login-selected-copy strong": selected, "input,textarea": inputs,
+        selectors = {"body": body,
+                     ".login-selected-copy .font-semibold": selected, "input,textarea": inputs,
                      "iframe,canvas,video,object,embed": embeds}
-        page = SimpleNamespace(url="https://localhost:8445/login?id=PRIVATE_GRANT_SENTINEL", locator=lambda key: selectors[key])
+        def get_by_label(label, *, exact):
+            self.assertEqual((label, exact), ("Password", True))
+            return password
+
+        page = SimpleNamespace(url="https://localhost:8445/login?id=PRIVATE_GRANT_SENTINEL",
+                               locator=lambda key: selectors[key], get_by_label=get_by_label)
         credentials = {"handle": "oidf-conformance", "password": "PRIVATE_PASSWORD_SENTINEL"}
         url = "https://localhost:8445/authorize?state=PRIVATE_STATE_SENTINEL"
         secrets = {"PRIVATE_CLIENT_SECRET_SENTINEL"}

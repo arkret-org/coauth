@@ -157,10 +157,10 @@ def review_dom_is_public(module, page, credentials, authorization_url, private_v
         return parsed.path == "/authorize" and text.strip() == expected
     if parsed.path != "/login":
         return False
-    password = page.locator("#login-password")
+    password = page.get_by_label("Password", exact=True)
     if not password.is_visible() or password.get_attribute("type") != "password" or password.input_value():
         return False
-    selected = page.locator(".login-selected-copy strong")
+    selected = page.locator(".login-selected-copy .font-semibold")
     if selected.count() != 1 or selected.inner_text(timeout=5000).strip() != LOCAL_REVIEW_HANDLE:
         return False
     for field in page.locator("input,textarea").all():
@@ -332,7 +332,7 @@ def drive_local_browser(process, scope, private_values):
                         if origin(url) not in allowed:
                             raise RuntimeError("official front-channel URL is outside the local fixture")
                         if test_id not in contexts:
-                            context = browser.new_context(ignore_https_errors=True)
+                            context = browser.new_context(ignore_https_errors=True, locale="en-US")
                             context.route("**/*", lambda route: route.continue_() if origin(route.request.url) in allowed else route.abort())
                             contexts[test_id] = context
                         page = contexts[test_id].new_page()
@@ -375,14 +375,14 @@ def drive_local_browser(process, scope, private_values):
                                     break
                                 if time.monotonic() > deadline:
                                     raise BrowserFailure(module, "login-or-consent-timeout")
-                                if page.locator("#login-error").is_visible():
+                                if page.get_by_role("alert").first.is_visible():
                                     raise BrowserFailure(module, "login-ui-error")
-                                if page.locator("#login-handle").is_visible():
+                                if page.get_by_label("Username", exact=True).is_visible():
                                     phase = "identifier-login"
-                                    page.locator("#login-handle").fill(credentials["handle"])
-                                    page.get_by_test_id("coauth-login-identifier-submit").click()
-                                    page.locator("#login-handle").wait_for(state="hidden", timeout=30000)
-                                elif page.locator("#login-password").is_visible():
+                                    page.get_by_label("Username", exact=True).fill(credentials["handle"])
+                                    page.get_by_role("button", name="Continue", exact=True).click()
+                                    page.get_by_label("Username", exact=True).wait_for(state="hidden", timeout=30000)
+                                elif page.get_by_label("Password", exact=True).is_visible():
                                     phase = "password-login"
                                     if submitted_password:
                                         raise BrowserFailure(module, "password-phase-did-not-advance")
@@ -393,34 +393,35 @@ def drive_local_browser(process, scope, private_values):
                                         browser_screenshots[test_id] = screenshot
                                         if review_dom_is_public(module, page, credentials, url, private_values):
                                             public_images.add(test_id)
-                                    page.locator("#login-password").fill(credentials["password"])
+                                    page.get_by_label("Password", exact=True).fill(credentials["password"])
                                     submitted_password = True
                                     password_submissions[test_id] = ordinal
                                     print("::notice::OIDF " + str(BrowserFailure(module, f"password-submit-{ordinal}")), flush=True)
                                     with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login", timeout=30000) as login:
-                                        page.get_by_test_id("coauth-login-submit").click()
+                                        page.get_by_role("button", name="Sign in", exact=True).click()
                                     login_body = login.value.json()
                                     if login.value.status != 200 or login_body.get("status") != "success":
                                         # Never interpolate response text, credentials or redirect URLs.
                                         code = login_body.get("error")
                                         known = {"invalid_credentials", "rate_limited", "account_deactivated", "account_locked", "password_login_disabled"}
                                         raise BrowserFailure(module, "login-" + (code if code in known else "unexpected-response"))
-                                    page.locator("#login-password").wait_for(state="hidden", timeout=30000)
-                                elif page.get_by_test_id("coauth-continue-as-current").is_visible():
+                                    page.get_by_label("Password", exact=True).wait_for(state="hidden", timeout=30000)
+                                elif page.locator(".login-current-account-button").is_visible():
                                     phase = "continue-current-account"
-                                    page.get_by_test_id("coauth-continue-as-current").click()
-                                    page.get_by_test_id("coauth-continue-as-current").wait_for(state="hidden", timeout=30000)
-                                elif page.get_by_test_id("coauth-oauth-approve").is_visible():
+                                    page.locator(".login-current-account-button").click()
+                                    page.locator(".login-current-account-button").wait_for(state="hidden", timeout=30000)
+                                elif page.get_by_role("button", name="Allow", exact=True).is_visible():
                                     phase = "authorization-decision"
                                     if submitted_decision:
                                         raise BrowserFailure(module, "consent-phase-did-not-advance")
                                     action = consent_action(module)
+                                    button = page.get_by_role("button", name="Deny" if action == "deny" else "Allow", exact=True)
                                     submitted_decision = True
                                     with page.expect_response(lambda reply: urlsplit(reply.url).path.endswith("/decision") and reply.request.method == "POST", timeout=30000) as decision:
-                                        page.get_by_test_id("coauth-oauth-" + action).click()
+                                        button.click()
                                     if decision.value.status != 200:
                                         raise BrowserFailure(module, "consent-http-error")
-                                    page.get_by_test_id("coauth-oauth-" + action).wait_for(state="hidden", timeout=30000)
+                                    button.wait_for(state="hidden", timeout=30000)
                                 page.wait_for_timeout(250)
                             response = api.post(f"{server}/api/runner/browser/{test_id}/visit", params={"url": url}, timeout=30)
                             if response.status_code != 404:
