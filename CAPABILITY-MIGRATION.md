@@ -242,7 +242,6 @@ third-party use:
    `SignerKeyResolution`（`crates/models-identity/src/signer_key_operations.rs:263`）、
    `AccountSubscribeReadAction`
    （`crates/models-collaboration/src/sync_frames/account_subscribe.rs:1038`）、
-   `ModerationQueueItem`（`crates/models-collaboration/src/governance/moderation_queue.rs:61`）。
    按已裁定口径，查询/同步操作的答案应为 `_Outcome`、逐条记录应为 `_Row`。
    `AccountStateView`（`sync_frames/current_states.rs:53`）与 `CurrentState`
    （`crates/wire/src/authority_commit.rs:732`）是与 `operation_kind` 双射的类型化当前结果信封，
