@@ -31,6 +31,7 @@ _*.*
 !conformance/publish-evidence.py
 !conformance/tests/test_public_evidence.py
 !conformance/tests/test_local_profiles.py
+!conformance/tests/browser_response_navigation.py
 __pycache__/
 .agent*
 

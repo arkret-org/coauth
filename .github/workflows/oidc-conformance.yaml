@@ -139,6 +139,9 @@ jobs:
           python3 -m pip install -r official-oidf-suite/scripts/requirements.txt pyyaml cryptography playwright
           python3 -m playwright install --with-deps chromium
 
+      - name: Check original response bodies across real browser navigation
+        run: python3 conformance/tests/browser_response_navigation.py
+
       - name: Test real local registrations and the public evidence boundary
         run: python3 -m unittest discover -s conformance/tests
 

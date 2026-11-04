@@ -103,6 +103,16 @@ def browser_error_category(error):
     return "unclassified"
 
 
+def retain_browser_responses(page):
+    """Keep real Chromium response bodies readable across document navigation."""
+    session = page.context.new_cdp_session(page)
+    session.send("Network.configureDurableMessages", {
+        "maxTotalBufferSize": 8 * 1024 * 1024,
+        "maxResourceBufferSize": 1024 * 1024,
+    })
+    return session
+
+
 def consent_action(module):
     return "deny" if module == REJECT_MODULE else "approve"
 
@@ -354,7 +364,9 @@ def drive_local_browser(process, scope, private_values):
                         phase = "navigation"
                         submitted_password = False
                         submitted_decision = False
+                        response_retention = None
                         try:
+                            response_retention = retain_browser_responses(page)
                             if method == "POST":
                                 # Match upstream BrowserControl: move the supplied URL's
                                 # query to a form body, preserving real browser cookies.
@@ -413,7 +425,7 @@ def drive_local_browser(process, scope, private_values):
                                     password_submissions[test_id] = ordinal
                                     print("::notice::OIDF " + str(BrowserFailure(module, f"password-submit-{ordinal}")), flush=True)
                                     phase = "password-submit"
-                                    with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login", timeout=30000) as login:
+                                    with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login" and reply.request.method == "POST", timeout=30000) as login:
                                         page.get_by_role("button", name="Sign in", exact=True).click()
                                     phase = "password-response"
                                     print("::notice::OIDF " + str(BrowserFailure(module, f"login-http-{login.value.status}")), flush=True)
@@ -451,7 +463,11 @@ def drive_local_browser(process, scope, private_values):
                         except Exception as error:
                             raise BrowserFailure(module, phase + "-" + type(error).__name__ + "-" + browser_error_category(error)) from error
                         finally:
-                            page.close()
+                            try:
+                                if response_retention is not None:
+                                    response_retention.detach()
+                            finally:
+                                page.close()
                 time.sleep(0.5)
         finally:
             browser.close()
