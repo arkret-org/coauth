@@ -36,10 +36,10 @@ jobs:
             bash .ci/checkout-sibling.sh "$repository" "../$repository"
           done
 
-      - name: Set up Rust 1.98.0
+      - name: Set up Rust 1.99.0
         uses: dtolnay/rust-toolchain@fa04a1451ff1842e2626ccb99004d0195b455a88 # master
         with:
-          toolchain: 1.98.0
+          toolchain: 1.99.0
 
       - uses: actions/setup-node@v4
         with:
