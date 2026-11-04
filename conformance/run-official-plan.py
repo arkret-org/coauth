@@ -88,6 +88,21 @@ class BrowserFailure(RuntimeError):
         super().__init__(f"{safe_module}: {phase}")
 
 
+def browser_error_category(error):
+    """Recognize browser failures without exporting private URLs or call logs."""
+    message = str(error)
+    for fragment, category in (
+        ("No resource with given identifier found", "response-body-unavailable"),
+        ("Execution context was destroyed", "navigation-context-destroyed"),
+        ("Target page, context or browser has been closed", "browser-closed"),
+        ("strict mode violation", "ambiguous-control"),
+        ("Element is not attached", "control-detached"),
+    ):
+        if fragment in message:
+            return category
+    return "unclassified"
+
+
 def consent_action(module):
     return "deny" if module == REJECT_MODULE else "approve"
 
@@ -397,14 +412,18 @@ def drive_local_browser(process, scope, private_values):
                                     submitted_password = True
                                     password_submissions[test_id] = ordinal
                                     print("::notice::OIDF " + str(BrowserFailure(module, f"password-submit-{ordinal}")), flush=True)
+                                    phase = "password-submit"
                                     with page.expect_response(lambda reply: urlsplit(reply.url).path == "/_coauth/account/auth/login", timeout=30000) as login:
                                         page.get_by_role("button", name="Sign in", exact=True).click()
+                                    phase = "password-response"
+                                    print("::notice::OIDF " + str(BrowserFailure(module, f"login-http-{login.value.status}")), flush=True)
                                     login_body = login.value.json()
                                     if login.value.status != 200 or login_body.get("status") != "success":
                                         # Never interpolate response text, credentials or redirect URLs.
                                         code = login_body.get("error")
                                         known = {"invalid_credentials", "rate_limited", "account_deactivated", "account_locked", "password_login_disabled"}
                                         raise BrowserFailure(module, "login-" + (code if code in known else "unexpected-response"))
+                                    phase = "password-advance"
                                     page.get_by_label("Password", exact=True).wait_for(state="hidden", timeout=30000)
                                 elif page.locator(".login-current-account-button").is_visible():
                                     phase = "continue-current-account"
@@ -430,7 +449,7 @@ def drive_local_browser(process, scope, private_values):
                         except BrowserFailure:
                             raise
                         except Exception as error:
-                            raise BrowserFailure(module, phase + "-" + type(error).__name__) from error
+                            raise BrowserFailure(module, phase + "-" + type(error).__name__ + "-" + browser_error_category(error)) from error
                         finally:
                             page.close()
                 time.sleep(0.5)

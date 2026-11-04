@@ -21,6 +21,19 @@ import yaml
 
 
 class LocalProfilesTests(unittest.TestCase):
+    def test_browser_error_categories_never_publish_private_call_logs(self):
+        runner = self.runner()
+        for fragment, category in (
+            ("No resource with given identifier found", "response-body-unavailable"),
+            ("Execution context was destroyed", "navigation-context-destroyed"),
+            ("Target page, context or browser has been closed", "browser-closed"),
+            ("strict mode violation", "ambiguous-control"),
+            ("Element is not attached", "control-detached"),
+            ("Unexpected PRIVATE_PASSWORD_SENTINEL https://private.example/token", "unclassified"),
+        ):
+            error = RuntimeError(fragment + " PRIVATE_PASSWORD_SENTINEL https://private.example/token")
+            self.assertEqual(runner.browser_error_category(error), category)
+
     def test_review_dom_gate_rejects_private_values_filled_inputs_and_other_accounts(self):
         runner = self.runner()
 
