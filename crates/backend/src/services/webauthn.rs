@@ -817,7 +817,7 @@ mod tests {
         let (counter, transports, aaguid, backup_eligible, backup_state, user_verified) =
             passkey_metadata(&serde_json::json!({}));
         assert_eq!(counter, 0);
-        assert!(transports.is_empty());
+        assert_eq!(transports.len(), 0);
         assert_eq!(aaguid, None);
         assert!(!backup_eligible);
         assert!(!backup_state);

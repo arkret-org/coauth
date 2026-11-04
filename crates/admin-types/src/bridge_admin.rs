@@ -303,9 +303,9 @@ mod tests {
     #[test]
     fn examples_default_is_all_empty_strings() {
         let e = AdminBridgeRiskActionExamples::default();
-        assert!(e.proposal_request.action.is_empty());
-        assert!(e.approve_request.approval_note.is_empty());
-        assert!(e.execute_request.execution_note.is_empty());
+        assert_eq!(e.proposal_request.action.len(), 0);
+        assert_eq!(e.approve_request.approval_note.len(), 0);
+        assert_eq!(e.execute_request.execution_note.len(), 0);
     }
 
     #[test]

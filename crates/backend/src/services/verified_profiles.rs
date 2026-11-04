@@ -82,7 +82,7 @@ mod tests {
         ));
         std::fs::write(&path, b"{ not json").unwrap();
         let path = camino::Utf8PathBuf::from_path_buf(path).unwrap();
-        assert!(load_from_path(path).is_empty());
+        assert_eq!(load_from_path(path).len(), 0);
     }
 
     #[test]

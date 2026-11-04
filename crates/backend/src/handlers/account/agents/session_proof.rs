@@ -2075,8 +2075,8 @@ mod tests {
         };
         let scope = qualify_station_content_scope(outcome.clone(), &request).unwrap();
         assert_eq!(scope.granted_scope, request.requested_scope);
-        assert!(scope.capability_grant_refs.is_empty());
-        assert!(scope.policy_refs.is_empty());
+        assert_eq!(scope.capability_grant_refs.len(), 0);
+        assert_eq!(scope.policy_refs.len(), 0);
         let mut wrong = outcome.clone();
         wrong.binding.intent_digest =
             arkret_identifiers::Hash::new(format!("sha256:{}", "b".repeat(64))).unwrap();
@@ -2666,7 +2666,7 @@ mod tests {
         .expect("MLS and to-device operations are service-surface scope");
 
         assert_eq!(effective_scope.granted_scope, requested_scope);
-        assert!(effective_scope.capability_grant_refs.is_empty());
+        assert_eq!(effective_scope.capability_grant_refs.len(), 0);
     }
 
     #[test]
@@ -2938,8 +2938,8 @@ mod tests {
             effective_scope.granted_scope,
             vec!["ak.self.committed_event.stream.subscribe.v1"]
         );
-        assert!(effective_scope.realm_ids.is_empty());
-        assert!(effective_scope.policy_refs.is_empty());
+        assert_eq!(effective_scope.realm_ids.len(), 0);
+        assert_eq!(effective_scope.policy_refs.len(), 0);
     }
 
     #[test]

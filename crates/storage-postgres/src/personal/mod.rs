@@ -58,19 +58,19 @@ mod tests {
 
         // We start off with no sessions
         let full_list = repo.personal_session().list(all, pagination).await.unwrap();
-        assert!(full_list.edges.is_empty());
+        assert_eq!(full_list.edges.len(), 0);
         let active_list = repo
             .personal_session()
             .list(active, pagination)
             .await
             .unwrap();
-        assert!(active_list.edges.is_empty());
+        assert_eq!(active_list.edges.len(), 0);
         let finished_list = repo
             .personal_session()
             .list(finished, pagination)
             .await
             .unwrap();
-        assert!(finished_list.edges.is_empty());
+        assert_eq!(finished_list.edges.len(), 0);
 
         // Start a personal session for that user
         let stable_scope = "urn:arkret:client:device:AABBCCDDEE".parse().unwrap();
@@ -117,7 +117,7 @@ mod tests {
             .list(finished, pagination)
             .await
             .unwrap();
-        assert!(finished_list.edges.is_empty());
+        assert_eq!(finished_list.edges.len(), 0);
 
         // Lookup the session and check it didn't change
         let session_lookup = repo
@@ -157,7 +157,7 @@ mod tests {
             .list(active, pagination)
             .await
             .unwrap();
-        assert!(active_list.edges.is_empty());
+        assert_eq!(active_list.edges.len(), 0);
         let finished_list = repo
             .personal_session()
             .list(finished, pagination)

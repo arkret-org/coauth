@@ -303,7 +303,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(revoked, 2);
-        assert!(
+        assert_eq!(
             repo.accountability_grant()
                 .list_active_for_subject(
                     AccountabilitySubjectKind::ControllerPrincipalId,
@@ -311,7 +311,8 @@ mod tests {
                 )
                 .await
                 .unwrap()
-                .is_empty()
+                .len(),
+            0
         );
 
         repo.accountability_grant()

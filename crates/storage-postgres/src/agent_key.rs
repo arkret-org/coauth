@@ -435,12 +435,13 @@ mod tests {
             Some("event_hash_collision")
         );
         assert!(quarantined.quarantined_at.is_some());
-        assert!(
+        assert_eq!(
             repo.agent_key_authorization()
                 .list_active_for_agent(&format!("did:web:{label}-agent.example"))
                 .await
                 .unwrap()
-                .is_empty()
+                .len(),
+            0
         );
         assert!(
             !repo

@@ -256,11 +256,11 @@ mod tests {
         assert_eq!(repo.app_session().count(finished).await.unwrap(), 0);
 
         let full_list = repo.app_session().list(all, pagination).await.unwrap();
-        assert!(full_list.edges.is_empty());
+        assert_eq!(full_list.edges.len(), 0);
         let active_list = repo.app_session().list(active, pagination).await.unwrap();
-        assert!(active_list.edges.is_empty());
+        assert_eq!(active_list.edges.len(), 0);
         let finished_list = repo.app_session().list(finished, pagination).await.unwrap();
-        assert!(finished_list.edges.is_empty());
+        assert_eq!(finished_list.edges.len(), 0);
 
         // Start an OAuth session
         let client = repo
@@ -325,7 +325,7 @@ mod tests {
         );
 
         let finished_list = repo.app_session().list(finished, pagination).await.unwrap();
-        assert!(finished_list.edges.is_empty());
+        assert_eq!(finished_list.edges.len(), 0);
 
         // Finish the session
         let oauth_session = repo
@@ -346,7 +346,7 @@ mod tests {
         );
 
         let active_list = repo.app_session().list(active, pagination).await.unwrap();
-        assert!(active_list.edges.is_empty());
+        assert_eq!(active_list.edges.len(), 0);
 
         let finished_list = repo.app_session().list(finished, pagination).await.unwrap();
         assert_eq!(finished_list.edges.len(), 1);
@@ -376,6 +376,6 @@ mod tests {
         let filter = AppSessionFilter::new().for_user(&user2);
         assert_eq!(repo.app_session().count(filter).await.unwrap(), 0);
         let list = repo.app_session().list(filter, pagination).await.unwrap();
-        assert!(list.edges.is_empty());
+        assert_eq!(list.edges.len(), 0);
     }
 }

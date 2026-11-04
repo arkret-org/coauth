@@ -889,7 +889,7 @@ mod tests {
                 ] {
                     assert!(header("Signature-Input").contains(component));
                 }
-                assert!(!header("Signature").is_empty());
+                assert_ne!(header("Signature"), "");
             }
         }
     }

@@ -439,7 +439,7 @@ mod tests {
             )
             .await
             .expect("DPoP proof verifies");
-        assert!(!result.jkt.is_empty());
+        assert_ne!(result.jkt, "");
     }
 
     #[tokio::test]

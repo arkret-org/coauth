@@ -140,7 +140,7 @@ async fn admin_invite_review_enqueue_list_approve_reject_repeat_and_audit() {
             "repeat resolution must not mint again"
         );
     }
-    assert!(pending(&state, &token).await.is_empty());
+    assert_eq!(pending(&state, &token).await.len(), 0);
     let mut connection = pool.get().await.unwrap();
     let audits = diesel::sql_query(
         "SELECT operation, details FROM admin_operation_logs \

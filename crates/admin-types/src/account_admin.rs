@@ -211,7 +211,7 @@ mod tests {
     fn admin_account_attributes_default_is_active() {
         let a = AdminAccountAttributes::default();
         assert_eq!(a.status, AdminAccountStatus::Active);
-        assert!(a.principal_ids.is_empty());
+        assert_eq!(a.principal_ids.len(), 0);
     }
 
     #[test]

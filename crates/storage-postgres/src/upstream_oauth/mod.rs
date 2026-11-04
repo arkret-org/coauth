@@ -42,7 +42,7 @@ mod tests {
 
         // The provider list should be empty at the start
         let all_providers = repo.upstream_oauth_provider().all_enabled().await.unwrap();
-        assert!(all_providers.is_empty());
+        assert_eq!(all_providers.len(), 0);
 
         // Let's add a provider
         let provider = repo
@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(&edge_ids, &ids[6..8]);
 
         // There should not be any disabled providers
-        assert!(
+        assert_eq!(
             repo.upstream_oauth_provider()
                 .list(
                     UpstreamOAuthProviderFilter::new().disabled_only(),
@@ -461,7 +461,8 @@ mod tests {
                 .await
                 .unwrap()
                 .edges
-                .is_empty()
+                .len(),
+            0
         );
     }
 

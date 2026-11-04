@@ -681,7 +681,7 @@ mod tests {
             outcome.viewer.as_ref().expect("viewer").handle.as_str(),
             "alice"
         );
-        assert!(outcome.warnings.is_empty());
+        assert_eq!(outcome.warnings, Vec::<String>::new());
         let response = serde_json::to_value(LoginOutcome::success(outcome.viewer)).unwrap();
         assert!(response.get("session_grant").is_none());
         assert!(response.get("warnings").is_none());

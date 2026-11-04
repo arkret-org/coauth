@@ -191,7 +191,7 @@ fn workflow_snapshot_tracks_completed_registration() {
 
     assert_eq!(snapshot.state, RegistrationWorkflowState::Completed);
     assert_eq!(snapshot.next_step, None);
-    assert!(snapshot.deadlines.is_empty());
+    assert_eq!(snapshot.deadlines.len(), 0);
     assert!(snapshot.completed_steps.contains(&"finish"));
     assert_eq!(
         snapshot.events.last().map(|event| event.kind),

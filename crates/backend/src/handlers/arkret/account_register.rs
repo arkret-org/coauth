@@ -968,7 +968,7 @@ mod tests {
 
         let parts = receipt.proof.jws.split('.').collect::<Vec<_>>();
         assert_eq!(parts.len(), 3);
-        assert!(parts[1].is_empty());
+        assert_eq!(parts[1].len(), 0);
         assert_eq!(
             arkret_canonical::base64url_decode(parts[0]).unwrap(),
             br#"{"alg":"Ed25519"}"#

@@ -109,7 +109,7 @@ mod tests {
         assert_eq!(rsvp.action, CapabilityActionId::RsvpSet);
         assert_eq!(rsvp.category, "discussion");
         assert_eq!(rsvp.risk_tier, CapabilityRiskTier::Low);
-        assert!(rsvp.required_constraints.is_empty());
+        assert_eq!(rsvp.required_constraints.len(), 0);
         assert_eq!(rsvp.target_event_kinds, vec!["ak.rsvp.set"]);
         assert_eq!(
             rsvp.profile.as_deref(),
