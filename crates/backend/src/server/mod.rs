@@ -17,6 +17,9 @@ use crate::listener::unix_or_tcp::UnixOrTcpListener;
 mod middleware;
 pub(crate) mod routers;
 
+#[cfg(all(test, feature = "cedar"))]
+mod app_state_tests;
+
 pub(crate) use middleware::{
     ARKRET_REQUEST_ID_HEADER, arkret_operation_selector_middleware, arkret_request_id_middleware,
 };
@@ -54,18 +57,8 @@ pub fn build_router(
     let request_timeout = (state.request_timeout_seconds > 0)
         .then(|| Duration::from_secs(state.request_timeout_seconds));
 
-    // Create the base router with the AppState in depot
+    // Build the resource routes before wrapping them in an optional prefix.
     let mut router = Router::new();
-
-    // Add state injection middleware at the top level
-    router = router
-        .hoop(InjectAppState(state.clone()))
-        .hoop(StationTrustGate(state))
-        .hoop(salvo::http::request::SecureMaxSize::new(max_body_bytes));
-
-    if let Some(duration) = request_timeout {
-        router = router.hoop(RequestTimeout { duration });
-    }
 
     // Build sub-routers for each resource
     use crate::handlers::health;
@@ -129,7 +122,18 @@ pub fn build_router(
         router = prefixed_router.push(router);
     }
 
-    // Add middleware layers
+    // Attach all shared middleware to the final outer router. Salvo runs parent
+    // hoops before child hoops, so state insertion must stay ahead of expansion
+    // even when a prefix introduces another router level.
+    router = router
+        .hoop(InjectAppState(state.clone()))
+        .hoop(StationTrustGate(state))
+        .hoop(salvo::http::request::SecureMaxSize::new(max_body_bytes));
+
+    if let Some(duration) = request_timeout {
+        router = router.hoop(RequestTimeout { duration });
+    }
+
     router
         .hoop(arkret_request_id_middleware)
         .hoop(inject_app_state)
