@@ -1,2 +1,25 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>coauth</title><link rel="stylesheet" href="/assets/sapid.css"><link rel="stylesheet" href="/assets/main.css"></head><body><div id="app"></div><noscript>This account service requires JavaScript.</noscript><script type="module" src="/assets/bootstrap.js"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>coauth</title>
+    <link rel="stylesheet" href="/assets/startup.css">
+    <link rel="stylesheet" href="/assets/sapid.css">
+    <link rel="stylesheet" href="/assets/main.css">
+  </head>
+  <body>
+    <div id="arkret-startup" role="status" aria-live="polite" aria-busy="true">
+      <img class="startup-logo" src="/assets/arkret-logo.svg" width="88" height="88" alt="Arkret">
+      <div class="startup-brand" aria-hidden="true">ARKRET</div>
+      <h1>Coauth</h1>
+      <p id="arkret-startup-message">Loading Coauth…</p>
+      <span class="startup-spinner" aria-hidden="true"></span>
+      <button id="arkret-startup-retry" type="button" hidden>Reload page</button>
+      <noscript><p>Enable JavaScript and WebAssembly to open Coauth.</p></noscript>
+    </div>
+    <div id="app"></div>
+    <script type="module" src="/assets/bootstrap.js"></script>
+  </body>
+</html>

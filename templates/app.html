@@ -6,7 +6,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <title>{{ _("app.name") }}</title>
+    <link rel="stylesheet" href="{{ app_config.assets_root }}/startup.css" />
     <link rel="stylesheet" href="{{ app_config.assets_root }}/sapid.css" />
     <link rel="stylesheet" href="{{ app_config.assets_root }}/main.css" />
     <link rel="icon" href='data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"%3E%3Crect width="64" height="64" rx="14" fill="%231f7a4f"/%3E%3Ctext x="32" y="41" text-anchor="middle" font-size="34" font-family="Arial,sans-serif" font-weight="700" fill="white"%3EC%3C/text%3E%3C/svg%3E' />
@@ -14,6 +16,15 @@
   </head>
 
   <body>
+    <div id="arkret-startup" role="status" aria-live="polite" aria-busy="true">
+      <img class="startup-logo" src="{{ app_config.assets_root }}/arkret-logo.svg" width="88" height="88" alt="Arkret">
+      <div class="startup-brand" aria-hidden="true">ARKRET</div>
+      <h1>Coauth</h1>
+      <p id="arkret-startup-message">Loading Coauth…</p>
+      <span class="startup-spinner" aria-hidden="true"></span>
+      <button id="arkret-startup-retry" type="button" hidden>Reload page</button>
+      <noscript><p>Enable JavaScript and WebAssembly to open Coauth.</p></noscript>
+    </div>
     <div id="main"></div>
     <script type="module" async src="{{ app_config.script_src }}"></script>
   </body>
