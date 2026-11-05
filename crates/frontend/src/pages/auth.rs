@@ -127,7 +127,7 @@ fn login_form(scope: &Scope, providers: ProvidersOutcome, query: String) -> View
                     query.trim_start_matches('?')
                 )
             };
-            link(
+            link_to_url(
                 crate::translations::t_with(
                     "coauth-login-continue-with-provider",
                     &[("provider", &name)],
@@ -391,7 +391,7 @@ pub fn password_recovery(scope: &Scope) -> View {
                             )
                             .await?;
                             if let Some(url) = response.progress_url {
-                                go(&url)?;
+                                go_to_url(&url)?;
                                 Ok(None)
                             } else {
                                 Ok(Some("Recovery email sent. Check your inbox.".into()))

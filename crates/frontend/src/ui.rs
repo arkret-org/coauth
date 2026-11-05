@@ -33,6 +33,10 @@ pub fn stack(children: Vec<View>) -> View {
     block("flex flex-col gap-6", children)
 }
 pub fn link(label: impl Into<String>, target: impl Into<String>, class: &str) -> View {
+    let target = crate::config::get_config().app_url(&target.into());
+    link_to_url(label, target, class)
+}
+pub fn link_to_url(label: impl Into<String>, target: impl Into<String>, class: &str) -> View {
     Box::new(
         sapid::anchor()
             .unstyled()
@@ -655,6 +659,11 @@ pub fn get_query(name: &str) -> Option<String> {
     }
 }
 pub fn go(url: &str) -> std::result::Result<(), String> {
+    go_to_url(&crate::config::get_config().app_url(url))
+}
+
+/// Follow a server-authored URL without changing the registered OAuth callback.
+pub fn go_to_url(url: &str) -> std::result::Result<(), String> {
     #[cfg(target_arch = "wasm32")]
     {
         web_sys::window()

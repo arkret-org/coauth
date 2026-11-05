@@ -15,6 +15,7 @@ use super::wrappers::{SampleIdentifier, TemplateContext, sample_list};
 #[derive(Serialize)]
 pub struct AppConfig {
     root: String,
+    base_path: String,
     api_endpoint: String,
     script_src: String,
     assets_root: String,
@@ -36,6 +37,7 @@ impl AppContext {
         Self {
             app_config: AppConfig {
                 root,
+                base_path: prefix.to_owned(),
                 api_endpoint: format!("{prefix}/_coauth"),
                 script_src: format!("{prefix}{script_src}"),
                 assets_root: format!("{prefix}/assets"),
@@ -52,22 +54,6 @@ impl TemplateContext for AppContext {
     ) -> BTreeMap<SampleIdentifier, Self> {
         let builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
         sample_list(vec![Self::new(&builder, "/assets/bootstrap.js")])
-    }
-}
-
-#[cfg(test)]
-mod app_tests {
-    use super::*;
-
-    #[test]
-    fn frontend_bundle_urls_follow_the_deployment_prefix() {
-        let builder = UrlBuilder::new("https://example.com/auth/".parse().unwrap(), None, None);
-        let context =
-            serde_json::to_value(AppContext::new(&builder, "/assets/bootstrap.js")).unwrap();
-        let config = &context["app_config"];
-        assert_eq!(config["api_endpoint"], "/auth/_coauth");
-        assert_eq!(config["assets_root"], "/auth/assets");
-        assert_eq!(config["script_src"], "/auth/assets/bootstrap.js");
     }
 }
 
@@ -165,5 +151,22 @@ impl TemplateContext for ErrorContext {
             Self::new().with_code("another_error"),
             Self::new(),
         ])
+    }
+}
+
+#[cfg(test)]
+mod app_tests {
+    use super::*;
+
+    #[test]
+    fn frontend_bundle_urls_follow_the_deployment_prefix() {
+        let builder = UrlBuilder::new("https://example.com/auth/".parse().unwrap(), None, None);
+        let context =
+            serde_json::to_value(AppContext::new(&builder, "/assets/bootstrap.js")).unwrap();
+        let config = &context["app_config"];
+        assert_eq!(config["base_path"], "/auth");
+        assert_eq!(config["api_endpoint"], "/auth/_coauth");
+        assert_eq!(config["assets_root"], "/auth/assets");
+        assert_eq!(config["script_src"], "/auth/assets/bootstrap.js");
     }
 }

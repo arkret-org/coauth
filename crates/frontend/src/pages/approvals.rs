@@ -90,9 +90,11 @@ async fn authorization_decision(
     ) {
         return Err("Unsupported callback mode".into());
     }
-    go(&response
-        .redirect_url
-        .ok_or("No redirect URL in response.")?)?;
+    go_to_url(
+        &response
+            .redirect_url
+            .ok_or("No redirect URL in response.")?,
+    )?;
     Ok(None)
 }
 
@@ -429,7 +431,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
     });
     ui::resource_body(source, move |scope, response| match response {
         UpstreamLinkState::Redirect { redirect_url } => {
-            let _ = go(&redirect_url);
+            let _ = go_to_url(&redirect_url);
             copy("loading-screen", "Redirecting…")
         }
         UpstreamLinkState::SuggestLink {
@@ -572,7 +574,7 @@ async fn upstream_action(id: &str, body: serde_json::Value) -> Outcome {
     .await?;
     match response {
         UpstreamLinkActionOutcome::Success { redirect_url } => {
-            go(&redirect_url)?;
+            go_to_url(&redirect_url)?;
             Ok(None)
         }
         UpstreamLinkActionOutcome::Error {

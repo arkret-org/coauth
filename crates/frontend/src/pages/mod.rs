@@ -114,6 +114,7 @@ pub fn app(scope: &Scope) -> View {
             "/login".into()
         }
     };
+    let path = crate::config::get_config().route_path(&path).to_owned();
     let account = matches!(
         path.as_str(),
         "/" | "/settings"
@@ -151,13 +152,13 @@ pub fn layout(scope: &Scope, body: View, full: bool) -> View {
                     };
                     let mut links = vec![];
                     if let Some(uri) = site.policy_uri {
-                        links.push(link("Privacy policy", uri, ""));
+                        links.push(link_to_url("Privacy policy", uri, ""));
                     }
                     if let Some(uri) = site.tos_uri {
                         if !links.is_empty() {
                             links.push(copy("dot-separator", "•"));
                         }
-                        links.push(link("Terms and conditions", uri, ""));
+                        links.push(link_to_url("Terms and conditions", uri, ""));
                     }
                     let mut body = vec![block("legal-links", links)];
                     if let Some(imprint) = site.imprint {

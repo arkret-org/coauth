@@ -76,6 +76,8 @@ pub(crate) fn capture_entry_request() {
         let Ok(pathname) = window.location().pathname() else {
             return;
         };
+        let config = crate::config::get_config();
+        let pathname = config.route_path(&pathname);
         if pathname != "/login" && pathname != "/register" {
             return;
         }
