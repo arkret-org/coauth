@@ -79,7 +79,7 @@ async fn cold_start_state() -> (AppState, CancellationToken, TaskTracker) {
         encrypter: Encrypter::new(&[0x42; 32]),
         url_builder,
         station_admin,
-        connector_registry: Default::default(),
+        connector_registry: coauth_principal::ConnectorRegistry::default(),
         policy_factory: policy_factory(&site_config.server_name, serde_json::json!({}))
             .await
             .unwrap(),
