@@ -855,67 +855,9 @@ html[data-theme="dark"] .btn-secondary:hover:not(:disabled) {
     box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
 }
 
-.password-input-wrapper {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.password-input-wrapper .form-input {
-    padding-right: 48px;
-}
-
-.password-toggle {
-    position: absolute;
-    right: var(--space-2x);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    height: 34px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--color-text-tertiary);
-    cursor: pointer;
-    transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-.password-toggle:hover {
-    color: var(--color-text-primary);
-    background-color: var(--color-bg-secondary);
-}
-
-.password-toggle:focus-visible {
-    outline: 3px solid var(--color-info);
-    outline-offset: 2px;
-    color: var(--color-primary);
-    box-shadow: 0 0 0 3px var(--color-primary-glow);
-}
-
-.password-toggle-icon {
-    width: 20px;
-    height: 20px;
-    pointer-events: none;
-}
-
-/* Password strength indicator. The fill width and colors are data-driven and
-   stay inline; the static box model lives here. */
+/* Sapid owns progress geometry; strength colors follow the application theme. */
 .password-strength {
     margin-top: 6px;
-}
-
-.password-strength-track {
-    height: 4px;
-    border-radius: 2px;
-    background-color: var(--color-bg-secondary);
-    overflow: hidden;
-}
-
-.password-strength-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.3s ease, background-color 0.3s ease;
 }
 
 .password-strength-label {
@@ -1829,9 +1771,6 @@ body:has(.dialog-overlay) .display-preferences {
 .sapid-field-label { display: block; font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text-primary); }
 .sapid-field-control { width: 100%; min-width: 0; }
 .sapid-text-field.form-input, .sapid-native-select.form-input { width: 100%; }
-.sapid-password-group { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
-.sapid-password-group .sapid-text-field { flex: 1; min-width: 0; }
-.sapid-password-toggle { border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-secondary); color: var(--color-text-secondary); font: inherit; font-size: 12px; padding: 0 8px; cursor: pointer; }
 .sapid-form { gap: 0; }
 .sapid-checkbox-label { font-size: var(--font-size-md); }
 .sapid-checkbox { display: flex; gap: 8px; align-items: center; }
@@ -1887,17 +1826,16 @@ body:has(.dialog-overlay) .display-preferences {
 .account-settings > .sapid-dialog-trigger { width: 100%; }
 .profile-avatar-controls { display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .profile-avatar-controls > .account-region { display: flex; justify-content: center; width: 100%; }
-.sapid-password-group { position: relative; }
-.sapid-password-group .sapid-text-field { padding-inline-end: 44px; width: 100%; }
-.sapid-password-group .sapid-password-toggle { position: absolute; right: 5px; top: 5px; bottom: 5px; width: 32px; padding: 0; border: 0; background: transparent; font-size: 0; }
-.sapid-password-toggle::before { content: ""; position: absolute; width: 16px; height: 10px; left: 8px; top: calc(50% - 5px); border: 1.5px solid var(--color-text-secondary); border-radius: 65% 35%; transform: rotate(35deg); }
-.sapid-password-toggle::after { content: ""; position: absolute; width: 5px; height: 5px; left: 13px; top: calc(50% - 2px); border-radius: 50%; background: var(--color-text-secondary); }
 form[id*="-password-change-"] .sapid-form-controls > .sapid-field:nth-child(2) { padding-bottom: 20px; border-bottom: 1px solid var(--color-border); }
 @media(max-width:480px) { .theme-toggle { font-size: 0; gap: 0; } .theme-toggle::before { content: ""; width: 12px; height: 12px; border-radius: 50%; background: linear-gradient(135deg,var(--color-primary),var(--color-secondary)); box-shadow: 0 0 0 4px var(--color-bg-tint); } }
 @media(max-width:640px) { .sapid-dialog.account-dialog[data-gly-layer=center] { top: auto; bottom: 0; left: 0; right: 0; transform: none; width: 100%; max-width: none; max-height: 85dvh; border-radius: var(--radius-xl) var(--radius-xl) 0 0; } }
 .account-settings > .account-dialog > .sapid-dialog-trigger { width: 100%; }
-.password-strength-progress { width: 100%; }
+.password-strength-progress { width: 100%; border-radius: 4px; overflow: hidden; background: var(--color-bg-secondary); }
 .password-strength-progress svg { display: block; width: 100%; height: 8px; }
+.password-strength-progress .sapid-progress-activity path { fill: var(--password-strength-color, var(--color-primary)); }
+.password-score-0, .password-score-1 { --password-strength-color: var(--color-destructive); }
+.password-score-2 { --password-strength-color: var(--color-warning, #d97706); }
+.password-score-3, .password-score-4 { --password-strength-color: var(--color-success, #16a34a); }
 .sapid-field-invalid .form-input { border-color: var(--color-destructive); }
 .sapid-field-error { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .sapid-dialog-panel .flex { min-width: 0; }
@@ -1916,11 +1854,19 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   .user-email > .sapid-button { margin-inline-start: auto; }
 }
 
-/* Git Sapid exposes labels but no TextField placeholder API. */
-.form-input-hint-wrap { position: relative; min-width: 0; width: 100%; }
-.form-input-hint { position: absolute; left: calc(var(--space-4x) + 1.5px); right: 48px; top: 50%; transform: translateY(-50%); color: var(--color-text-tertiary); font-size: var(--font-size-md); line-height: 1.5; pointer-events: none; white-space: nowrap; overflow: hidden; }
-.form-input-hint.is-hidden { display: none; }
 
 .layout-container > .layout-footer-region { margin-top: auto; }
 .form-field > .sapid-field-description { order: 3; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
 .sapid-dialog.account-dialog > .sapid-layer-close { align-self: center; font-weight: 600; }
+
+/* Sapid owns visibility state, the eye graphic, and input section geometry. */
+.sapid-text-field-editor { width: 100%; min-width: 0; }
+.sapid-password-visibility { display: flex; align-items: center; justify-content: center; }
+.sapid-password-toggle { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+.sapid-password-toggle:hover { background: var(--color-bg-secondary); color: var(--color-text-primary); }
+.sapid-password-toggle:focus-visible { outline: 2px solid var(--color-info); outline-offset: 2px; }
+.sapid-password-toggle svg { display: block; width: 20px; height: 20px; }
+.sapid-password-toggle svg path { stroke: currentColor; }
+.sapid-alert { display: flex; align-items: flex-start; gap: 10px; }
+.sapid-alert-icon { flex-shrink: 0; }
+.sapid-alert-icon svg path { stroke: currentColor; }

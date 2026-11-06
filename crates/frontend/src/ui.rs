@@ -55,17 +55,19 @@ pub fn button(label: impl Into<String>, class: &str, action: impl FnMut() + 'sta
     )
 }
 pub fn badge(label: impl Into<String>, ok: bool) -> View {
-    copy(
-        if ok {
-            "badge badge-success"
-        } else {
-            "badge badge-warning"
-        },
-        label,
+    Box::new(
+        sapid::badge()
+            .unstyled()
+            .class(if ok {
+                "badge badge-success"
+            } else {
+                "badge badge-warning"
+            })
+            .content(label.into()),
     )
 }
 pub fn separator() -> View {
-    block("separator section", vec![])
+    Box::new(sapid::separator().unstyled().class("separator section"))
 }
 pub fn disclosure(scope: &Scope, key: &str, label: &str, content: View, open: bool) -> View {
     let mut content = Some(content);
@@ -145,15 +147,27 @@ pub fn empty(title: &str, description: &str) -> View {
     )
 }
 pub fn alert(message: impl Into<String>, success: bool) -> View {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let key = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     Box::new(
-        view()
-            .role(if success { Role::Status } else { Role::Alert })
+        sapid::alert(format!("account-alert-{key}"))
+            .unstyled()
+            .severity(if success {
+                sapid::AlertSeverity::Success
+            } else {
+                sapid::AlertSeverity::Danger
+            })
+            .announcement(if success {
+                sapid::Announcement::Polite
+            } else {
+                sapid::Announcement::Assertive
+            })
             .class(if success {
                 "alert alert-success"
             } else {
                 "alert alert-critical"
             })
-            .fill(plain(message)),
+            .content(message.into()),
     )
 }
 pub fn reactive<T: Clone + 'static>(
@@ -375,15 +389,6 @@ pub fn field(
     let value = item.value;
     let enabled = enabled.into();
     let select_key = format!("select-{}-{key}", scope.id().slot());
-    let hint_empty = item.placeholder.is_empty();
-    let hint_class = scope.bond(move || {
-        if hint_empty || !value.get().is_empty() {
-            "form-input-hint is-hidden"
-        } else {
-            "form-input-hint"
-        }
-        .to_owned()
-    });
     Box::new(
         sapid::field(format!("{}-{key}", scope.id().slot()))
             .unstyled()
@@ -442,6 +447,7 @@ pub fn field(
                             .class("form-input")
                             .name(item.label.clone())
                             .field(control)
+                            .placeholder(item.placeholder.clone())
                             .value(value)
                             .enabled(enabled.clone())
                             .on_value_change(move |new| value.revise(|old| *old = new)),
@@ -454,20 +460,13 @@ pub fn field(
                             .name(item.label.clone())
                             .purpose(item.purpose)
                             .field(control)
+                            .placeholder(item.placeholder.clone())
                             .value(value)
                             .enabled(enabled.clone())
                             .on_value_change(move |new| value.revise(|old| *old = new)),
                     )
                 };
-                Box::new(
-                    view().class("form-input-hint-wrap").fill((
-                        input,
-                        text()
-                            .kind(TextKind::Inline)
-                            .class(hint_class)
-                            .content(item.placeholder.clone()),
-                    )),
-                )
+                input
             }),
     )
 }
