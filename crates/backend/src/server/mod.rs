@@ -117,9 +117,9 @@ pub fn build_router(
     }
 
     // Apply prefix if specified
-    let prefix = prefix.unwrap_or_default().trim_end_matches('/').to_owned();
-    if !prefix.is_empty() {
-        let prefixed_router = Router::with_path(format!("{prefix}/"));
+    let prefix = DeploymentPrefix::new(prefix);
+    if !prefix.0.is_empty() {
+        let prefixed_router = Router::with_path(format!("{}/", prefix.0));
         router = prefixed_router.push(router);
     }
 
@@ -127,7 +127,7 @@ pub fn build_router(
     // hoops before child hoops, so state insertion must stay ahead of expansion
     // even when a prefix introduces another router level.
     router = router
-        .hoop(DeploymentPrefix(prefix))
+        .hoop(prefix)
         .hoop(InjectAppState(state.clone()))
         .hoop(StationTrustGate(state))
         .hoop(salvo::http::request::SecureMaxSize::new(max_body_bytes));

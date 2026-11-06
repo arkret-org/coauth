@@ -113,9 +113,16 @@ async fn bootstrap_routes_receive_app_state_with_and_without_prefix() {
         &state.arkret_config
     ));
 
-    for prefix in [None, Some(""), Some("/"), Some("/auth"), Some("/auth/")] {
-        let path_prefix = prefix.unwrap_or_default().trim_end_matches('/');
-        let base = format!("https://example.com{path_prefix}/");
+    for prefix in [
+        None,
+        Some(""),
+        Some("/"),
+        Some("/auth"),
+        Some("/auth/"),
+        Some("auth"),
+    ] {
+        let path_prefix = super::middleware::DeploymentPrefix::new(prefix);
+        let base = format!("https://example.com{}/", path_prefix.0);
         let mut state = state.clone();
         state.url_builder = UrlBuilder::new(base.parse().unwrap(), None, None);
         let service = Service::new(build_router(
@@ -175,8 +182,10 @@ async fn mounted_protocol_routes_reach_authentication_and_keep_route_errors() {
         Some("/auth"),
         Some("/auth/"),
         Some("/tenant/auth"),
+        Some("auth"),
+        Some("tenant/auth/"),
     ] {
-        let mount = prefix.unwrap_or_default().trim_end_matches('/');
+        let mount = super::middleware::DeploymentPrefix::new(prefix).0;
         let base = format!("https://example.com{mount}");
         let service = Service::new(build_router(
             state.clone(),

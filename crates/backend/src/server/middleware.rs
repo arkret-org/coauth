@@ -23,6 +23,17 @@ pub(crate) const ARKRET_REQUEST_ID_HEADER: &str = "x-arkret-request-id";
 #[derive(Clone)]
 pub(super) struct DeploymentPrefix(pub(super) String);
 
+impl DeploymentPrefix {
+    pub(super) fn new(prefix: Option<&str>) -> Self {
+        let prefix = prefix.unwrap_or_default().trim_matches('/');
+        Self(if prefix.is_empty() {
+            String::new()
+        } else {
+            format!("/{prefix}")
+        })
+    }
+}
+
 #[salvo::async_trait]
 impl Handler for DeploymentPrefix {
     async fn handle(
