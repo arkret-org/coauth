@@ -158,8 +158,6 @@ fn account_api_subrouters() -> (Router, Router) {
 
     let arkret_router = Router::with_path("/_arkret")
         .hoop(public_oidc_browser_cors())
-        .hoop(arkret_route_boundary)
-        .hoop(crate::server::arkret_operation_selector_middleware)
         // Account Authority is a Station capability. This deployment-private
         // process does not publish a role-local Describe or service-resolution
         // endpoint; the owning Station advertises the Account Authority URL.
@@ -273,8 +271,10 @@ fn account_api_subrouters() -> (Router, Router) {
                 .options(oidc_preflight_handler)
                 .post(arkret::request_account_erasure),
         )
-        .push(Router::with_path("peer/account-status/resolve").post(arkret::resolve_account_status))
-        .push(Router::with_path("{**rest}").goal(arkret_not_found));
+        .push(
+            Router::with_path("peer/account-status/resolve").post(arkret::resolve_account_status),
+        );
+    let arkret_router = finish_arkret_routes(arkret_router);
 
     let coauth_router = Router::with_path("/_coauth")
         .hoop(public_oidc_browser_cors())
@@ -509,34 +509,61 @@ fn account_api_subrouters() -> (Router, Router) {
 }
 
 #[handler]
-async fn arkret_not_found(req: &Request, res: &mut Response) {
-    render_arkret_route_miss(req, res);
+async fn arkret_not_found(res: &mut Response) {
+    render_arkret_route_miss(res, None);
 }
 
-// Classify the deployed route before the operation selector. An unknown path
-// or wrong method has no operation to select and must not become a selector
-// version error or reach an account-authority handler.
-#[handler]
-async fn arkret_route_boundary(
-    req: &mut Request,
-    depot: &mut Depot,
-    res: &mut Response,
-    ctrl: &mut FlowCtrl,
-) {
-    let allowed = arkret_allowed_methods(req.uri().path());
-    if allowed.is_some_and(|methods| {
-        methods
-            .split(',')
-            .any(|method| method.trim() == req.method().as_str())
-    }) {
-        ctrl.call_next(req, depot, res).await;
-    } else {
-        render_arkret_route_miss(req, res);
+/// Derive method failures from the same routes that dispatch the handlers.
+/// Only a matched method runs the operation selector; unknown paths and wrong
+/// methods keep their protocol errors without a second path/method registry.
+fn finish_arkret_routes(mut router: Router) -> Router {
+    use std::sync::Arc;
+
+    use salvo::routing::FilterInfo;
+
+    for endpoint in router.routers_mut() {
+        let mut methods = Vec::new();
+        for method_route in endpoint.routers_mut() {
+            for filter in method_route.filters() {
+                if let FilterInfo::Method(method) = filter.info() {
+                    methods.push(method);
+                }
+            }
+            method_route.hoops_mut().push(Arc::new(
+                crate::server::arkret_operation_selector_middleware,
+            ));
+        }
+        methods.sort_unstable_by(|a, b| a.as_str().cmp(b.as_str()));
+        methods.dedup();
+        let allow = methods
+            .iter()
+            .map(http::Method::as_str)
+            .collect::<Vec<_>>()
+            .join(", ");
+        endpoint.goal = Some(Arc::new(ArkretMethodNotAllowed { allow }));
+    }
+    router.push(Router::with_path("{**rest}").goal(arkret_not_found))
+}
+
+struct ArkretMethodNotAllowed {
+    allow: String,
+}
+
+#[salvo::async_trait]
+impl Handler for ArkretMethodNotAllowed {
+    async fn handle(
+        &self,
+        _req: &mut Request,
+        _depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        render_arkret_route_miss(res, Some(&self.allow));
         ctrl.skip_rest();
     }
 }
 
-fn render_arkret_route_miss(req: &Request, res: &mut Response) {
+fn render_arkret_route_miss(res: &mut Response, allowed: Option<&str>) {
     let request_id = res
         .headers()
         .get(crate::server::ARKRET_REQUEST_ID_HEADER)
@@ -545,7 +572,7 @@ fn render_arkret_route_miss(req: &Request, res: &mut Response) {
             || format!("ak:request:{}", uuid::Uuid::now_v7()),
             ToOwned::to_owned,
         );
-    if let Some(allowed) = arkret_allowed_methods(req.uri().path()) {
+    if let Some(allowed) = allowed {
         if let Ok(value) = http::HeaderValue::from_str(allowed) {
             res.headers_mut().insert(http::header::ALLOW, value);
         }
@@ -568,31 +595,6 @@ fn render_arkret_route_miss(req: &Request, res: &mut Response) {
             )
             .with_instance(&request_id),
         );
-    }
-}
-
-fn arkret_allowed_methods(path: &str) -> Option<&'static str> {
-    match path {
-        "/_arkret/root/identity/document" => Some("GET"),
-        "/_arkret/root/identity/resolve" | "/_arkret/peer/account-status/resolve" => Some("POST"),
-        "/_arkret/gate/account/onboarding" => Some("GET, OPTIONS"),
-        "/_arkret/gate/account/authentication-handoffs"
-        | "/_arkret/open/device-pairing/requests"
-        | "/_arkret/gate/account/device-pairing/finalizations"
-        | "/_arkret/gate/account/device-pair"
-        | "/_arkret/gate/account/device-pairing/code-claims"
-        | "/_arkret/gate/account/did-binding-challenges"
-        | "/_arkret/gate/account/identity-binding-challenges"
-        | "/_arkret/gate/account/identity-abandonments"
-        | "/_arkret/gate/account/register"
-        | "/_arkret/gate/account/logout"
-        | "/_arkret/gate/account/session-grants/refresh"
-        | "/_arkret/gate/account/session-grants/revoke"
-        | "/_arkret/gate/account/session-grants"
-        | "/_arkret/gate/account/agent-key-pair"
-        | "/_arkret/gate/account/erasure-requests"
-        | "/_arkret/gate/account/recovery-session-grants/issue" => Some("POST, OPTIONS"),
-        _ => None,
     }
 }
 
@@ -632,6 +634,39 @@ mod private_tcb_surface_tests {
                 "missing private adapter: {private}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod method_boundary_tests {
+    use salvo::test::{ResponseExt as _, TestClient};
+
+    use super::*;
+
+    #[handler]
+    async fn unused_goal() -> StatusCode {
+        StatusCode::NO_CONTENT
+    }
+
+    #[tokio::test]
+    async fn allowed_methods_follow_actual_routes_without_a_path_registry() {
+        let service = Service::new(finish_arkret_routes(
+            Router::with_path("/_arkret").push(
+                Router::with_path("new-capability/{id}")
+                    .delete(unused_goal)
+                    .get(unused_goal),
+            ),
+        ));
+        let mut response = TestClient::post("https://example.com/_arkret/new-capability/example")
+            .send(&service)
+            .await;
+        assert_eq!(response.status_code, Some(StatusCode::METHOD_NOT_ALLOWED));
+        assert_eq!(response.headers()[http::header::ALLOW], "DELETE, GET");
+        let problem = response.take_json::<serde_json::Value>().await.unwrap();
+        assert_eq!(
+            problem["type"],
+            "https://arkret.org/problems/method_not_allowed"
+        );
     }
 }
 

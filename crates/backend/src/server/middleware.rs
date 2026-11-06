@@ -19,6 +19,34 @@ use crate::services::station_trust;
 
 pub(crate) const ARKRET_REQUEST_ID_HEADER: &str = "x-arkret-request-id";
 
+/// The listener mount is routing context, never a rewrite of the authenticated URL.
+#[derive(Clone)]
+pub(super) struct DeploymentPrefix(pub(super) String);
+
+#[salvo::async_trait]
+impl Handler for DeploymentPrefix {
+    async fn handle(
+        &self,
+        req: &mut Request,
+        depot: &mut Depot,
+        res: &mut Response,
+        ctrl: &mut FlowCtrl,
+    ) {
+        depot.insert("deployment_prefix", self.clone());
+        ctrl.call_next(req, depot, res).await;
+    }
+}
+
+fn deployment_relative_path<'a>(req: &'a Request, depot: &Depot) -> &'a str {
+    let path = req.uri().path();
+    depot
+        .get::<DeploymentPrefix>("deployment_prefix")
+        .ok()
+        .and_then(|prefix| path.strip_prefix(&prefix.0))
+        .filter(|relative| relative.starts_with('/'))
+        .unwrap_or(path)
+}
+
 fn arkret_request_id(req: &Request) -> String {
     req.headers()
         .get(ARKRET_REQUEST_ID_HEADER)
@@ -81,7 +109,10 @@ pub(crate) async fn arkret_operation_selector_middleware(
                 .ok()
                 .and_then(arkret_wire::ServiceOperationId::from_wire);
             if selected.is_some_and(|operation| {
-                operation.matches_http_request(req.method().as_str(), req.uri().path())
+                operation.matches_http_request(
+                    req.method().as_str(),
+                    deployment_relative_path(req, depot),
+                )
             }) {
                 ctrl.call_next(req, depot, res).await;
                 if res.status_code.unwrap_or(StatusCode::OK).is_success() {
@@ -511,8 +542,7 @@ fn is_station_trust_bootstrap_path(path: &str) -> bool {
         "/livez",
         "/readyz",
     ]
-    .iter()
-    .any(|allowed| path == *allowed || path.ends_with(allowed))
+    .contains(&path)
 }
 
 #[salvo::async_trait]
@@ -525,7 +555,7 @@ impl Handler for StationTrustGate {
         ctrl: &mut FlowCtrl,
     ) {
         if station_trust::is_ready(&self.0.arkret_config)
-            || is_station_trust_bootstrap_path(req.uri().path())
+            || is_station_trust_bootstrap_path(deployment_relative_path(req, depot))
         {
             ctrl.call_next(req, depot, res).await;
             return;
@@ -554,7 +584,7 @@ mod station_trust_gate_tests {
             "/.well-known/openid-configuration"
         ));
         assert!(is_station_trust_bootstrap_path("/oauth/keys.json"));
-        assert!(is_station_trust_bootstrap_path("/prefix/readyz"));
+        assert!(!is_station_trust_bootstrap_path("/prefix/readyz"));
         assert!(!is_station_trust_bootstrap_path("/oauth/token"));
         assert!(!is_station_trust_bootstrap_path("/_arkret/gate/account"));
     }
@@ -631,6 +661,57 @@ mod tests {
     #[handler]
     async fn selector_test_ok(res: &mut Response) {
         res.status_code(StatusCode::NO_CONTENT);
+    }
+
+    #[handler]
+    async fn echo_authenticated_uri(req: &Request) -> String {
+        req.uri().to_string()
+    }
+
+    #[tokio::test]
+    async fn deployment_prefix_is_exact_and_preserves_the_authenticated_uri() {
+        use salvo::test::ResponseExt as _;
+
+        for prefix in ["", "/auth", "/tenant/auth"] {
+            let service = Service::new(
+                Router::with_path(format!("{prefix}/_arkret/gate/account/logout"))
+                    .hoop(DeploymentPrefix(prefix.to_owned()))
+                    .hoop(arkret_operation_selector_middleware)
+                    .post(echo_authenticated_uri),
+            );
+            let uri = format!("https://example.com{prefix}/_arkret/gate/account/logout?next=%2F");
+            let mut response = TestClient::post(&uri)
+                .add_header(
+                    "Arkret-Operation",
+                    "ak.gate.account.command.logout.v1",
+                    true,
+                )
+                .send(&service)
+                .await;
+            assert_eq!(response.status_code, Some(StatusCode::OK));
+            assert_eq!(response.take_string().await.unwrap(), uri);
+        }
+
+        for path in [
+            "/authentication/_arkret/gate/account/logout",
+            "/auth/auth/_arkret/gate/account/logout",
+        ] {
+            let service = Service::new(
+                Router::with_path(path)
+                    .hoop(DeploymentPrefix("/auth".to_owned()))
+                    .hoop(arkret_operation_selector_middleware)
+                    .post(echo_authenticated_uri),
+            );
+            let response = TestClient::post(format!("https://example.com{path}"))
+                .add_header(
+                    "Arkret-Operation",
+                    "ak.gate.account.command.logout.v1",
+                    true,
+                )
+                .send(&service)
+                .await;
+            assert_eq!(response.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+        }
     }
 
     fn selector_test_service() -> Service {

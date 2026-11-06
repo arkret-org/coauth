@@ -25,6 +25,8 @@ use crate::handlers::{ActivityTracker, CookieManager, Limiter, MetadataCache};
 use crate::services::principal_facade::DbConnectorAdmin;
 
 async fn cold_start_state() -> (AppState, CancellationToken, TaskTracker) {
+    static VERSION_INIT: std::sync::Once = std::sync::Once::new();
+    VERSION_INIT.call_once(|| crate::set_version(env!("CARGO_PKG_VERSION")));
     let site_config = test_site_config();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let workspace = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -106,7 +108,6 @@ async fn cold_start_state() -> (AppState, CancellationToken, TaskTracker) {
 #[tokio::test]
 async fn bootstrap_routes_receive_app_state_with_and_without_prefix() {
     setup();
-    crate::set_version(env!("CARGO_PKG_VERSION"));
     let (state, cancellation, tasks) = cold_start_state().await;
     assert!(!crate::services::station_trust::is_ready(
         &state.arkret_config
@@ -154,6 +155,137 @@ async fn bootstrap_routes_receive_app_state_with_and_without_prefix() {
         assert_eq!(gated.status_code, Some(StatusCode::SERVICE_UNAVAILABLE));
         let error = gated.take_json::<serde_json::Value>().await.unwrap();
         assert_eq!(error["errcode"], "station_trust_unavailable");
+    }
+
+    drop(state);
+    cancellation.cancel();
+    tasks.close();
+    tasks.wait().await;
+}
+
+#[tokio::test]
+async fn mounted_protocol_routes_reach_authentication_and_keep_route_errors() {
+    setup();
+    let (mut state, cancellation, tasks) = cold_start_state().await;
+    state.arkret_config.stations.clear();
+
+    for prefix in [
+        None,
+        Some("/"),
+        Some("/auth"),
+        Some("/auth/"),
+        Some("/tenant/auth"),
+    ] {
+        let mount = prefix.unwrap_or_default().trim_end_matches('/');
+        let base = format!("https://example.com{mount}");
+        let service = Service::new(build_router(
+            state.clone(),
+            &[Resource::RestApi],
+            prefix,
+            None,
+        ));
+        let handoff = format!("{base}/_arkret/gate/account/authentication-handoffs");
+        let selector = "ak.gate.account.exchange.create_handoff.v1";
+
+        let mut response = TestClient::post(&handoff)
+            .add_header("Arkret-Operation", selector, true)
+            .add_header("Content-Type", "application/json", true)
+            .body("{}")
+            .send(&service)
+            .await;
+        assert_eq!(
+            response.status_code,
+            Some(StatusCode::UNAUTHORIZED),
+            "{prefix:?}"
+        );
+        let problem = response.take_json::<serde_json::Value>().await.unwrap();
+        assert_eq!(
+            problem["type"],
+            "https://arkret.org/problems/signature_invalid"
+        );
+        assert!(
+            problem["detail"]
+                .as_str()
+                .unwrap()
+                .contains("requires a DPoP proof")
+        );
+
+        for (selectors, expected) in [
+            (vec![], "operation_selector_required"),
+            (
+                vec!["ak.gate.account.command.logout.v1"],
+                "unsupported_operation_version",
+            ),
+            (vec![selector, selector], "unsupported_operation_version"),
+        ] {
+            let mut request = TestClient::post(&handoff);
+            for value in selectors {
+                request = request.add_header("Arkret-Operation", value, false);
+            }
+            let mut response = request.body("{}").send(&service).await;
+            let problem = response.take_json::<serde_json::Value>().await.unwrap();
+            assert_eq!(
+                problem["type"],
+                format!("https://arkret.org/problems/{expected}"),
+                "{prefix:?}"
+            );
+        }
+
+        let mut wrong_method = TestClient::get(&handoff)
+            .add_header("Arkret-Operation", selector, true)
+            .send(&service)
+            .await;
+        assert_eq!(
+            wrong_method.status_code,
+            Some(StatusCode::METHOD_NOT_ALLOWED)
+        );
+        assert_eq!(wrong_method.headers()[http::header::ALLOW], "OPTIONS, POST");
+        let problem = wrong_method.take_json::<serde_json::Value>().await.unwrap();
+        assert_eq!(
+            problem["type"],
+            "https://arkret.org/problems/method_not_allowed"
+        );
+
+        let preflight = TestClient::options(&handoff)
+            .add_header("Origin", "https://client.example", true)
+            .add_header("Access-Control-Request-Method", "POST", true)
+            .add_header(
+                "Access-Control-Request-Headers",
+                "content-type,dpop,arkret-operation",
+                true,
+            )
+            .send(&service)
+            .await;
+        assert_eq!(preflight.status_code, Some(StatusCode::NO_CONTENT));
+        assert_eq!(
+            preflight.headers()[http::header::ACCESS_CONTROL_ALLOW_ORIGIN],
+            "*"
+        );
+
+        for path in [
+            "/_arkret/missing",
+            "/_arkret/describe",
+            "/_arkret/gate/account/authentication-handoffs/extra",
+        ] {
+            let mut response = TestClient::post(format!("{base}{path}"))
+                .add_header("Arkret-Operation", selector, true)
+                .send(&service)
+                .await;
+            assert_eq!(response.status_code, Some(StatusCode::NOT_FOUND));
+            let problem = response.take_json::<serde_json::Value>().await.unwrap();
+            assert_eq!(
+                problem["type"],
+                "https://arkret.org/problems/unrecognized_endpoint"
+            );
+        }
+
+        let outside = TestClient::post(format!(
+            "https://example.com{mount}/other/_arkret/gate/account/authentication-handoffs"
+        ))
+        .add_header("Arkret-Operation", selector, true)
+        .send(&service)
+        .await;
+        assert_eq!(outside.status_code, Some(StatusCode::NOT_FOUND));
     }
 
     drop(state);

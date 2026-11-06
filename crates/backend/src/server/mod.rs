@@ -24,7 +24,8 @@ pub(crate) use middleware::{
     ARKRET_REQUEST_ID_HEADER, arkret_operation_selector_middleware, arkret_request_id_middleware,
 };
 use middleware::{
-    InjectAppState, RequestTimeout, StationTrustGate, favicon_handler, public_oidc_browser_cors,
+    DeploymentPrefix, InjectAppState, RequestTimeout, StationTrustGate, favicon_handler,
+    public_oidc_browser_cors,
 };
 pub use middleware::{
     cache_control_middleware, log_response_middleware, override_response_csp,
@@ -116,9 +117,9 @@ pub fn build_router(
     }
 
     // Apply prefix if specified
-    let prefix = format!("{}/", prefix.unwrap_or_default().trim_end_matches('/'));
-    if !prefix.is_empty() && prefix != "/" {
-        let prefixed_router = Router::with_path(&prefix);
+    let prefix = prefix.unwrap_or_default().trim_end_matches('/').to_owned();
+    if !prefix.is_empty() {
+        let prefixed_router = Router::with_path(format!("{prefix}/"));
         router = prefixed_router.push(router);
     }
 
@@ -126,6 +127,7 @@ pub fn build_router(
     // hoops before child hoops, so state insertion must stay ahead of expansion
     // even when a prefix introduces another router level.
     router = router
+        .hoop(DeploymentPrefix(prefix))
         .hoop(InjectAppState(state.clone()))
         .hoop(StationTrustGate(state))
         .hoop(salvo::http::request::SecureMaxSize::new(max_body_bytes));
@@ -455,7 +457,7 @@ mod tests {
                 .headers()
                 .get(http::header::ALLOW)
                 .and_then(|value| value.to_str().ok()),
-            Some("POST, OPTIONS")
+            Some("OPTIONS, POST")
         );
         let wrong_method_body = wrong_method.take_json::<serde_json::Value>().await.unwrap();
         assert_eq!(
