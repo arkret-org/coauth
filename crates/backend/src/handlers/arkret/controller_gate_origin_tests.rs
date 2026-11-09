@@ -262,7 +262,8 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
         branch:
             arkret_models_collaboration::authority_commit::AuthorityForwardBranch::AuthorityForward,
         event_submission: arkret_wire::EventAdmissionSubmission::new(event.clone()),
-        mls_genesis_material: None,
+        mls_group_state_material: None,
+        content_backup_sources: None,
         producer_device_evidence: None,
         producer_agent_evidence: Some(evidence.clone()),
     };
