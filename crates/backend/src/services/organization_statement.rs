@@ -86,6 +86,10 @@ pub struct OrganizationStatementRequest {
     pub executed_by: Option<arkret_wire::ActorId>,
 }
 
+pub(crate) fn statement_id_or_generate(statement_id: Option<String>) -> String {
+    statement_id.unwrap_or_else(|| format!("org-stmt-{}", uuid::Uuid::now_v7()))
+}
+
 /// Issue a signed `ak.realm.organization` statement.
 ///
 /// `service_did` is the coauth service DID used to construct the
@@ -378,6 +382,50 @@ mod tests {
             &tampered_bytes,
             signature.as_str(),
         ));
+    }
+
+    #[test]
+    fn generated_and_supplied_statement_handles_reach_the_real_signer_unchanged() {
+        let generated = statement_id_or_generate(None);
+        let uuid = generated.strip_prefix("org-stmt-").unwrap();
+        assert_eq!(uuid::Uuid::parse_str(uuid).unwrap().get_version_num(), 7);
+        for literal in [
+            generated,
+            " ".to_owned(),
+            " 界 ".to_owned(),
+            "界".repeat(256),
+        ] {
+            let mut request = base_request();
+            request.statement_id = statement_id_or_generate(Some(literal.clone()));
+            let payload = issue_organization_statement(
+                &keyring(),
+                "did:web:coauth.example",
+                request,
+                now(),
+                &offline_resolver(),
+            )
+            .unwrap();
+            assert_eq!(payload.statement_id, literal);
+            let transcript: serde_json::Value = serde_json::from_slice(
+                &realm_organization_statement_signing_bytes(&payload).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(transcript["statement_id"], literal);
+        }
+        for literal in [String::new(), "ak:orgstmt:old".into(), "界".repeat(257)] {
+            let mut request = base_request();
+            request.statement_id = statement_id_or_generate(Some(literal));
+            assert!(
+                issue_organization_statement(
+                    &keyring(),
+                    "did:web:coauth.example",
+                    request,
+                    now(),
+                    &offline_resolver(),
+                )
+                .is_err()
+            );
+        }
     }
 
     #[test]

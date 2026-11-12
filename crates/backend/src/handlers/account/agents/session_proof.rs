@@ -80,7 +80,7 @@ pub async fn fetch_agent_participation_overlay(
         .post_private_json("private_agent_participation_read", "/_coland/account-authority/agent-participation/read", &accounts, None)
         .await.map_err(|_| AgentAuthRejection::PolicyUnavailable)?;
     let mut scopes = BTreeSet::new();
-    if outcome.agent_id != agent.as_str()
+    if &outcome.agent_id != agent
         || outcome
             .participation_entries
             .iter()

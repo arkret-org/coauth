@@ -21,8 +21,7 @@
 
 use arkret_canonical::{canonical_json_bytes, sha256_digest};
 use arkret_identifiers::{
-    DidCoreId, DigestSuiteCode, EventId, RealmCommitId, RealmId, new_prefixed_uuid7,
-    project_did_to_core_id,
+    DidCoreId, DigestSuiteCode, EventId, RealmCommitId, RealmId, project_did_to_core_id,
 };
 use arkret_models_collaboration::{RealmOrganizationPayload, RealmOrganizationStatus};
 use coauth_admin_types::organization_admin::{
@@ -50,7 +49,7 @@ use crate::services::organization_bootstrap::{
 };
 use crate::services::organization_statement::{
     OrganizationStatementRequest, RepositoryDelegationResolver, issue_organization_statement,
-    offline_resolver,
+    offline_resolver, statement_id_or_generate,
 };
 
 fn parse_organization_id(raw: &str) -> Result<DidCoreId, AppError> {
@@ -574,9 +573,7 @@ pub async fn issue_statement_handler(
         _ => organization_id.clone(),
     };
 
-    let statement_id = body
-        .statement_id
-        .unwrap_or_else(|| new_prefixed_uuid7("ak:orgstmt:"));
+    let statement_id = statement_id_or_generate(body.statement_id);
 
     let request = OrganizationStatementRequest {
         statement_id,
