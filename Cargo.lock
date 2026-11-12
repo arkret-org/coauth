@@ -593,6 +593,7 @@ dependencies = [
  "arkret-canonical",
  "arkret-wire",
  "chrono",
+ "curve25519-dalek 5.0.0",
  "hex",
  "regex",
  "salvo-oapi",
@@ -639,6 +640,7 @@ version = "0.3.0"
 dependencies = [
  "arkret-canonical",
  "arkret-models-collaboration",
+ "arkret-models-crypto",
  "arkret-models-identity",
  "arkret-wire",
  "chrono",
