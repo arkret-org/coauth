@@ -238,6 +238,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
     // Realm Actor or runtime, and does not exercise fresh account registration.
     let endpoint = "https://registration.example/".parse().unwrap();
     let lifecycle_key = crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&[81; 32]);
+    let archive_key = arkret_crypto::hpke::generate_x25519_keypair().unwrap();
     let inception = arkret_signatures::webvh::prepare_realm_actor_inception(
         &arkret_signatures::webvh::RealmActorInceptionInput {
             principal_endpoint: &endpoint,
@@ -246,6 +247,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
             root_seed: &[82; 32],
             next_root_public_key_multibase: "z6MkjchhfUsD6mmvni8mCdXHw216Xrm9bQe2mBH1P5RDjVJG",
             controller_public_key: &lifecycle_key.verifying_key().to_bytes(),
+            content_backup_public_key: archive_key.public_key(),
         },
     )
     .unwrap();

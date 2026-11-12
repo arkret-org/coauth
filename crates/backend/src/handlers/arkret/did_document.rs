@@ -178,7 +178,26 @@ impl VerificationMethod {
                 })
         };
 
+        if self.public_key_multibase.is_some() && self.public_key_jwk.is_some() {
+            return Err(FormalKeyAdmissionError::Invalid(
+                "verification method contains ambiguous key material".to_owned(),
+            ));
+        }
         if let Some(multibase) = self.public_key_multibase.as_ref() {
+            let decoded = arkret_canonical::decode_multibase_base58btc(multibase)
+                .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+            if decoded.starts_with(&[0xec, 0x01]) {
+                let key: [u8; 32] = decoded[2..].try_into().map_err(|_| {
+                    FormalKeyAdmissionError::Invalid(
+                        "X25519 Multikey must contain exactly 32 public key bytes".to_owned(),
+                    )
+                })?;
+                arkret_crypto::hpke::validate_x25519_recipient_key(&key)
+                    .map_err(|error| FormalKeyAdmissionError::Invalid(error.to_string()))?;
+                // Agreement material never enters the signing-key inventory.
+                // Its DID and key id still pass the same formal admission gate.
+                return enforce(None);
+            }
             let bytes = PublicKeyMaterial::Ed25519Multibase {
                 value: multibase.clone(),
             }
@@ -418,6 +437,46 @@ mod tests {
         .expect("wire document should parse before use-time validation");
 
         assert!(method.public_key_material().is_err());
+    }
+
+    #[test]
+    fn formal_document_admits_x25519_agreement_without_signing_authority() {
+        let did = "did:web:coauth.production";
+        let key_id = format!("{did}#content-backup");
+        let key = arkret_crypto::hpke::generate_x25519_keypair().unwrap();
+        let multikey = |bytes: &[u8]| {
+            arkret_canonical::encode_multibase_base58btc([&[0xec, 0x01][..], bytes].concat())
+        };
+        let mut document: DidDocument = serde_json::from_value(json!({
+            "id": did,
+            "verificationMethod": [{
+                "id": key_id, "type": "Multikey", "controller": did,
+                "publicKeyMultibase": multikey(key.public_key()),
+            }],
+            "keyAgreement": [key_id],
+        }))
+        .unwrap();
+        let trust_domain =
+            arkret_wire::TrustDomainId::new("ak:trust_domain:coauth.production").unwrap();
+        enforce_formal_document_admission(&document, &trust_domain).unwrap();
+        assert!(document.verification_method[0].public_jwk().is_err());
+        assert!(
+            document.verification_method[0]
+                .public_key_material()
+                .unwrap()
+                .ed25519_bytes()
+                .is_err()
+        );
+        for invalid in [vec![0; 32], vec![1; 31], vec![1; 33]] {
+            document.verification_method[0].public_key_multibase = Some(multikey(&invalid));
+            assert!(enforce_formal_document_admission(&document, &trust_domain).is_err());
+        }
+        document.verification_method[0].public_key_multibase = Some(multikey(key.public_key()));
+        document.verification_method[0].id = format!("{did}#archive-fixture");
+        assert!(matches!(
+            enforce_formal_document_admission(&document, &trust_domain),
+            Err(FormalKeyAdmissionError::TestSigningMaterialDenied)
+        ));
     }
 
     fn spec_root() -> PathBuf {
