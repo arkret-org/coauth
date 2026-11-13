@@ -601,5 +601,4 @@ pub async fn device_approval_post(
 }
 
 #[cfg(test)]
-#[path = "approval_tests.rs"]
 mod tests;

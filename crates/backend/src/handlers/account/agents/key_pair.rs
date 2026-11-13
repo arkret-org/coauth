@@ -1215,5 +1215,4 @@ fn pairing_superseded_event_refs(
 }
 
 #[cfg(test)]
-#[path = "key_pair/tests.rs"]
 mod tests;

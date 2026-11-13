@@ -467,5 +467,4 @@ mod tests {
 }
 
 #[cfg(all(test, feature = "cedar"))]
-#[path = "admin_invite_review_tests.rs"]
 mod pg_tests;

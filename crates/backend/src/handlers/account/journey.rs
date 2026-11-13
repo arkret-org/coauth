@@ -538,5 +538,4 @@ pub async fn respond_journey(
 }
 
 #[cfg(test)]
-#[path = "journey_tests.rs"]
 mod tests;

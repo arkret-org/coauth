@@ -948,5 +948,4 @@ mod controller_gate_http_regression {
 }
 
 #[cfg(test)]
-#[path = "controller_gate_origin_tests.rs"]
 mod origin_tests;

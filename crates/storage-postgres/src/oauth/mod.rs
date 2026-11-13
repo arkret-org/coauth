@@ -18,5 +18,4 @@ pub use self::session::PgOAuthSessionRepository;
 pub use self::session_grant::PgOAuthSessionGrantRepository;
 
 #[cfg(test)]
-#[path = "tests.rs"]
 mod tests;

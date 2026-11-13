@@ -99,5 +99,4 @@ pub(crate) struct Admission<'a> {
 }
 
 #[cfg(test)]
-#[path = "sessions_tests.rs"]
 mod tests;
