@@ -101,3 +101,16 @@ coauth-register-phone-optional = Phone (optional)
 coauth-register-contact-required = Provide an email address or phone number to verify your account.
 coauth-register-email-required = Provide an email address to verify your account.
 coauth-register-handle-invalid = Enter a valid username of 1–128 characters without spaces or reserved symbols.
+
+security-passkey-name = Passkey name
+security-passkey-id = Passkey ID
+security-passkey-created = Created
+security-passkey-last-used = Last used
+security-passkey-never-used = Not used yet
+security-passkey-unnamed = Unnamed passkey
+security-passkey-remove = Remove
+security-passkey-remove-title = Remove this passkey?
+security-passkey-remove-impact = This passkey will no longer be accepted for signing in to this account.
+security-passkey-alternative-help = Before continuing, make sure you can sign in with another method. Only this sign-in credential will be removed.
+security-passkey-remove-confirm = Remove passkey
+security-passkey-removed = Passkey removed.

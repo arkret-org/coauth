@@ -126,6 +126,7 @@ fn passkey(
     state: Action,
     source: Resource<PasskeyListOutcome>,
 ) -> View {
+    let remove = revoke_passkey_confirmation(scope, &key, state, source.clone());
     let id = key.id.clone();
     let reload = source.clone();
     let backup = if key.backup_eligible {
@@ -182,16 +183,6 @@ fn passkey(
             }
         },
     );
-    let id = key.id;
-    let remove = ui::action(scope, "Remove", "btn btn-danger btn-sm", state, move || {
-        let path = format!("/self/passkeys/{}/revoke", encode(&id));
-        let source = source.clone();
-        async move {
-            api::api_post::<PasskeyMutationOutcome>(&path, serde_json::json!({})).await?;
-            source.reload();
-            Ok(Some("Passkey removed.".into()))
-        }
-    });
     block(
         "flex flex-col gap-2",
         vec![
@@ -200,5 +191,82 @@ fn passkey(
             field,
             block("flex gap-2", vec![rename, remove]),
         ],
+    )
+}
+
+fn revoke_passkey_confirmation(
+    scope: &Scope,
+    key: &PasskeySummary,
+    state: Action,
+    source: Resource<PasskeyListOutcome>,
+) -> View {
+    use crate::translations::t;
+    let open = scope.cage(false);
+    let owner = scope.downgrade();
+    let id = key.id.clone();
+    let rows = vec![
+        (
+            t("security-passkey-name"),
+            key.label
+                .clone()
+                .filter(|label| !label.trim().is_empty())
+                .unwrap_or_else(|| t("security-passkey-unnamed")),
+        ),
+        (t("security-passkey-id"), key.id.clone()),
+        (t("security-passkey-created"), key.created_at.clone()),
+        (
+            t("security-passkey-last-used"),
+            key.last_used_at
+                .clone()
+                .unwrap_or_else(|| t("security-passkey-never-used")),
+        ),
+    ];
+    let mut content = Some(block(
+        "passkey-revoke-details",
+        vec![
+            ui::details(rows),
+            copy(
+                "text-sm text-secondary",
+                t("security-passkey-alternative-help"),
+            ),
+        ],
+    ));
+    Box::new(
+        sapid::alert_dialog(format!("passkey-revoke-{}-{}", scope.id().slot(), key.id))
+            .unstyled()
+            .class("account-confirm-dialog passkey-revoke-dialog")
+            .label(t("security-passkey-remove"))
+            .title(t("security-passkey-remove-title"))
+            .description(t("security-passkey-remove-impact"))
+            .cancel_label(t("action-cancel"))
+            .confirm_label(t("security-passkey-remove-confirm"))
+            .confirm_variant(sapid::ButtonVariant::Danger)
+            .confirm_enabled(scope.bond(move || !state.busy.get() && state.allowed.get()))
+            .open(open)
+            .on_open_change(move |next| {
+                if next {
+                    state.feedback.revise(|value| *value = None);
+                }
+                open.revise(|value| *value = next);
+            })
+            .on_confirm(move || {
+                let path = format!("/self/passkeys/{}/revoke", encode(&id));
+                let source = source.clone();
+                state.run(&owner, async move {
+                    api::api_post::<PasskeyMutationOutcome>(&path, serde_json::json!({})).await?;
+                    source.reload();
+                    Ok(Some(t("security-passkey-removed")))
+                });
+            })
+            .trigger_content(move || {
+                Box::new(
+                    text()
+                        .kind(TextKind::Inline)
+                        .class("btn btn-destructive btn-sm")
+                        .content(t("security-passkey-remove")),
+                ) as View
+            })
+            .content_policy(sapid::ContentPolicy::KeepMounted)
+            .content(move || content.take().unwrap_or_else(|| block("", vec![]))),
     )
 }

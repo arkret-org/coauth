@@ -84,3 +84,16 @@ coauth-register-phone-optional = 手机号（可选）
 coauth-register-contact-required = 请填写邮箱地址或手机号，用于验证账号。
 coauth-register-email-required = 请填写邮箱地址，用于验证账号。
 coauth-register-handle-invalid = 请输入 1 至 128 个字符的有效用户名，且不要使用空白或保留符号。
+
+security-passkey-name = Passkey 名称
+security-passkey-id = Passkey ID
+security-passkey-created = 创建时间
+security-passkey-last-used = 最近使用
+security-passkey-never-used = 尚未使用
+security-passkey-unnamed = 未命名 Passkey
+security-passkey-remove = 移除
+security-passkey-remove-title = 移除此 Passkey？
+security-passkey-remove-impact = 移除后，将无法再使用此 Passkey 登录当前账户。
+security-passkey-alternative-help = 继续前，请确认仍能使用其他方式登录。此操作仅移除这个登录凭据。
+security-passkey-remove-confirm = 确认移除 Passkey
+security-passkey-removed = Passkey 已移除。

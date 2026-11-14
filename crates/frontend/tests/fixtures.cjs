@@ -5,7 +5,7 @@ const oauthSession={id:'app-1',display_name:'Inkson desktop',scope:'openid profi
 const pageInfo={has_previous_page:false,has_next_page:false,start_cursor:null,end_cursor:null};
 const linked=[{id:'link-1',provider_id:'oidc-example',subject:'alice@example.test',human_account_name:'Alice',provider_name:'Example Identity',provider_brand:'oidc',created_at:created}];
 const user={id:'account-1',username:'alice',principal_id:'principal-1',handle:'alice',can_request_admin:true,has_password:true,profile:{display_name:'Alice Chen',avatar_url:null,preferred_locale:'en',updated_at:created},principal:{principal_address:'@alice:example.test',display_name:'Alice Chen'},emails:{total_count:1,edges:[{cursor:'email-1',node:{id:'email-1',email:'alice@example.test',confirmed_at:created,is_primary:true}}]},linked_accounts:linked,browser_sessions:{total_count:2,edges:[{cursor:'b1',node:browserSession},{cursor:'b2',node:{...browserSession,id:'browser-2',display_name:'Personal phone',user_agent:{name:'Chrome',model:'Pixel',os:'Android',device_type:'MOBILE'}}}],page_info:pageInfo},app_sessions:{total_count:1,edges:[{cursor:'a1',node:{__typename:'OAuthSession',...oauthSession}}],page_info:pageInfo}};
-const providers={providers:[{id:'oidc-example',authorize_url:'/upstream/authorize/example',human_name:'Example Identity'}],password_login_enabled:true,passkey_login_enabled:true,password_registration_enabled:true,account_recovery_allowed:true,login_hint:null,current_account:null};
+const providers={providers:[{id:'oidc-example',authorize_url:'/upstream/authorize/example',human_name:'Example Identity'}],password_login_enabled:true,passkey_login_enabled:true,password_registration_enabled:true,password_registration_contact_required:true,phone_verification_enabled:false,account_recovery_allowed:true,login_hint:null,current_account:null};
 const viewer={viewer:{__typename:'User',...user},viewer_session:{__typename:'BrowserSession',...browserSession},site_config:site};
 async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='http://127.0.0.1:4183'}={}){
   const errors=[],requests=[],consoleErrors=[];let loggedIn=true;let registrationEmail='alice@example.test';let postAuthAction=null;let notificationPrefs=[{channel:'email',enabled:true},{channel:'sms',enabled:false}];let passkeys=[{id:'passkey-1',label:'Windows Hello',backup_eligible:true,backup_state:true,user_verified:true,created_at:created,last_used_at:created}];
@@ -48,7 +48,7 @@ async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='h
       if(p==='/self/viewer/preferences'){notificationPrefs=body.preferences;return reply({preferences:notificationPrefs});}
       if(p.startsWith('/self/passkeys/')){if(p.endsWith('/revoke'))passkeys=[];else passkeys[0]={...passkeys[0],label:body.label};return reply({status:'ok',id:'passkey-1'});}
       if(p.startsWith('/account/auth/passkey/'))return route.fulfill({status:503,json:{error:'Passkey ceremony is temporarily unavailable.'}});
-      if(p.startsWith('/self/oauth/authorization-grants/'))return reply({status:'success',redirect_url:'/callback?code=fixture'});
+      if(p.startsWith('/self/oauth/authorization-grants/'))return body?.csrf_token==='fixture-authorized-decision'?reply({status:'success',response_mode:'query',redirect_url:'/callback?code=fixture'}):route.fulfill({status:403,json:{error:'invalid_csrf_token'}});
       if(p.startsWith('/self/device-grants/'))return reply({status:body.action==='deny'?'rejected':'fulfilled'});
       if(p.startsWith('/self/upstream-oauth/link/'))return reply({status:'success',redirect_url:'/'});
       if(p.startsWith('/local/admin/oauth/clients/'))return reply({data:{[body.locale]:{display_name:body.display_name,description:body.description}}});
@@ -56,14 +56,14 @@ async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='h
     }
     if(p==='/account/auth/providers')return reply(providers);
     if(p==='/self/site-config')return reply(site);
-    if(p==='/self/viewer')return reply(loggedIn?viewer:{...viewer,viewer:{__typename:'Anonymous',id:'anonymous'},viewer_session:{__typename:'Anonymous',id:'anonymous'}});
+    if(p==='/self/viewer')return reply(loggedIn?{...viewer,viewer:{...viewer.viewer,profile:{...user.profile,preferred_locale:locale}}}:{...viewer,viewer:{__typename:'Anonymous',id:'anonymous'},viewer_session:{__typename:'Anonymous',id:'anonymous'}});
     if(p==='/self/viewer/security')return reply({has_password:true,active_sessions_count:3,linked_providers_count:1,verified_emails_count:1,verified_phones_count:0});
     if(p==='/self/viewer/preferences')return reply({available_channels:[{channel:'email',enabled:true},{channel:'sms',enabled:false}],preferences:notificationPrefs});
     if(p==='/self/linked-accounts')return reply({accounts:linked});
     if(p==='/self/passkeys')return reply({passkeys});
     if(p.startsWith('/self/sessions/'))return reply(p.endsWith('/app-1')?{__typename:'OAuthSession',...oauthSession}:{__typename:'BrowserSession',...browserSession,id:p.split('/').at(-1)});
     if(p.startsWith('/self/oauth-clients/'))return reply({id:'client-1',client_id:'inkson',client_name:'Inkson',client_uri:'https://inkson.example.test',tos_uri:'https://example.test/terms',policy_uri:'https://example.test/privacy',logo_uri:null});
-    if(p.startsWith('/self/oauth/authorization-grants/')||p.startsWith('/self/device-grants/'))return reply({grant_id:'grant-1',client:{id:'client-1',client_id:'inkson',client_name:'Inkson',client_uri:'https://inkson.example.test',logo_uri:null},scope:'openid profile email',user:{principal_address:'@alice:example.test',display_name:'Alice Chen'},policy_violation:false});
+    if(p.startsWith('/self/oauth/authorization-grants/')||p.startsWith('/self/device-grants/'))return reply({grant_id:'grant-1',csrf_token:'fixture-authorized-decision',response_mode:'query',client:{id:'client-1',client_id:'inkson',client_name:'Inkson',client_uri:'https://inkson.example.test',logo_uri:null},scope:'openid profile email',user:{principal_address:'@alice:example.test',display_name:'Alice Chen'},policy_violation:false});
     if(p.startsWith('/account/email-auth/'))return reply({id:'email-1',email:'alice@example.test',completed_at:null});
     if(p.startsWith('/account/auth/register/'))return reply({id:'registration-1',handle:'alice',email_pending:true,pending_email:registrationEmail,next_step:'verify_email'});
     if(p.startsWith('/account/auth/recovery/'))return reply({id:'recovery-1',email:'alice@example.test',status:'pending'});
