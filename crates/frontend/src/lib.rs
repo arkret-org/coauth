@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 mod api;
 mod config;
+mod drafts;
 mod pages;
 mod passkey;
 mod post_auth_continuation;

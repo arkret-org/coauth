@@ -40,15 +40,19 @@ pub fn login(scope: &Scope) -> View {
                 },
                 Some(error),
             ),
-            None => return copy("loading-screen", "Loading…"),
+            None => return copy("loading-screen", crate::translations::t("ui-loading")),
         };
         let mut body = vec![];
         if let Some(error) = error {
             body.push(alert(error, false));
             let retry = retry.clone();
-            body.push(button("Try again", "btn btn-secondary", move || {
-                retry.reload();
-            }));
+            body.push(button(
+                crate::translations::t("ui-try-again"),
+                "btn btn-secondary",
+                move || {
+                    retry.reload();
+                },
+            ));
         }
         body.push(login_form(scope, providers, query.clone()));
         block("", body)
@@ -79,14 +83,14 @@ fn login_form(scope: &Scope, providers: ProvidersOutcome, query: String) -> View
                     let hint=handle.get_untracked();hint.is_empty()||account.username.eq_ignore_ascii_case(&hint)||account.handle.eq_ignore_ascii_case(&hint)
                 }){
                     let username=account.username.clone();let label=account.display_name.as_deref().filter(|value|!value.trim().is_empty()).unwrap_or(&account.handle).to_owned();
-                    body.push(button(format!("Continue as {label}"),"btn btn-secondary btn-block login-current-account-button",move ||{handle.revise(|v|v.clone_from(&username));password_value.revise(String::clear);step.revise(|v|*v=true);}));
+                    body.push(button(crate::translations::t_with("ui-continue-as", &[("name", &label)]),"btn btn-secondary btn-block login-current-account-button",move ||{handle.revise(|v|v.clone_from(&username));password_value.revise(String::clear);step.revise(|v|*v=true);}));
                     body.push(copy("login-divider",t("coauth-login-separator")));
                 }
                 body.push(ui::form(scope,"login-identifier",vec![identifier.clone()],t("action-continue"),"btn btn-primary btn-block",state,move |values|async move{
                     if values[0].trim().is_empty(){return Err(t("coauth-errors-identifier-required"))}password_value.revise(String::clear);step.revise(|v|*v=true);Ok(None)
                 }));
             }else{
-                body.push(block("login-selected-account",vec![copy("login-selected-avatar",handle.get_untracked().chars().next().map_or("?".into(),|c|c.to_uppercase().to_string())),block("login-selected-copy",vec![copy("login-selected-label","Selected account"),copy("font-semibold",handle.get_untracked())])]));
+                body.push(block("login-selected-account",vec![copy("login-selected-avatar",handle.get_untracked().chars().next().map_or("?".into(),|c|c.to_uppercase().to_string())),block("login-selected-copy",vec![copy("login-selected-label",crate::translations::t("ui-selected-account")),copy("font-semibold",handle.get_untracked())])]));
                 if password_enabled{
                     body.push(ui::form(scope,"login-password",vec![password.clone()],t("action-sign-in"),"btn btn-primary btn-block",state,move |values|async move{
                         let response=api::api_post::<LoginOutcome>("/account/auth/login",serde_json::json!({"handle":handle.get_untracked(),"password":values[0]})).await?;
@@ -94,7 +98,7 @@ fn login_form(scope: &Scope, providers: ProvidersOutcome, query: String) -> View
                     }));
                 }
                 if passkey_enabled{
-                    body.push(ui::action(scope,"Sign in with a passkey","btn btn-secondary btn-block",state,move ||async move{crate::passkey::authenticate(handle.get_untracked()).await?;ui::auth_success()}));
+                    body.push(ui::action(scope,&crate::translations::t("ui-sign-in-with-a-passkey"),"btn btn-secondary btn-block",state,move ||async move{crate::passkey::authenticate(handle.get_untracked()).await?;ui::auth_success()}));
                 }
                 if !fixed_hint{body.push(button(t("coauth-approval-use-another-account"),"btn btn-tertiary btn-block",move ||{password_value.revise(String::clear);state.feedback.revise(|v|*v=None);step.revise(|v|*v=false);}));}
                 if providers.account_recovery_allowed{body.push(link(t("coauth-login-forgot-password"),"/recover","link login-links"));}
@@ -176,17 +180,29 @@ pub fn recovery_start(scope: &Scope) -> View {
         .email()
         .required();
     auth_card(
-        "Account recovery",
+        &crate::translations::t("ui-recover-account-sign-in"),
         vec![
             copy(
+                "recovery-stage",
+                crate::translations::t("ui-step-1-of-3-request-a-sign-in-recovery-link"),
+            ),
+            copy(
                 "text-secondary",
-                "Enter the email address associated with your account and we'll send you a recovery link.",
+                crate::translations::t(
+                    "ui-this-flow-restores-account-sign-in-it-does-not-r-06eaf49f",
+                ),
+            ),
+            copy(
+                "text-secondary",
+                crate::translations::t(
+                    "ui-enter-the-email-address-associated-with-your-acc-28865110",
+                ),
             ),
             ui::form(
                 scope,
                 "recovery-start",
                 vec![email],
-                "Send recovery email",
+                crate::translations::t("ui-send-recovery-email"),
                 "btn btn-primary btn-block",
                 state,
                 |values| async move {
@@ -196,19 +212,23 @@ pub fn recovery_start(scope: &Scope) -> View {
                     )
                     .await?;
                     if response.status == "success" {
-                        let id = response
-                            .id
-                            .ok_or("Recovery response did not provide a progress ID")?;
+                        let id = response.id.ok_or(crate::translations::t(
+                            "ui-recovery-response-did-not-provide-a-progress-id",
+                        ))?;
                         go(&format!("/recover/progress/{}", encode(&id)))?;
                         Ok(None)
                     } else {
-                        Err(response
-                            .error
-                            .unwrap_or_else(|| "Unable to start recovery.".into()))
+                        Err(response.error.unwrap_or_else(|| {
+                            crate::translations::t("ui-unable-to-start-recovery").into()
+                        }))
                     }
                 },
             ),
-            link("Back to sign in", "/login", "link"),
+            link(
+                crate::translations::t("ui-back-to-sign-in"),
+                "/login",
+                "link",
+            ),
         ],
     )
 }
@@ -219,24 +239,33 @@ pub fn recovery_progress(scope: &Scope, id: String) -> View {
         async move { api::api_get::<RecoveryStatusOutcome>(&path).await }
     });
     ui::resource_body(data, move |scope, response| {
-        let mut body = vec![];
+        let mut body = vec![copy(
+            "recovery-stage",
+            crate::translations::t("ui-step-2-of-3-open-the-link-in-your-email"),
+        )];
         match response.status.as_str() {
             "consumed" => body.push(copy(
                 "alert alert-info",
-                "This recovery link has already been used.",
+                crate::translations::t("ui-this-recovery-link-has-already-been-used"),
             )),
             "disabled" => body.push(copy(
                 "alert alert-warning",
-                "Account recovery is not available.",
+                crate::translations::t("ui-account-recovery-is-not-available"),
             )),
             _ => {
-                body.push(copy("text-secondary",format!("We sent a recovery email to {}. Please check your inbox and follow the link.",response.email)));
+                body.push(copy(
+                    "text-secondary",
+                    crate::translations::t_with(
+                        "ui-recovery-email-address",
+                        &[("email", &response.email)],
+                    ),
+                ));
                 let request = id.clone();
                 let state = Action::new(scope);
                 body.push(state.messages());
                 body.push(ui::action(
                     scope,
-                    "Resend recovery email",
+                    &crate::translations::t("ui-resend-recovery-email"),
                     "btn btn-secondary btn-block",
                     state,
                     move || {
@@ -244,14 +273,20 @@ pub fn recovery_progress(scope: &Scope, id: String) -> View {
                         async move {
                             api::api_post::<serde_json::Value>(&path, serde_json::json!({}))
                                 .await?;
-                            Ok(Some("Recovery email resent.".into()))
+                            Ok(Some(
+                                crate::translations::t("ui-recovery-email-resent").into(),
+                            ))
                         }
                     },
                 ));
             }
         }
-        body.push(link("Back to sign in", "/login", "link"));
-        auth_card("Check your email", body)
+        body.push(link(
+            crate::translations::t("ui-back-to-sign-in"),
+            "/login",
+            "link",
+        ));
+        auth_card(&crate::translations::t("ui-check-your-email"), body)
     })
 }
 pub fn password_change(scope: &Scope) -> View {
@@ -259,15 +294,17 @@ pub fn password_change(scope: &Scope) -> View {
     ui::resource_body(viewer, move |scope, response| {
         let Some(user) = response.viewer.as_user() else {
             let _ = go("/login");
-            return plain("Redirecting to login…");
+            return plain(crate::translations::t("ui-redirecting-to-login"));
         };
         let id = user.id.clone();
         let fields = vec![
             Field::new(scope, t("coauth-change-password-current"), "")
                 .password()
                 .required(),
-            Field::new(scope, "New password", "").password().required(),
-            Field::new(scope, "Confirm new password", "")
+            Field::new(scope, crate::translations::t("ui-new-password"), "")
+                .new_password()
+                .required(),
+            Field::new(scope, crate::translations::t("ui-confirm-new-password"), "")
                 .password()
                 .required(),
         ];
@@ -281,7 +318,7 @@ pub fn password_change(scope: &Scope) -> View {
                 scope,
                 "password-change",
                 fields,
-                "Change password",
+                crate::translations::t("ui-change-password"),
                 "btn btn-primary",
                 state,
                 move |values| {
@@ -299,7 +336,11 @@ pub fn password_change(scope: &Scope) -> View {
                     }
                 },
             ),
-            link("Cancel", "/settings", "btn btn-tertiary"),
+            link(
+                crate::translations::t("ui-cancel"),
+                "/settings",
+                "btn btn-tertiary",
+            ),
         ])
     })
 }
@@ -307,10 +348,17 @@ pub fn password_recovery(scope: &Scope) -> View {
     let ticket = get_query("ticket").unwrap_or_default();
     if ticket.is_empty() {
         return auth_card(
-            "Reset password",
+            &crate::translations::t("ui-reset-password"),
             vec![
-                alert("No recovery ticket found in the URL.", false),
-                link("Start a new recovery", "/recover", "btn btn-primary"),
+                alert(
+                    crate::translations::t("ui-no-recovery-ticket-found-in-the-url"),
+                    false,
+                ),
+                link(
+                    crate::translations::t("ui-start-a-new-recovery"),
+                    "/recover",
+                    "btn btn-primary",
+                ),
             ],
         );
     }
@@ -322,7 +370,18 @@ pub fn password_recovery(scope: &Scope) -> View {
     let reload = data.clone();
     ui::resource_body(data, move |scope, response| {
         let state = Action::new(scope);
-        let mut children = vec![];
+        let mut children = vec![
+            copy(
+                "recovery-stage",
+                crate::translations::t("ui-step-3-of-3-set-a-new-sign-in-password"),
+            ),
+            copy(
+                "text-secondary",
+                crate::translations::t(
+                    "ui-changing-this-password-restores-this-sign-in-met-ebdc1ad5",
+                ),
+            ),
+        ];
         if response.status == "valid" {
             let ticket = ticket.clone();
             let reload = reload.clone();
@@ -330,12 +389,14 @@ pub fn password_recovery(scope: &Scope) -> View {
                 scope,
                 "password-recovery",
                 vec![
-                    Field::new(scope, "New password", "").password().required(),
-                    Field::new(scope, "Confirm new password", "")
+                    Field::new(scope, crate::translations::t("ui-new-password"), "")
+                        .new_password()
+                        .required(),
+                    Field::new(scope, crate::translations::t("ui-confirm-new-password"), "")
                         .password()
                         .required(),
                 ],
-                "Reset password",
+                crate::translations::t("ui-reset-password"),
                 "btn btn-primary btn-block",
                 state,
                 move |values| {
@@ -367,10 +428,12 @@ pub fn password_recovery(scope: &Scope) -> View {
         } else {
             children.push(alert(
                 match response.status.as_str() {
-                    "expired" => "This recovery link has expired.",
-                    "consumed" => "This recovery link has already been used.",
-                    "disabled" => "Account recovery is not available.",
-                    _ => "Invalid recovery ticket.",
+                    "expired" => crate::translations::t("ui-this-recovery-link-has-expired"),
+                    "consumed" => {
+                        crate::translations::t("ui-this-recovery-link-has-already-been-used")
+                    }
+                    "disabled" => crate::translations::t("ui-account-recovery-is-not-available"),
+                    _ => crate::translations::t("ui-invalid-recovery-ticket"),
                 },
                 false,
             ));
@@ -379,7 +442,7 @@ pub fn password_recovery(scope: &Scope) -> View {
                 children.push(state.messages());
                 children.push(ui::action(
                     scope,
-                    "Send a new recovery email",
+                    &crate::translations::t("ui-send-a-new-recovery-email"),
                     "btn btn-secondary btn-block",
                     state,
                     move || {
@@ -394,16 +457,28 @@ pub fn password_recovery(scope: &Scope) -> View {
                                 go_to_url(&url)?;
                                 Ok(None)
                             } else {
-                                Ok(Some("Recovery email sent. Check your inbox.".into()))
+                                Ok(Some(
+                                    crate::translations::t(
+                                        "ui-recovery-email-sent-check-your-inbox",
+                                    )
+                                    .into(),
+                                ))
                             }
                         }
                     },
                 ));
             }
         }
-        children.push(copy("text-sm text-secondary","Changing your account password does not reset device trust or replace your Arkret principal recovery secret."));
-        children.push(link("Back to sign in", "/login", "link"));
-        auth_card("Reset password", children)
+        children.push(copy(
+            "text-sm text-secondary",
+            crate::translations::t("ui-changing-your-account-password-does-not-reset-de-de98128d"),
+        ));
+        children.push(link(
+            crate::translations::t("ui-back-to-sign-in"),
+            "/login",
+            "link",
+        ));
+        auth_card(&crate::translations::t("ui-reset-password"), children)
     })
 }
 pub fn email_verify(scope: &Scope, id: String) -> View {
@@ -416,19 +491,23 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
     ui::resource_body(data, move |scope, response| {
         if response.completed_at.is_some() {
             return auth_card(
-                "Email verified",
+                &crate::translations::t("ui-email-verified"),
                 vec![
                     copy(
                         "alert alert-success",
-                        "Your email address has been verified.",
+                        crate::translations::t("ui-your-email-address-has-been-verified"),
                     ),
-                    link("Back to settings", "/settings", "btn btn-primary"),
+                    link(
+                        crate::translations::t("ui-back-to-settings"),
+                        "/settings",
+                        "btn btn-primary",
+                    ),
                 ],
             );
         }
         let mut children = vec![copy(
             "text-secondary",
-            format!("Enter the verification code sent to {}.", response.email),
+            crate::translations::t_with("ui-verification-sent-to", &[("email", &response.email)]),
         )];
         let state = Action::new(scope);
         let request = id.clone();
@@ -436,8 +515,8 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
         children.push(ui::form(
             scope,
             "email-verify",
-            vec![Field::new(scope, "Verification code", "").required()],
-            "Verify email",
+            vec![Field::new(scope, crate::translations::t("ui-verification-code"), "").required()],
+            crate::translations::t("ui-verify-email"),
             "btn btn-primary btn-block",
             state,
             move |values| {
@@ -455,9 +534,11 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
                             Ok(None)
                         }
                         CompleteEmailAuthStatus::InvalidCode => {
-                            Err("Invalid verification code.".into())
+                            Err(crate::translations::t("ui-invalid-verification-code").into())
                         }
-                        CompleteEmailAuthStatus::NotFound => Err("Verification not found.".into()),
+                        CompleteEmailAuthStatus::NotFound => {
+                            Err(crate::translations::t("ui-verification-not-found").into())
+                        }
                     }
                 }
             },
@@ -465,7 +546,7 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
         let request = id.clone();
         children.push(ui::action(
             scope,
-            "Resend code",
+            &crate::translations::t("ui-resend-code"),
             "btn btn-secondary btn-block",
             state,
             move || {
@@ -473,24 +554,56 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
                 async move {
                     api::api_post::<ResendEmailAuthCodePayload>(&path, serde_json::json!({}))
                         .await?;
-                    Ok(Some("Verification code sent.".into()))
+                    Ok(Some(
+                        crate::translations::t("ui-verification-code-sent").into(),
+                    ))
                 }
             },
         ));
-        children.push(link("Back to settings", "/settings", "link"));
-        auth_card("Verify your email", children)
+        children.push(link(
+            crate::translations::t("ui-back-to-settings"),
+            "/settings",
+            "link",
+        ));
+        auth_card(&crate::translations::t("ui-verify-your-email"), children)
     })
 }
 pub fn validate_passwords(password: &str, confirmation: &str) -> std::result::Result<(), String> {
     if password.is_empty() {
-        Err("Password is required.".into())
+        Err(crate::translations::t("ui-password-is-required").into())
     } else if password != confirmation {
-        Err("Passwords do not match.".into())
+        Err(crate::translations::t("ui-passwords-do-not-match").into())
     } else {
         Ok(())
     }
 }
 fn password_error(status: &SetPasswordStatus) -> String {
-    match status{
-    SetPasswordStatus::WrongPassword=>"Current password is incorrect.",SetPasswordStatus::InvalidNewPassword=>"New password does not meet the requirements.",SetPasswordStatus::AccountLocked=>"This account is locked and cannot be recovered.",SetPasswordStatus::PasswordChangesDisabled=>"Password changes are not available.",SetPasswordStatus::DeviceTrustRecoveryRequired=>"Password recovery cannot reset device trust. Use the device recovery flow for trusted devices.",SetPasswordStatus::ExpiredRecoveryTicket=>"This recovery link has expired.",SetPasswordStatus::RecoveryTicketAlreadyUsed=>"This recovery link has already been used.",SetPasswordStatus::NoSuchRecoveryTicket=>"Invalid recovery ticket.",_=>"An error occurred while changing your password.",}.into()
+    match status {
+        SetPasswordStatus::WrongPassword => {
+            crate::translations::t("ui-current-password-is-incorrect")
+        }
+        SetPasswordStatus::InvalidNewPassword => {
+            crate::translations::t("ui-new-password-does-not-meet-the-requirements")
+        }
+        SetPasswordStatus::AccountLocked => {
+            crate::translations::t("ui-this-account-is-locked-and-cannot-be-recovered")
+        }
+        SetPasswordStatus::PasswordChangesDisabled => {
+            crate::translations::t("ui-password-changes-are-not-available")
+        }
+        SetPasswordStatus::DeviceTrustRecoveryRequired => {
+            crate::translations::t("ui-password-recovery-cannot-reset-device-trust-use-f02e4d34")
+        }
+        SetPasswordStatus::ExpiredRecoveryTicket => {
+            crate::translations::t("ui-this-recovery-link-has-expired")
+        }
+        SetPasswordStatus::RecoveryTicketAlreadyUsed => {
+            crate::translations::t("ui-this-recovery-link-has-already-been-used")
+        }
+        SetPasswordStatus::NoSuchRecoveryTicket => {
+            crate::translations::t("ui-invalid-recovery-ticket")
+        }
+        _ => crate::translations::t("ui-an-error-occurred-while-changing-your-password"),
+    }
+    .into()
 }

@@ -13,30 +13,46 @@ pub fn page(scope: &Scope) -> View {
     let state = Action::new(scope);
     ui::resource_body(summary, move |scope, summary| {
         let password_label = if summary.has_password {
-            "Password is set"
+            crate::translations::t("ui-password-is-set")
         } else {
-            "No password set"
+            crate::translations::t("ui-no-password-set")
         };
         let mut children = vec![
-            heading(1, "heading-xs", "Security Center"),
+            heading(
+                1,
+                "heading-xs",
+                crate::translations::t("ui-security-center"),
+            ),
             block(
                 "flex flex-col gap-2",
                 vec![
-                    heading(2, "text-md font-semibold", "Password status"),
-                    badge(password_label, summary.has_password),
+                    heading(
+                        2,
+                        "text-md font-semibold",
+                        crate::translations::t("ui-password-status"),
+                    ),
+                    copy("badge", password_label),
                     copy(
                         "text-md text-secondary",
-                        "View and manage your account password. Check when it was last changed and update it if needed.",
+                        crate::translations::t(
+                            "ui-view-and-manage-your-account-password-check-when-ca728765",
+                        ),
                     ),
                 ],
             ),
             separator(),
         ];
         let mut key_children = vec![
-            heading(2, "text-md font-semibold", "Passkeys"),
+            heading(
+                2,
+                "text-md font-semibold",
+                crate::translations::t("ui-passkeys"),
+            ),
             copy(
                 "text-md text-secondary",
-                "Passkeys protect this Coauth account from phishing. They do not replace your Arkret DID principal recovery secret or authorize a new long-lived device.",
+                crate::translations::t(
+                    "ui-passkeys-protect-this-coauth-account-from-phishi-8a8d7486",
+                ),
             ),
             state.messages(),
         ];
@@ -45,7 +61,10 @@ pub fn page(scope: &Scope) -> View {
             passkeys.clone(),
             move |scope, response| {
                 if response.passkeys.is_empty() {
-                    return copy("text-md text-secondary", "No passkeys are registered yet.");
+                    return copy(
+                        "text-md text-secondary",
+                        crate::translations::t("ui-no-passkeys-are-registered-yet"),
+                    );
                 }
                 stack(
                     response
@@ -61,9 +80,10 @@ pub fn page(scope: &Scope) -> View {
             scope,
             "new-passkey",
             vec![
-                Field::new(scope, "New passkey name", "").placeholder("For example, Windows Hello"),
+                Field::new(scope, crate::translations::t("ui-new-passkey-name"), "")
+                    .placeholder(crate::translations::t("ui-for-example-windows-hello")),
             ],
-            "Add passkey",
+            crate::translations::t("ui-add-passkey"),
             "btn btn-primary btn-sm",
             state,
             move |values| {
@@ -72,36 +92,53 @@ pub fn page(scope: &Scope) -> View {
                     let label = (!values[0].trim().is_empty()).then(|| values[0].trim().into());
                     crate::passkey::register(None, label).await?;
                     reload.reload();
-                    Ok(Some("Passkey added.".into()))
+                    Ok(Some(crate::translations::t("ui-passkey-added").into()))
                 }
             },
         ));
-        key_children.push(copy("text-sm text-secondary","Adding, renaming, or removing a passkey requires a recent sign-in. If this session is too old, sign out and authenticate again first."));
+        key_children.push(copy(
+            "text-sm text-secondary",
+            crate::translations::t("ui-adding-renaming-or-removing-a-passkey-requires-a-f3dc3b5a"),
+        ));
         children.push(block("flex flex-col gap-3", key_children));
         children.push(separator());
         children.push(block(
             "flex flex-col gap-2",
             vec![
-                heading(2, "text-md font-semibold", "Active sessions"),
-                plain(format!(
-                    "{} active session(s)",
-                    summary.active_sessions_count
+                heading(
+                    2,
+                    "text-md font-semibold",
+                    crate::translations::t("ui-active-sessions"),
+                ),
+                plain(crate::translations::t_count(
+                    "ui-session-count",
+                    summary.active_sessions_count as u64,
                 )),
                 copy(
                     "text-md text-secondary",
-                    "A summary of your currently active browser and app sessions.",
+                    crate::translations::t(
+                        "ui-a-summary-of-your-currently-active-browser-and-app-sessions",
+                    ),
                 ),
-                link("Manage sessions", "/sessions", "btn btn-secondary btn-sm"),
+                link(
+                    crate::translations::t("ui-manage-sessions"),
+                    "/sessions",
+                    "btn btn-secondary btn-sm",
+                ),
             ],
         ));
         children.push(separator());
         children.push(block(
             "flex flex-col gap-2",
             vec![
-                heading(2, "text-md font-semibold", "Verified emails"),
-                plain(format!(
-                    "{} verified email(s)",
-                    summary.verified_emails_count
+                heading(
+                    2,
+                    "text-md font-semibold",
+                    crate::translations::t("ui-verified-emails"),
+                ),
+                plain(crate::translations::t_count(
+                    "ui-verified-email-count",
+                    summary.verified_emails_count as u64,
                 )),
             ],
         ));
@@ -109,10 +146,14 @@ pub fn page(scope: &Scope) -> View {
         children.push(block(
             "flex flex-col gap-2",
             vec![
-                heading(2, "text-md font-semibold", "Linked providers"),
-                plain(format!(
-                    "{} linked provider(s)",
-                    summary.linked_providers_count
+                heading(
+                    2,
+                    "text-md font-semibold",
+                    crate::translations::t("ui-linked-providers"),
+                ),
+                plain(crate::translations::t_count(
+                    "ui-linked-provider-count",
+                    summary.linked_providers_count as u64,
                 )),
             ],
         ));
@@ -131,12 +172,12 @@ fn passkey(
     let reload = source.clone();
     let backup = if key.backup_eligible {
         if key.backup_state {
-            "Synced passkey"
+            crate::translations::t("ui-synced-passkey")
         } else {
-            "Sync-capable passkey"
+            crate::translations::t("ui-sync-capable-passkey")
         }
     } else {
-        "Device-bound credential"
+        crate::translations::t("ui-device-bound-credential")
     };
     let mut badges = vec![
         copy(
@@ -144,21 +185,32 @@ fn passkey(
             key.label
                 .as_deref()
                 .filter(|value| !value.is_empty())
-                .unwrap_or("Unnamed passkey"),
+                .unwrap_or(&crate::translations::t("ui-unnamed-passkey")),
         ),
         copy("badge", backup),
     ];
     if key.user_verified {
-        badges.push(badge("User verified", true));
+        badges.push(badge(crate::translations::t("ui-user-verified"), true));
     }
-    let description = format!(
-        "Created {}{}",
-        key.created_at,
-        key.last_used_at
-            .map(|value| format!(" · Last used {value}"))
-            .unwrap_or_default()
+    let description = if let Some(last_used) = key.last_used_at.as_deref() {
+        crate::translations::t_with(
+            "ui-passkey-dates",
+            &[
+                ("created", &crate::utils::format_date(&key.created_at)),
+                ("used", &crate::utils::format_date(last_used)),
+            ],
+        )
+    } else {
+        crate::translations::t_with(
+            "ui-passkey-created",
+            &[("created", &crate::utils::format_date(&key.created_at))],
+        )
+    };
+    let name = Field::new(
+        scope,
+        crate::translations::t("ui-passkey-name"),
+        key.label.unwrap_or_default(),
     );
-    let name = Field::new(scope, "Passkey name", key.label.unwrap_or_default());
     let name_value = name.value;
     let field = ui::field(
         scope,
@@ -169,7 +221,7 @@ fn passkey(
     );
     let rename = ui::action(
         scope,
-        "Save name",
+        &crate::translations::t("ui-save-name"),
         "btn btn-secondary btn-sm",
         state,
         move || {
@@ -179,7 +231,7 @@ fn passkey(
             async move {
                 api::api_patch::<PasskeyMutationOutcome>(&path,serde_json::json!({"label":(!value.trim().is_empty()).then(||value.trim().to_owned())})).await?;
                 source.reload();
-                Ok(Some("Passkey name saved.".into()))
+                Ok(Some(crate::translations::t("ui-passkey-name-saved").into()))
             }
         },
     );

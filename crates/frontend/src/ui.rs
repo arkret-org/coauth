@@ -69,7 +69,14 @@ pub fn badge(label: impl Into<String>, ok: bool) -> View {
 pub fn separator() -> View {
     Box::new(sapid::separator().unstyled().class("separator section"))
 }
-pub fn disclosure(scope: &Scope, key: &str, label: &str, content: View, open: bool) -> View {
+pub fn disclosure(
+    scope: &Scope,
+    key: &str,
+    label: impl Into<String>,
+    content: View,
+    open: bool,
+) -> View {
+    let label = label.into();
     let mut content = Some(content);
     Box::new(
         sapid::collapsible(format!("{}-{key}", scope.id().slot()))
@@ -84,11 +91,12 @@ pub fn disclosure(scope: &Scope, key: &str, label: &str, content: View, open: bo
 pub fn dialog(
     scope: &Scope,
     key: &str,
-    label: &str,
+    label: impl Into<String>,
     class: &str,
     content: View,
     open: Cage<bool>,
 ) -> View {
+    let label = label.into();
     let mut content = Some(content);
     Box::new(
         sapid::dialog(format!("{}-{key}", scope.id().slot()))
@@ -96,11 +104,11 @@ pub fn dialog(
             .class("account-dialog")
             .label(label.to_owned())
             .title(label.to_owned())
-            .close_label(if key == "edit-profile" {
-                "Cancel"
+            .close_label(crate::translations::t(if key == "edit-profile" {
+                "action-cancel"
             } else {
-                "Close"
-            })
+                "ui-close"
+            }))
             .open(open)
             .on_open_change(move |next| open.revise(|value| *value = next))
             .trigger_content({
@@ -124,20 +132,12 @@ pub fn note(title: impl Into<String>, description: impl Into<String>) -> View {
     block(
         "page-heading",
         vec![
-            copy(
-                "page-heading-icon",
-                if title == "Device not found" {
-                    "?"
-                } else {
-                    "🔒"
-                },
-            ),
             heading(1, "heading-sm", title),
             copy("page-heading-subtitle", description),
         ],
     )
 }
-pub fn empty(title: &str, description: &str) -> View {
+pub fn empty(title: impl Into<String>, description: impl Into<String>) -> View {
     block(
         "empty-state",
         vec![
@@ -261,13 +261,17 @@ pub fn resource_body<T: Clone + 'static>(
     render: impl Fn(&Scope, T) -> View + 'static,
 ) -> View {
     reactive(source.data, move |scope, result| match result {
-        None => copy("loading-screen", "Loading…"),
+        None => copy("loading-screen", crate::translations::t("ui-loading")),
         Some(Ok(value)) => render(scope, value),
         Some(Err(message)) => {
             let reload = source.clone();
             stack(vec![
                 alert(message, false),
-                button("Try again", "btn btn-secondary", move || reload.reload()),
+                button(
+                    crate::translations::t("ui-try-again"),
+                    "btn btn-secondary",
+                    move || reload.reload(),
+                ),
             ])
         }
     })
@@ -281,12 +285,20 @@ pub struct Action {
 }
 impl Action {
     pub fn new(scope: &Scope) -> Self {
-        Self {
+        let state = Self {
             busy: scope.cage(false),
             allowed: scope.cage(true),
             feedback: scope.cage(None),
             owner: scope.cage(scope.downgrade()),
-        }
+        };
+        crate::drafts::track(scope, move || {
+            if state.busy.get_untracked() {
+                crate::drafts::State::Busy
+            } else {
+                crate::drafts::State::Clean
+            }
+        });
+        state
     }
     pub fn messages(self) -> View {
         reactive(self.feedback, |_, value| match value {
@@ -324,7 +336,9 @@ impl Action {
 pub struct Field {
     pub label: String,
     pub value: Cage<String>,
+    pub baseline: Cage<String>,
     pub purpose: Purpose,
+    pub show_strength: bool,
     pub required: bool,
     pub readonly: bool,
     pub placeholder: String,
@@ -333,10 +347,13 @@ pub struct Field {
 }
 impl Field {
     pub fn new(scope: &Scope, label: impl Into<String>, initial: impl Into<String>) -> Self {
+        let initial = initial.into();
         Self {
             label: label.into(),
-            value: scope.cage(initial.into()),
+            value: scope.cage(initial.clone()),
+            baseline: scope.cage(initial),
             purpose: Purpose::Text,
+            show_strength: false,
             required: false,
             readonly: false,
             placeholder: String::new(),
@@ -346,6 +363,11 @@ impl Field {
     }
     pub fn password(mut self) -> Self {
         self.purpose = Purpose::Password;
+        self
+    }
+    pub fn new_password(mut self) -> Self {
+        self.purpose = Purpose::Password;
+        self.show_strength = true;
         self
     }
     pub fn email(mut self) -> Self {
@@ -387,6 +409,16 @@ pub fn field(
     state: Action,
 ) -> View {
     let value = item.value;
+    let baseline = item.baseline;
+    if !item.readonly {
+        crate::drafts::track(scope, move || {
+            if value.get_untracked() != baseline.get_untracked() {
+                crate::drafts::State::Unsaved
+            } else {
+                crate::drafts::State::Clean
+            }
+        });
+    }
     let enabled = enabled.into();
     let select_key = format!("select-{}-{key}", scope.id().slot());
     Box::new(
@@ -427,6 +459,7 @@ pub fn field(
                             }))
                             .enabled(enabled.clone())
                             .on_value_change(move |new| {
+                                crate::drafts::edited();
                                 let next = new
                                     .and_then(|key| {
                                         key.strip_prefix("option-")
@@ -450,7 +483,10 @@ pub fn field(
                             .placeholder(item.placeholder.clone())
                             .value(value)
                             .enabled(enabled.clone())
-                            .on_value_change(move |new| value.revise(|old| *old = new)),
+                            .on_value_change(move |new| {
+                                crate::drafts::edited();
+                                value.revise(|old| *old = new);
+                            }),
                     )
                 } else {
                     Box::new(
@@ -463,7 +499,10 @@ pub fn field(
                             .placeholder(item.placeholder.clone())
                             .value(value)
                             .enabled(enabled.clone())
-                            .on_value_change(move |new| value.revise(|old| *old = new)),
+                            .on_value_change(move |new| {
+                                crate::drafts::edited();
+                                value.revise(|old| *old = new);
+                            }),
                     )
                 };
                 input
@@ -486,6 +525,16 @@ where
     let enabled = scope.bond(move || !state.busy.get());
     let can_submit = scope.bond(move || !state.busy.get() && state.allowed.get());
     let values = fields.iter().map(|field| field.value).collect::<Vec<_>>();
+    let acknowledged = fields
+        .iter()
+        .map(|field| {
+            (
+                field.value,
+                field.baseline,
+                field.purpose == Purpose::Password,
+            )
+        })
+        .collect::<Vec<_>>();
     let mut children = if key == "new-passkey" {
         vec![]
     } else {
@@ -493,10 +542,10 @@ where
     };
     let new_password = fields
         .iter()
-        .find(|field| field.label == "New password")
+        .find(|field| field.show_strength)
         .map(|field| field.value);
     for (index, item) in fields.into_iter().enumerate() {
-        let is_new = item.label == "New password";
+        let is_new = item.show_strength;
         children.push(field(
             scope,
             &format!("{key}-{index}"),
@@ -531,8 +580,30 @@ where
                 if state.busy.get_untracked() {
                     return;
                 }
-                let snapshot = values.iter().map(|value| value.get_untracked()).collect();
-                state.run(&weak, submit(snapshot));
+                let snapshot = values
+                    .iter()
+                    .map(|value| value.get_untracked())
+                    .collect::<Vec<_>>();
+                let submitted = snapshot.clone();
+                let acknowledged = acknowledged.clone();
+                let owner = weak.clone();
+                let future = submit(snapshot);
+                state.run(&weak, async move {
+                    let result = future.await;
+                    if result.is_ok() && owner.upgrade().is_some() {
+                        for ((value, baseline, password), accepted) in
+                            acknowledged.into_iter().zip(submitted)
+                        {
+                            if password {
+                                value.revise(String::clear);
+                                baseline.revise(String::clear);
+                            } else {
+                                baseline.revise(|current| *current = accepted);
+                            }
+                        }
+                    }
+                    result
+                });
             }),
     );
     if matches!(
@@ -590,7 +661,7 @@ fn password_strength(scope: &Scope, value: Cage<String>) -> View {
                         .unstyled()
                         .class("password-strength-progress")
                         .range(0.0, 4.0)
-                        .name("Password strength")
+                        .name(crate::translations::t("ui-password-strength"))
                         .value_text(label.clone()),
                 ),
                 copy("password-strength-label", label),
@@ -598,23 +669,67 @@ fn password_strength(scope: &Scope, value: Cage<String>) -> View {
         )
     })
 }
-pub fn checkbox(_scope: &Scope, _key: &str, label: &str, value: Cage<bool>, enabled: bool) -> View {
+pub fn checkbox(
+    scope: &Scope,
+    _key: &str,
+    label: impl Into<String>,
+    value: Cage<bool>,
+    enabled: impl Into<Vary<bool>>,
+) -> View {
+    checkbox_core(scope, label.into(), value, enabled.into(), true)
+}
+pub fn preference_checkbox(
+    scope: &Scope,
+    _key: &str,
+    label: impl Into<String>,
+    value: Cage<bool>,
+    enabled: impl Into<Vary<bool>>,
+) -> View {
+    checkbox_core(scope, label.into(), value, enabled.into(), false)
+}
+fn checkbox_core(
+    scope: &Scope,
+    label: String,
+    value: Cage<bool>,
+    enabled: Vary<bool>,
+    tracked: bool,
+) -> View {
+    let initial = value.get_untracked();
+    if tracked {
+        crate::drafts::track(scope, move || {
+            if value.get_untracked() != initial {
+                crate::drafts::State::Unsaved
+            } else {
+                crate::drafts::State::Clean
+            }
+        });
+    }
     Box::new(
         sapid::checkbox()
             .unstyled()
             .class("checkbox-label")
-            .name(label.to_owned())
-            .label(label.to_owned())
+            .name(label.clone())
+            .label(label)
             .checked(value)
             .enabled(enabled)
-            .on_checked_change(move |next| value.revise(|old| *old = next)),
+            .on_checked_change(move |next| {
+                crate::drafts::edited();
+                value.revise(|old| *old = next);
+            }),
     )
 }
-pub fn action<F, Fut>(scope: &Scope, label: &str, class: &str, state: Action, submit: F) -> View
+pub fn action<F, Fut>(
+    scope: &Scope,
+    label: impl Into<String>,
+    class: &str,
+    state: Action,
+    submit: F,
+) -> View
 where
     F: Fn() -> Fut + 'static,
     Fut: Future<Output = Outcome> + 'static,
 {
+    let label = label.into();
     let enabled = scope.bond(move || !state.busy.get() && state.allowed.get());
     let weak = scope.downgrade();
     Box::new(

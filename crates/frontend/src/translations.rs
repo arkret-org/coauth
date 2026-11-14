@@ -251,6 +251,18 @@ pub fn t_with(key: &str, values: &[(&str, &str)]) -> String {
     format_for_locale(current_locale(), key, Some(&args)).unwrap_or_else(|| key.to_owned())
 }
 
+fn format_count(locale: UiLocale, key: &str, count: u64) -> String {
+    let mut args = FluentArgs::new();
+    args.set("count", FluentValue::from(count as f64));
+    args.set("count_display", count.to_string());
+    format_for_locale(locale, key, Some(&args)).unwrap_or_else(|| key.to_owned())
+}
+
+/// Use numeric plural selection while keeping the displayed integer exact.
+pub fn t_count(key: &str, count: u64) -> String {
+    format_count(current_locale(), key, count)
+}
+
 /// Apply the selected catalog to document metadata and durable UI preference.
 pub fn apply_locale(locale: UiLocale) {
     #[cfg(target_arch = "wasm32")]
@@ -291,7 +303,19 @@ pub fn set_locale(value: UiLocale) {
 
 #[cfg(test)]
 mod tests {
-    use super::{UiLocale, format_for_locale};
+    use super::{UiLocale, format_count, format_for_locale};
+
+    #[test]
+    fn counts_use_locale_plural_rules_and_keep_large_integers_exact() {
+        assert!(format_count(UiLocale::En, "ui-session-count", 1).contains("active session"));
+        assert!(!format_count(UiLocale::En, "ui-session-count", 1).contains("sessions"));
+        assert!(format_count(UiLocale::En, "ui-session-count", 2).contains("sessions"));
+        assert!(format_count(UiLocale::Zh, "ui-session-count", 2).contains("个活跃会话"));
+        assert!(
+            format_count(UiLocale::En, "ui-session-count", u64::MAX)
+                .contains(&u64::MAX.to_string())
+        );
+    }
 
     /// Parse a tag the way a caller would, then render through it. Tag parsing
     /// itself is `arkret-locale`'s job and is tested there; this asserts the

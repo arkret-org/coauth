@@ -40,16 +40,20 @@ pub fn entry(scope: &Scope) -> View {
             let mut fields = vec![
                 Field::new(scope, t("common-handle"), "")
                     .required()
-                    .placeholder("Choose a username"),
+                    .placeholder(crate::translations::t("ui-choose-a-username")),
                 Field::new(scope, t("common-email-address"), "").email(),
             ];
             if phone_enabled {
                 fields.push(Field::new(scope, t("coauth-register-phone-optional"), ""));
             }
             let password_index = fields.len();
-            fields.push(Field::new(scope, "New password", "").password().required());
             fields.push(
-                Field::new(scope, "Confirm password", "")
+                Field::new(scope, crate::translations::t("ui-new-password"), "")
+                    .new_password()
+                    .required(),
+            );
+            fields.push(
+                Field::new(scope, crate::translations::t("ui-confirm-password"), "")
                     .password()
                     .required(),
             );
@@ -91,14 +95,17 @@ pub fn entry(scope: &Scope) -> View {
                         )
                         .await?;
                         if response.status != "success" {
-                            let code = response.error.as_deref().unwrap_or("Registration failed.");
+                            let fallback = crate::translations::t("ui-registration-failed");
+                            let code = response.error.as_deref().unwrap_or(&fallback);
                             return Err(if code == "email_or_phone_required" {
                                 t(contact_message_key)
                             } else {
                                 error_message(code)
                             });
                         }
-                        let id = response.id.ok_or("Registration did not provide an ID")?;
+                        let id = response.id.ok_or(crate::translations::t(
+                            "ui-registration-did-not-provide-an-id",
+                        ))?;
                         next_step(&id, response.next_step.as_deref())?;
                         Ok(None)
                     }
@@ -114,9 +121,9 @@ pub fn entry(scope: &Scope) -> View {
                     .into_iter()
                     .map(|provider| {
                         link(
-                            format!(
-                                "Continue with {}",
-                                provider.human_name.unwrap_or(provider.id)
+                            crate::translations::t_with(
+                                "coauth-login-continue-with-provider",
+                                &[("provider", &provider.human_name.unwrap_or(provider.id))],
                             ),
                             provider.authorize_url,
                             "btn btn-secondary btn-block",
@@ -128,13 +135,13 @@ pub fn entry(scope: &Scope) -> View {
         if !providers.password_registration_enabled {
             body.push(copy(
                 "text-secondary",
-                "Password registration is not available.",
+                crate::translations::t("ui-password-registration-is-not-available"),
             ));
         }
         body.push(block(
             "login-register",
             vec![
-                plain("Already have an account?"),
+                plain(crate::translations::t("ui-already-have-an-account")),
                 link(t("action-sign-in"), "/login", "link"),
             ],
         ));
@@ -148,8 +155,8 @@ pub fn step(scope: &Scope, id: String, kind: String) -> View {
         "display-name" => display_name(scope, id),
         "finish" => finish(scope, id),
         _ => empty(
-            "Registration step not found",
-            "Return to registration and try again.",
+            &crate::translations::t("ui-registration-step-not-found"),
+            &crate::translations::t("ui-return-to-registration-and-try-again"),
         ),
     }
 }
@@ -163,13 +170,16 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
     ui::resource_body(data, move |scope, status| {
         let state = Action::new(scope);
         let request = id.clone();
-        let code = Field::new(scope, "Verification code", "")
+        let code = Field::new(scope, crate::translations::t("ui-verification-code"), "")
             .required()
-            .placeholder("6-digit code");
+            .placeholder(crate::translations::t("ui-6-digit-code"));
         let mut body = vec![copy(
             "text-secondary",
             if phone {
-                "We sent a verification code to your phone number. Please enter it below.".into()
+                crate::translations::t(
+                    "ui-we-sent-a-verification-code-to-your-phone-number-15050432",
+                )
+                .into()
             } else {
                 format!(
                     "Enter the verification code sent to {}.",
@@ -184,7 +194,7 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
             scope,
             "registration-verify",
             vec![code],
-            "Verify",
+            crate::translations::t("ui-verify"),
             "btn btn-primary btn-block",
             state,
             move |values| {
@@ -203,12 +213,9 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
                         api::api_post::<StepOutcome>(&path, serde_json::json!({"code":values[0]}))
                             .await?;
                     if response.status != "success" {
-                        return Err(error_message(
-                            response
-                                .error
-                                .as_deref()
-                                .unwrap_or("Invalid verification code."),
-                        ));
+                        return Err(error_message(response.error.as_deref().unwrap_or(
+                            &crate::translations::t("ui-invalid-verification-code"),
+                        )));
                     }
                     next_step(&id, response.next_step.as_deref())?;
                     Ok(None)
@@ -218,7 +225,7 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
         let request = id.clone();
         body.push(ui::action(
             scope,
-            "Resend code",
+            &crate::translations::t("ui-resend-code"),
             "btn btn-secondary btn-block",
             state,
             move || {
@@ -233,7 +240,9 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
                     if !matches!(response.status.as_str(), "resent" | "success") {
                         return Err(error_message(&response.status));
                     }
-                    Ok(Some("A new verification code has been sent.".into()))
+                    Ok(Some(
+                        crate::translations::t("ui-a-new-verification-code-has-been-sent").into(),
+                    ))
                 }
             },
         ));
@@ -241,55 +250,60 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
             let request = id.clone();
             let reload = reload.clone();
             let change_state = Action::new(scope);
-            let form = ui::form(
-                scope,
-                "registration-change-email",
-                vec![
-                    Field::new(
-                        scope,
-                        "Email address",
-                        status.pending_email.unwrap_or_default(),
-                    )
-                    .email()
-                    .required(),
-                ],
-                "Update email",
-                "btn btn-primary btn-block",
-                change_state,
-                move |values| {
-                    let path = format!("/account/auth/register/{}/change-email", encode(&request));
-                    let reload = reload.clone();
-                    async move {
-                        let response = api::api_post::<ChangeRegistrationEmailOutcome>(
-                            &path,
-                            serde_json::json!({"email":values[0]}),
+            let form =
+                ui::form(
+                    scope,
+                    "registration-change-email",
+                    vec![
+                        Field::new(
+                            scope,
+                            crate::translations::t("ui-email-address"),
+                            status.pending_email.unwrap_or_default(),
                         )
-                        .await?;
-                        if response.status != "updated" {
-                            return Err(error_message(
-                                response.error.as_deref().unwrap_or("Email update failed."),
-                            ));
+                        .email()
+                        .required(),
+                    ],
+                    crate::translations::t("ui-update-email"),
+                    "btn btn-primary btn-block",
+                    change_state,
+                    move |values| {
+                        let path =
+                            format!("/account/auth/register/{}/change-email", encode(&request));
+                        let reload = reload.clone();
+                        async move {
+                            let response = api::api_post::<ChangeRegistrationEmailOutcome>(
+                                &path,
+                                serde_json::json!({"email":values[0]}),
+                            )
+                            .await?;
+                            if response.status != "updated" {
+                                return Err(error_message(response.error.as_deref().unwrap_or(
+                                    &crate::translations::t("ui-email-update-failed"),
+                                )));
+                            }
+                            reload.reload();
+                            Ok(Some(
+                                crate::translations::t(
+                                    "ui-your-email-has-been-updated-and-a-new-code-has-been-sent",
+                                )
+                                .into(),
+                            ))
                         }
-                        reload.reload();
-                        Ok(Some(
-                            "Your email has been updated and a new code has been sent.".into(),
-                        ))
-                    }
-                },
-            );
+                    },
+                );
             body.push(ui::disclosure(
                 scope,
                 "change-email",
-                "Change email address",
+                &crate::translations::t("ui-change-email-address"),
                 form,
                 false,
             ));
         }
         auth_card(
             if phone {
-                "Verify your phone"
+                crate::translations::t("ui-verify-your-phone")
             } else {
-                "Verify your email"
+                crate::translations::t("ui-verify-your-email")
             },
             body,
         )
@@ -322,12 +336,9 @@ fn display_name(scope: &Scope, id: String) -> View {
                         )
                         .await?;
                         if response.status != "success" {
-                            return Err(error_message(
-                                response
-                                    .error
-                                    .as_deref()
-                                    .unwrap_or("Unable to save display name."),
-                            ));
+                            return Err(error_message(response.error.as_deref().unwrap_or(
+                                &crate::translations::t("ui-unable-to-save-display-name"),
+                            )));
                         }
                         next_step(&id, Some("finish"))?;
                         Ok(None)
@@ -349,7 +360,10 @@ fn display_name(scope: &Scope, id: String) -> View {
                         .await?;
                         if response.status != "success" {
                             return Err(error_message(
-                                response.error.as_deref().unwrap_or("Unable to continue."),
+                                response
+                                    .error
+                                    .as_deref()
+                                    .unwrap_or(&crate::translations::t("ui-unable-to-continue")),
                             ));
                         }
                         next_step(&id, Some("finish"))?;
@@ -369,17 +383,26 @@ fn finish(scope: &Scope, id: String) -> View {
         let submit_id = id.clone();
         if status.setup_required {
             auth_card(
-                "Create your account",
+                &crate::translations::t("ui-create-your-account"),
                 vec![
                     copy(
                         "text-secondary",
-                        "If you are claiming the initial administrator account, enter the bootstrap token below. Leave it blank to continue as a regular user, or enter the correct token to claim the first administrator account.",
+                        crate::translations::t(
+                            "ui-if-you-are-claiming-the-initial-administrator-ac-2d2597e2",
+                        ),
                     ),
                     ui::form(
                         scope,
                         "registration-finish",
-                        vec![Field::new(scope, "Bootstrap admin token (optional)", "").password()],
-                        "Create account",
+                        vec![
+                            Field::new(
+                                scope,
+                                crate::translations::t("ui-bootstrap-admin-token-optional"),
+                                "",
+                            )
+                            .password(),
+                        ],
+                        crate::translations::t("ui-create-account-798ca2ce"),
                         "btn btn-primary btn-block",
                         state,
                         move |values| {
@@ -402,13 +425,13 @@ fn finish(scope: &Scope, id: String) -> View {
                 async move { complete(&request, None).await },
             );
             auth_card(
-                "Create your account",
+                &crate::translations::t("ui-create-your-account"),
                 vec![
-                    plain("Completing registration…"),
+                    plain(crate::translations::t("ui-completing-registration")),
                     state.messages(),
                     ui::action(
                         scope,
-                        "Try again",
+                        &crate::translations::t("ui-try-again"),
                         "btn btn-secondary btn-block",
                         state,
                         move || {
@@ -428,12 +451,9 @@ async fn complete(id: &str, token: Option<String>) -> Outcome {
     )
     .await?;
     if response.status != "success" {
-        return Err(error_message(
-            response
-                .error
-                .as_deref()
-                .unwrap_or("Could not complete registration."),
-        ));
+        return Err(error_message(response.error.as_deref().unwrap_or(
+            &crate::translations::t("ui-could-not-complete-registration"),
+        )));
     }
     if let Some(action) = response.post_auth_action {
         crate::post_auth_continuation::save(&action);
@@ -459,8 +479,26 @@ fn mask_email(email: &str) -> String {
     }
 }
 fn error_message(code: &str) -> String {
-    match code{
-    "handle_invalid"=>t("coauth-register-handle-invalid"),"email_or_phone_required"=>t("coauth-register-contact-required"),"invalid_code"=>"Incorrect code. Please try again.".into(),"invalid_display_name"=>t("coauth-errors-display-name-invalid"),"rate_limited"=>"Please wait a moment and try again.".into(),"registration_already_completed"=>"This registration has already been completed.".into(),"email_already_verified"=>"This email has already been verified.".into(),"email_invalid"=>"Please enter a valid email address.".into(),"email_in_use"=>"This email is already in use.".into(),"bootstrap_admin_token_invalid"=>"That admin bootstrap token is not valid. Clear the field to continue as a regular user, or enter the correct token to claim the first administrator account.".into(),other=>other.into(),}
+    match code {
+        "handle_invalid" => t("coauth-register-handle-invalid"),
+        "email_or_phone_required" => t("coauth-register-contact-required"),
+        "invalid_code" => crate::translations::t("ui-incorrect-code-please-try-again").into(),
+        "invalid_display_name" => t("coauth-errors-display-name-invalid"),
+        "rate_limited" => crate::translations::t("ui-please-wait-a-moment-and-try-again").into(),
+        "registration_already_completed" => {
+            crate::translations::t("ui-this-registration-has-already-been-completed").into()
+        }
+        "email_already_verified" => {
+            crate::translations::t("ui-this-email-has-already-been-verified").into()
+        }
+        "email_invalid" => crate::translations::t("ui-please-enter-a-valid-email-address").into(),
+        "email_in_use" => crate::translations::t("ui-this-email-is-already-in-use").into(),
+        "bootstrap_admin_token_invalid" => {
+            crate::translations::t("ui-that-admin-bootstrap-token-is-not-valid-clear-th-be50dd67")
+                .into()
+        }
+        other => other.into(),
+    }
 }
 
 #[cfg(test)]

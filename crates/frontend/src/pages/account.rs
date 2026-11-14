@@ -8,10 +8,10 @@ pub fn shell(scope: &Scope, path: String) -> View {
     ui::resource_body(viewer, move |scope, response| {
         let Some(user) = response.viewer.as_user().cloned() else {
             let _ = go("/login");
-            return plain("Redirecting to login…");
+            return plain(crate::translations::t("ui-redirecting-to-login"));
         };
         let Some(principal) = user.principal.clone() else {
-            return alert("User data unavailable.", false);
+            return alert(crate::translations::t("ui-user-data-unavailable"), false);
         };
         let stored = user
             .profile
@@ -27,7 +27,12 @@ pub fn shell(scope: &Scope, path: String) -> View {
             .or_else(|| principal.display_name.clone())
             .unwrap_or_else(|| principal.principal_address.clone());
         let avatar = if let Some(url) = user.profile.avatar_url.clone() {
-            Box::new(image().class("user-avatar").source(url).alt("Avatar")) as View
+            Box::new(
+                image()
+                    .class("user-avatar")
+                    .source(url)
+                    .alt(crate::translations::t("ui-avatar")),
+            ) as View
         } else {
             copy(
                 "user-avatar",
@@ -58,16 +63,19 @@ pub fn shell(scope: &Scope, path: String) -> View {
         )];
         for (title, items) in [
             (
-                "Account",
+                crate::translations::t("ui-account"),
                 vec![
-                    ("Overview", "/"),
-                    ("Settings", "/settings"),
-                    ("Identities", "/identities"),
+                    (crate::translations::t("ui-overview"), "/"),
+                    (crate::translations::t("ui-settings"), "/settings"),
+                    (crate::translations::t("ui-identities"), "/identities"),
                 ],
             ),
             (
-                "Security",
-                vec![("Security", "/security"), ("Devices", "/sessions")],
+                crate::translations::t("ui-security"),
+                vec![
+                    (crate::translations::t("ui-security"), "/security"),
+                    (crate::translations::t("ui-devices"), "/sessions"),
+                ],
             ),
         ] {
             let mut group = vec![copy("sidebar-group-label", title)];
@@ -90,15 +98,25 @@ pub fn shell(scope: &Scope, path: String) -> View {
             nav.push(block(
                 "sidebar-nav-group",
                 vec![
-                    copy("sidebar-group-label", "Administration"),
-                    link("Admin Portal (external)", url, "sidebar-item"),
+                    copy(
+                        "sidebar-group-label",
+                        crate::translations::t("ui-administration"),
+                    ),
+                    link(
+                        crate::translations::t("ui-admin-portal-external"),
+                        url,
+                        "sidebar-item",
+                    ),
                 ],
             ));
         }
         let mut preferences = vec![
-            copy("sidebar-group-label", "Preferences"),
+            copy(
+                "sidebar-group-label",
+                crate::translations::t("ui-preferences"),
+            ),
             link(
-                "Notifications",
+                crate::translations::t("ui-notifications"),
                 "/notifications",
                 if path == "/notifications" {
                     "sidebar-item active"
@@ -109,7 +127,7 @@ pub fn shell(scope: &Scope, path: String) -> View {
         ];
         if response.site_config.plan_management_iframe_uri.is_some() {
             preferences.push(link(
-                "Plan",
+                crate::translations::t("ui-plan"),
                 "/plan",
                 if path == "/plan" {
                     "sidebar-item active"
@@ -128,10 +146,20 @@ pub fn shell(scope: &Scope, path: String) -> View {
                         .class("account-sidebar")
                         .fill(nav),
                 ),
-                block("account-content", vec![super::route(scope, &path)]),
+                block(
+                    "account-content",
+                    vec![if path == "/" {
+                        overview_for_user(scope, user.clone())
+                    } else {
+                        super::route(scope, &path)
+                    }],
+                ),
             ],
         );
-        super::layout(scope, body, true)
+        block(
+            "account-with-preferences",
+            vec![super::preferences(scope), super::layout(scope, body, true)],
+        )
     })
 }
 fn profile_editor(
@@ -152,20 +180,21 @@ fn profile_editor(
         scope,
         "profile-edit",
         vec![
-            Field::new(scope, "Display name", initial)
-                .description("Your display name is shown to other users."),
-            Field::new(scope, "Language", locale)
-                .description(
-                    "Applies everywhere you sign in, and to the notifications we send you.",
-                )
+            Field::new(scope, crate::translations::t("ui-display-name"), initial).description(
+                crate::translations::t("ui-your-display-name-is-shown-to-other-users"),
+            ),
+            Field::new(scope, crate::translations::t("ui-language"), locale)
+                .description(crate::translations::t(
+                    "ui-applies-everywhere-you-sign-in-and-to-the-notifi-53557f56",
+                ))
                 .choices([
-                    ("", "Use device language"),
-                    ("en", "English"),
-                    ("zh", "中文"),
+                    ("", crate::translations::t("ui-use-device-language")),
+                    ("en", "English".to_owned()),
+                    ("zh", "中文".to_owned()),
                 ]),
             Field::new(
                 scope,
-                "Principal ID",
+                crate::translations::t("ui-principal-id"),
                 user.principal
                     .as_ref()
                     .map(|p| p.principal_address.clone())
@@ -173,7 +202,7 @@ fn profile_editor(
             )
             .readonly(true),
         ],
-        "Save",
+        crate::translations::t("ui-save"),
         "btn btn-primary",
         state,
         move |values| {
@@ -181,7 +210,10 @@ fn profile_editor(
             async move {
                 let locale = values[1].trim();
                 if !locale.is_empty() && crate::translations::UiLocale::from_tag(locale).is_none() {
-                    return Err("Choose a supported account language (en or zh-CN).".into());
+                    return Err(crate::translations::t(
+                        "ui-choose-a-supported-account-language-en-or-zh-cn",
+                    )
+                    .into());
                 }
                 let response=api::api_patch::<PatchViewerProfileOutcome>("/self/viewer/profile",serde_json::json!({"display_name":(!values[0].is_empty()).then(||values[0].clone()),"avatar_url":avatar.get_untracked(),"preferred_locale":(!locale.is_empty()).then_some(locale)})).await?;
                 crate::translations::set_account_locale(
@@ -206,7 +238,7 @@ fn profile_editor(
                         image()
                             .class("user-avatar user-avatar-lg self-center")
                             .source(url)
-                            .alt("Avatar"),
+                            .alt(crate::translations::t("ui-avatar")),
                     ),
                     None => copy(
                         "user-avatar user-avatar-lg self-center",
@@ -221,7 +253,7 @@ fn profile_editor(
     ui::dialog(
         scope,
         "edit-profile",
-        "Edit profile",
+        &crate::translations::t("ui-edit-profile"),
         "btn btn-tertiary btn-sm",
         body,
         open,
@@ -234,8 +266,22 @@ fn avatar_upload(scope: &Scope, avatar: Cage<Option<String>>, state: Action) -> 
     Box::new(
         sapid::file_button()
             .unstyled()
-            .class(scope.bond(move || if state.busy.get() { "btn btn-secondary btn-sm avatar-uploading" } else { "btn btn-secondary btn-sm" }.to_owned()))
-            .label(scope.bond(move || if state.busy.get() { "Uploading avatar…" } else { "Upload avatar" }.to_owned()))
+            .class(scope.bond(move || {
+                if state.busy.get() {
+                    "btn btn-secondary btn-sm avatar-uploading"
+                } else {
+                    "btn btn-secondary btn-sm"
+                }
+                .to_owned()
+            }))
+            .label(scope.bond(move || {
+                if state.busy.get() {
+                    crate::translations::t("ui-uploading-avatar")
+                } else {
+                    crate::translations::t("ui-upload-avatar")
+                }
+                .to_owned()
+            }))
             .controller_ref(controller)
             .configuration(glory::render::FileConfig {
                 multiple: false,
@@ -250,7 +296,12 @@ fn avatar_upload(scope: &Scope, avatar: Cage<Option<String>>, state: Action) -> 
             })
             .on_result(move |result| {
                 if let glory::render::FileOutcome::Rejected(reason) = result {
-                    state.feedback.revise(|value| *value = Some(Err(format!("Avatar selection was rejected: {reason:?}. Choose a PNG, JPEG, GIF or WebP image up to 5 MB."))));
+                    state.feedback.revise(|value| {
+                        *value = Some(Err(crate::translations::t_with(
+                            "ui-avatar-selection-rejected",
+                            &[("reason", &format!("{reason:?}"))],
+                        )))
+                    });
                 }
             })
             .on_files(move |files| {
@@ -266,7 +317,8 @@ fn avatar_upload(scope: &Scope, avatar: Cage<Option<String>>, state: Action) -> 
                     avatar.revise(|value| *value = Some(url));
                     let _ = control.clear();
                     Ok(Some(
-                        "Avatar uploaded. Save your profile to apply it.".into(),
+                        crate::translations::t("ui-avatar-uploaded-save-your-profile-to-apply-it")
+                            .into(),
                     ))
                 });
             }),
@@ -287,7 +339,9 @@ async fn upload_avatar(
     let mut bytes = Vec::with_capacity(file.size as usize);
     let mut offset = 0u64;
     while offset < file.size {
-        let scope = owner.upgrade().ok_or("Avatar selection was closed")?;
+        let scope = owner
+            .upgrade()
+            .ok_or(crate::translations::t("ui-avatar-selection-was-closed"))?;
         let result = Rc::new(RefCell::new((None, None::<Waker>)));
         let reply = result.clone();
         control
@@ -320,7 +374,7 @@ async fn upload_avatar(
         .await
         .map_err(|error| error.to_string())?;
         if chunk.is_empty() {
-            return Err("Unable to read the complete avatar.".into());
+            return Err(crate::translations::t("ui-unable-to-read-the-complete-avatar").into());
         }
         offset += chunk.len() as u64;
         bytes.extend(chunk);
@@ -331,10 +385,11 @@ async fn upload_avatar(
     let properties = web_sys::BlobPropertyBag::new();
     properties.set_type(&file.media_type);
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &properties)
-        .map_err(|_| "Unable to prepare avatar")?;
-    let form = web_sys::FormData::new().map_err(|_| "Unable to prepare avatar upload")?;
+        .map_err(|_| crate::translations::t("ui-unable-to-prepare-avatar"))?;
+    let form = web_sys::FormData::new()
+        .map_err(|_| crate::translations::t("ui-unable-to-prepare-avatar-upload"))?;
     form.append_with_blob_and_filename("avatar", &blob, &file.name)
-        .map_err(|_| "Unable to attach avatar")?;
+        .map_err(|_| crate::translations::t("ui-unable-to-attach-avatar"))?;
     let options = web_sys::RequestInit::new();
     options.set_method("POST");
     options.set_credentials(web_sys::RequestCredentials::SameOrigin);
@@ -343,23 +398,36 @@ async fn upload_avatar(
         &format!("{}/self/viewer/avatar", crate::config::api_base_url()),
         &options,
     )
-    .map_err(|_| "Unable to create avatar request")?;
-    let window = web_sys::window().ok_or("Browser window unavailable")?;
+    .map_err(|_| crate::translations::t("ui-unable-to-create-avatar-request"))?;
+    let window =
+        web_sys::window().ok_or(crate::translations::t("ui-browser-window-unavailable"))?;
     let response: web_sys::Response = JsFuture::from(window.fetch_with_request(&request))
         .await
-        .map_err(|error| format!("Avatar upload failed: {error:?}"))?
+        .map_err(|error| {
+            crate::translations::t_with(
+                "ui-avatar-upload-failed",
+                &[("error", &format!("{error:?}"))],
+            )
+        })?
         .dyn_into()
-        .map_err(|_| "Invalid upload response")?;
+        .map_err(|_| crate::translations::t("ui-invalid-upload-response"))?;
     if !response.ok() {
-        return Err(format!("Avatar upload failed (HTTP {})", response.status()));
+        return Err(crate::translations::t_with(
+            "ui-avatar-http-failed",
+            &[("status", &response.status().to_string())],
+        ));
     }
-    let json = JsFuture::from(response.json().map_err(|_| "Invalid avatar response")?)
-        .await
-        .map_err(|_| "Invalid avatar response")?;
+    let json = JsFuture::from(
+        response
+            .json()
+            .map_err(|_| crate::translations::t("ui-invalid-avatar-response"))?,
+    )
+    .await
+    .map_err(|_| crate::translations::t("ui-invalid-avatar-response"))?;
     js_sys::Reflect::get(&json, &JsValue::from_str("avatar_url"))
         .ok()
         .and_then(|v| v.as_string())
-        .ok_or_else(|| "Avatar response did not provide a URL".into())
+        .ok_or_else(|| crate::translations::t("ui-avatar-response-did-not-provide-a-url").into())
 }
 #[cfg(not(target_arch = "wasm32"))]
 async fn upload_avatar(
@@ -367,151 +435,179 @@ async fn upload_avatar(
     _: sapid::FileController,
     _: glory::render::FileInfo,
 ) -> std::result::Result<String, String> {
-    Err("Avatar upload requires a browser.".into())
+    Err(crate::translations::t("ui-avatar-upload-requires-a-browser").into())
 }
 
 pub fn overview(scope: &Scope) -> View {
+    let source = ui::resource(scope, || api::api_get::<ViewerOutcome>("/self/viewer"));
+    ui::resource_body(source, |scope, response| {
+        match response.viewer.as_user().cloned() {
+            Some(user) => overview_for_user(scope, user),
+            None => plain(crate::translations::t("ui-sign-in-to-view-your-account")),
+        }
+    })
+}
+fn overview_for_user(scope: &Scope, user: coauth_account_types::ViewerUser) -> View {
     let security = ui::resource(scope, || {
         api::api_get::<SecuritySummaryOutcome>("/self/viewer/security")
     });
-    ui::resource_body(security, |_, summary| {
-        let password = if summary.has_password {
-            "Password is set"
-        } else {
-            "No password set"
-        };
-        let hero = block(
-            "overview-hero",
-            vec![
-                block(
-                    "overview-hero-copy",
-                    vec![
-                        copy("overview-eyebrow", "Control center"),
-                        heading(1, "heading-xs", "Account overview"),
-                        copy(
-                            "text-md text-secondary",
-                            "Scan account posture, pending work, and the fastest routes to your common account tasks.",
+    ui::resource_body(security, move |_, summary| {
+        let pending_emails = user
+            .emails
+            .as_ref()
+            .map(|emails| {
+                emails
+                    .edges
+                    .iter()
+                    .filter(|edge| edge.node.confirmed_at.is_none())
+                    .map(|edge| edge.node.email.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let mut sessions = user
+            .browser_sessions
+            .as_ref()
+            .map(|connection| {
+                connection
+                    .edges
+                    .iter()
+                    .map(|edge| edge.node.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        sessions.sort_by_key(|session| {
+            std::cmp::Reverse(
+                session
+                    .last_active_at
+                    .as_deref()
+                    .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok()),
+            )
+        });
+        let mut recent = vec![];
+        for session in sessions.into_iter().take(3) {
+            recent.push(block(
+                "overview-session-row",
+                vec![
+                    copy(
+                        "font-semibold",
+                        session
+                            .display_name
+                            .unwrap_or_else(|| crate::translations::t("ui-browser-session").into()),
+                    ),
+                    copy(
+                        "text-sm text-secondary",
+                        session
+                            .last_active_at
+                            .map(|value| crate::utils::format_date(&value))
+                            .unwrap_or_else(|| {
+                                crate::translations::t("ui-activity-time-unavailable")
+                            }),
+                    ),
+                    link(
+                        crate::translations::t("ui-view-session"),
+                        format!("/sessions/{}", encode(&session.id)),
+                        "btn btn-secondary btn-sm",
+                    ),
+                ],
+            ));
+        }
+        if recent.is_empty() {
+            recent.push(copy(
+                "text-secondary",
+                crate::translations::t("ui-no-browser-sessions-are-listed"),
+            ));
+        }
+        let mut children = vec![
+            heading(
+                1,
+                "heading-xs",
+                crate::translations::t("ui-account-overview"),
+            ),
+            copy(
+                "text-secondary",
+                crate::translations::t(
+                    "ui-manage-the-sign-in-methods-and-sessions-for-this-account",
+                ),
+            ),
+            overview_section(
+                crate::translations::t("ui-account-summary"),
+                vec![
+                    details(vec![
+                        (
+                            crate::translations::t("ui-password-sign-in").into(),
+                            if summary.has_password {
+                                crate::translations::t("ui-available")
+                            } else {
+                                crate::translations::t("ui-not-configured")
+                            }
+                            .into(),
                         ),
-                        badge(password, summary.has_password),
-                    ],
-                ),
-                block(
-                    "overview-hero-actions",
-                    vec![
-                        link("Review security", "/security", "btn btn-primary btn-sm"),
-                        link("Open devices", "/sessions", "btn btn-secondary btn-sm"),
-                    ],
-                ),
-            ],
-        );
-        let cards = vec![
-            stat(
-                "Password",
-                password,
-                if summary.has_password {
-                    "Password login is available for this account."
-                } else {
-                    "Add a password to reduce recovery friction and speed up sign-in."
-                },
-                "Open security",
-                "/security",
-                if summary.has_password {
-                    "tone-success"
-                } else {
-                    "tone-warning"
-                },
-            ),
-            stat(
-                "Active sessions",
-                &summary.active_sessions_count.to_string(),
-                "Browser and app sessions currently recognized as active.",
-                "Manage sessions",
-                "/sessions",
-                "tone-neutral",
-            ),
-            stat(
-                "Linked identities",
-                &summary.linked_providers_count.to_string(),
-                "Connected upstream identity providers available for sign-in.",
-                "Review identities",
-                "/identities",
-                "tone-neutral",
+                        (
+                            crate::translations::t("ui-active-sessions").into(),
+                            summary.active_sessions_count.to_string(),
+                        ),
+                        (
+                            crate::translations::t("ui-linked-identity-providers").into(),
+                            summary.linked_providers_count.to_string(),
+                        ),
+                        (
+                            crate::translations::t("ui-verified-email-addresses").into(),
+                            summary.verified_emails_count.to_string(),
+                        ),
+                        (
+                            crate::translations::t("ui-verified-phone-numbers").into(),
+                            summary.verified_phones_count.to_string(),
+                        ),
+                    ]),
+                    copy(
+                        "text-sm text-secondary",
+                        crate::translations::t(
+                            "ui-passkeys-and-linked-providers-can-be-valid-sign-9df79123",
+                        ),
+                    ),
+                    link(
+                        crate::translations::t("ui-manage-sign-in-methods"),
+                        "/security",
+                        "btn btn-secondary",
+                    ),
+                ],
             ),
         ];
-        let actions = [
-            (
-                "Security",
-                "Password health, session posture, and verified signals.",
-                "/security",
-            ),
-            (
-                "Identities",
-                "Inspect or detach linked upstream sign-in providers.",
-                "/identities",
-            ),
-            (
-                "Notifications",
-                "Review delivery channels and update messaging preferences.",
-                "/notifications",
-            ),
-            (
-                "Devices",
-                "Rename or revoke browser and OAuth sessions.",
-                "/sessions",
-            ),
-        ]
-        .into_iter()
-        .map(|(title, description, url)| {
-            block(
-                "overview-action-card",
+        if !pending_emails.is_empty() {
+            children.push(overview_section(
+                crate::translations::t("ui-email-verification-pending"),
                 vec![
-                    block(
-                        "flex flex-col gap-2",
-                        vec![
-                            heading(2, "overview-action-title", title),
-                            copy("text-sm text-secondary", description),
-                        ],
-                    ),
-                    link("Open", url, "overview-action-arrow"),
-                ],
-            )
-        })
-        .collect();
-        block(
-            "overview-shell",
-            vec![
-                hero,
-                block("overview-stat-grid", cards),
-                block(
-                    "flex flex-col gap-2",
-                    vec![
-                        copy("overview-section-title", "Quick actions"),
-                        copy(
-                            "text-sm text-secondary",
-                            "Jump directly into the areas users typically revisit after sign-in.",
+                    copy(
+                        "text-secondary",
+                        crate::translations::t(
+                            "ui-an-email-address-on-this-account-is-waiting-for-verification",
                         ),
-                    ],
-                ),
-                block("overview-action-grid", actions),
-            ],
-        )
+                    ),
+                    copy("overview-pending-emails", pending_emails.join(" · ")),
+                    link(
+                        crate::translations::t("ui-review-email-addresses"),
+                        "/settings",
+                        "btn btn-secondary",
+                    ),
+                ],
+            ));
+        }
+        children.push(overview_section(
+            crate::translations::t("ui-recent-browser-sessions"),
+            recent,
+        ));
+        children.push(link(
+            crate::translations::t("ui-view-all-devices-and-sessions"),
+            "/sessions",
+            "btn btn-secondary",
+        ));
+        block("overview-shell overview-focused", children)
     })
 }
-fn stat(title: &str, value: &str, note: &str, label: &str, target: &str, tone: &str) -> View {
-    block(
-        &format!("overview-stat-card {tone}"),
-        vec![
-            block(
-                "flex flex-col gap-2",
-                vec![
-                    copy("overview-stat-label", title),
-                    copy("overview-stat-value", value),
-                    copy("overview-stat-note", note),
-                ],
-            ),
-            link(label, target, "btn btn-secondary btn-sm"),
-        ],
-    )
+
+fn overview_section(title: impl Into<String>, mut children: Vec<View>) -> View {
+    children.insert(0, heading(2, "heading-sm", title));
+    block("overview-section", children)
 }
 
 pub fn settings(scope: &Scope) -> View {
@@ -520,10 +616,10 @@ pub fn settings(scope: &Scope) -> View {
     let actions = Action::new(scope);
     ui::resource_body(source, move |scope, response| {
         let Some(user) = response.viewer.as_user() else {
-            return alert("Not authenticated.", false);
+            return alert(crate::translations::t("ui-not-authenticated"), false);
         };
         let Some(session) = response.viewer_session.as_browser_session() else {
-            return alert("Not authenticated.", false);
+            return alert(crate::translations::t("ui-not-authenticated"), false);
         };
         let mut body = vec![];
         let emails = user
@@ -545,9 +641,9 @@ pub fn settings(scope: &Scope) -> View {
                                 "email-badge"
                             },
                             if email.is_primary {
-                                "Primary"
+                                crate::translations::t("ui-primary")
                             } else {
-                                "Secondary"
+                                crate::translations::t("ui-secondary")
                             },
                         ),
                         copy(
@@ -557,9 +653,9 @@ pub fn settings(scope: &Scope) -> View {
                                 "email-badge"
                             },
                             if email.confirmed_at.is_some() {
-                                "Verified"
+                                crate::translations::t("ui-verified")
                             } else {
-                                "Unverified"
+                                crate::translations::t("ui-unverified")
                             },
                         ),
                     ],
@@ -567,7 +663,7 @@ pub fn settings(scope: &Scope) -> View {
                 let mut row = vec![identity];
                 if email.confirmed_at.is_none() {
                     row.push(link(
-                        "Verify",
+                        crate::translations::t("ui-verify"),
                         format!("/emails/{}/verify", encode(&email.id)),
                         "link",
                     ));
@@ -577,7 +673,7 @@ pub fn settings(scope: &Scope) -> View {
                     let reload = reload.clone();
                     row.push(ui::action(
                         scope,
-                        "Remove",
+                        &crate::translations::t("ui-remove"),
                         "btn btn-destructive btn-sm",
                         actions,
                         move || {
@@ -591,7 +687,8 @@ pub fn settings(scope: &Scope) -> View {
                                         Ok(None)
                                     }
                                     RemoveEmailStatus::NotFound => {
-                                        Err("Email address not found.".into())
+                                        Err(crate::translations::t("ui-email-address-not-found")
+                                            .into())
                                     }
                                 }
                             }
@@ -605,12 +702,12 @@ pub fn settings(scope: &Scope) -> View {
                     scope,
                     "add-email",
                     vec![
-                        Field::new(scope, "Email address", "")
+                        Field::new(scope, crate::translations::t("ui-email-address"), "")
                             .email()
                             .required()
-                            .placeholder("Enter your email"),
+                            .placeholder(crate::translations::t("ui-enter-your-email")),
                     ],
-                    "Add",
+                    crate::translations::t("ui-add"),
                     "btn btn-primary",
                     actions,
                     |values| async move {
@@ -621,18 +718,22 @@ pub fn settings(scope: &Scope) -> View {
                         .await?;
                         match result.status {
                             AddEmailStatus::Added => {
-                                let email = result
-                                    .email
-                                    .ok_or("Email response did not provide a verification ID")?;
+                                let email = result.email.ok_or(crate::translations::t(
+                                    "ui-email-response-did-not-provide-a-verification-id",
+                                ))?;
                                 go(&format!("/emails/{}/verify", encode(&email.id)))?;
                                 Ok(None)
                             }
-                            AddEmailStatus::Exists => {
-                                Err("This email address is already in use.".into())
+                            AddEmailStatus::Exists => Err(crate::translations::t(
+                                "ui-this-email-address-is-already-in-use",
+                            )
+                            .into()),
+                            AddEmailStatus::Invalid => {
+                                Err(crate::translations::t("ui-invalid-email-address").into())
                             }
-                            AddEmailStatus::Invalid => Err("Invalid email address.".into()),
                             AddEmailStatus::Denied => Err(format!(
-                                "Email denied: {}",
+                                "{} {}",
+                                crate::translations::t("ui-email-denied"),
                                 result.violations.unwrap_or_default().join(", ")
                             )),
                         }
@@ -642,7 +743,7 @@ pub fn settings(scope: &Scope) -> View {
             body.push(ui::disclosure(
                 scope,
                 "contact-info",
-                "Contact info",
+                &crate::translations::t("ui-contact-info"),
                 stack(contacts),
                 true,
             ));
@@ -652,13 +753,13 @@ pub fn settings(scope: &Scope) -> View {
             body.push(ui::disclosure(
                 scope,
                 "account-password",
-                "Account password",
+                &crate::translations::t("ui-account-password"),
                 block(
                     "password-preview",
                     vec![
                         copy("password-dots", "••••••••"),
                         link(
-                            "Change password",
+                            crate::translations::t("ui-change-password"),
                             "/password/change",
                             "btn btn-secondary btn-sm",
                         ),
@@ -681,7 +782,7 @@ pub fn settings(scope: &Scope) -> View {
         let signout_open = scope.cage(false);
         let signout = ui::action(
             scope,
-            "Sign out",
+            &crate::translations::t("ui-sign-out"),
             "btn btn-destructive-solid",
             actions,
             move || {
@@ -689,7 +790,7 @@ pub fn settings(scope: &Scope) -> View {
                 async move {
                     let response = api::api_delete::<EndSessionPayload>(&path).await?;
                     if response.status != EndSessionStatus::Ended {
-                        return Err("Session could not be ended.".into());
+                        return Err(crate::translations::t("ui-session-could-not-be-ended").into());
                     }
                     go("/login")?;
                     Ok(None)
@@ -699,10 +800,12 @@ pub fn settings(scope: &Scope) -> View {
         body.push(ui::dialog(
             scope,
             "sign-out",
-            "Sign out",
+            &crate::translations::t("ui-sign-out"),
             "btn btn-destructive btn-lg",
             stack(vec![
-                plain("Are you sure you want to sign out?"),
+                plain(crate::translations::t(
+                    "ui-are-you-sure-you-want-to-sign-out",
+                )),
                 actions.messages(),
                 signout,
             ]),
@@ -738,9 +841,9 @@ fn deactivation(
     let field = Field::new(
         scope,
         if password_mode {
-            "Enter your password to confirm"
+            crate::translations::t("ui-enter-your-password-to-confirm")
         } else {
-            "Type your account address to confirm"
+            crate::translations::t("ui-type-your-account-address-to-confirm")
         },
         "",
     )
@@ -782,17 +885,23 @@ fn deactivation(
         scope,
         "deactivate-account",
         vec![field],
-        "Deactivate",
+        crate::translations::t("ui-deactivate"),
         "btn btn-destructive-solid",
         state,
         move |values| {
             let expected = expected.clone();
             async move {
                 if !ready.get_untracked() {
-                    return Err("Please wait before confirming this action.".into());
+                    return Err(crate::translations::t(
+                        "ui-please-wait-before-confirming-this-action",
+                    )
+                    .into());
                 }
                 if !password_mode && (expected.is_empty() || values[0] != expected) {
-                    return Err("Enter the account address exactly to confirm.".into());
+                    return Err(crate::translations::t(
+                        "ui-enter-the-account-address-exactly-to-confirm",
+                    )
+                    .into());
                 }
                 let mut body = serde_json::json!({"principal_erase":erase.get_untracked()});
                 if password_mode {
@@ -805,23 +914,38 @@ fn deactivation(
                         go("/login")?;
                         Ok(None)
                     }
-                    DeactivateUserStatus::IncorrectPassword => Err("Incorrect password.".into()),
-                    DeactivateUserStatus::NotFound => Err("Account not found.".into()),
+                    DeactivateUserStatus::IncorrectPassword => {
+                        Err(crate::translations::t("ui-incorrect-password").into())
+                    }
+                    DeactivateUserStatus::NotFound => {
+                        Err(crate::translations::t("ui-account-not-found").into())
+                    }
                 }
             }
         },
     );
     let content = stack(vec![
-        copy("text-md", format!("Account: {address}")),
+        copy(
+            "text-md",
+            crate::translations::t_with("ui-account-address", &[("address", &address)]),
+        ),
         copy(
             "text-md text-secondary",
-            "Are you sure you want to deactivate your account? This action cannot be undone.",
+            crate::translations::t("ui-are-you-sure-you-want-to-deactivate-your-account-30dcc162"),
         ),
-        ui::checkbox(scope, "erase-data", "Erase all my data", erase, true),
+        ui::checkbox(
+            scope,
+            "erase-data",
+            &crate::translations::t("ui-erase-all-my-data"),
+            erase,
+            true,
+        ),
         ui::reactive(erase, |_, yes| {
             if yes {
                 alert(
-                    "All your messages and media will be permanently deleted from the server. This cannot be reversed.",
+                    crate::translations::t(
+                        "ui-all-your-messages-and-media-will-be-permanently-ca795700",
+                    ),
                     false,
                 )
             } else {
@@ -834,7 +958,7 @@ fn deactivation(
     ui::dialog(
         scope,
         "deactivate-account",
-        "Deactivate account",
+        &crate::translations::t("ui-deactivate-account"),
         "btn btn-tertiary text-destructive",
         content,
         open,
@@ -857,19 +981,19 @@ fn identity_section(
     });
     let mut body = vec![copy(
         "text-md text-secondary",
-        "Connect external accounts to enable additional sign-in methods.",
+        crate::translations::t("ui-connect-external-accounts-to-enable-additional-sign-in-methods"),
     )];
     if accounts.is_empty() {
         body.push(copy(
             "text-md text-secondary",
-            "No external accounts linked.",
+            crate::translations::t("ui-no-external-accounts-linked"),
         ));
     }
     for account in accounts {
         let name = account
             .provider_name
             .or(account.provider_brand)
-            .unwrap_or_else(|| "External provider".into());
+            .unwrap_or_else(|| crate::translations::t("ui-external-provider").into());
         let subject = account.human_account_name.unwrap_or(account.subject);
         let id = account.id;
         let reload = viewer.clone();
@@ -878,13 +1002,13 @@ fn identity_section(
                 sapid::button()
                     .unstyled()
                     .class("btn btn-destructive btn-sm")
-                    .label("Unlink")
+                    .label(crate::translations::t("ui-unlink"))
                     .enabled(false),
             ) as View
         } else {
             ui::action(
                 scope,
-                "Unlink",
+                &crate::translations::t("ui-unlink"),
                 "btn btn-destructive btn-sm",
                 state,
                 move || {
@@ -893,7 +1017,7 @@ fn identity_section(
                     async move {
                         api::api_delete::<UnlinkOutcome>(&path).await?;
                         reload.reload();
-                        Ok(Some("Identity unlinked.".into()))
+                        Ok(Some(crate::translations::t("ui-identity-unlinked").into()))
                     }
                 },
             )
@@ -921,7 +1045,10 @@ fn identity_section(
                 .filter(|provider| !linked_ids.contains(&provider.id))
                 .map(|provider| {
                     link(
-                        format!("Link {}", provider.human_name.unwrap_or(provider.id)),
+                        crate::translations::t_with(
+                            "ui-link-provider",
+                            &[("provider", &provider.human_name.unwrap_or(provider.id))],
+                        ),
                         provider.authorize_url,
                         "btn btn-secondary",
                     )
@@ -932,7 +1059,7 @@ fn identity_section(
     ui::disclosure(
         scope,
         "linked-accounts",
-        "Linked accounts",
+        &crate::translations::t("ui-linked-accounts"),
         stack(body),
         true,
     )
@@ -954,25 +1081,35 @@ pub fn identities(scope: &Scope) -> View {
             .map(|a| a.provider_id.clone())
             .collect::<Vec<_>>();
         let mut rows = vec![
-            heading(1, "heading-xs", "Identity Bindings"),
+            heading(
+                1,
+                "heading-xs",
+                crate::translations::t("ui-identity-bindings"),
+            ),
             state.messages(),
-            heading(2, "text-md font-semibold", "Linked accounts"),
+            heading(
+                2,
+                "text-md font-semibold",
+                crate::translations::t("ui-linked-accounts"),
+            ),
             copy(
                 "text-md text-secondary",
-                "External identity providers currently linked to your account. You can sign in with any of these.",
+                crate::translations::t(
+                    "ui-external-identity-providers-currently-linked-to-bcc52e6c",
+                ),
             ),
         ];
         if count == 0 {
             rows.push(copy(
                 "text-md text-secondary",
-                "No external accounts linked.",
+                crate::translations::t("ui-no-external-accounts-linked"),
             ));
         }
         for account in response.accounts {
             let label = account
                 .provider_name
                 .or(account.provider_brand)
-                .unwrap_or_else(|| "External provider".into());
+                .unwrap_or_else(|| crate::translations::t("ui-external-provider").into());
             let id = account.id.clone();
             let reload = reload.clone();
             let remove = if count <= 1 {
@@ -980,13 +1117,13 @@ pub fn identities(scope: &Scope) -> View {
                     sapid::button()
                         .unstyled()
                         .class("btn btn-destructive btn-sm")
-                        .label("Unlink")
+                        .label(crate::translations::t("ui-unlink"))
                         .enabled(false),
                 ) as View
             } else {
                 ui::action(
                     scope,
-                    "Unlink",
+                    &crate::translations::t("ui-unlink"),
                     "btn btn-destructive btn-sm",
                     state,
                     move || {
@@ -995,7 +1132,7 @@ pub fn identities(scope: &Scope) -> View {
                         async move {
                             api::api_delete::<UnlinkOutcome>(&path).await?;
                             reload.reload();
-                            Ok(Some("Identity unlinked.".into()))
+                            Ok(Some(crate::translations::t("ui-identity-unlinked").into()))
                         }
                     },
                 )
@@ -1024,9 +1161,12 @@ pub fn identities(scope: &Scope) -> View {
                 .filter(|provider| !linked_ids.contains(&provider.id))
                 .map(|provider| {
                     link(
-                        format!(
-                            "Link {}",
-                            provider.human_name.as_deref().unwrap_or(&provider.id)
+                        crate::translations::t_with(
+                            "ui-link-provider",
+                            &[(
+                                "provider",
+                                provider.human_name.as_deref().unwrap_or(&provider.id),
+                            )],
                         ),
                         &provider.authorize_url,
                         "btn btn-secondary",
@@ -1044,20 +1184,48 @@ pub fn notifications(scope: &Scope) -> View {
     });
     ui::resource_body(source, |scope, response| {
         let prefs = scope.cage(response.preferences);
+        let baseline = scope.cage(
+            prefs
+                .get_untracked()
+                .iter()
+                .map(|p| (p.channel.clone(), p.enabled))
+                .collect::<Vec<_>>(),
+        );
+        crate::drafts::track(scope, move || {
+            if prefs
+                .get_untracked()
+                .iter()
+                .map(|p| (p.channel.clone(), p.enabled))
+                .collect::<Vec<_>>()
+                != baseline.get_untracked()
+            {
+                crate::drafts::State::Unsaved
+            } else {
+                crate::drafts::State::Clean
+            }
+        });
         let state = Action::new(scope);
-        let mut children = vec![heading(1, "heading-xs", "Notification Preferences")];
+        let mut children = vec![heading(
+            1,
+            "heading-xs",
+            crate::translations::t("ui-notification-preferences"),
+        )];
         for (channel, title, label, description) in [
             (
                 "email",
-                "Email notifications",
-                "Receive email notifications",
-                "Enable or disable email notifications for account activity and security alerts.",
+                crate::translations::t("ui-email-notifications"),
+                crate::translations::t("ui-receive-email-notifications"),
+                crate::translations::t(
+                    "ui-enable-or-disable-email-notifications-for-accoun-3ebf0191",
+                ),
             ),
             (
                 "sms",
-                "SMS notifications",
-                "Receive SMS notifications",
-                "Enable or disable SMS notifications for account verification and alerts.",
+                crate::translations::t("ui-sms-notifications"),
+                crate::translations::t("ui-receive-sms-notifications"),
+                crate::translations::t(
+                    "ui-enable-or-disable-sms-notifications-for-account-2229c8b7",
+                ),
             ),
         ] {
             let available = response
@@ -1088,28 +1256,42 @@ pub fn notifications(scope: &Scope) -> View {
             children.push(stack(vec![
                 heading(2, "text-md font-semibold", title),
                 badge(
-                    format!(
-                        "{} delivery {}",
-                        if channel == "email" { "Email" } else { "SMS" },
-                        if available {
-                            "configured"
-                        } else {
-                            "not configured"
-                        }
-                    ),
+                    crate::translations::t(if available {
+                        "ui-delivery-configured"
+                    } else {
+                        "ui-delivery-unavailable"
+                    }),
                     available,
                 ),
                 copy("text-md text-secondary", description),
-                ui::checkbox(scope, channel, label, checked, available),
+                ui::preference_checkbox(
+                    scope,
+                    channel,
+                    label,
+                    checked,
+                    scope.bond(move || available && !state.busy.get()),
+                ),
             ]));
             children.push(separator());
         }
-        children.push(stack(vec![heading(2,"text-md font-semibold","Language preference"),copy("text-md text-secondary","Choose the language for notification messages sent to you. This setting is not yet available.")]));
+        children.push(stack(vec![
+            heading(
+                2,
+                "text-md font-semibold",
+                crate::translations::t("ui-language-preference"),
+            ),
+            copy(
+                "text-md text-secondary",
+                crate::translations::t(
+                    "ui-choose-the-language-for-notification-messages-se-6cc65fb0",
+                ),
+            ),
+        ]));
         children.push(separator());
         children.push(state.messages());
         children.push(ui::action(
             scope,
-            "Save preferences",
+            &crate::translations::t("ui-save-preferences"),
             "btn btn-primary",
             state,
             move || async move {
@@ -1118,8 +1300,15 @@ pub fn notifications(scope: &Scope) -> View {
                     serde_json::json!({"preferences":prefs.get_untracked()}),
                 )
                 .await?;
+                baseline.revise(|value| {
+                    *value = response
+                        .preferences
+                        .iter()
+                        .map(|p| (p.channel.clone(), p.enabled))
+                        .collect()
+                });
                 prefs.revise(|value| *value = response.preferences);
-                Ok(Some("Preferences saved.".into()))
+                Ok(Some(crate::translations::t("ui-preferences-saved").into()))
             },
         ));
         stack(children)
@@ -1135,7 +1324,7 @@ pub fn plan(scope: &Scope) -> View {
             Some(uri) => plan_frame(scope, uri),
             None => {
                 let _ = go("/");
-                plain("Redirecting…")
+                plain(crate::translations::t("ui-redirecting"))
             }
         }
     })
@@ -1169,7 +1358,10 @@ fn plan_frame(scope: &Scope, url: String) -> View {
                             && let Ok(frame) = document.create_element("iframe")
                         {
                             let _ = frame.set_attribute("src", &url);
-                            let _ = frame.set_attribute("title", "Plan management");
+                            let _ = frame.set_attribute(
+                                "title",
+                                &crate::translations::t("ui-plan-management"),
+                            );
                             let _ = frame.set_attribute("class", "plan-iframe");
                             let _ = parent.append_child(&frame);
                         }

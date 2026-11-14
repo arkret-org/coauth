@@ -8,9 +8,9 @@ const user={id:'account-1',username:'alice',principal_id:'principal-1',handle:'a
 const providers={providers:[{id:'oidc-example',authorize_url:'/upstream/authorize/example',human_name:'Example Identity'}],password_login_enabled:true,passkey_login_enabled:true,password_registration_enabled:true,password_registration_contact_required:true,phone_verification_enabled:false,account_recovery_allowed:true,login_hint:null,current_account:null};
 const viewer={viewer:{__typename:'User',...user},viewer_session:{__typename:'BrowserSession',...browserSession},site_config:site};
 async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='http://127.0.0.1:4183'}={}){
-  const errors=[],requests=[],consoleErrors=[];let loggedIn=true;let registrationEmail='alice@example.test';let postAuthAction=null;let notificationPrefs=[{channel:'email',enabled:true},{channel:'sms',enabled:false}];let passkeys=[{id:'passkey-1',label:'Windows Hello',backup_eligible:true,backup_state:true,user_verified:true,created_at:created,last_used_at:created}];
+  const errors=[],requests=[],consoleErrors=[];let loggedIn=true;let currentProfile={...user.profile,preferred_locale:locale};let registrationEmail='alice@example.test';let postAuthAction=null;let notificationPrefs=[{channel:'email',enabled:true},{channel:'sms',enabled:false}];let passkeys=[{id:'passkey-1',label:'Windows Hello',backup_eligible:true,backup_state:true,user_verified:true,created_at:created,last_used_at:created}];
   page.on('pageerror',e=>errors.push(String(e)));page.on('console',message=>{if(message.type()==='error')consoleErrors.push(message.text());});
-  await page.addInitScript(({dark,locale})=>{localStorage.setItem('coauth_theme',dark?'dark':'light');localStorage.setItem('arkret.ui.locale.v1',locale);},{dark,locale});
+  await page.addInitScript(({dark,locale})=>{if(!localStorage.getItem('coauth_theme'))localStorage.setItem('coauth_theme',dark?'dark':'light');if(!localStorage.getItem('arkret.ui.locale.v1'))localStorage.setItem('arkret.ui.locale.v1',locale);},{dark,locale});
   await page.route('**/*',async route=>{
     const url=new URL(route.request().url());const path=decodeURIComponent(url.pathname);const reply=json=>route.fulfill({json});
     if(url.hostname==='plan.example.test')return route.fulfill({contentType:'text/html',body:'<h1>Plan management</h1><p>Current plan: Team</p>'});
@@ -43,7 +43,7 @@ async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='h
       if(p.startsWith('/browser-sessions/')){if(p==='/browser-sessions/browser-1')loggedIn=false;return reply({status:'ENDED'});}
       if(p.startsWith('/oauth-sessions/'))return reply({status:'ENDED'});
       if(p==='/viewer/deactivate'){if(body.password==='wrong')return reply({status:'INCORRECT_PASSWORD'});loggedIn=false;return reply({status:'DEACTIVATED'});}
-      if(p==='/self/viewer/profile')return reply({profile:{...user.profile,...body,updated_at:created},principal:{...user.principal,display_name:body.display_name??user.principal.display_name}});
+      if(p==='/self/viewer/profile'){currentProfile={...currentProfile,...body,updated_at:created};return reply({profile:currentProfile,principal:{...user.principal,display_name:currentProfile.display_name}});}
       if(p==='/self/viewer/avatar')return reply({avatar_url:'/assets/avatar-fixture.svg'});
       if(p==='/self/viewer/preferences'){notificationPrefs=body.preferences;return reply({preferences:notificationPrefs});}
       if(p.startsWith('/self/passkeys/')){if(p.endsWith('/revoke'))passkeys=[];else passkeys[0]={...passkeys[0],label:body.label};return reply({status:'ok',id:'passkey-1'});}
@@ -56,7 +56,7 @@ async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='h
     }
     if(p==='/account/auth/providers')return reply(providers);
     if(p==='/self/site-config')return reply(site);
-    if(p==='/self/viewer')return reply(loggedIn?{...viewer,viewer:{...viewer.viewer,profile:{...user.profile,preferred_locale:locale}}}:{...viewer,viewer:{__typename:'Anonymous',id:'anonymous'},viewer_session:{__typename:'Anonymous',id:'anonymous'}});
+    if(p==='/self/viewer')return reply(loggedIn?{...viewer,viewer:{...viewer.viewer,profile:currentProfile}}:{...viewer,viewer:{__typename:'Anonymous',id:'anonymous'},viewer_session:{__typename:'Anonymous',id:'anonymous'}});
     if(p==='/self/viewer/security')return reply({has_password:true,active_sessions_count:3,linked_providers_count:1,verified_emails_count:1,verified_phones_count:0});
     if(p==='/self/viewer/preferences')return reply({available_channels:[{channel:'email',enabled:true},{channel:'sms',enabled:false}],preferences:notificationPrefs});
     if(p==='/self/linked-accounts')return reply({accounts:linked});
