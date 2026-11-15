@@ -350,6 +350,7 @@ dependencies = [
  "aes-gcm 0.11.1",
  "argon2 0.6.0",
  "arkret-canonical",
+ "arkret-models-collaboration",
  "arkret-models-crypto",
  "arkret-signatures",
  "arkret-wire",
