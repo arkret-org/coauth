@@ -29,6 +29,31 @@ impl<'c, P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> +
     pub fn new(conn: &'c mut P) -> Self {
         Self { conn }
     }
+
+    async fn complete_authentication(
+        &mut self,
+        clock: &dyn Clock,
+        mut user_email_authentication: UserEmailAuthentication,
+    ) -> Result<UserEmailAuthentication, DatabaseError> {
+        let completed_at = clock.now();
+
+        // We'll assume the caller has checked that completed_at is None, so in case
+        // they haven't, the update will not affect any rows, which will raise
+        // an error
+        let rows_affected = diesel::update(
+            user_email_authentications::table
+                .find(Uuid::from(user_email_authentication.id))
+                .filter(user_email_authentications::completed_at.is_null()),
+        )
+        .set(user_email_authentications::completed_at.eq(Some(completed_at)))
+        .execute(self.conn)
+        .await?;
+
+        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
+
+        user_email_authentication.completed_at = Some(completed_at);
+        Ok(user_email_authentication)
+    }
 }
 
 #[derive(Debug, Clone, Queryable, Selectable)]
@@ -687,30 +712,11 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     async fn complete_authentication_with_code(
         &mut self,
         clock: &dyn Clock,
-        mut user_email_authentication: UserEmailAuthentication,
+        user_email_authentication: UserEmailAuthentication,
         user_email_authentication_code: &UserEmailAuthenticationCode,
     ) -> Result<UserEmailAuthentication, Self::Error> {
-        // We technically don't use the authentication code here (other than
-        // recording it in the span), but this is to make sure the caller has
-        // fetched one before calling this
-        let completed_at = clock.now();
-
-        // We'll assume the caller has checked that completed_at is None, so in case
-        // they haven't, the update will not affect any rows, which will raise
-        // an error
-        let rows_affected = diesel::update(
-            user_email_authentications::table
-                .find(Uuid::from(user_email_authentication.id))
-                .filter(user_email_authentications::completed_at.is_null()),
-        )
-        .set(user_email_authentications::completed_at.eq(Some(completed_at)))
-        .execute(self.conn)
-        .await?;
-
-        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
-
-        user_email_authentication.completed_at = Some(completed_at);
-        Ok(user_email_authentication)
+        self.complete_authentication(clock, user_email_authentication)
+            .await
     }
 
     #[tracing::instrument(
@@ -726,30 +732,11 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     async fn complete_authentication_with_upstream(
         &mut self,
         clock: &dyn Clock,
-        mut user_email_authentication: UserEmailAuthentication,
+        user_email_authentication: UserEmailAuthentication,
         upstream_oauth_authorization_session: &UpstreamOAuthAuthorizationSession,
     ) -> Result<UserEmailAuthentication, Self::Error> {
-        // We technically don't use the upstream_oauth_authorization_session here (other
-        // than recording it in the span), but this is to make sure the caller
-        // has fetched one before calling this
-        let completed_at = clock.now();
-
-        // We'll assume the caller has checked that completed_at is None, so in case
-        // they haven't, the update will not affect any rows, which will raise
-        // an error
-        let rows_affected = diesel::update(
-            user_email_authentications::table
-                .find(Uuid::from(user_email_authentication.id))
-                .filter(user_email_authentications::completed_at.is_null()),
-        )
-        .set(user_email_authentications::completed_at.eq(Some(completed_at)))
-        .execute(self.conn)
-        .await?;
-
-        DatabaseError::ensure_affected_rows_usize(rows_affected, 1)?;
-
-        user_email_authentication.completed_at = Some(completed_at);
-        Ok(user_email_authentication)
+        self.complete_authentication(clock, user_email_authentication)
+            .await
     }
 
     #[tracing::instrument(

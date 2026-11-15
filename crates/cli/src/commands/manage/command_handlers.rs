@@ -60,7 +60,7 @@ pub(super) async fn handle_set_password(
     let (version, hashed_password) = password_manager.hash(&mut rng, password).await?;
 
     repo.user_password()
-        .add(&mut rng, &clock, &user, version, hashed_password, None)
+        .add(&mut rng, &clock, &user, version, hashed_password)
         .await?;
 
     info!(%user.id, handle = %user.localpart, "Password changed");

@@ -144,7 +144,7 @@ pub async fn change_password(
         .map_err(ChangePasswordError::Password)?;
 
     repo.user_password()
-        .add(rng, clock, &user, version, hash, None)
+        .add(rng, clock, &user, version, hash)
         .await?;
 
     // Revoke all existing sessions established with the previous password,

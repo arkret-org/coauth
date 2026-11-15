@@ -161,9 +161,8 @@ secrets:
 passwords:
   enabled: true
   minimum_complexity: 3
-  schemes:
-    - version: 1
-      algorithm: argon2id
+  scheme:
+    algorithm: argon2id
 ```
 
 ## `account`

@@ -14,7 +14,6 @@ use super::wrappers::{SampleIdentifier, TemplateContext, sample_list};
 /// Frontend application configuration serialized as `snake_case` JSON.
 #[derive(Serialize)]
 pub struct AppConfig {
-    root: String,
     base_path: String,
     api_endpoint: String,
     script_src: String,
@@ -32,11 +31,9 @@ impl AppContext {
     /// (resolved from the static frontend build output at startup).
     #[must_use]
     pub fn new(url_builder: &UrlBuilder, script_src: &str) -> Self {
-        let root = url_builder.relative_url("/account/");
         let prefix = url_builder.prefix().unwrap_or_default();
         Self {
             app_config: AppConfig {
-                root,
                 base_path: prefix.to_owned(),
                 api_endpoint: format!("{prefix}/_coauth"),
                 script_src: format!("{prefix}{script_src}"),

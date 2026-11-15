@@ -1,5 +1,3 @@
-use std::cmp::Reverse;
-
 use anyhow::bail;
 use camino::Utf8PathBuf;
 use schemars::JsonSchema;
@@ -18,17 +16,6 @@ const DEFAULT_MIN_COMPLEXITY: u8 = 3;
 #[allow(clippy::unnecessary_wraps)]
 fn bcrypt_cost_default() -> Option<u32> {
     Some(12)
-}
-
-fn initial_scheme() -> Vec<HashingScheme> {
-    vec![HashingScheme {
-        version: 1,
-        algorithm: Algorithm::default(),
-        unicode_normalization: false,
-        cost: None,
-        secret: None,
-        secret_file: None,
-    }]
 }
 
 // ---------------------------------------------------------------------------
@@ -52,24 +39,12 @@ pub enum Algorithm {
 // HashingScheme
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::trivially_copy_pass_by_ref)]
-const fn bool_is_false(v: &bool) -> bool {
-    !*v
-}
-
-/// A versioned set of parameters that controls how passwords are hashed
+/// Parameters for the active password hashing algorithm
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct HashingScheme {
-    /// Monotonic version tag -- the highest version is used for new passwords
-    pub version: u16,
-
     /// Which hashing algorithm to apply
     pub algorithm: Algorithm,
-
-    /// Apply NFKC normalization before hashing. Normally `false`; enable only
-    /// when importing hashes that were produced with that normalization step.
-    #[serde(default, skip_serializing_if = "bool_is_false")]
-    pub unicode_normalization: bool,
 
     /// bcrypt work-factor (only relevant for bcrypt)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -87,20 +62,32 @@ pub struct HashingScheme {
     pub secret_file: Option<Utf8PathBuf>,
 }
 
+impl Default for HashingScheme {
+    fn default() -> Self {
+        Self {
+            algorithm: Algorithm::default(),
+            cost: None,
+            secret: None,
+            secret_file: None,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // PasswordsConfig
 // ---------------------------------------------------------------------------
 
 /// Password authentication and hashing behaviour
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct PasswordsConfig {
     /// Master switch for password-based login
     #[serde(default = "default_pw_enabled")]
     pub enabled: bool,
 
-    /// Ordered list of hashing schemes (newest version wins for new passwords)
-    #[serde(default = "initial_scheme")]
-    pub schemes: Vec<HashingScheme>,
+    /// Parameters for the active password hashing algorithm
+    #[serde(default)]
+    pub scheme: HashingScheme,
 
     /// Minimum zxcvbn complexity score (0-4):
     ///   0 = <100 guesses, 1 = <10k, 2 = <1M, 3 = <100M, 4 = beyond
@@ -121,7 +108,7 @@ impl Default for PasswordsConfig {
     fn default() -> Self {
         Self {
             enabled: default_pw_enabled(),
-            schemes: initial_scheme(),
+            scheme: HashingScheme::default(),
             minimum_complexity: DEFAULT_MIN_COMPLEXITY,
         }
     }
@@ -140,45 +127,21 @@ impl PasswordsConfig {
         self.minimum_complexity
     }
 
-    /// Resolve every scheme, reading secrets from disk where needed, and return
-    /// the fully-expanded list sorted by descending version.
+    /// Resolve the active hashing parameters and optional pepper secret.
     ///
     /// # Errors
     ///
-    /// Fails if two schemes share the same version, if the scheme list is
-    /// empty, or if an external secret file cannot be read.
-    pub async fn load(
-        &self,
-    ) -> Result<Vec<(u16, Algorithm, Option<u32>, Option<Vec<u8>>, bool)>, anyhow::Error> {
-        // Deduplicate by version (descending)
-        let mut ordered: Vec<&HashingScheme> = self.schemes.iter().collect();
-        ordered.sort_unstable_by_key(|s| Reverse(s.version));
-        ordered.dedup_by_key(|s| s.version);
-
-        if ordered.len() != self.schemes.len() {
-            bail!("Multiple password schemes have the same versions");
-        }
-        if ordered.is_empty() {
-            bail!("Requires at least one password scheme in the config");
-        }
-
-        let mut out = Vec::with_capacity(ordered.len());
-        for scheme in ordered {
-            let pepper = match (&scheme.secret, &scheme.secret_file) {
-                (Some(s), None) => Some(s.clone().into_bytes()),
-                (None, Some(path)) => Some(tokio::fs::read(path).await?),
-                (Some(_), Some(_)) => bail!("Cannot specify both `secret` and `secret_file`"),
-                (None, None) => None,
-            };
-            out.push((
-                scheme.version,
-                scheme.algorithm,
-                scheme.cost,
-                pepper,
-                scheme.unicode_normalization,
-            ));
-        }
-        Ok(out)
+    /// Fails if an external secret file cannot be read or both secret sources
+    /// are configured.
+    pub async fn load(&self) -> Result<(Algorithm, Option<u32>, Option<Vec<u8>>), anyhow::Error> {
+        let scheme = &self.scheme;
+        let pepper = match (&scheme.secret, &scheme.secret_file) {
+            (Some(secret), None) => Some(secret.clone().into_bytes()),
+            (None, Some(path)) => Some(tokio::fs::read(path).await?),
+            (Some(_), Some(_)) => bail!("Cannot specify both `secret` and `secret_file`"),
+            (None, None) => None,
+        };
+        Ok((scheme.algorithm, scheme.cost, pepper))
     }
 }
 
@@ -208,18 +171,8 @@ impl ConfigurationSection for PasswordsConfig {
             return Ok(());
         }
 
-        if self.schemes.is_empty() {
-            return Err(
-                make_err("Requires at least one password scheme in the config".into()).into(),
-            );
-        }
-
-        for scheme in &self.schemes {
-            if scheme.secret.is_some() && scheme.secret_file.is_some() {
-                return Err(
-                    make_err("Cannot specify both `secret` and `secret_file`".into()).into(),
-                );
-            }
+        if self.scheme.secret.is_some() && self.scheme.secret_file.is_some() {
+            return Err(make_err("Cannot specify both `secret` and `secret_file`".into()).into());
         }
 
         Ok(())
@@ -245,5 +198,15 @@ mod tests {
             .expect_err("out-of-range complexity must be rejected");
 
         assert!(error.to_string().contains("between 0 and 4"));
+    }
+    #[test]
+    fn rejects_unknown_password_configuration_members() {
+        for value in [
+            serde_json::json!({"unexpected": true}),
+            serde_json::json!({"scheme": {"algorithm": "argon2id", "unexpected": true}}),
+        ] {
+            let error = serde_json::from_value::<PasswordsConfig>(value).unwrap_err();
+            assert!(error.to_string().contains("unknown field"));
+        }
     }
 }

@@ -103,26 +103,14 @@ pub async fn password_manager_from_config(
         return Ok(PasswordManager::disabled());
     }
 
-    let schemes = config.load().await?.into_iter().map(
-        |(version, algorithm, cost, secret, unicode_normalization)| {
-            use crate::handlers::passwords::Hasher;
-            let hasher = match algorithm {
-                coauth_config::passwords::Algorithm::Pbkdf2 => {
-                    Hasher::pbkdf2(secret, unicode_normalization)
-                }
-                coauth_config::passwords::Algorithm::Bcrypt => {
-                    Hasher::bcrypt(cost, secret, unicode_normalization)
-                }
-                coauth_config::passwords::Algorithm::Argon2id => {
-                    Hasher::argon2id(secret, unicode_normalization)
-                }
-            };
-
-            (version, hasher)
-        },
-    );
-
-    PasswordManager::new(config.minimum_complexity(), schemes)
+    let (algorithm, cost, secret) = config.load().await?;
+    use crate::handlers::passwords::Hasher;
+    let hasher = match algorithm {
+        coauth_config::passwords::Algorithm::Pbkdf2 => Hasher::pbkdf2(secret),
+        coauth_config::passwords::Algorithm::Bcrypt => Hasher::bcrypt(cost, secret),
+        coauth_config::passwords::Algorithm::Argon2id => Hasher::argon2id(secret),
+    };
+    Ok(PasswordManager::new(config.minimum_complexity(), hasher))
 }
 
 pub fn mailer_from_config(
@@ -793,71 +781,6 @@ mod tests {
         assert_eq!(attempts, 3);
     }
 
-    #[tokio::test]
-    async fn test_password_manager_from_config() {
-        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
-        let password = Zeroizing::new("hunter2".to_owned());
-
-        // Test a valid, enabled config
-        let config = serde_json::from_value(serde_json::json!({
-            "schemes": [{
-                "version": 42,
-                "algorithm": "argon2id"
-            }, {
-                "version": 10,
-                "algorithm": "bcrypt"
-            }]
-        }))
-        .unwrap();
-
-        let manager = password_manager_from_config(&config).await;
-        assert!(manager.is_ok());
-        let manager = manager.unwrap();
-        assert!(manager.is_enabled());
-        let hashed = manager.hash(&mut rng, password.clone()).await;
-        assert!(hashed.is_ok());
-        let (version, hashed) = hashed.unwrap();
-        assert_eq!(version, 42);
-        assert!(hashed.starts_with("$argon2id$"));
-
-        // Test a valid, disabled config
-        let config = serde_json::from_value(serde_json::json!({
-            "enabled": false,
-            "schemes": []
-        }))
-        .unwrap();
-
-        let manager = password_manager_from_config(&config).await;
-        assert!(manager.is_ok());
-        let manager = manager.unwrap();
-        assert!(!manager.is_enabled());
-        let res = manager.hash(&mut rng, password.clone()).await;
-        assert!(res.is_err());
-
-        // Test an invalid config
-        // Repeat the same version twice
-        let config = serde_json::from_value(serde_json::json!({
-            "schemes": [{
-                "version": 42,
-                "algorithm": "argon2id"
-            }, {
-                "version": 42,
-                "algorithm": "bcrypt"
-            }]
-        }))
-        .unwrap();
-        let manager = password_manager_from_config(&config).await;
-        assert!(manager.is_err());
-
-        // Empty schemes
-        let config = serde_json::from_value(serde_json::json!({
-            "schemes": []
-        }))
-        .unwrap();
-        let manager = password_manager_from_config(&config).await;
-        assert!(manager.is_err());
-    }
-
     #[derive(QueryableByName)]
     struct RowCount {
         #[diesel(sql_type = BigInt)]
@@ -938,5 +861,41 @@ mod tests {
 
         let drop_sql = format!("DROP TABLE IF EXISTS {table_name}");
         sql_query(&drop_sql).execute(&mut *conn).await.unwrap();
+    }
+    #[tokio::test]
+    async fn password_manager_uses_active_scheme_and_rejects_conflicting_peppers() {
+        let config = serde_json::from_value(serde_json::json!({
+            "scheme": { "algorithm": "argon2id" }
+        }))
+        .unwrap();
+        let manager = password_manager_from_config(&config).await.unwrap();
+        let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
+        let (version, hash) = manager
+            .hash(&mut rng, Zeroizing::new("hunter2".to_owned()))
+            .await
+            .unwrap();
+        assert_eq!(version, 1);
+        assert!(hash.starts_with("$argon2id$"));
+        let config = serde_json::from_value(serde_json::json!({"enabled": false})).unwrap();
+        let manager = password_manager_from_config(&config).await.unwrap();
+        assert!(!manager.is_enabled());
+        assert!(
+            manager
+                .hash(&mut rng, Zeroizing::new("hunter2".to_owned()))
+                .await
+                .is_err()
+        );
+        let config = serde_json::from_value(serde_json::json!({
+            "scheme": {"algorithm": "argon2id", "secret": "pepper", "secret_file": "unused"}
+        }))
+        .unwrap();
+        assert!(
+            password_manager_from_config(&config)
+                .await
+                .err()
+                .expect("conflicting peppers must fail")
+                .to_string()
+                .contains("both `secret` and `secret_file`")
+        );
     }
 }

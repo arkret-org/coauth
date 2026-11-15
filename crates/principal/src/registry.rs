@@ -52,12 +52,6 @@ impl ConnectorRegistry {
         self.providers.get(name)
     }
 
-    /// List all registered provider names.
-    #[must_use]
-    pub fn provider_names(&self) -> Vec<&str> {
-        self.providers.keys().map(String::as_str).collect()
-    }
-
     /// Check health of all providers by calling
     /// `is_handle_available("__health_check__")` on each.
     pub async fn check_all_health(&self) -> Vec<(&str, Result<(), String>)> {

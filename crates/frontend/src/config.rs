@@ -23,29 +23,12 @@ pub fn get_config() -> AppConfig {
             let api_endpoint = js_sys::Reflect::get(&val, &"api_endpoint".into())
                 .ok()
                 .and_then(|v| v.as_string())
-                .or_else(|| {
-                    js_sys::Reflect::get(&val, &"apiEndpoint".into())
-                        .ok()
-                        .and_then(|v| v.as_string())
-                })
                 .unwrap_or_else(|| "/_coauth".to_owned());
 
             let base_path = js_sys::Reflect::get(&val, &"base_path".into())
                 .ok()
                 .and_then(|value| value.as_string())
-                .unwrap_or_else(|| {
-                    // Older servers already publish an account root. Keep their
-                    // prefixed shells usable while frontend/server roll out.
-                    js_sys::Reflect::get(&val, &"root".into())
-                        .ok()
-                        .and_then(|value| value.as_string())
-                        .and_then(|root| {
-                            root.trim_end_matches('/')
-                                .strip_suffix("/account")
-                                .map(str::to_owned)
-                        })
-                        .unwrap_or_default()
-                });
+                .unwrap_or_default();
 
             return AppConfig {
                 api_endpoint,
@@ -107,9 +90,7 @@ fn read_config_value() -> Option<web_sys::wasm_bindgen::JsValue> {
         return Some(value);
     }
 
-    js_sys::Reflect::get(&window, &"APP_CONFIG".into())
-        .ok()
-        .filter(|value| !value.is_undefined() && !value.is_null())
+    None
 }
 
 /// Resolve the full API base URL based on the current location.

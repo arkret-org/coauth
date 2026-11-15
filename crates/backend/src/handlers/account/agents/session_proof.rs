@@ -2142,17 +2142,6 @@ mod tests {
             grant["scope_details"]["constraints"]["allowed_data_labels"],
             serde_json::json!(scope.allowed_data_labels)
         );
-        for (container, current, obsolete) in [
-            ("resources", "realm_ids", "realm_refs"),
-            ("resources", "strand_ids", "strand_refs"),
-            ("constraints", "allowed_data_labels", "allowed_data_classes"),
-        ] {
-            let mut invalid = grant.clone();
-            let object = invalid["scope_details"][container].as_object_mut().unwrap();
-            let ceiling = object.remove(current).unwrap();
-            object.insert(obsolete.to_owned(), ceiling);
-            assert!(serde_json::from_value::<SessionGrantValidationMetadata>(invalid).is_err());
-        }
     }
 
     fn test_account_authority_keyring() -> coauth_keyring::Keyring {

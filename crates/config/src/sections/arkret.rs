@@ -400,14 +400,6 @@ impl ArkretConfig {
             .any(|trusted| trusted == &host)
     }
 
-    /// Primary Station endpoint for call sites that operate on a
-    /// single server. The endpoint is topology configuration only; its
-    /// service DID is always resolved at runtime.
-    #[must_use]
-    pub fn primary_station_url(&self) -> Option<&Url> {
-        self.stations.first().map(|server| &server.endpoint)
-    }
-
     /// Station whose verified identity is delegated to this private Account
     /// Authority component.
     #[must_use]

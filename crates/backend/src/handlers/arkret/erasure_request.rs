@@ -878,7 +878,7 @@ mod tests {
             .unwrap();
         let password = repo
             .user_password()
-            .add(&mut rng, &clock, &user, 1, "hashed".to_owned(), None)
+            .add(&mut rng, &clock, &user, 1, "hashed".to_owned())
             .await
             .unwrap();
         let session = repo

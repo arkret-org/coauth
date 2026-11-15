@@ -448,10 +448,6 @@ mod tests {
         (session, ticket.ticket)
     }
 
-    fn has_database_url() -> bool {
-        std::env::var_os("DATABASE_URL").is_some()
-    }
-
     #[test]
     fn recovery_success_outcome_serializes_password_only_trust_boundary() {
         let outcome = SetPasswordOutcome::recovered(AccountRecoveryCompletion::password_only());
@@ -494,10 +490,6 @@ mod tests {
 
     #[tokio::test]
     async fn get_recovery_ticket_status_reports_valid_ticket() {
-        if !has_database_url() {
-            return;
-        }
-
         setup();
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
@@ -520,10 +512,6 @@ mod tests {
 
     #[tokio::test]
     async fn resend_recovery_email_returns_progress_url() {
-        if !has_database_url() {
-            return;
-        }
-
         setup();
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
@@ -551,10 +539,6 @@ mod tests {
 
     #[tokio::test]
     async fn set_password_by_recovery_rejects_device_trust_scope_without_consuming_ticket() {
-        if !has_database_url() {
-            return;
-        }
-
         setup();
         let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
             return;
