@@ -340,7 +340,7 @@ mod tests {
             "service": [{
                 "id": "did:web:resolver.example#station",
                 "type": "ArkretService",
-                "serviceKind": "station",
+                "service_kind": "station",
                 "serviceEndpoint": "https://station.example/",
                 "customRoutingHint": {"region": "test"}
             }],

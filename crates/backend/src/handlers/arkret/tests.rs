@@ -489,7 +489,7 @@ fn internal_authority_peer_requires_verified_identity_and_domains() {
 }
 
 #[test]
-fn session_grant_is_signed_for_the_bound_principal_id() {
+fn session_grant_is_opaque_for_the_bound_principal_id() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let arkret_config = personal_node_did_web_config();
