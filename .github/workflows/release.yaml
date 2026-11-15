@@ -398,56 +398,56 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: e84ab4be3f1004ef5f48ea2250cd403787c4e706
+          ref: 5a2d1665e1831ff6e6cefe8a0b09a4d37989b611
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 6624d36603863ff8a5cc1b5325edcdf08d4029f6
+          ref: 3cdc2265f5134b7f7c53b563474c58cdc0070d06
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/cotest
           path: arkret-org/cotest
-          ref: 7a1cf197ce50c1dd7370d660faba366bd4fe3cc1
+          ref: 6014fd04077aeca6a5f5f5e0dc5e7f84c9a07ec0
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout garth
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/garth
           path: arkret-org/garth
-          ref: 0df727f46130ea18673785952846ee250724fdc6
+          ref: 960e007b4905f91b2ffc52ccf91db0b3cf5ca44d
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout floria
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/floria
           path: arkret-org/floria
-          ref: 70d7a12a966a7ea0917242f0c67923fe777627fe
+          ref: 74cdcef3be19397ff7b813779c3e1ec734ed487b
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout arkret-spec
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-org/arkret-spec
-          ref: 66c9261b58fa211505ce8a710c1464bdc4a63dc8
+          ref: fa57d06e1aec58970e588d503621e65ba3445a32
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout bridges
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/bridges
           path: arkret-org/bridges
-          ref: e794d625f320e2ddcae7f1d01bb5bd23462563f5
+          ref: ffc924755307dd76a092c36aedb9c7b464539d9f
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout savfox
         uses: actions/checkout@v6
         with:
           repository: savfox-ai/savfox
           path: savfox-ai/savfox
-          ref: ec6317055a42cf5c8ebb4dd99737a02def1aaa6e
+          ref: 05f25d778e9bf90afde4240da9aa2179ec8e0fff
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-python@v6
         with:
@@ -517,56 +517,56 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: e84ab4be3f1004ef5f48ea2250cd403787c4e706
+          ref: 5a2d1665e1831ff6e6cefe8a0b09a4d37989b611
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 6624d36603863ff8a5cc1b5325edcdf08d4029f6
+          ref: 3cdc2265f5134b7f7c53b563474c58cdc0070d06
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/cotest
           path: arkret-org/cotest
-          ref: 7a1cf197ce50c1dd7370d660faba366bd4fe3cc1
+          ref: 6014fd04077aeca6a5f5f5e0dc5e7f84c9a07ec0
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout garth
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/garth
           path: arkret-org/garth
-          ref: 0df727f46130ea18673785952846ee250724fdc6
+          ref: 960e007b4905f91b2ffc52ccf91db0b3cf5ca44d
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout floria
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/floria
           path: arkret-org/floria
-          ref: 70d7a12a966a7ea0917242f0c67923fe777627fe
+          ref: 74cdcef3be19397ff7b813779c3e1ec734ed487b
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout arkret-spec
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/arkret-spec
           path: arkret-org/arkret-spec
-          ref: 66c9261b58fa211505ce8a710c1464bdc4a63dc8
+          ref: fa57d06e1aec58970e588d503621e65ba3445a32
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout bridges
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/bridges
           path: arkret-org/bridges
-          ref: e794d625f320e2ddcae7f1d01bb5bd23462563f5
+          ref: ffc924755307dd76a092c36aedb9c7b464539d9f
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout savfox
         uses: actions/checkout@v6
         with:
           repository: savfox-ai/savfox
           path: savfox-ai/savfox
-          ref: ec6317055a42cf5c8ebb4dd99737a02def1aaa6e
+          ref: 05f25d778e9bf90afde4240da9aa2179ec8e0fff
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-python@v6
         with:
