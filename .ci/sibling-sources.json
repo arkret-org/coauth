@@ -1,11 +1,11 @@
 {
-  "arkret-rust-sdk": "762cead77b4385a176622e32c473bec43a941d8d",
-  "arkret-spec": "8591ce649b91e2ad465993b11981d72a071ddfdf",
-  "coland": "122bfa71e24c5c46f7f2587e2308617777dd153a",
-  "cotest": "7a1cf197ce50c1dd7370d660faba366bd4fe3cc1",
-  "garth": "60b40c9dc27a2c3e9af0946b004bc23777e87803",
-  "chime": "18c27e22eb07574e3847e4a9936eab1f19f35af3",
-  "inkson": "9338ab1f7721419d24d7be3a93d33498fece5c85",
-  "floria": "2c5b292081316cfa164c3a026df46001a92e534e",
-  "bridges": "e70585ebe3b3d964ca55351127467a17947d4975"
+  "arkret-rust-sdk": "5a2d1665e1831ff6e6cefe8a0b09a4d37989b611",
+  "arkret-spec": "fa57d06e1aec58970e588d503621e65ba3445a32",
+  "coland": "3cdc2265f5134b7f7c53b563474c58cdc0070d06",
+  "cotest": "6014fd04077aeca6a5f5f5e0dc5e7f84c9a07ec0",
+  "garth": "960e007b4905f91b2ffc52ccf91db0b3cf5ca44d",
+  "chime": "fed3a6c08501ecb2e02fa0b10f6c152b07b8359e",
+  "inkson": "19957d54ee1e7d5657f13a5aea828169035ee352",
+  "floria": "74cdcef3be19397ff7b813779c3e1ec734ed487b",
+  "bridges": "ffc924755307dd76a092c36aedb9c7b464539d9f"
 }
