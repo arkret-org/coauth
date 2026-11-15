@@ -1,11 +1,11 @@
 {
   "arkret-rust-sdk": "819fc97ca2356cd0ed467864babfaca93e0b5494",
   "arkret-spec": "4e46718f83a4fcbedc12ef7409bc68743ec41dc9",
-  "coland": "6624d36603863ff8a5cc1b5325edcdf08d4029f6",
-  "cotest": "7a1cf197ce50c1dd7370d660faba366bd4fe3cc1",
+  "coland": "937e086333f075965ff43b00de74b35bff586c41",
+  "cotest": "b61d36eeb5fa49c2aeb6f5af21ba135afdffaa30",
   "garth": "8c35acec7c6d8c79b61c06855367340f0a17da78",
-  "chime": "aa8e2afc78fa35c6248c1a1016280b22d7502645",
-  "inkson": "9338ab1f7721419d24d7be3a93d33498fece5c85",
-  "floria": "03e7f8cdd8c9905ea7fdd402abbac2299e419f49",
-  "bridges": "9a0f7615f85e5b8139705048d936437d848a03c7"
+  "chime": "fed3a6c08501ecb2e02fa0b10f6c152b07b8359e",
+  "inkson": "a2052a553cea3a09742f45bfedf809fa260f0be1",
+  "floria": "350caeb774fda88304bc7113041aea7c133fe7c8",
+  "bridges": "89274ba5d888a8497b012d823152846ee9118120"
 }
