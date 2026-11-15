@@ -400,14 +400,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: d5a2ec492b343bfe3a3e1be33e36713ed154fc59
+          ref: 819fc97ca2356cd0ed467864babfaca93e0b5494
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 122bfa71e24c5c46f7f2587e2308617777dd153a
+          ref: 6624d36603863ff8a5cc1b5325edcdf08d4029f6
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
@@ -421,14 +421,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/garth
           path: arkret-org/garth
-          ref: 60b40c9dc27a2c3e9af0946b004bc23777e87803
+          ref: 8c35acec7c6d8c79b61c06855367340f0a17da78
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout floria
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/floria
           path: arkret-org/floria
-          ref: 2c5b292081316cfa164c3a026df46001a92e534e
+          ref: 03e7f8cdd8c9905ea7fdd402abbac2299e419f49
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout arkret-spec
         uses: actions/checkout@v6
@@ -442,14 +442,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/bridges
           path: arkret-org/bridges
-          ref: e70585ebe3b3d964ca55351127467a17947d4975
+          ref: 9a0f7615f85e5b8139705048d936437d848a03c7
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout savfox
         uses: actions/checkout@v6
         with:
           repository: savfox-ai/savfox
           path: savfox-ai/savfox
-          ref: 18a5d4deae8efe9630ee55d710eefe133acc4939
+          ref: ec6317055a42cf5c8ebb4dd99737a02def1aaa6e
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-python@v6
         with:
@@ -519,14 +519,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/arkret-rust-sdk
           path: arkret-org/arkret-rust-sdk
-          ref: d5a2ec492b343bfe3a3e1be33e36713ed154fc59
+          ref: 819fc97ca2356cd0ed467864babfaca93e0b5494
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout coland
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/coland
           path: arkret-org/coland
-          ref: 122bfa71e24c5c46f7f2587e2308617777dd153a
+          ref: 6624d36603863ff8a5cc1b5325edcdf08d4029f6
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout cotest
         uses: actions/checkout@v6
@@ -540,14 +540,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/garth
           path: arkret-org/garth
-          ref: 60b40c9dc27a2c3e9af0946b004bc23777e87803
+          ref: 8c35acec7c6d8c79b61c06855367340f0a17da78
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout floria
         uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/floria
           path: arkret-org/floria
-          ref: 2c5b292081316cfa164c3a026df46001a92e534e
+          ref: 03e7f8cdd8c9905ea7fdd402abbac2299e419f49
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout arkret-spec
         uses: actions/checkout@v6
@@ -561,14 +561,14 @@ jobs:
         with:
           repository: ${{ github.repository_owner }}/bridges
           path: arkret-org/bridges
-          ref: e70585ebe3b3d964ca55351127467a17947d4975
+          ref: 9a0f7615f85e5b8139705048d936437d848a03c7
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - name: Checkout savfox
         uses: actions/checkout@v6
         with:
           repository: savfox-ai/savfox
           path: savfox-ai/savfox
-          ref: 18a5d4deae8efe9630ee55d710eefe133acc4939
+          ref: ec6317055a42cf5c8ebb4dd99737a02def1aaa6e
           token: ${{ secrets.CI_REPO_TOKEN || github.token }}
       - uses: actions/setup-python@v6
         with:

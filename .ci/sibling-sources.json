@@ -1,11 +1,11 @@
 {
-  "arkret-rust-sdk": "762cead77b4385a176622e32c473bec43a941d8d",
-  "arkret-spec": "8591ce649b91e2ad465993b11981d72a071ddfdf",
-  "coland": "122bfa71e24c5c46f7f2587e2308617777dd153a",
+  "arkret-rust-sdk": "819fc97ca2356cd0ed467864babfaca93e0b5494",
+  "arkret-spec": "4e46718f83a4fcbedc12ef7409bc68743ec41dc9",
+  "coland": "6624d36603863ff8a5cc1b5325edcdf08d4029f6",
   "cotest": "7a1cf197ce50c1dd7370d660faba366bd4fe3cc1",
-  "garth": "60b40c9dc27a2c3e9af0946b004bc23777e87803",
-  "chime": "18c27e22eb07574e3847e4a9936eab1f19f35af3",
+  "garth": "8c35acec7c6d8c79b61c06855367340f0a17da78",
+  "chime": "aa8e2afc78fa35c6248c1a1016280b22d7502645",
   "inkson": "9338ab1f7721419d24d7be3a93d33498fece5c85",
-  "floria": "2c5b292081316cfa164c3a026df46001a92e534e",
-  "bridges": "e70585ebe3b3d964ca55351127467a17947d4975"
+  "floria": "03e7f8cdd8c9905ea7fdd402abbac2299e419f49",
+  "bridges": "9a0f7615f85e5b8139705048d936437d848a03c7"
 }
