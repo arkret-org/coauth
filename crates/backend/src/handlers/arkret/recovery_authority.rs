@@ -1,24 +1,20 @@
-//! Standard SessionGrant issuance after trusted root-anchored recovery completion.
+//! Standard opaque issuance from one authenticated native Recovery completion.
+use arkret_models_collaboration::events_payloads::device_identity::DeviceAuthorizePayload;
 use arkret_models_collaboration::objects::account_status::AccountStatus;
-use arkret_models_collaboration::session_grants::SessionGrantResponseBody;
-use arkret_models_crypto::{RecoveryReceipt, RecoveryReceiptOutcome};
+use arkret_models_crypto::{RecoveryTransactionCompletion, SecurityTransaction};
 use arkret_models_identity::{
-    AccountHandoffAllowedOperation, InitialSessionGrantIntent,
-    STANDARD_INITIAL_SESSION_GRANT_OPERATIONS, SessionGrantProofKind,
+    AccountHandoffAllowedOperation, IssueRecoveryCompletionGrantResponseBody,
+    RecoveryCompletionGrantRequestBody, STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
+    SessionGrantProofKind, SessionGrantResponseBody,
 };
-use arkret_signatures::proof::verify_detached_ed25519_signature;
-use arkret_wire::{IssueRecoveryCompletionGrantResponseBody, RecoveryCompletionGrantRequestBody};
-use chrono::{Duration, Timelike as _, Utc};
-use coauth_data::storage::user::BrowserSessionRepository as _;
+use chrono::{DateTime, Duration, Utc};
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{
     NewRecoveryCompletionGrantIssuance, NewSessionGrantOperation, RepositoryAccess as _,
     SessionGrantCommitOutcome, SessionGrantExactOutcome, SessionGrantProofAuthorization,
     SessionGrantReserveOutcome, UserPatch,
 };
-use coauth_jose::constraints::Constrainable as _;
 use salvo::prelude::*;
-use sha2::Digest as _;
 
 use super::ArkretRouteError;
 use super::account_handoff::{
@@ -26,24 +22,20 @@ use super::account_handoff::{
     verify_account_handoff_holder_without_lookup,
 };
 use super::canonical_response::ArkretCanonicalJson;
-use super::session_grant::acquire_private_current_device_binding;
+use super::session_grant::{
+    acquire_current_replay_authority, acquire_private_current_device_admission,
+    require_outer_dpop_fresh,
+};
 use crate::handlers::common::DepotExt;
 use crate::services::account_status_publication::{
-    author_and_enqueue_transition, validate_transition_plan,
+    author_and_enqueue_prepared_transition, validate_transition_plan,
 };
 use crate::services::session_grant::{
     HumanGrantIssuance, SessionGrantIssuanceSeed, issue_session_grant_for_audience,
     new_session_grant_record,
 };
-use crate::services::station_trust::{effective_audience, shared};
+use crate::services::station_trust::owning_station_id_for;
 
-/// `POST /_arkret/gate/account/recovery-session-grants/issue`.
-///
-/// A still-valid, Bound account handoff authenticates the account and the new
-/// session key. The handoff audience Station proves that root
-/// re-anchor and replacement-device authorization completed. Coauth then
-/// issues a fresh Standard grant directly; there is no restricted predecessor
-/// credential or cross-service recovery-coordinator authority.
 #[handler]
 pub async fn issue_recovery_completion_grant_endpoint(
     req: &mut Request,
@@ -52,326 +44,452 @@ pub async fn issue_recovery_completion_grant_endpoint(
     let request: RecoveryCompletionGrantRequestBody = req
         .parse_json()
         .await
-        .map_err(|_| schema_violation("invalid recovery completion grant request"))?;
+        .map_err(|_| schema_violation("invalid typed recovery-completion request"))?;
     request
         .validate_structural()
         .map_err(|error| schema_violation(error.to_string()))?;
-    let canonical_request = arkret_canonical::canonical_json_bytes(&request)
-        .map_err(|error| schema_violation(error.to_string()))?;
-
-    // Exact replay remains available after the successful call consumed the
-    // handoff. Possession is re-proved with a fresh HTTP DPoP JTI before any
-    // stored bytes are disclosed.
+    let canonical_request = arkret_canonical::canonical_json_bytes(&request)?;
+    let config = depot.arkret_config()?;
+    let issuer = owning_station_id_for(&config);
+    let receipt = &request.terminal_receipt;
+    if receipt.session_grant_ref.issuer_id != issuer {
+        return Err(signature_invalid(
+            "historical Recovery record belongs to another issuer",
+        ));
+    }
+    let operation_identity = request.operation_identity(&issuer)?;
+    let request_identity = arkret_canonical::sha256_digest(&operation_identity);
     let (handoff_token, replay_dpop) = verify_account_handoff_holder_without_lookup(req, depot)?;
-    let now = truncate_to_seconds(crate::handlers::make_clock().now());
-    let mut replay_repo = depot.repo().await?;
-    let replay_grant = replay_repo
+    let clock = crate::handlers::make_clock();
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let mut repo = depot.repo().await?;
+    let handoff = repo
         .account_handoff()
         .get_by_token(&handoff_token, now)
         .await?
         .ok_or_else(unauthenticated_handoff)?;
     enforce_handoff_operation(
-        &replay_grant,
+        &handoff,
         AccountHandoffAllowedOperation::IssueRecoveryCompletionGrant,
     )?;
-    if replay_dpop.jkt != replay_grant.cnf_jkt {
-        replay_repo.cancel().await.ok();
+    if replay_dpop.jkt != handoff.cnf_jkt
+        || request.accepted_device_possession_proof.holder_jkt != handoff.cnf_jkt
+        || handoff.audience_id != receipt.account_id.station_id.as_str()
+    {
         return Err(signature_invalid(
-            "account handoff DPoP key does not match the credential cnf.jkt",
+            "fresh AccountHandoff, DPoP, new holder and full Account disagree",
         ));
     }
-    let prior = replay_repo
-        .recovery_authority()
-        .lookup_completion_issuance(request.transaction_id.as_str())
-        .await?;
-    replay_repo.cancel().await.ok();
+    let binding = verify_account_principal_binding(
+        &mut repo,
+        handoff.local_account_id,
+        &handoff.audience_id,
+        &receipt.account_id,
+    )
+    .await?;
+    let browser_session_id = handoff.browser_session_id.ok_or_else(|| {
+        failed_precondition("completion requires fresh account-authenticated browser context")
+    })?;
+    let browser_session = repo
+        .browser_session()
+        .lookup(browser_session_id)
+        .await?
+        .ok_or_else(|| failed_precondition("authenticated browser context is unavailable"))?;
+    if browser_session.user.id != handoff.local_account_id
+        || browser_session.finished_at.is_some()
+        || !matches!(
+            browser_session.user.status,
+            AccountStatus::Active | AccountStatus::Deactivated
+        )
+    {
+        return Err(failed_precondition(
+            "current account lifecycle forbids recovery completion",
+        ));
+    }
+    if browser_session.user.status == AccountStatus::Deactivated
+        && !config.allow_recovery_reactivation
+    {
+        return Err(ArkretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+            "deployment policy denies recovery reactivation",
+        ));
+    }
+    let inspection = inspect_completion_attempt(&mut repo, &request, &issuer, &*clock).await?;
+    let inspected_at =
+        fresh_completion_qualification_at_cut(&mut repo, &handoff, &replay_dpop, &*clock).await?;
+    require_current_completion_issuer(depot, &issuer)?;
+    let prior = match inspection {
+        CompletionAttempt::Accepted(record) => Some(*record),
+        CompletionAttempt::Unaccepted => None,
+        CompletionAttempt::ExpiredUnaccepted => {
+            if !repo
+                .dpop_replay()
+                .consume_jti(crate::services::dpop::dpop_replay_record(
+                    &replay_dpop.claims.jti,
+                    inspected_at,
+                ))
+                .await?
+            {
+                return Err(signature_invalid(
+                    "completion expiry probe HTTP DPoP JTI was already consumed",
+                ));
+            }
+            if let Err(error) =
+                fresh_completion_qualification_at_cut(&mut repo, &handoff, &replay_dpop, &*clock)
+                    .await
+            {
+                repo.cancel().await?;
+                return Err(error);
+            }
+            repo.save().await?;
+            return Err(expired_unaccepted_completion());
+        }
+    };
+    repo.cancel().await?;
     if let Some(prior) = prior {
         return exact_replay(
+            depot,
             prior,
             &request,
             &canonical_request,
-            replay_grant.local_account_id,
-        );
+            &handoff,
+            &replay_dpop,
+            Some(&replay_dpop.claims.jti),
+            &*clock,
+        )
+        .await;
     }
 
-    // A new issuance must use an active handoff; this call also consumes the
-    // HTTP DPoP JTI. The handoff row itself is consumed in the final database
-    // transaction together with the issuer ledger and replay record.
-    let (handoff, dpop) = authenticate_account_handoff(
+    // First issuance alone admits the original business proof window and consumes the handoff.
+    let (active_handoff, dpop) = authenticate_account_handoff(
         req,
         depot,
         AccountHandoffAllowedOperation::IssueRecoveryCompletionGrant,
     )
     .await?;
-    if handoff.id != replay_grant.id || dpop.jkt != handoff.cnf_jkt {
+    if active_handoff.id != handoff.id || dpop.jkt != handoff.cnf_jkt {
         return Err(signature_invalid(
-            "account handoff identity changed during recovery completion issuance",
+            "AccountHandoff changed during first issuance",
         ));
     }
-
-    let initial: InitialSessionGrantIntent =
-        serde_json::from_value(request.initial_session.clone())
-            .map_err(|error| schema_violation(format!("initial_session is invalid: {error}")))?;
-    initial
-        .validate()
-        .map_err(|error| schema_violation(error.to_string()))?;
-    let receipt: RecoveryReceipt = serde_json::from_value(request.terminal_receipt.clone())
-        .map_err(|error| failed_precondition(format!("terminal receipt is invalid: {error}")))?;
-    receipt
-        .validate()
+    let completed = fetch_station_completion(depot, &request).await?;
+    let completion = &completed.completion_attestation;
+    request
+        .validate_completion(completion)
         .map_err(|error| failed_precondition(error.to_string()))?;
-    validate_completion_evidence(&request, &receipt, &initial, &handoff, &dpop.jkt)?;
-
-    let mut prerequisite_repo = depot.repo().await?;
-    let principal_binding = verify_account_principal_binding(
-        &mut prerequisite_repo,
-        handoff.local_account_id,
-        &handoff.audience_id,
-        receipt.account_id.principal_id.as_str(),
-    )
-    .await?;
-    let account_id = principal_binding.account_id.clone();
-    if receipt.account_id != account_id {
-        prerequisite_repo.cancel().await.ok();
-        return Err(signature_invalid(
-            "terminal receipt account_id does not match the accepted AccountHandoff binding",
-        ));
-    }
-    // The consecutive commit pair must sit in the Principal Control Realm this
-    // exact account binding was installed under. A structurally valid pair from
-    // any other Realm stream is a different authority and must not mint a
-    // Standard grant for this account.
-    if commit_pair_realm(&request.completion_attestation.reanchor_event_ref)
-        != Some(&principal_binding.principal_control_realm_id)
+    if completion.reanchor_event_ref.stream_ref
+        != (arkret_wire::CommitStreamRef::Realm {
+            realm_id: binding.principal_control_realm_id.clone(),
+        })
     {
-        prerequisite_repo.cancel().await.ok();
         return Err(failed_precondition(
-            "recovery commits are not in this account's Principal Control Realm stream",
+            "completion belongs to another Principal Control Realm",
         ));
     }
-    verify_station_completion_attestation(
-        depot,
-        &mut prerequisite_repo,
-        &handoff.audience_id,
-        &request,
+    verify_station_completion(depot, &completed).await?;
+    let payload = DeviceAuthorizePayload::try_from(&receipt.recovery_unit.events[1].event)
+        .map_err(|error| signature_invalid(error.to_string()))?;
+    let candidate_multibase = payload
+        .device_public_key_did
+        .as_str()
+        .strip_prefix("did:key:")
+        .ok_or_else(|| signature_invalid("native replacement Event does not name a did:key"))?;
+    let candidate_key = arkret_signatures::proof::PublicKeyMaterial::Ed25519Multibase {
+        value: candidate_multibase.to_owned(),
+    };
+    arkret_signatures::recovery::verify_recovery_receipt(
+        receipt,
+        &receipt.signature_proof.verification_method,
+        &candidate_key,
     )
-    .await?;
-    let browser_session_id = handoff.browser_session_id.ok_or_else(|| {
-        failed_precondition("recovery completion requires its authenticated browser session")
-    })?;
-    let browser_session = prerequisite_repo
-        .browser_session()
-        .lookup(browser_session_id)
-        .await?
-        .ok_or_else(|| failed_precondition("authenticated browser session no longer exists"))?;
-    // A deactivated account is not valid for ordinary use, but the dedicated
-    // recovery-completion path may consume an unfinished browser session that
-    // was established by the deployment's fresh account-auth recovery flow.
-    // All other inactive states remain excluded.
-    let recovery_session_eligible = browser_session.finished_at.is_none()
-        && matches!(
-            browser_session.user.status,
-            AccountStatus::Active | AccountStatus::Deactivated
-        );
-    if !recovery_session_eligible || browser_session.user.id != handoff.local_account_id {
-        prerequisite_repo.cancel().await.ok();
-        return Err(failed_precondition(
-            "account handoff browser session is no longer active for this account",
-        ));
-    }
-    prerequisite_repo.cancel().await.ok();
-
-    let clock = crate::handlers::make_clock();
-    let now = truncate_to_seconds(clock.now());
-    let config = depot.arkret_config()?;
-    let expires_at = now + config.session_grant_ttl;
-    let keyring = depot.keyring()?;
-    let (_, signing_key) =
-        crate::services::preferred_service_signing_key(&keyring).ok_or_else(|| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                "no session-grant signing key is available",
-            ))
-        })?;
-    let signing_key_id = signing_key
-        .kid()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            ArkretRouteError::Internal(Box::<dyn std::error::Error + Send + Sync>::from(
-                "preferred session-grant signing key has no kid",
-            ))
-        })?
-        .to_owned();
-    let issuer_id = crate::services::station_trust::owning_station_id_for(&config);
-    let request_identity = format!("recovery-completion:{}", request.transaction_id);
-    let intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_request).into();
+    .map_err(|error| signature_invalid(error.to_string()))?;
+    arkret_signatures::recovery::verify_recovery_completion_holder(
+        &request,
+        &receipt.signature_proof.verification_method,
+        &candidate_key,
+    )
+    .map_err(|error| signature_invalid(error.to_string()))?;
+    let subject = super::account_handoff::account_subject(&issuer, handoff.local_account_id)?;
+    let handoff_digest =
+        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(handoff_token.as_bytes()))?;
+    let expected_device = arkret_models_identity::SessionGrantDeviceBinding {
+        device_id: receipt.new_device_id.clone(),
+        authorization_event_id: completion.device_authorization_event_ref.event_id.clone(),
+        model_generation_ref: receipt.new_model_generation_ref,
+    };
+    let intent_digest = arkret_canonical::sha256_bytes(&canonical_request);
     let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
+    match inspect_completion_attempt(&mut repo, &request, &issuer, &*clock).await? {
+        CompletionAttempt::Accepted(_) => {
+            fresh_completion_qualification_at_cut(&mut repo, &handoff, &dpop, &*clock).await?;
+            repo.cancel().await?;
+            return replay_after_race(
+                depot,
+                &request,
+                &canonical_request,
+                &handoff,
+                &dpop,
+                &*clock,
+            )
+            .await;
+        }
+        CompletionAttempt::ExpiredUnaccepted => {
+            fresh_completion_qualification_at_cut(&mut repo, &handoff, &dpop, &*clock).await?;
+            repo.cancel().await?;
+            return Err(expired_unaccepted_completion());
+        }
+        CompletionAttempt::Unaccepted => {}
+    }
+    let keyring = depot.keyring()?;
+    // Authoring a successor may resolve the real AA issuer source. Prepare it
+    // before any account head/user/binding lock; active completion needs none.
+    let publication_source = if browser_session.user.status == AccountStatus::Deactivated {
+        let context =
+            crate::services::account_status_publication::AccountStatusIssuerContext::from_depot(
+                depot,
+            )?;
+        let source = context
+            .prepare(&mut repo, &keyring, &issuer, &binding, clock.now())
+            .await
+            .map_err(|error| failed_precondition(error))?;
+        Some((context, source))
+    } else {
+        None
+    };
+    let qualified_at =
+        fresh_completion_qualification_at_cut(&mut repo, &handoff, &dpop, &*clock).await?;
+    if qualified_at >= request.accepted_device_possession_proof.expires_at {
+        return reject_stale_first_attempt(
+            depot,
+            repo,
+            &request,
+            &canonical_request,
+            &handoff,
+            &dpop,
+            &*clock,
+        )
+        .await;
+    }
+    // The business-key lock fences this one first acceptance. Read current
+    // replacement eligibility after obtaining it, rather than letting an
+    // admission captured before a lock wait survive a revoke/reanchor.
+    let device_admission = acquire_private_current_device_admission(
+        depot,
+        &receipt.account_id,
+        receipt.new_device_id.clone(),
+        arkret_wire::DeviceRevocationDeniedAction::SessionGrantIssueOrRefresh,
+        Some(&expected_device),
+        Some(arkret_wire::AcceptedDevicePossessionProof::Issue(
+            request.accepted_device_possession_proof.clone(),
+        )),
+        request
+            .accepted_device_possession_proof
+            .session_intent_digest
+            .clone(),
+        clock.now(),
+    )
+    .await
+    .map_err(recovery_completion_device_refusal)?;
+    let device_deadline = device_admission.expires_at();
+    let device_binding = device_admission.binding;
+    if device_binding != expected_device {
+        return Err(failed_precondition("replacement generation changed"));
+    }
+    // RPC and lock waits may outlive a once-fresh handoff. This time is also
+    // the time used by the conditional handoff consumption at commit.
+    let now = fresh_completion_qualification_at_cut(&mut repo, &handoff, &dpop, &*clock).await?;
+    if now >= request.accepted_device_possession_proof.expires_at || now >= device_deadline {
+        return reject_stale_first_attempt(
+            depot,
+            repo,
+            &request,
+            &canonical_request,
+            &handoff,
+            &dpop,
+            &*clock,
+        )
+        .await;
+    }
+    let expires_at = now + config.session_grant_ttl;
+    request
+        .validate_first_issue(completion, &subject, &handoff_digest, &dpop.jkt, now)
+        .map_err(|error| signature_invalid(error.to_string()))?;
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
             &mut rng,
             &*clock,
             NewSessionGrantOperation {
-                issuer_id,
+                issuer_id: issuer.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
                 proof_kind: Some(SessionGrantProofKind::AccountHandoff),
                 request_identity: &request_identity,
                 canonical_intent_digest: intent_digest,
                 canonical_intent: &canonical_request,
                 target_session_grant_id: None,
-                issuance_nonce: None,
-                session_id: None,
                 grant_not_before: Some(now),
                 grant_expires_at: Some(expires_at),
-                signing_key_id: Some(&signing_key_id),
                 retained_until: expires_at + Duration::days(7),
             },
         )
         .await?;
     let operation = match reserved {
-        SessionGrantReserveOutcome::Reserved(operation) => operation,
-        SessionGrantReserveOutcome::Pending(operation)
+        SessionGrantReserveOutcome::Reserved(operation)
             if operation.state == coauth_data::SessionGrantOperationState::Reserved =>
         {
             operation
         }
-        SessionGrantReserveOutcome::Replay(operation) => {
-            let bytes = operation
-                .canonical_outcome
-                .ok_or_else(indeterminate_replay)?;
-            repo.cancel().await.ok();
-            return replay_record_after_ledger_race(
+        SessionGrantReserveOutcome::Replay(_) => {
+            repo.cancel().await?;
+            return replay_after_race(
                 depot,
                 &request,
                 &canonical_request,
-                handoff.local_account_id,
-                Some(bytes),
+                &handoff,
+                &dpop,
+                &*clock,
             )
             .await;
         }
         SessionGrantReserveOutcome::Conflict(_) => {
-            repo.cancel().await.ok();
             return Err(duplicate_conflict(
-                "recovery transaction id was reused with a different canonical request",
+                "completion business key already has another complete request",
             ));
         }
-        SessionGrantReserveOutcome::Indeterminate(_) | SessionGrantReserveOutcome::Pending(_) => {
-            repo.cancel().await.ok();
-            return Err(indeterminate_replay());
-        }
+        _ => return Err(indeterminate_replay()),
     };
-
-    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
-    let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
-        serde_json::from_str(initial.session_public_key.as_str())
-            .map_err(|error| signature_invalid(error.to_string()))?;
-    let expected_device_binding = arkret_models_identity::SessionGrantDeviceBinding {
-        device_id: initial.device_id.clone(),
-        authorization_event_id: request
-            .completion_attestation
-            .device_authorization_event_ref
-            .event_id
-            .clone(),
-        model_generation_ref: request.new_model_generation_ref,
-    };
-    let device_binding = acquire_private_current_device_binding(
-        depot,
-        &account_id,
-        initial.device_id.clone(),
-        arkret_wire::DeviceRevocationDeniedAction::SessionGrantIssueOrRefresh,
-        Some(&expected_device_binding),
-        None,
-        request.canonical_request_digest.clone(),
-        clock.now(),
-    )
-    .await
-    .map_err(recovery_completion_device_refusal)?;
-    if device_binding != expected_device_binding {
-        return Err(ArkretRouteError::coded(
-            StatusCode::CONFLICT,
-            arkret_wire::ErrorCode::DEVICE_REVOKED,
-            "recovery completion device binding is unavailable or generation-fenced",
-        ));
-    }
+    let seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
+    let public_key = serde_json::from_str(request.initial_session.session_public_key.as_str())
+        .map_err(|error| signature_invalid(format!("invalid initial public key: {error}")))?;
     let material = issue_session_grant_for_audience(
-        &issuance_seed,
+        &seed,
         &config,
-        &keyring,
         HumanGrantIssuance {
             browser_session: &browser_session,
-            session_public_key,
-            audience_id: initial.audience_id.clone(),
-            device_id: initial.device_id.clone(),
+            session_public_key: public_key,
+            audience_id: request.initial_session.audience_id.clone(),
+            device_id: receipt.new_device_id.clone(),
             scopes: STANDARD_INITIAL_SESSION_GRANT_OPERATIONS
                 .iter()
                 .map(|operation| operation.as_str().to_owned())
                 .collect(),
             subject_override: Some(&receipt.account_id.principal_id),
-            account_id: &account_id,
-            dpop_jkt: handoff.cnf_jkt.clone(),
+            account_id: &receipt.account_id,
+            dpop_jkt: dpop.jkt.clone(),
             device_binding,
             proof_kind: SessionGrantProofKind::AccountHandoff,
         },
     )?;
-    let wire_grant = SessionGrantResponseBody {
+    let issued_session = SessionGrantResponseBody {
+        issuer_id: material.issuer_id.clone(),
         account_id: material.account_id.clone(),
-        device_id: Some(initial.device_id.clone()),
-        session_grant: material.grant_jwt.clone(),
+        device_id: material.metadata.device_id.clone(),
+        session_grant: material.session_grant.clone(),
         expires_at: material.expires_at_timestamp,
         session_grant_id: material.grant_id.clone(),
-        session_public_key: initial.session_public_key.clone(),
-        audience_id: initial.audience_id.clone(),
+        session_public_key: material.metadata.session_public_key.clone(),
+        audience_id: material.audience_id.clone(),
         granted_scope: material.scopes.clone(),
         previous_session_grant_id: None,
     };
     let outcome = IssueRecoveryCompletionGrantResponseBody {
-        transaction_id: request.transaction_id.clone(),
-        issued_session: serde_json::to_value(wire_grant)?,
-        issued_at: issuance_seed.not_before,
+        transaction_id: receipt.transaction_id.clone(),
+        issued_session,
+        issued_at: seed.not_before,
     };
     let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
-
-    // The deployment permits reactivation, but only here: the terminal PCR
-    // recovery evidence, replacement-device generation check, AccountStatus
-    // successor, local account restoration and first new-generation grant
-    // commit as one transaction. Exact replay then observes the same outcome.
+    // Keep the existing account head -> user -> accepted-binding lock order.
+    let head = repo
+        .account_status_ledger()
+        .current_for_gate(issuer.as_str(), &handoff.local_account_id.to_string())
+        .await?;
     let current_user = repo
         .user()
-        .lookup(handoff.local_account_id)
+        .lookup_for_gate(handoff.local_account_id)
         .await?
         .ok_or_else(|| failed_precondition("recovery account no longer exists"))?;
+    let current_binding = repo
+        .principal_did()
+        .get_by_principal_id_and_audience_for_gate(
+            receipt.account_id.principal_id.as_str(),
+            receipt.account_id.station_id.as_str(),
+        )
+        .await?
+        .ok_or_else(|| failed_precondition("accepted account binding no longer exists"))?;
+    if head.as_ref().is_some_and(|head| {
+        head.status != current_user.status
+            || head.account_id != receipt.account_id
+            || head.binding_version != binding.binding_version
+    }) {
+        return Err(failed_precondition(
+            "local lifecycle and accepted issuer head disagree",
+        ));
+    }
+    if current_binding != binding || current_user.id != binding.user_id {
+        return Err(failed_precondition(
+            "recovery account binding changed before issuer commit",
+        ));
+    }
+    let now = fresh_completion_qualification_at_cut(&mut repo, &handoff, &dpop, &*clock).await?;
+    if now >= request.accepted_device_possession_proof.expires_at || now >= device_deadline {
+        return reject_stale_first_attempt(
+            depot,
+            repo,
+            &request,
+            &canonical_request,
+            &handoff,
+            &dpop,
+            &*clock,
+        )
+        .await;
+    }
+    request
+        .validate_first_issue(completion, &subject, &handoff_digest, &dpop.jkt, now)
+        .map_err(|error| signature_invalid(error.to_string()))?;
     match current_user.status {
         AccountStatus::Active => {}
         AccountStatus::Deactivated => {
+            if !depot.arkret_config()?.allow_recovery_reactivation {
+                return Err(ArkretRouteError::coded(
+                    StatusCode::FORBIDDEN,
+                    arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+                    "deployment policy denies recovery reactivation",
+                ));
+            }
             let station = depot.station()?;
-            let issuer_context = crate::services::account_status_publication::AccountStatusIssuerContext::from_depot(depot)?;
-            let plan = author_and_enqueue_transition(
+            let Some((context, source)) = publication_source.as_ref() else {
+                repo.cancel().await?;
+                return Err(ArkretRouteError::coded(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+                    "account became deactivated during qualification; retry the identical completion request",
+                ));
+            };
+            let plan = author_and_enqueue_prepared_transition(
                 &mut repo,
                 &mut rng,
                 &*clock,
                 station.as_ref(),
                 &keyring,
-                crate::services::station_trust::owning_station_id_for(&config).as_str(),
+                issuer.as_str(),
                 &current_user,
-                &principal_binding,
+                &binding,
                 AccountStatus::Active,
-                Some("pcr_recovery_completed".to_owned()),
+                Some("pcr_recovery_completed".into()),
                 now,
-                &issuer_context,
+                context,
+                source,
             )
             .await
             .map_err(account_status_reactivation_failed)?;
-            validate_transition_plan(
-                &current_user,
-                &principal_binding,
-                AccountStatus::Active,
-                &plan,
-            )
-            .map_err(account_status_reactivation_failed)?;
+            validate_transition_plan(&current_user, &binding, AccountStatus::Active, &plan)
+                .map_err(account_status_reactivation_failed)?;
             repo.user()
                 .patch(
                     &*clock,
-                    current_user.clone(),
+                    current_user,
                     UserPatch {
                         status: Some(AccountStatus::Active),
                         ..UserPatch::default()
@@ -380,30 +498,22 @@ pub async fn issue_recovery_completion_grant_endpoint(
                 .await?;
         }
         AccountStatus::ErasurePending => {
-            repo.cancel().await.ok();
             return Err(ArkretRouteError::coded(
                 StatusCode::CONFLICT,
                 arkret_wire::ErrorCode::ACCOUNT_ERASED,
-                "hard-erasure lifecycle is terminal and cannot be reactivated",
+                "hard-erasure state cannot be reactivated",
             ));
         }
-        status => {
-            repo.cancel().await.ok();
-            return Err(failed_precondition(format!(
-                "account status {} is not eligible for recovery reactivation",
-                status.as_str(),
-            )));
+        _ => {
+            return Err(failed_precondition(
+                "current account state forbids recovery reactivation",
+            ));
         }
     }
-    let checkpoint = serde_json::json!({
-        "kind": "recovery_completion",
-        "account_handoff_id": handoff.id.to_string(),
-        "transaction_id": request.transaction_id.to_string(),
-        "terminal_receipt_id": receipt.receipt_id.to_string(),
-        "reanchor_ref": serde_json::to_value(&request.completion_attestation.reanchor_event_ref)?,
-        "device_authorization_ref": serde_json::to_value(&request.completion_attestation.device_authorization_event_ref)?,
-        "new_model_generation_ref": serde_json::to_value(request.new_model_generation_ref)?,
-    });
+    let checkpoint = serde_json::json!({"kind":"recovery_completion", "account_handoff_id":handoff.id.to_string(),
+        "terminal_receipt_digest":receipt.receipt_digest()?, "completion_attestation":completion,
+        "accepted_device_possession_proof_digest":arkret_wire::AcceptedDevicePossessionProof::Issue(
+            request.accepted_device_possession_proof.clone()).proof_digest()?});
     let authorization_ref = format!("account-handoff:{}", handoff.id);
     let committed = repo
         .oauth_session_grant()
@@ -414,192 +524,643 @@ pub async fn issue_recovery_completion_grant_endpoint(
             SessionGrantProofAuthorization {
                 authorization_ref: &authorization_ref,
                 checkpoint: &checkpoint,
-                proof_expires_at: handoff.expires_at,
+                proof_expires_at: handoff
+                    .expires_at
+                    .min(request.accepted_device_possession_proof.expires_at)
+                    .min(device_deadline),
             },
             SessionGrantExactOutcome {
                 canonical_response: &canonical_outcome,
-                response_digest: sha2::Sha256::digest(&canonical_outcome).into(),
+                response_digest: arkret_canonical::sha256_bytes(&canonical_outcome),
             },
             new_session_grant_record(Some(browser_session_id), &material),
         )
         .await?;
     match committed {
         SessionGrantCommitOutcome::Committed(_) => {}
-        SessionGrantCommitOutcome::Replay(operation) => {
-            let bytes = operation
-                .canonical_outcome
-                .ok_or_else(indeterminate_replay)?;
-            repo.cancel().await.ok();
-            return replay_record_after_ledger_race(
+        SessionGrantCommitOutcome::AuthorizationExpired(_) => {
+            return reject_stale_first_attempt(
                 depot,
+                repo,
                 &request,
                 &canonical_request,
-                handoff.local_account_id,
-                Some(bytes),
+                &handoff,
+                &dpop,
+                &*clock,
             )
             .await;
         }
-        SessionGrantCommitOutcome::Indeterminate(_) => {
-            repo.cancel().await.ok();
-            return Err(indeterminate_replay());
+        SessionGrantCommitOutcome::Replay(_) => {
+            repo.cancel().await?;
+            return replay_after_race(
+                depot,
+                &request,
+                &canonical_request,
+                &handoff,
+                &dpop,
+                &*clock,
+            )
+            .await;
         }
+        SessionGrantCommitOutcome::Indeterminate(_) => return Err(indeterminate_replay()),
     }
-
-    let generation = serde_json::to_value(request.new_model_generation_ref)?;
     let inserted = repo
         .recovery_authority()
         .insert_completion_issuance(NewRecoveryCompletionGrantIssuance {
-            transaction_id: request.transaction_id.to_string(),
-            transaction_request_digest: request.transaction_request_digest.to_string(),
+            issuer_id: issuer,
+            account_id: receipt.account_id.clone(),
+            transaction_id: receipt.transaction_id.clone(),
+            terminal_receipt_digest: receipt.receipt_digest()?,
             local_account_id: handoff.local_account_id,
-            principal_id: receipt.account_id.principal_id.clone(),
-            device_id: initial.device_id.to_string(),
-            reanchor_ref: serde_json::to_value(&request.completion_attestation.reanchor_event_ref)?,
-            device_authorization_ref: serde_json::to_value(
-                &request
-                    .completion_attestation
-                    .device_authorization_event_ref,
-            )?,
-            new_model_generation_ref: generation,
-            canonical_request_digest: request.canonical_request_digest.to_string(),
+            reanchor_ref: completion.reanchor_event_ref.clone(),
+            device_authorization_ref: completion.device_authorization_event_ref.clone(),
+            new_model_generation_ref: receipt.new_model_generation_ref,
+            canonical_request_digest: request.canonical_request_digest.clone(),
             canonical_request: canonical_request.clone(),
             session_grant_operation_id: operation.id,
             canonical_outcome: canonical_outcome.clone(),
-            issued_at: issuance_seed.not_before,
+            issued_at: seed.not_before,
         })
         .await?;
     if !inserted {
-        repo.cancel().await.ok();
-        return replay_record_after_ledger_race(
+        repo.cancel().await?;
+        return replay_after_race(
             depot,
             &request,
             &canonical_request,
-            handoff.local_account_id,
-            None,
+            &handoff,
+            &dpop,
+            &*clock,
         )
         .await;
     }
     if !repo.account_handoff().consume_grant(&handoff, now).await? {
-        repo.cancel().await.ok();
         return Err(failed_precondition(
-            "account handoff was consumed before recovery completion committed",
+            "handoff was consumed before recovery completion committed",
         ));
     }
+    let final_at =
+        match fresh_completion_qualification_at_cut(&mut repo, &handoff, &dpop, &*clock).await {
+            Ok(now) => now,
+            Err(error) => {
+                repo.cancel().await?;
+                return Err(error);
+            }
+        };
+    if final_at >= request.accepted_device_possession_proof.expires_at
+        || final_at >= device_deadline
+    {
+        return reject_stale_first_attempt(
+            depot,
+            repo,
+            &request,
+            &canonical_request,
+            &handoff,
+            &dpop,
+            &*clock,
+        )
+        .await;
+    }
+    require_current_completion_issuer(depot, &receipt.session_grant_ref.issuer_id)?;
     repo.save().await?;
     Ok(ArkretCanonicalJson(canonical_outcome))
 }
 
-/// Cross-checks the two independent replacement-device / Station signatures
-/// that together describe one atomic recovery commit.
-///
-/// The receipt and the completion attestation are signed by different keys over
-/// overlapping members, so every shared member is compared here.
-///
-/// Recovery completion is accepted only when the re-anchor Event and the
-/// replacement-device authorization Event are **two consecutive committed
-/// positions of one PCR Realm stream**. The replacement device signs only the
-/// two producer Event ids; the governing Station signs the two
-/// `CommittedEventRef` quadruples. This boundary therefore joins the halves:
-/// `receipt.reanchor_event_id` and `receipt.authorization_event_id` must be the
-/// exact `event_id` members of `completion_attestation.reanchor_event_ref` and
-/// `completion_attestation.device_authorization_event_ref`,
-/// and the two refs must name the same Realm stream at strictly consecutive
-/// positions. The client never signs, carries, or re-derives the `RealmCommit`
-/// itself.
-///
-/// One `RealmCommit` carries exactly one `event_ref` at exactly one
-/// `stream_position`, so the pair always names two distinct commits. Same-stream
-/// adjacency, the Realm stream kind, and the distinctness of both `commit_id`
-/// and `event_id` are all enforced by
-/// `RecoveryCompletionGrantRequestBody::validate_structural`, which delegates
-/// to the SDK `validate_recovery_commit_pair`.
-///
-/// The coordinator is `account_id.station_id`; no separate coordinator member
-/// exists on wire or in the signed projection.
-fn validate_completion_evidence(
+/// Roll back every unpublished first-attempt effect before observing the
+/// serialized business key again. Never renew a proof over an accepted or
+/// unknown issuer outcome; an expired device observation alone retries exactly.
+async fn reject_stale_first_attempt(
+    depot: &Depot,
+    repo: coauth_data::BoxRepository,
     request: &RecoveryCompletionGrantRequestBody,
-    receipt: &RecoveryReceipt,
-    initial: &InitialSessionGrantIntent,
-    handoff: &coauth_data::account_handoff::AccountHandoffGrant,
-    dpop_jkt: &str,
-) -> Result<(), ArkretRouteError> {
-    let attestation = &request.completion_attestation;
-    let receipt_bytes = arkret_canonical::canonical_json_bytes(&request.terminal_receipt)
+    canonical_request: &[u8],
+    handoff: &coauth_data::AccountHandoffGrant,
+    dpop: &arkret_signatures::dpop::VerifiedDpopProof,
+    clock: &dyn coauth_data::Clock,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    repo.cancel().await?;
+    let issuer = owning_station_id_for(&depot.arkret_config()?);
+    if issuer != request.terminal_receipt.session_grant_ref.issuer_id {
+        return Err(signature_invalid(
+            "completion issuer changed during the first attempt",
+        ));
+    }
+    let mut repo = depot.repo().await?;
+    let observed = inspect_completion_attempt(&mut repo, request, &issuer, clock).await?;
+    let qualification =
+        fresh_completion_qualification_at_cut(&mut repo, handoff, dpop, clock).await;
+    repo.cancel().await?;
+    qualification?;
+    require_completion_outer_dpop_fresh(dpop, clock.now())?;
+    match observed {
+        CompletionAttempt::Accepted(record) => {
+            exact_replay(
+                depot,
+                *record,
+                request,
+                canonical_request,
+                handoff,
+                dpop,
+                None,
+                clock,
+            )
+            .await
+        }
+        CompletionAttempt::ExpiredUnaccepted => Err(expired_unaccepted_completion()),
+        CompletionAttempt::Unaccepted => Err(ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+            "current-device observation expired before first acceptance; retry the identical completion request",
+        )),
+    }
+}
+
+async fn fetch_station_completion(
+    depot: &Depot,
+    request: &RecoveryCompletionGrantRequestBody,
+) -> Result<RecoveryTransactionCompletion, ArkretRouteError> {
+    let receipt = &request.terminal_receipt;
+    let config = depot.arkret_config()?;
+    let destination = config
+        .stations
+        .iter()
+        .find(|server| {
+            crate::services::station_trust::effective_audience_shared(server).as_ref()
+                == Some(&receipt.account_id.station_id)
+        })
+        .ok_or_else(|| {
+            failed_precondition(
+                "the full Account origin Station has no configured registered channel",
+            )
+        })?;
+    let http = depot.http_client()?;
+    let channel = crate::services::peer_protocol_client::InternalAuthorityChannel::new(
+        &destination.endpoint,
+        &http,
+        destination.internal_authority_shared_secret(),
+        receipt.account_id.station_id.clone(),
+    )
+    .map_err(|error| {
+        failed_precondition(format!(
+            "registered completion channel unavailable: {error}"
+        ))
+    })?;
+    let result = channel.get_recovery_completion(&receipt.transaction_id).await.map_err(|error| {
+        if matches!(&error, crate::services::peer_protocol_client::PeerProtocolClientError::Status { status: 404, .. }) {
+            return failed_precondition("original Station has no visible immutable completion at this authenticated read cut; preserve the frozen Recovery intent");
+        }
+        ArkretRouteError::coded(StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SERVICE_UNAVAILABLE, format!("original Station completion is unavailable: {error}"))
+    })?;
+    let SecurityTransaction::Recovery(completed) = result else {
+        return Err(failed_precondition(
+            "security transaction is not immutable completed Recovery",
+        ));
+    };
+    completed
+        .validate_structural()
         .map_err(|error| failed_precondition(error.to_string()))?;
-    let receipt_digest =
-        arkret_identifiers::Hash::new(arkret_canonical::sha256_digest(&receipt_bytes))
-            .map_err(|error| failed_precondition(error.to_string()))?;
-    let receipt_generation = serde_json::to_value(receipt.new_model_generation_ref)
-        .map_err(|error| failed_precondition(error.to_string()))?;
-    let request_generation = serde_json::to_value(request.new_model_generation_ref)
-        .map_err(|error| failed_precondition(error.to_string()))?;
-    if receipt.outcome != RecoveryReceiptOutcome::Completed
-        || receipt.transaction_id != request.transaction_id
-        || receipt.transaction_request_digest != request.transaction_request_digest
-        || receipt.account_id != attestation.account_id
-        || receipt.recovery_session_id != attestation.recovery_session_id
-        || receipt.receipt_id != attestation.terminal_receipt_id
-        || receipt_digest != attestation.terminal_receipt_digest
-        || receipt.prepared_plan_digest != attestation.prepared_plan_digest
-        || receipt.new_device_id != attestation.replacement_device_id
-        || receipt.new_device_id != initial.device_id
-        || receipt.reanchor_event_id != request.completion_attestation.reanchor_event_ref.event_id
-        || receipt.authorization_event_id
-            != request
-                .completion_attestation
-                .device_authorization_event_ref
-                .event_id
-        || receipt_generation != request_generation
-        || receipt.completed_at > attestation.completed_at
-        || attestation.account_id.station_id.as_str() != handoff.audience_id
+    if &completed.account_id.station_id != channel.destination_service_id()
+        || completed.account_id != receipt.account_id
+        || completed.transaction_id != receipt.transaction_id
+        || arkret_canonical::canonical_json_bytes(&completed.recovery_receipt)?
+            != arkret_canonical::canonical_json_bytes(receipt)?
     {
         return Err(failed_precondition(
-            "recovery receipt, completion attestation, replacement device and current generation disagree",
+            "original Station returned another full signed Recovery",
         ));
     }
-    if initial.audience_id.as_str() != handoff.audience_id {
-        return Err(failed_precondition(
-            "initial SessionGrant audience does not match the account handoff audience",
-        ));
-    }
-    initial
-        .validate()
-        .map_err(|error| failed_precondition(error.to_string()))?;
-    let session_jkt = initial
-        .session_public_key
-        .thumbprint_sha256()
-        .map_err(|error| signature_invalid(error.to_string()))?;
-    if session_jkt != handoff.cnf_jkt || session_jkt != dpop_jkt {
+    Ok(completed)
+}
+
+async fn verify_station_completion(
+    depot: &Depot,
+    completed: &RecoveryTransactionCompletion,
+) -> Result<(), ArkretRouteError> {
+    let completion = &completed.completion_attestation;
+    let method = &completion.signature_proof.verification_method;
+    let signer = arkret_identifiers::Did::new(
+        method
+            .as_str()
+            .split_once('#')
+            .map_or(method.as_str(), |(did, _)| did),
+    )
+    .map_err(|error| signature_invalid(error.to_string()))?;
+    if arkret_identifiers::project_did_to_core_id(&signer)
+        .map_err(|error| signature_invalid(error.to_string()))?
+        != completed.account_id.station_id
+    {
         return Err(signature_invalid(
-            "initial session key thumbprint does not match the Bound handoff and HTTP DPoP key",
+            "completion signer is not this full Account's original Station",
+        ));
+    }
+    let http = depot.http_client()?;
+    let config = depot.arkret_config()?;
+    let resolver = depot.did_resolver_service()?;
+    let document = if signer.method() == "webvh" {
+        let historical = crate::services::did_resolver::resolve_verified_webvh_service_document_at(
+            &http,
+            resolver.resolver_egress_policy(),
+            &signer,
+            completion.completed_at,
+        )
+        .await
+        .map_err(|error| {
+            signature_invalid(format!("historical Station authority unavailable: {error}"))
+        })?;
+        crate::services::did_binding::to_shared_document(&historical)
+            .map_err(|error| signature_invalid(error.to_string()))?
+    } else {
+        let mut repo = depot.read_repo().await?;
+        let resolution = crate::services::did_binding::authority_document(
+            &http,
+            &depot.url_builder()?,
+            &config,
+            &depot.keyring()?,
+            &mut repo,
+            resolver.as_ref(),
+            depot.verified_did_binding_store()?.as_ref(),
+            signer.as_str(),
+            arkret_identity::DidBindingPurpose::Service,
+            crate::services::did_binding::high_risk_freshness(),
+            crate::handlers::make_clock().now(),
+        )
+        .await
+        .map_err(|error| signature_invalid(error.to_string()))?;
+        repo.cancel().await?;
+        resolution.accepted.document().clone()
+    };
+    arkret_identity::validate_verification_method_relationship(
+        &document,
+        method,
+        &signer,
+        arkret_identity::DidVerificationRelationship::AssertionMethod,
+    )
+    .map_err(|error| signature_invalid(error.to_string()))?;
+    let key =
+        arkret_identity::resolve_verification_method_key_from_document(&document, method.as_str())
+            .map_err(|error| signature_invalid(error.to_string()))?;
+    arkret_signatures::proof::verify_ed25519_raw_transcript_signature(
+        &completion.signing_bytes()?,
+        &completion.signature_proof.signature,
+        &key.public_key,
+    )
+    .map_err(|error| signature_invalid(error.to_string()))
+}
+
+async fn verify_account_principal_binding(
+    repo: &mut coauth_data::BoxRepository,
+    local_id: coauth_data::Ulid,
+    audience: &str,
+    account: &arkret_wire::AccountId,
+) -> Result<coauth_data::PrincipalDidBinding, ArkretRouteError> {
+    let binding = repo
+        .principal_did()
+        .get_by_principal_id_and_audience(account.principal_id.as_str(), audience)
+        .await?
+        .filter(|binding| binding.user_id == local_id && binding.account_id == *account)
+        .ok_or_else(|| {
+            failed_precondition(
+                "full recovered Account is not the current authenticated local binding",
+            )
+        })?;
+    binding.account_id.validate()?;
+    Ok(binding)
+}
+
+/// Re-read the actual handoff after waits; its original authentication does
+/// not extend expiry. A consumed row may still authenticate an accepted exact
+/// replay; first issuance separately consumes it conditionally in this transaction.
+async fn fresh_completion_handoff_at_cut(
+    repo: &mut coauth_data::BoxRepository,
+    expected: &coauth_data::AccountHandoffGrant,
+    clock: &dyn coauth_data::Clock,
+) -> Result<DateTime<Utc>, ArkretRouteError> {
+    let current = repo
+        .account_handoff()
+        .get_by_token(&expected.account_handoff_grant, clock.now())
+        .await?
+        .ok_or_else(unauthenticated_handoff)?;
+    let browser_id = current
+        .browser_session_id
+        .ok_or_else(unauthenticated_handoff)?;
+    let browser = repo
+        .browser_session()
+        .lookup(browser_id)
+        .await?
+        .ok_or_else(unauthenticated_handoff)?;
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    if current.id != expected.id
+        || current.request_id != expected.request_id
+        || current.request_digest != expected.request_digest
+        || current.local_account_id != expected.local_account_id
+        || current.browser_session_id != expected.browser_session_id
+        || current.audience_id != expected.audience_id
+        || current.cnf_jkt != expected.cnf_jkt
+        || current.allowed_operations != expected.allowed_operations
+        || current.issued_at != expected.issued_at
+        || current.expires_at != expected.expires_at
+        || current.issued_at > now
+        || current.expires_at <= now
+        || current.revoked_at.is_some()
+        || browser.finished_at.is_some()
+        || browser.user.id != current.local_account_id
+        || !matches!(
+            browser.user.status,
+            AccountStatus::Active | AccountStatus::Deactivated
+        )
+    {
+        return Err(unauthenticated_handoff());
+    }
+    enforce_handoff_operation(
+        &current,
+        AccountHandoffAllowedOperation::IssueRecoveryCompletionGrant,
+    )?;
+    Ok(now)
+}
+
+/// Handoff re-reads may block. Keep the current HTTP proof's verified iat
+/// deadline through that wait; this never re-admits the historical inner PoP.
+async fn fresh_completion_qualification_at_cut(
+    repo: &mut coauth_data::BoxRepository,
+    handoff: &coauth_data::AccountHandoffGrant,
+    dpop: &arkret_signatures::dpop::VerifiedDpopProof,
+    clock: &dyn coauth_data::Clock,
+) -> Result<DateTime<Utc>, ArkretRouteError> {
+    let at = fresh_completion_handoff_at_cut(repo, handoff, clock).await?;
+    require_completion_outer_dpop_fresh(dpop, clock.now())?;
+    Ok(at)
+}
+
+fn require_completion_outer_dpop_fresh(
+    dpop: &arkret_signatures::dpop::VerifiedDpopProof,
+    now: DateTime<Utc>,
+) -> Result<(), ArkretRouteError> {
+    let valid_through = crate::services::dpop::verified_proof_valid_through(dpop)
+        .map_err(|error| signature_invalid(error.to_string()))?;
+    require_outer_dpop_fresh(valid_through, now)
+}
+
+async fn exact_replay(
+    depot: &Depot,
+    record: coauth_data::RecoveryCompletionGrantIssuance,
+    request: &RecoveryCompletionGrantRequestBody,
+    canonical_request: &[u8],
+    handoff: &coauth_data::AccountHandoffGrant,
+    dpop: &arkret_signatures::dpop::VerifiedDpopProof,
+    jti_to_consume: Option<&str>,
+    clock: &dyn coauth_data::Clock,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    let now = clock.now();
+    require_completion_outer_dpop_fresh(dpop, now)?;
+    let stored: RecoveryCompletionGrantRequestBody =
+        serde_json::from_slice(&record.canonical_request)?;
+    request
+        .validate_exact_replay(&stored, &record.account_id, &dpop.jkt)
+        .map_err(|error| duplicate_conflict(error.to_string()))?;
+    if record.local_account_id != handoff.local_account_id
+        || record.canonical_request != canonical_request
+        || record.canonical_request_digest != request.canonical_request_digest
+        || record.terminal_receipt_digest != request.terminal_receipt.receipt_digest()?
+    {
+        return Err(duplicate_conflict(
+            "completion replay changed the original account or complete request",
+        ));
+    }
+    let outcome: IssueRecoveryCompletionGrantResponseBody =
+        serde_json::from_slice(&record.canonical_outcome)?;
+    if outcome.transaction_id != record.transaction_id
+        || outcome.issued_at != record.issued_at
+        || outcome.issued_session.account_id != record.account_id
+        || outcome.issued_session.issuer_id != record.issuer_id
+        || arkret_canonical::canonical_json_bytes(&outcome)? != record.canonical_outcome
+    {
+        return Err(indeterminate_replay());
+    }
+    let mut repo = depot.repo().await?;
+    let operation = repo
+        .oauth_session_grant()
+        .lock_operation(record.session_grant_operation_id)
+        .await?;
+    if operation.state != coauth_data::SessionGrantOperationState::Committed
+        || operation.issuer_id != record.issuer_id
+        || operation.result_grant_id.as_ref() != Some(&outcome.issued_session.session_grant_id)
+        || operation.canonical_outcome.as_deref() != Some(record.canonical_outcome.as_slice())
+        || operation.canonical_intent.as_deref() != Some(canonical_request)
+    {
+        return Err(indeterminate_replay());
+    }
+    let grant = repo
+        .oauth_session_grant()
+        .lookup_by_grant_id(&record.issuer_id, &outcome.issued_session.session_grant_id)
+        .await?
+        .ok_or_else(indeterminate_replay)?;
+    if grant.session_grant != outcome.issued_session.session_grant
+        || grant.issuance_operation_id != operation.id
+    {
+        return Err(indeterminate_replay());
+    }
+    if now >= grant.expires_at {
+        return Err(ArkretRouteError::session_grant_replay_expired(
+            grant.grant_id,
+        ));
+    }
+    if let Some(state) = super::session_grant::replay_terminal_state(grant.lifecycle_state) {
+        return Err(ArkretRouteError::session_grant_replay_terminal(
+            grant.grant_id,
+            state,
+        ));
+    }
+    repo.cancel().await?;
+    require_completion_outer_dpop_fresh(dpop, clock.now())?;
+    let qualification_deadline = acquire_current_replay_authority(
+        depot,
+        &grant,
+        &dpop.jkt,
+        request.canonical_request_digest.clone(),
+        now,
+    )
+    .await?;
+    let mut repo = depot.repo().await?;
+    lock_replay_issuer_qualification(&mut repo, &grant, &record).await?;
+    let current_operation = repo
+        .oauth_session_grant()
+        .lock_operation(record.session_grant_operation_id)
+        .await?;
+    if current_operation != operation {
+        return Err(indeterminate_replay());
+    }
+    let replay_at = fresh_completion_qualification_at_cut(&mut repo, handoff, dpop, clock).await?;
+    validate_replay_deadline(replay_at, qualification_deadline, &grant)?;
+    if let Some(jti) = jti_to_consume {
+        if !repo
+            .dpop_replay()
+            .consume_jti(crate::services::dpop::dpop_replay_record(jti, replay_at))
+            .await?
+        {
+            return Err(signature_invalid(
+                "completion replay HTTP DPoP JTI was already consumed",
+            ));
+        }
+    }
+    let delivered_at =
+        match fresh_completion_qualification_at_cut(&mut repo, handoff, dpop, clock).await {
+            Ok(now) => now,
+            Err(error) => {
+                repo.cancel().await?;
+                return Err(error);
+            }
+        };
+    validate_replay_deadline(delivered_at, qualification_deadline, &grant)?;
+    let current = repo
+        .oauth_session_grant()
+        .lookup_by_grant_id(&grant.issuer_id, &grant.grant_id)
+        .await?
+        .ok_or_else(indeterminate_replay)?;
+    if let Some(state) = super::session_grant::replay_terminal_state(current.lifecycle_state) {
+        return Err(ArkretRouteError::session_grant_replay_terminal(
+            current.grant_id,
+            state,
+        ));
+    }
+    if current.session_grant != grant.session_grant || current.metadata != grant.metadata {
+        return Err(indeterminate_replay());
+    }
+    if let Some(id) = current.browser_session_id {
+        let browser = repo
+            .browser_session()
+            .lookup(id)
+            .await?
+            .ok_or_else(unauthenticated_handoff)?;
+        if browser.finished_at.is_some() || browser.user.id != record.local_account_id {
+            return Err(unauthenticated_handoff());
+        }
+    }
+    let final_at =
+        match fresh_completion_qualification_at_cut(&mut repo, handoff, dpop, clock).await {
+            Ok(now) => now,
+            Err(error) => {
+                repo.cancel().await?;
+                return Err(error);
+            }
+        };
+    validate_replay_deadline(final_at, qualification_deadline, &grant)?;
+    require_current_completion_issuer(depot, &record.issuer_id)?;
+    repo.save().await?;
+    Ok(ArkretCanonicalJson(record.canonical_outcome))
+}
+
+fn require_current_completion_issuer(
+    depot: &Depot,
+    expected: &arkret_identifiers::DidCoreId,
+) -> Result<(), ArkretRouteError> {
+    if owning_station_id_for(&depot.arkret_config()?) != *expected {
+        return Err(signature_invalid(
+            "completion issuer changed before outcome acceptance",
         ));
     }
     Ok(())
 }
 
-async fn verify_account_principal_binding(
+/// Current issuer lifecycle is read only after the remote qualification, in
+/// the established head -> user -> accepted binding -> operation order.
+async fn lock_replay_issuer_qualification(
     repo: &mut coauth_data::BoxRepository,
-    account_id: coauth_data::Ulid,
-    audience: &str,
-    principal_id: &str,
-) -> Result<coauth_data::PrincipalDidBinding, ArkretRouteError> {
+    grant: &coauth_data::SessionGrant,
+    record: &coauth_data::RecoveryCompletionGrantIssuance,
+) -> Result<(), ArkretRouteError> {
+    let head = repo
+        .account_status_ledger()
+        .current_for_gate(
+            record.issuer_id.as_str(),
+            &record.local_account_id.to_string(),
+        )
+        .await?;
+    let user = repo
+        .user()
+        .lookup_for_gate(record.local_account_id)
+        .await?
+        .ok_or_else(|| failed_precondition("replay account no longer exists"))?;
     let binding = repo
         .principal_did()
-        .get_by_principal_id_and_audience(principal_id, audience)
+        .get_by_principal_id_and_audience_for_gate(
+            record.account_id.principal_id.as_str(),
+            record.account_id.station_id.as_str(),
+        )
         .await?
-        .ok_or_else(|| {
-            failed_precondition("principal is not bound to an account at this audience")
-        })?;
-    if binding.user_id != account_id || binding.principal_id.as_str() != principal_id {
+        .ok_or_else(|| failed_precondition("replay account binding no longer exists"))?;
+    if user.status != AccountStatus::Active
+        || binding.user_id != user.id
+        || binding.account_id != record.account_id
+        || grant.metadata.account_id != record.account_id
+        || grant.local_account_id.as_str() != record.local_account_id.to_string()
+        || record.reanchor_ref.stream_ref
+            != (arkret_wire::CommitStreamRef::Realm {
+                realm_id: binding.principal_control_realm_id.clone(),
+            })
+        || head.as_ref().is_some_and(|head| {
+            head.status != user.status
+                || head.account_id != binding.account_id
+                || head.binding_version != binding.binding_version
+        })
+    {
         return Err(failed_precondition(
-            "recovered principal is bound to a different service account",
+            "current replay issuer lifecycle or binding changed",
         ));
     }
-    binding
-        .account_id
-        .validate()
-        .map_err(|error| failed_precondition(error.to_string()))?;
-    Ok(binding)
+    Ok(())
+}
+
+fn validate_replay_deadline(
+    now: DateTime<Utc>,
+    qualification_deadline: DateTime<Utc>,
+    grant: &coauth_data::SessionGrant,
+) -> Result<(), ArkretRouteError> {
+    if now >= grant.expires_at {
+        return Err(ArkretRouteError::session_grant_replay_expired(
+            grant.grant_id.clone(),
+        ));
+    }
+    if now >= qualification_deadline {
+        return Err(ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SERVICE_UNAVAILABLE,
+            "current-device replay observation expired; retry the identical completion request",
+        ));
+    }
+    Ok(())
+}
+
+async fn replay_after_race(
+    depot: &Depot,
+    request: &RecoveryCompletionGrantRequestBody,
+    canonical_request: &[u8],
+    handoff: &coauth_data::AccountHandoffGrant,
+    dpop: &arkret_signatures::dpop::VerifiedDpopProof,
+    clock: &dyn coauth_data::Clock,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    let issuer = owning_station_id_for(&depot.arkret_config()?);
+    let receipt = &request.terminal_receipt;
+    let mut repo = depot.read_repo().await?;
+    let record = repo
+        .recovery_authority()
+        .lookup_completion_issuance(&issuer, &receipt.account_id, &receipt.transaction_id)
+        .await?
+        .ok_or_else(indeterminate_replay)?;
+    repo.cancel().await?;
+    // First-admission authentication already consumed this JTI. The committed
+    // racing outcome is still checked for all current qualifications below.
+    exact_replay(
+        depot,
+        record,
+        request,
+        canonical_request,
+        handoff,
+        dpop,
+        None,
+        clock,
+    )
+    .await
 }
 
 fn account_status_reactivation_failed(
@@ -612,163 +1173,63 @@ fn account_status_reactivation_failed(
     )
 }
 
-/// Verifies the Station signature over the fixed 14-member completion
-/// projection.
-///
-/// The projection itself is owned by `arkret_wire` (`signing_bytes`), so this
-/// boundary can never drift from the transcript the Station signed. The signer
-/// must be the handoff audience, and `validate_completion_evidence` separately
-/// requires `attestation.account_id.station_id` to equal that same audience, so
-/// the coordinator is pinned to the account's own Station.
-async fn verify_station_completion_attestation(
-    depot: &Depot,
+/// The only source of a deterministic "renew PoP" decision. The lock remains
+/// held by the caller through its first accept or negative decision transaction.
+#[derive(Debug)]
+enum CompletionAttempt {
+    Accepted(Box<coauth_data::RecoveryCompletionGrantIssuance>),
+    Unaccepted,
+    ExpiredUnaccepted,
+}
+
+async fn inspect_completion_attempt(
     repo: &mut coauth_data::BoxRepository,
-    expected_station: &str,
     request: &RecoveryCompletionGrantRequestBody,
-) -> Result<(), ArkretRouteError> {
-    let attestation = &request.completion_attestation;
-    let signer_did = arkret_identifiers::Did::new(verification_method_did(
-        attestation.signature_proof.verification_method.as_str(),
-    ))
-    .map_err(|error| signature_invalid(error.to_string()))?;
-    let signer_core = arkret_identifiers::project_did_to_core_id(&signer_did)
-        .map_err(|error| signature_invalid(error.to_string()))?;
-    if signer_core.as_str() != expected_station {
-        return Err(signature_invalid(
-            "recovery completion attestation must be signed by the handoff audience",
-        ));
-    }
-    let config = depot.arkret_config()?;
-    let trusted = config
-        .stations
-        .iter()
-        .filter_map(|server| effective_audience(server, shared()))
-        .any(|service_id| service_id.as_str() == expected_station);
-    if !trusted {
-        return Err(signature_invalid(
-            "recovery completion signer is not the configured Station",
-        ));
-    }
-    let resolution = crate::services::did_binding::authority_document(
-        &depot.http_client()?,
-        &depot.url_builder()?,
-        &config,
-        &depot.keyring()?,
-        repo,
-        depot.did_resolver_service()?.as_ref(),
-        depot.verified_did_binding_store()?.as_ref(),
-        signer_did.as_str(),
-        arkret_identity::DidBindingPurpose::Recovery,
-        crate::services::did_binding::high_risk_freshness(),
-        crate::handlers::make_clock().now(),
-    )
-    .await
-    .map_err(|error| {
-        signature_invalid(format!(
-            "no fresh trusted recovery binding for the Station: {error}"
-        ))
-    })?;
-    verify_with_document_method(
-        &resolution.document,
-        attestation.signature_proof.verification_method.as_str(),
-        &attestation
-            .signing_bytes()
-            .map_err(|error| signature_invalid(error.to_string()))?,
-        &attestation.signature_proof.signature,
-        "completion attestation",
-    )
-}
-
-fn verify_with_document_method(
-    document: &super::DidDocument,
-    verification_method: &str,
-    signing_bytes: &[u8],
-    signature: &str,
-    label: &str,
-) -> Result<(), ArkretRouteError> {
-    let method = document
-        .verification_method
-        .iter()
-        .find(|method| method.id == verification_method)
-        .ok_or_else(|| signature_invalid(format!("{label} verification method is absent")))?;
-    let material = method.public_key_material().map_err(signature_invalid)?;
-    if !verify_detached_ed25519_signature(&material, signing_bytes, signature) {
-        return Err(signature_invalid(format!(
-            "{label} signature did not verify"
-        )));
-    }
-    Ok(())
-}
-
-fn exact_replay(
-    record: coauth_data::RecoveryCompletionGrantIssuance,
-    request: &RecoveryCompletionGrantRequestBody,
-    canonical_request: &[u8],
-    account_id: coauth_data::Ulid,
-) -> Result<ArkretCanonicalJson, ArkretRouteError> {
-    if record.transaction_request_digest != request.transaction_request_digest.as_str()
-        || record.canonical_request_digest != request.canonical_request_digest.as_str()
-        || record.local_account_id != account_id
-        || record.canonical_request != canonical_request
-    {
-        return Err(duplicate_conflict(
-            "recovery transaction id was reused with different account or request bytes",
-        ));
-    }
-    Ok(ArkretCanonicalJson(record.canonical_outcome))
-}
-
-async fn replay_record_after_ledger_race(
-    depot: &Depot,
-    request: &RecoveryCompletionGrantRequestBody,
-    canonical_request: &[u8],
-    account_id: coauth_data::Ulid,
-    ledger_outcome: Option<Vec<u8>>,
-) -> Result<ArkretCanonicalJson, ArkretRouteError> {
-    let mut repo = depot.repo().await?;
-    let record = repo
-        .recovery_authority()
-        .lookup_completion_issuance(request.transaction_id.as_str())
+    issuer: &arkret_identifiers::DidCoreId,
+    clock: &dyn coauth_data::Clock,
+) -> Result<CompletionAttempt, ArkretRouteError> {
+    let receipt = &request.terminal_receipt;
+    repo.recovery_authority()
+        .lock_completion_business_key(issuer, &receipt.account_id, &receipt.transaction_id)
         .await?;
-    repo.cancel().await.ok();
-    let outcome = exact_replay(
-        record.ok_or_else(indeterminate_replay)?,
-        request,
-        canonical_request,
-        account_id,
-    )?;
-    if ledger_outcome
-        .as_ref()
-        .is_some_and(|ledger| ledger != &outcome.0)
+    if let Some(record) = repo
+        .recovery_authority()
+        .lookup_completion_issuance(issuer, &receipt.account_id, &receipt.transaction_id)
+        .await?
     {
-        return Err(indeterminate_replay());
+        return Ok(CompletionAttempt::Accepted(Box::new(record)));
     }
-    Ok(outcome)
-}
-
-/// Realm of a committed recovery Event, accepted only for a Realm stream.
-///
-/// Recovery re-anchor and replacement-device authorization belong to the
-/// account's Principal Control Realm stream. A Circle or Sidecar stream ref is
-/// a different visibility stream and is refused rather than projected onto its
-/// parent Realm.
-fn commit_pair_realm(
-    committed: &arkret_wire::CommittedEventRef,
-) -> Option<&arkret_identifiers::RealmId> {
-    match &committed.stream_ref {
-        arkret_wire::CommitStreamRef::Realm { realm_id } => Some(realm_id),
-        arkret_wire::CommitStreamRef::Circle { .. }
-        | arkret_wire::CommitStreamRef::Sidecar { .. } => None,
-        _ => None,
+    // Read time after acquiring the lock. A candidate that was still doing
+    // network qualification while an expiry probe won this lock cannot later
+    // accept the expired body using its earlier captured time.
+    if request.accepted_device_possession_proof.expires_at <= clock.now() {
+        let request_identity = arkret_canonical::sha256_digest(request.operation_identity(issuer)?);
+        if repo
+            .oauth_session_grant()
+            .lookup_operation_by_identity(
+                issuer,
+                coauth_data::SessionGrantOperationKind::Issue,
+                Some(SessionGrantProofKind::AccountHandoff),
+                &request_identity,
+            )
+            .await?
+            .is_some()
+        {
+            return Err(indeterminate_replay());
+        }
+        return Ok(CompletionAttempt::ExpiredUnaccepted);
     }
+    Ok(CompletionAttempt::Unaccepted)
 }
 
-fn verification_method_did(value: &str) -> &str {
-    value.split_once('#').map_or(value, |(did, _)| did)
-}
-
-fn truncate_to_seconds(value: chrono::DateTime<Utc>) -> chrono::DateTime<Utc> {
-    value.with_nanosecond(0).unwrap_or(value)
+fn expired_unaccepted_completion() -> ArkretRouteError {
+    ArkretRouteError::CodedDetailed {
+        status: StatusCode::UNAUTHORIZED,
+        code: arkret_wire::ErrorCode::REAUTHENTICATION_REQUIRED,
+        message: "no accepted completion exists at the serialized business key and the original PoP expired".into(),
+        details: vec![("reason_code", serde_json::to_value(arkret_wire::ReasonCode::ProofInvalid)
+            .expect("typed reason code serializes"))],
+    }
 }
 
 fn unauthenticated_handoff() -> ArkretRouteError {
@@ -874,3 +1335,7 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+#[path = "recovery_authority/expiry_tests.rs"]
+mod expiry_tests;

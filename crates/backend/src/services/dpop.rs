@@ -44,6 +44,32 @@ use tokio::sync::Mutex;
 const MAX_PROOF_AGE: Duration = Duration::seconds(300);
 const MAX_FUTURE_SKEW: Duration = Duration::seconds(30);
 
+/// Inclusive upper bound of the already verified proof's existing iat window.
+/// This is host-local timing evidence, never a token or a caller assertion.
+pub(crate) fn verified_proof_valid_through(
+    proof: &VerifiedDpopProof,
+) -> Result<DateTime<Utc>, DpopError> {
+    DateTime::from_timestamp(proof.claims.iat, 0)
+        .and_then(|issued| issued.checked_add_signed(MAX_PROOF_AGE))
+        .ok_or_else(|| arkret_signatures::dpop::DpopVerificationError::IssuedAtOutOfRange.into())
+}
+
+/// Preserve the SDK's inclusive iat boundaries and future-clock leeway after
+/// blocking native admission work, without rechecking any historical inner PoP.
+pub(crate) fn require_proof_fresh_at(
+    valid_through: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<(), DpopError> {
+    let valid_from = valid_through
+        .checked_sub_signed(MAX_PROOF_AGE)
+        .and_then(|issued| issued.checked_sub_signed(MAX_FUTURE_SKEW))
+        .ok_or(arkret_signatures::dpop::DpopVerificationError::IssuedAtOutOfRange)?;
+    if now < valid_from || now > valid_through {
+        return Err(arkret_signatures::dpop::DpopVerificationError::IssuedAtOutOfRange.into());
+    }
+    Ok(())
+}
+
 /// Time window for jti replay detection — once a jti is observed it is
 /// rejected until this many seconds after its `iat`.
 const NONCE_TTL: StdDuration = StdDuration::from_mins(5);
@@ -412,6 +438,43 @@ mod tests {
         Jwt::sign(header, claims.clone(), &signer)
             .expect("DPoP sign")
             .into_string()
+    }
+
+    #[test]
+    fn delayed_admission_preserves_verified_iat_boundaries_and_checked_arithmetic() {
+        let issued = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+        let signing = SigningKey::generate(&mut OsRng);
+        let claims = VerifiedDpopClaims {
+            jti: "last-admission-window".into(),
+            htm: "POST".into(),
+            htu: "https://example.test/issue".into(),
+            iat: issued.timestamp(),
+            ath: None,
+            nonce: None,
+        };
+        let proof = sign_proof(&claims, &signing);
+        let verified =
+            DpopVerifier::verify_without_replay(&proof, "POST", &claims.htu, issued, None).unwrap();
+        let through = verified_proof_valid_through(&verified).unwrap();
+        assert_eq!(through, issued + MAX_PROOF_AGE);
+        for now in [issued - MAX_FUTURE_SKEW, issued, through] {
+            require_proof_fresh_at(through, now).unwrap();
+            DpopVerifier::verify_without_replay(&proof, "POST", &claims.htu, now, None).unwrap();
+        }
+        for now in [
+            issued - MAX_FUTURE_SKEW - Duration::nanoseconds(1),
+            through + Duration::nanoseconds(1),
+        ] {
+            assert!(require_proof_fresh_at(through, now).is_err());
+            assert!(
+                DpopVerifier::verify_without_replay(&proof, "POST", &claims.htu, now, None)
+                    .is_err()
+            );
+        }
+        let mut impossible = verified;
+        impossible.claims.iat = i64::MAX;
+        assert!(verified_proof_valid_through(&impossible).is_err());
+        assert!(require_proof_fresh_at(DateTime::<Utc>::MIN_UTC, issued).is_err());
     }
 
     #[tokio::test]

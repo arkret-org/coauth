@@ -30,6 +30,8 @@ pub async fn logout_account(
             ArkretRouteError::Unauthorized("Authorization: DPoP <session_grant> is required".into())
         })?
         .to_owned();
+    let opaque_secret = arkret_identifiers::SessionGrantSecret::new(token.clone())
+        .map_err(|_| ArkretRouteError::Unauthorized("invalid opaque session credential".into()))?;
     let proof = req
         .headers()
         .get("dpop")
@@ -55,7 +57,10 @@ pub async fn logout_account(
     let mut repo = depot.repo().await?;
     let original = repo
         .oauth_session_grant()
-        .lookup_by_grant_jwt(&token)
+        .lookup_by_secret(
+            &station_trust::owning_station_id_for(&config),
+            &opaque_secret,
+        )
         .await?;
     repo.cancel().await?;
     if original

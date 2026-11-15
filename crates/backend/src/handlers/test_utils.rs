@@ -515,18 +515,7 @@ impl TestState {
         let audit_signing_key =
             JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(45)))
                 .with_kid(coauth_keyring::AUDIT_SIGNING_KEY_ID);
-        // Session grants are signed by the key designated for them, so the
-        // fixture pins it rather than letting key order decide.
-        let session_grant_key =
-            JsonWebKey::new(PrivateKey::generate_ed25519(ChaChaRng::seed_from_u64(46)))
-                .with_kid(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID);
-        let jwks = JsonWebKeySet::new(vec![
-            rsa,
-            ed25519,
-            account_authority_key,
-            audit_signing_key,
-            session_grant_key,
-        ]);
+        let jwks = JsonWebKeySet::new(vec![rsa, ed25519, account_authority_key, audit_signing_key]);
         let keyring = Keyring::new(jwks);
 
         let encrypter = Encrypter::new(&[0x42; 32]);

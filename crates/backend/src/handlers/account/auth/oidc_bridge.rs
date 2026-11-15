@@ -74,12 +74,10 @@ pub(crate) struct OidcHandoffExchangeSuccess {
     pub audience: String,
 }
 
-/// Coauth's declared v1 recovery policy permits fresh OIDC account
-/// authentication to produce only the short-lived AccountHandoff for a
-/// deactivated account. Every ordinary session/grant path still applies the
-/// active-account gate, and only recovery completion may restore the status.
-fn account_handoff_auth_status_allowed(status: AccountStatus) -> bool {
-    matches!(status, AccountStatus::Active | AccountStatus::Deactivated)
+/// The opt-in applies only to this fresh AccountHandoff authentication path.
+/// It never makes the account active or permits ordinary session issuance.
+fn account_handoff_auth_status_allowed(status: AccountStatus, allow_reactivation: bool) -> bool {
+    status == AccountStatus::Active || (allow_reactivation && status == AccountStatus::Deactivated)
 }
 
 /// Typed failure of the OIDC exchange, carrying the registry error code the
@@ -530,10 +528,15 @@ pub(crate) async fn authenticate_local_handoff_code(
         ));
     }
     let user = browser_session.user.clone();
-    if !account_handoff_auth_status_allowed(user.status) {
+    if !account_handoff_auth_status_allowed(user.status, arkret_config.allow_recovery_reactivation)
+    {
         return Err(OidcExchangeError::new(
-            "invalid_authorization_code",
-            "authorization_code is bound to an inactive account",
+            if user.status == AccountStatus::Deactivated {
+                "account_deactivated"
+            } else {
+                "invalid_authorization_code"
+            },
+            "authorization_code is bound to an account disallowed by the handoff policy",
         ));
     }
     if !oauth_session
@@ -864,7 +867,10 @@ async fn exchange_oidc_code(
                     ),
                 )
             })?;
-        if !account_handoff_auth_status_allowed(user.status) {
+        if !account_handoff_auth_status_allowed(
+            user.status,
+            arkret_config.allow_recovery_reactivation,
+        ) {
             let code = match user.status {
                 arkret_models_collaboration::objects::account_status::AccountStatus::Locked => {
                     "account_locked"
@@ -1442,19 +1448,26 @@ mod tests {
     }
 
     #[test]
-    fn account_handoff_auth_allows_only_active_or_recovery_candidate() {
-        assert!(account_handoff_auth_status_allowed(AccountStatus::Active));
-        assert!(account_handoff_auth_status_allowed(
-            AccountStatus::Deactivated
-        ));
-        for status in [
-            AccountStatus::SoftLoggedOut,
-            AccountStatus::Locked,
-            AccountStatus::Suspended,
-            AccountStatus::ErasurePending,
-        ] {
-            assert!(!account_handoff_auth_status_allowed(status));
+    fn account_handoff_auth_allows_only_explicit_recovery_policy() {
+        for allow in [false, true] {
+            assert!(account_handoff_auth_status_allowed(
+                AccountStatus::Active,
+                allow
+            ));
+            assert_eq!(
+                account_handoff_auth_status_allowed(AccountStatus::Deactivated, allow),
+                allow
+            );
+            for status in [
+                AccountStatus::SoftLoggedOut,
+                AccountStatus::Locked,
+                AccountStatus::Suspended,
+                AccountStatus::ErasurePending,
+            ] {
+                assert!(!account_handoff_auth_status_allowed(status, allow));
+            }
         }
+        assert!(!coauth_config::ArkretConfig::default().allow_recovery_reactivation);
     }
 
     #[test]

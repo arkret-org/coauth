@@ -263,6 +263,12 @@ pub struct ArkretConfig {
     #[serde(default, skip_serializing_if = "is_false")]
     pub audit_signature_fail_closed: bool,
 
+    /// Explicit deployment policy for deactivated-account Recovery candidates.
+    /// It permits only fresh account-handoff authentication and the dedicated
+    /// completed-PCR reactivation transaction. Ordinary session paths stay denied.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub allow_recovery_reactivation: bool,
+
     /// Fresh high-risk-action authentication ceiling, in seconds, for the
     /// self-service erasure entry point
     /// `ak.gate.account.command.request_erasure.v1`
@@ -304,6 +310,7 @@ impl Default for ArkretConfig {
             trust_domain: None,
             admin_org_id: None,
             audit_signature_fail_closed: false,
+            allow_recovery_reactivation: false,
             erasure_request_max_auth_age: None,
         }
     }

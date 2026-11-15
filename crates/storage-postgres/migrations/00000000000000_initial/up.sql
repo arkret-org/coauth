@@ -85,13 +85,13 @@ CREATE TABLE public.accountability_subject_revocations (
     updated_at timestamp with time zone NOT NULL
 );
 
--- AKP-0008 §4.5: durable accepted agent key authorizations. Column order
+-- AKP-0008 Â§4.5: durable accepted agent key authorizations. Column order
 -- tracks event-payload.schema.json#/$defs/agent_key_authorize_payload
 -- (agent_id, key_id, verification_method, accountable_principal_id,
 -- audience, issued_at, expires_at) so the fan-out payload coland writes as
 -- `ak.agent.key.authorize` stays field-aligned with the spec. `expires_at`
 -- is nullable: absent means the authorization never expires by time and is
--- governed solely by the revocation chain (key-management §3.6.1).
+-- governed solely by the revocation chain (key-management Â§3.6.1).
 CREATE TABLE public.agent_key_authorizations (
     id uuid NOT NULL,
     authorized_event_id text NOT NULL,
@@ -121,7 +121,7 @@ CREATE TABLE public.agent_key_authorizations (
     updated_at timestamp with time zone NOT NULL
 );
 
--- AKP-0008 §4.6: single-consumption replay table for agent_key_proof session
+-- AKP-0008 Â§4.6: single-consumption replay table for agent_key_proof session
 -- grants. Each accepted proof challenge and nonce is consumed exactly once;
 -- rows survive past the proof `expires_at` by a grace window so a replay
 -- inside the window is still rejected. A sweeper prunes rows past `prune_after`.
@@ -139,17 +139,17 @@ CREATE TABLE public.agent_session_proof_replay (
     created_at timestamp with time zone NOT NULL
 );
 
--- Accepted DID bindings (`did-usage-and-verification.md` §5). One row is one
+-- Accepted DID bindings (`did-usage-and-verification.md` Â§5). One row is one
 -- acceptance: a verified binding plus the DID document it pins, stored in
 -- `accepted` as the canonical serialization of the shared SDK value object.
 --
 -- The primary key is the full six-dimension store key. `verification_method`
 -- and `version_id` are optional dimensions, but a PostgreSQL primary key
--- cannot contain NULL, so "absent" is encoded as the empty string — neither a
+-- cannot contain NULL, so "absent" is encoded as the empty string â€” neither a
 -- DID URL nor a method version identifier can be empty, so this is
 -- unambiguous.
 --
--- `history_head` is not a key dimension but *is* a §5 invalidation dimension
+-- `history_head` is not a key dimension but *is* a Â§5 invalidation dimension
 -- (witness fork), so it gets its own index. `expires_at` bounds how long an
 -- acceptance is readable; expired rows are filtered out on read and dropped
 -- on the next write (see `dpop_jti_replay` for the same lazy-prune pattern).
@@ -200,7 +200,7 @@ CREATE TABLE public.dpop_jti_replay (
 );
 
 -- Durable self-service erasure intents
--- (`ak.gate.account.command.request_erasure.v1`, account-lifecycle.md §8.1).
+-- (`ak.gate.account.command.request_erasure.v1`, account-lifecycle.md Â§8.1).
 -- One row per accepted request_id; `canonical_outcome` carries the exact
 -- acceptance bytes for byte-identical replays, and the partial unique index
 -- below enforces at most one live (record not yet signed) intent per user.
@@ -220,14 +220,15 @@ CREATE UNIQUE INDEX user_erasure_requests_live_intent_idx
     ON public.user_erasure_requests (user_id) WHERE record_issued_at IS NULL;
 
 CREATE TABLE public.recovery_completion_grant_issuances (
-    transaction_id text NOT NULL,
-    transaction_request_digest text NOT NULL,
-    local_account_id uuid NOT NULL,
+    issuer_id text NOT NULL,
     principal_id text NOT NULL,
-    device_id text NOT NULL,
+    account_station_id text NOT NULL,
+    transaction_id text NOT NULL,
+    terminal_receipt_digest text NOT NULL CHECK (terminal_receipt_digest ~ '^sha256:[0-9a-f]{64}$'),
+    local_account_id uuid NOT NULL,
     reanchor_ref jsonb NOT NULL,
     device_authorization_ref jsonb NOT NULL,
-    new_model_generation_ref jsonb NOT NULL,
+    new_model_generation_ref bigint NOT NULL CHECK (new_model_generation_ref > 0),
     canonical_request_digest text NOT NULL,
     canonical_request bytea NOT NULL,
     session_grant_operation_id uuid NOT NULL,
@@ -297,7 +298,7 @@ CREATE TABLE public.organization_principal_controls (
 
 COMMENT ON COLUMN public.organization_principal_controls.pcr_commit_ref IS 'Authority-signed RealmCommit of the PCR Realm stream the control state was evaluated at. NULL means the control state carries no authority commit yet.';
 
-COMMENT ON TABLE public.organization_principal_controls IS 'Organization principal control state (identity-did.md §7). One row per stable organization identity, retaining the exact bootstrap DID evidence. There is intentionally no shared-credential/password column: an organization principal is controlled by DID keys + delegations only, never a shared human login.';
+COMMENT ON TABLE public.organization_principal_controls IS 'Organization principal control state (identity-did.md Â§7). One row per stable organization identity, retaining the exact bootstrap DID evidence. There is intentionally no shared-credential/password column: an organization principal is controlled by DID keys + delegations only, never a shared human login.';
 
 CREATE TABLE public.organization_delegations (
     id uuid NOT NULL,
@@ -528,20 +529,21 @@ CREATE TABLE public.oauth_session_grant_operations (
     canonical_intent_digest bytea NOT NULL,
     canonical_intent bytea,
     operation_selector jsonb,
-    issuance_nonce text,
+    reserved_grant_id uuid,
+    reserved_credential_digest bytea,
+    reserved_session_grant text,
     session_id text,
     grant_not_before timestamp with time zone,
     grant_expires_at timestamp with time zone,
-    signing_key_id text,
     state text NOT NULL,
     proof_authorization_ref text,
     proof_authorization_checkpoint jsonb,
     proof_expires_at timestamp with time zone,
     outcome_digest bytea,
     canonical_outcome bytea,
-    target_session_grant_id bytea,
-    result_grant_id bytea,
-    affected_grant_ids bytea[] DEFAULT '{}'::bytea[] NOT NULL,
+    target_session_grant_id uuid,
+    result_grant_id uuid,
+    affected_grant_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
     retained_until timestamp with time zone NOT NULL,
     committed_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
@@ -550,18 +552,29 @@ CREATE TABLE public.oauth_session_grant_operations (
     CONSTRAINT oauth_session_grant_operations_kind_valid CHECK ((operation_kind = ANY (ARRAY['issue'::text, 'refresh'::text, 'revoke'::text]))),
     CONSTRAINT oauth_session_grant_operations_proof_kind_shape CHECK ((((operation_kind = 'issue'::text) AND (proof_kind IS NOT NULL)) OR ((operation_kind <> 'issue'::text) AND (proof_kind IS NULL)))),
     CONSTRAINT oauth_session_grant_operations_digest_length CHECK ((octet_length(canonical_intent_digest) = 32)),
-    CONSTRAINT oauth_session_grant_operations_seed_shape CHECK (((state = 'evicted'::text) AND (issuance_nonce IS NULL) AND (session_id IS NULL) AND (grant_not_before IS NULL) AND (grant_expires_at IS NULL) AND (signing_key_id IS NULL)) OR ((state <> 'evicted'::text) AND (((operation_kind = 'revoke'::text) AND (issuance_nonce IS NULL) AND (session_id IS NULL) AND (grant_not_before IS NULL) AND (grant_expires_at IS NULL) AND (signing_key_id IS NULL)) OR ((operation_kind <> 'revoke'::text) AND (issuance_nonce ~ '^[A-Za-z0-9_-]{43}$'::text) AND (btrim(session_id) <> ''::text) AND (grant_expires_at > grant_not_before) AND (btrim(signing_key_id) <> ''::text))))),
+    CONSTRAINT oauth_session_grant_operations_seed_shape CHECK (
+        (operation_kind = 'revoke' AND reserved_grant_id IS NULL AND reserved_credential_digest IS NULL AND reserved_session_grant IS NULL AND session_id IS NULL AND grant_not_before IS NULL AND grant_expires_at IS NULL)
+        OR (operation_kind <> 'revoke' AND reserved_grant_id IS NOT NULL AND reserved_credential_digest IS NOT NULL
+            AND octet_length(reserved_credential_digest) = 32
+            AND substring(reserved_grant_id::text from 15 for 1) = '7'
+            AND substring(reserved_grant_id::text from 20 for 1) IN ('8','9','a','b')
+            AND ((state = 'evicted' AND reserved_session_grant IS NULL AND session_id IS NULL AND grant_not_before IS NULL AND grant_expires_at IS NULL)
+            OR (state <> 'evicted' AND reserved_session_grant IS NOT NULL AND session_id IS NOT NULL AND grant_not_before IS NOT NULL AND grant_expires_at IS NOT NULL
+            AND reserved_session_grant ~ '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$'
+            AND btrim(session_id) <> '' AND grant_expires_at > grant_not_before)))),
     CONSTRAINT oauth_session_grant_operations_outcome_digest_length CHECK (((outcome_digest IS NULL) OR (octet_length(outcome_digest) = 32))),
-    CONSTRAINT oauth_session_grant_operations_grant_id_lengths CHECK ((((target_session_grant_id IS NULL) OR (octet_length(target_session_grant_id) = 33)) AND ((result_grant_id IS NULL) OR (octet_length(result_grant_id) = 33)))),
+    CONSTRAINT oauth_session_grant_operations_record_id_shape CHECK (
+        (target_session_grant_id IS NULL OR (substring(target_session_grant_id::text from 15 for 1) = '7' AND substring(target_session_grant_id::text from 20 for 1) IN ('8','9','a','b')))
+        AND (result_grant_id IS NULL OR (substring(result_grant_id::text from 15 for 1) = '7' AND substring(result_grant_id::text from 20 for 1) IN ('8','9','a','b')))),
     CONSTRAINT oauth_session_grant_operations_state_valid CHECK ((state = ANY (ARRAY['reserved'::text, 'authorized'::text, 'committed'::text, 'evicted'::text]))),
     CONSTRAINT oauth_session_grant_operations_retention_valid CHECK ((retained_until > created_at)),
     CONSTRAINT oauth_session_grant_operations_authorization_shape CHECK ((((state = 'reserved'::text) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL)) OR ((state = ANY (ARRAY['authorized'::text, 'committed'::text])) AND (proof_authorization_ref IS NOT NULL) AND (proof_authorization_checkpoint IS NOT NULL) AND (proof_expires_at IS NOT NULL) AND (retained_until >= proof_expires_at)) OR ((state = 'evicted'::text) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL)))),
-    CONSTRAINT oauth_session_grant_operations_outcome_shape CHECK ((((state = ANY (ARRAY['reserved'::text, 'authorized'::text])) AND (result_grant_id IS NULL) AND (cardinality(affected_grant_ids) = 0) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL) AND (committed_at IS NULL)) OR ((state = 'committed'::text) AND (outcome_digest IS NOT NULL) AND (canonical_outcome IS NOT NULL) AND (committed_at IS NOT NULL) AND (((operation_kind = 'issue'::text) AND (target_session_grant_id IS NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'refresh'::text) AND (target_session_grant_id IS NOT NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'revoke'::text) AND (result_grant_id IS NULL)))) OR ((state = 'evicted'::text) AND (canonical_intent IS NULL) AND (operation_selector IS NULL) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL))))
+    CONSTRAINT oauth_session_grant_operations_outcome_shape CHECK ((((state = ANY (ARRAY['reserved'::text, 'authorized'::text])) AND (result_grant_id IS NULL) AND (cardinality(affected_grant_ids) = 0) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL) AND (committed_at IS NULL)) OR ((state = 'committed'::text) AND (outcome_digest IS NOT NULL) AND (canonical_outcome IS NOT NULL) AND (committed_at IS NOT NULL) AND (((operation_kind = 'issue'::text) AND (target_session_grant_id IS NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'refresh'::text) AND (target_session_grant_id IS NOT NULL) AND (result_grant_id IS NOT NULL) AND (cardinality(affected_grant_ids) = 0)) OR ((operation_kind = 'revoke'::text) AND (result_grant_id IS NULL)))) OR ((state = 'evicted'::text) AND (canonical_intent IS NULL) AND (proof_authorization_ref IS NULL) AND (proof_authorization_checkpoint IS NULL) AND (proof_expires_at IS NULL) AND (outcome_digest IS NULL) AND (canonical_outcome IS NULL))))
 );
 
 CREATE TABLE public.oauth_session_grants (
     id uuid NOT NULL,
-    grant_id bytea NOT NULL CHECK ((octet_length(grant_id) = 33) AND (get_byte(grant_id, 0) = 1)),
+    grant_id uuid NOT NULL CHECK (substring(grant_id::text from 15 for 1) = '7' AND substring(grant_id::text from 20 for 1) IN ('8','9','a','b')),
     issuance_operation_id uuid NOT NULL,
     user_session_id uuid,
     issuer_id text NOT NULL,
@@ -570,29 +583,27 @@ CREATE TABLE public.oauth_session_grants (
     device_id text,
     audience_id text NOT NULL,
     scope_list text[] NOT NULL,
-    grant_jwt text NOT NULL,
+    session_grant text NOT NULL,
+    credential_digest bytea NOT NULL,
+    canonical_metadata bytea NOT NULL,
     session_id text NOT NULL,
-    issuance_nonce text NOT NULL,
-    issuance_preimage bytea NOT NULL,
-    issuance_digest bytea NOT NULL,
-    signing_key_id text NOT NULL,
     session_public_key text NOT NULL,
     credential_class text NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     lifecycle_state text NOT NULL,
     revoked_at timestamp with time zone,
     superseded_at timestamp with time zone,
-    successor_grant_id bytea,
+    successor_grant_id uuid,
     created_at timestamp with time zone NOT NULL
-    ,CONSTRAINT oauth_session_grants_issuance_digest_valid CHECK ((octet_length(issuance_digest) = 32) AND (substring(grant_id from 2 for 32) = issuance_digest))
-    ,CONSTRAINT oauth_session_grants_nonce_valid CHECK ((issuance_nonce ~ '^[A-Za-z0-9_-]{43}$'::text))
+    ,CONSTRAINT oauth_session_grants_credential_digest_valid CHECK (octet_length(credential_digest) = 32)
+    ,CONSTRAINT oauth_session_grants_secret_valid CHECK (session_grant ~ '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$')
     ,CONSTRAINT oauth_session_grants_session_id_nonempty CHECK ((btrim(session_id) <> ''::text))
     ,CONSTRAINT oauth_session_grants_local_account_id_valid CHECK ((btrim(local_account_id) <> ''::text) AND (length(local_account_id) <= 255) AND (local_account_id !~ '^(ak|did):'::text))
-    ,CONSTRAINT oauth_session_grants_signing_key_id_nonempty CHECK ((btrim(signing_key_id) <> ''::text))
     ,CONSTRAINT oauth_session_grants_lifecycle_valid CHECK ((lifecycle_state = ANY (ARRAY['active'::text, 'revoked'::text, 'superseded'::text])) AND (((lifecycle_state = 'active'::text) AND (revoked_at IS NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'revoked'::text) AND (revoked_at IS NOT NULL) AND (superseded_at IS NULL) AND (successor_grant_id IS NULL)) OR ((lifecycle_state = 'superseded'::text) AND (revoked_at IS NULL) AND (superseded_at IS NOT NULL) AND (successor_grant_id IS NOT NULL))))
-    ,CONSTRAINT oauth_session_grants_successor_id_valid CHECK (((successor_grant_id IS NULL) OR ((octet_length(successor_grant_id) = 33) AND (get_byte(successor_grant_id, 0) = 1))))
+    ,CONSTRAINT oauth_session_grants_successor_id_valid CHECK (successor_grant_id IS NULL OR (substring(successor_grant_id::text from 15 for 1) = '7' AND substring(successor_grant_id::text from 20 for 1) IN ('8','9','a','b')))
     ,CONSTRAINT oauth_session_grants_expiry_valid CHECK ((expires_at > created_at))
 );
+
 
 CREATE TABLE public.oauth_sessions (
     id uuid NOT NULL,
@@ -1391,7 +1402,7 @@ ALTER TABLE ONLY public.verified_did_bindings
     ADD CONSTRAINT verified_did_bindings_pkey PRIMARY KEY (did, trust_domain, purpose, policy_digest, verification_method);
 
 ALTER TABLE ONLY public.recovery_completion_grant_issuances
-    ADD CONSTRAINT recovery_completion_grant_issuances_pkey PRIMARY KEY (transaction_id);
+    ADD CONSTRAINT recovery_completion_grant_issuances_pkey PRIMARY KEY (issuer_id, principal_id, account_station_id, transaction_id);
 
 ALTER TABLE ONLY public.recovery_completion_grant_issuances
     ADD CONSTRAINT recovery_completion_grant_issuances_operation_key UNIQUE (session_grant_operation_id);
@@ -1681,7 +1692,7 @@ CREATE INDEX agent_session_proof_replay_prune_idx ON public.agent_session_proof_
 
 CREATE INDEX dpop_jti_replay_expires_at_idx ON public.dpop_jti_replay USING btree (expires_at);
 
--- One index per §5 invalidation dimension that the primary key does not
+-- One index per Â§5 invalidation dimension that the primary key does not
 -- already serve as a leading prefix. The PK covers `did` (and every prefix of
 -- did, trust_domain, purpose, policy_digest), so only the remaining dimensions
 -- need their own index.
@@ -1793,17 +1804,24 @@ CREATE INDEX oauth_session_grants_active_idx ON public.oauth_session_grants USIN
 
 CREATE UNIQUE INDEX oauth_session_grant_operations_identity_idx ON public.oauth_session_grant_operations USING btree (issuer_id, operation_kind, COALESCE(proof_kind, ''::text), request_identity);
 
+-- The operation ledger is the single issuer-scoped allocation authority.
+-- These non-secret fences survive eviction of secrets and replay originals.
+CREATE UNIQUE INDEX oauth_session_grant_operations_reserved_grant_idx ON public.oauth_session_grant_operations USING btree (issuer_id, reserved_grant_id);
+
+CREATE UNIQUE INDEX oauth_session_grant_operations_reserved_credential_idx ON public.oauth_session_grant_operations USING btree (issuer_id, reserved_credential_digest);
+
 CREATE INDEX oauth_session_grant_operations_retention_idx ON public.oauth_session_grant_operations USING btree (retained_until) WHERE (state <> 'evicted'::text);
 
 CREATE INDEX oauth_session_grants_device_id_idx ON public.oauth_session_grants USING btree (device_id) WHERE (device_id IS NOT NULL);
 
--- Session grants are compact JWS values and can exceed PostgreSQL's B-tree
--- per-index-row limit. `grant_id` and `issuance_operation_id` already provide
--- the durable uniqueness constraints; this hash index supports exact JWT
--- lookup and lets PostgreSQL recheck the full text value on collisions.
-CREATE INDEX oauth_session_grants_grant_jwt_idx ON public.oauth_session_grants USING hash (grant_jwt);
+-- Opaque credentials have canonical 43-byte ASCII form. Issuer-scoped digest
+-- lookup always rechecks the exact credential; the operation ledger owns the
+-- durable allocation fences even after grant records and replay originals age out.
+CREATE INDEX oauth_session_grants_credential_digest_idx ON public.oauth_session_grants USING btree (issuer_id, credential_digest);
 
-CREATE UNIQUE INDEX oauth_session_grants_grant_id_idx ON public.oauth_session_grants USING btree (grant_id);
+CREATE UNIQUE INDEX oauth_session_grants_exact_credential_idx ON public.oauth_session_grants USING btree (issuer_id, session_grant);
+
+CREATE UNIQUE INDEX oauth_session_grants_grant_id_idx ON public.oauth_session_grants USING btree (issuer_id, grant_id);
 
 CREATE UNIQUE INDEX oauth_session_grants_issuance_operation_idx ON public.oauth_session_grants USING btree (issuance_operation_id);
 

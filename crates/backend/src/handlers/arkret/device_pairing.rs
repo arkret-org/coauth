@@ -14,7 +14,6 @@ use arkret_models_collaboration::events_payloads::{
 };
 use arkret_models_identity::{
     AccountHandoffAllowedOperation, SessionGrantCredentialClass, SessionGrantHolderBinding,
-    SignedSessionGrantClaims,
 };
 use arkret_signatures::device_pairing::{
     ServerDevicePairingChallenge, verify_server_device_pairing_target_proof,
@@ -31,12 +30,13 @@ use coauth_data::{
     DevicePairingStageInsert, NewDevicePairingAdmission, NewDevicePairingPendingRecord,
     RepositoryAccess,
 };
-use coauth_jose::jwt::Jwt;
 use rand_core::RngCore;
 use salvo::prelude::*;
 
 use super::account_handoff::{proof_invalid, random_opaque};
-use super::session_grant::acquire_private_current_device_binding;
+use super::session_grant::{
+    CurrentDeviceAdmission, acquire_private_current_device_admission, require_outer_dpop_fresh,
+};
 use super::{ArkretCanonicalJson, ArkretRouteError, authenticate_account_handoff};
 use crate::handlers::common::{DepotExt as _, extract_bound_activity_tracker};
 use crate::services::did_binding;
@@ -507,6 +507,7 @@ pub async fn pair_device(
         {
             return Err(pairing_duplicate_conflict());
         }
+        require_pairing_credentials_current(&authenticated, crate::handlers::make_clock().now())?;
         if admission.state == DevicePairingAdmissionState::Completed {
             return Ok(ArkretCanonicalJson(
                 admission
@@ -514,7 +515,9 @@ pub async fn pair_device(
                     .ok_or_else(pairing_temporarily_unavailable)?,
             ));
         }
-        return resume_device_pairing_admission(admission, depot, now).await;
+        let outcome = resume_device_pairing_admission(admission, depot, now).await?;
+        require_pairing_credentials_current(&authenticated, crate::handlers::make_clock().now())?;
+        return Ok(outcome);
     }
 
     let validated = match validate_pairing_intent(&record, &body, &authenticated, now) {
@@ -535,7 +538,7 @@ pub async fn pair_device(
         "device_id": &authenticated.device_id,
         "request": &body,
     }))?)?;
-    let current_binding = acquire_private_current_device_binding(
+    let current_device = acquire_private_current_device_admission(
         depot,
         &authenticated.account_id,
         authenticated.device_id.clone(),
@@ -546,7 +549,7 @@ pub async fn pair_device(
         now,
     )
     .await?;
-    if current_binding != authenticated.device_binding {
+    if current_device.binding != authenticated.device_binding {
         return Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
             arkret_wire::ErrorCode::DEVICE_REVOKED,
@@ -568,8 +571,8 @@ pub async fn pair_device(
     let admission = NewDevicePairingAdmission {
         device_pairing_request_id: body.device_pairing_request_id.clone(),
         pairing_code: body.pairing_code.clone(),
-        approving_account_id: authenticated.account_id,
-        approving_device_id: authenticated.device_id,
+        approving_account_id: authenticated.account_id.clone(),
+        approving_device_id: authenticated.device_id.clone(),
         canonical_request_digest: request_digest,
         canonical_request_bytes: canonical_request,
         authorize_event_bytes,
@@ -581,6 +584,25 @@ pub async fn pair_device(
             .account_handoff()
             .reserve_device_pairing_admission(admission, now)
             .await?;
+        if let Err(error) =
+            require_pairing_credentials_current(&authenticated, crate::handlers::make_clock().now())
+        {
+            repo.cancel().await?;
+            return Err(error);
+        }
+        // The account/row locks in reserve may outlive the private observation
+        // or the original pending window. Only a newly created fence needs
+        // first-use qualification; a concurrently accepted exact intent is
+        // immutable recovery work, not another authorization from this read.
+        if let Err(error) = require_pairing_first_admission_current(
+            &result,
+            &current_device,
+            record.expires_at,
+            crate::handlers::make_clock().now(),
+        ) {
+            repo.cancel().await?;
+            return Err(error);
+        }
         match result {
             DevicePairingAdmissionReserve::Started(_)
             | DevicePairingAdmissionReserve::Resume(_) => repo.save().await?,
@@ -593,12 +615,48 @@ pub async fn pair_device(
     match reserved {
         DevicePairingAdmissionReserve::Started(admission)
         | DevicePairingAdmissionReserve::Resume(admission) => {
-            resume_device_pairing_admission(admission, depot, now).await
+            let outcome = resume_device_pairing_admission(admission, depot, now).await?;
+            require_pairing_credentials_current(
+                &authenticated,
+                crate::handlers::make_clock().now(),
+            )?;
+            Ok(outcome)
         }
-        DevicePairingAdmissionReserve::Replay(bytes) => Ok(ArkretCanonicalJson(bytes)),
+        DevicePairingAdmissionReserve::Replay(bytes) => {
+            require_pairing_credentials_current(
+                &authenticated,
+                crate::handlers::make_clock().now(),
+            )?;
+            Ok(ArkretCanonicalJson(bytes))
+        }
         DevicePairingAdmissionReserve::DuplicateConflict => Err(pairing_duplicate_conflict()),
         DevicePairingAdmissionReserve::NotFound => Err(ArkretRouteError::NotFound),
     }
+}
+
+fn require_pairing_current_device_window(
+    current_device: &CurrentDeviceAdmission,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), ArkretRouteError> {
+    if now >= current_device.expires_at() {
+        return Err(pairing_temporarily_unavailable());
+    }
+    Ok(())
+}
+
+fn require_pairing_first_admission_current(
+    result: &DevicePairingAdmissionReserve,
+    current_device: &CurrentDeviceAdmission,
+    pending_expires_at: chrono::DateTime<chrono::Utc>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), ArkretRouteError> {
+    if matches!(result, DevicePairingAdmissionReserve::Started(_)) {
+        if now >= pending_expires_at {
+            return Err(ArkretRouteError::NotFound);
+        }
+        require_pairing_current_device_window(current_device, now)?;
+    }
+    Ok(())
 }
 
 struct ValidatedPairingIntent<'a> {
@@ -1014,6 +1072,24 @@ struct AuthenticatedCurrentDevice {
     device_id: arkret_identifiers::DeviceId,
     device_binding: arkret_models_identity::SessionGrantDeviceBinding,
     principal_control_realm_id: arkret_wire::RealmId,
+    // These bounds differ: the opaque credential expires exclusively while
+    // the existing verified DPoP iat bound is inclusive (including its lower
+    // future-clock boundary). Neither is the private device observation TTL.
+    credential_expires_at: chrono::DateTime<chrono::Utc>,
+    outer_dpop_valid_through: chrono::DateTime<chrono::Utc>,
+}
+
+fn require_pairing_credentials_current(
+    authenticated: &AuthenticatedCurrentDevice,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<(), ArkretRouteError> {
+    require_outer_dpop_fresh(authenticated.outer_dpop_valid_through, now)?;
+    if now >= authenticated.credential_expires_at {
+        return Err(ArkretRouteError::Unauthorized(
+            "session grant has expired".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// `ak.gate.account.read.claim_device_pairing_code.v1`.
@@ -1046,7 +1122,7 @@ pub async fn claim_device_pairing_code(
         "request": &body,
     }))?)?;
     let now = arkret_canonical::normalize_timestamp_canonical(crate::handlers::make_clock().now());
-    acquire_private_current_device_binding(
+    let current_device = acquire_private_current_device_admission(
         depot,
         &authenticated.account_id,
         authenticated.device_id.clone(),
@@ -1068,6 +1144,18 @@ pub async fn claim_device_pairing_code(
         return Err(ArkretRouteError::NotFound);
     };
 
+    // get_device_pairing_by_code takes the pending row lock. Neither that
+    // wait nor a pool checkout extends the authenticated Station observation.
+    let now = crate::handlers::make_clock().now();
+    if let Err(error) = require_pairing_credentials_current(&authenticated, now) {
+        repo.cancel().await?;
+        return Err(error);
+    }
+    if let Err(error) = require_pairing_current_device_window(&current_device, now) {
+        repo.cancel().await?;
+        return Err(error);
+    }
+
     let usable = record.state == DevicePairingState::ReadyForClaim
         && record.expires_at > now
         && record.admission.is_none()
@@ -1077,6 +1165,13 @@ pub async fn claim_device_pairing_code(
         repo.account_handoff()
             .record_device_pairing_failure(&record.device_pairing_request_id, now)
             .await?;
+        let at = crate::handlers::make_clock().now();
+        let qualification = require_pairing_credentials_current(&authenticated, at)
+            .and_then(|()| require_pairing_current_device_window(&current_device, at));
+        if let Err(error) = qualification {
+            repo.cancel().await?;
+            return Err(error);
+        }
         repo.save().await?;
         return Err(ArkretRouteError::NotFound);
     }
@@ -1107,6 +1202,13 @@ pub async fn claim_device_pairing_code(
         repo.account_handoff()
             .record_device_pairing_failure(&record.device_pairing_request_id, now)
             .await?;
+        let at = crate::handlers::make_clock().now();
+        let qualification = require_pairing_credentials_current(&authenticated, at)
+            .and_then(|()| require_pairing_current_device_window(&current_device, at));
+        if let Err(error) = qualification {
+            repo.cancel().await?;
+            return Err(error);
+        }
         repo.save().await?;
         return Err(ArkretRouteError::NotFound);
     }
@@ -1134,6 +1236,12 @@ pub async fn claim_device_pairing_code(
     };
     let bytes = arkret_canonical::canonical_json_bytes(&outcome)?;
     repo.cancel().await.ok();
+    let now = crate::handlers::make_clock().now();
+    require_pairing_credentials_current(&authenticated, now)?;
+    require_pairing_current_device_window(&current_device, now)?;
+    if now >= outcome.bootstrap.expires_at {
+        return Err(ArkretRouteError::NotFound);
+    }
     Ok(ArkretCanonicalJson(bytes))
 }
 
@@ -1142,18 +1250,22 @@ async fn authenticate_current_device(
     depot: &Depot,
     operation: &str,
 ) -> Result<AuthenticatedCurrentDevice, ArkretRouteError> {
-    let grant_jwt = crate::services::dpop::dpop_authorization_token(req).ok_or_else(|| {
+    let session_grant = crate::services::dpop::dpop_authorization_token(req).ok_or_else(|| {
         ArkretRouteError::Unauthorized(format!(
             "Authorization: DPoP <session_grant> is required for {operation}"
         ))
     })?;
-    let claims = Jwt::<SignedSessionGrantClaims>::try_from(grant_jwt)
-        .map_err(|_| ArkretRouteError::Unauthorized("session grant is not parseable".to_owned()))?
-        .payload()
-        .clone();
-    claims.validate().map_err(|error| {
-        ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
-    })?;
+    let secret = arkret_identifiers::SessionGrantSecret::new(session_grant)
+        .map_err(|_| ArkretRouteError::Unauthorized("invalid opaque session credential".into()))?;
+    let mut repo = depot.repo().await?;
+    let issuer_id = crate::services::station_trust::owning_station_id_for(&depot.arkret_config()?);
+    let grant = repo
+        .oauth_session_grant()
+        .lookup_by_secret(&issuer_id, &secret)
+        .await?
+        .ok_or_else(|| ArkretRouteError::Unauthorized("session grant is not active".into()))?;
+    let claims = grant.metadata.clone();
+    claims.validate()?;
     if claims.credential_class != SessionGrantCredentialClass::Standard
         || !matches!(
             claims.holder_binding,
@@ -1177,7 +1289,7 @@ async fn authenticate_current_device(
         req.method().as_str(),
         &htu,
         now,
-        Some(grant_jwt),
+        Some(session_grant),
     )
     .map_err(|error| ArkretRouteError::Unauthorized(format!("invalid DPoP proof: {error}")))?;
     let expected_jkt = claims
@@ -1186,15 +1298,11 @@ async fn authenticate_current_device(
         .map_err(|error| ArkretRouteError::Unauthorized(format!("invalid session key: {error}")))?;
     DpopVerifier::require_matching_jkt(&dpop.jkt, &expected_jkt)
         .map_err(|error| ArkretRouteError::Unauthorized(format!("invalid DPoP holder: {error}")))?;
+    let outer_dpop_valid_through = crate::services::dpop::verified_proof_valid_through(&dpop)
+        .map_err(|error| ArkretRouteError::Unauthorized(format!("invalid DPoP window: {error}")))?;
 
-    let mut repo = depot.repo().await?;
-    let grant = repo
-        .oauth_session_grant()
-        .lookup_by_grant_jwt(grant_jwt)
-        .await?
-        .ok_or_else(|| ArkretRouteError::Unauthorized("session grant is not active".to_owned()))?;
     if !grant.is_active(&*clock)
-        || grant.grant_id != claims.grant_id
+        || grant.grant_id != claims.id
         || grant.issuer_id != claims.issuer_id
         || grant.subject_id != claims.account_id.principal_id
         || grant.audience_id != claims.audience_id
@@ -1226,6 +1334,22 @@ async fn authenticate_current_device(
     let user = repo.user().lookup(local_account_id).await?.ok_or_else(|| {
         ArkretRouteError::Unauthorized("session account is unavailable".to_owned())
     })?;
+    if user.status != arkret_models_collaboration::objects::account_status::AccountStatus::Active {
+        return Err(ArkretRouteError::Unauthorized(
+            "current account lifecycle forbids device pairing".into(),
+        ));
+    }
+    if let Some(session_id) = grant.browser_session_id {
+        let session = repo
+            .browser_session()
+            .lookup(session_id)
+            .await?
+            .filter(|session| session.user.id == user.id && session.finished_at.is_none())
+            .ok_or_else(|| {
+                ArkretRouteError::Unauthorized("session authentication context has ended".into())
+            })?;
+        let _ = session;
+    }
     let principal_binding = repo
         .principal_did()
         .get_for_user_and_audience(&user, claims.audience_id.as_str())
@@ -1242,7 +1366,13 @@ async fn authenticate_current_device(
         device_id: device_binding.device_id.clone(),
         device_binding,
         principal_control_realm_id: principal_binding.principal_control_realm_id,
+        credential_expires_at: grant.expires_at,
+        outer_dpop_valid_through,
     };
+    if let Err(error) = require_pairing_credentials_current(&authenticated, clock.now()) {
+        repo.cancel().await?;
+        return Err(error);
+    }
     repo.save().await?;
     Ok(authenticated)
 }
@@ -1369,7 +1499,7 @@ mod tests {
             .unwrap();
         let rate = claim.find(".check_device_pairing(").unwrap();
         let gate = claim
-            .find("acquire_private_current_device_binding(")
+            .find("acquire_private_current_device_admission(")
             .unwrap();
         let lookup = claim.find(".get_device_pairing_by_code(").unwrap();
         let budget = claim.find(".record_device_pairing_failure(").unwrap();
@@ -1407,3 +1537,6 @@ mod tests {
         assert!(claim.contains("record.admission.is_none()"));
     }
 }
+
+#[cfg(test)]
+mod expiry_tests;

@@ -62,8 +62,7 @@ fn client_with_auth_method(method: Option<OAuthClientAuthenticationMethod>) -> C
 
 fn ed25519_keyring() -> Keyring {
     let mut rng = ChaChaRng::seed_from_u64(701);
-    let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID);
+    let key = JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng)).with_kid("oidc-test-ed25519");
     Keyring::new(JsonWebKeySet::new(vec![key]))
 }
 
@@ -354,7 +353,6 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         admin_audience: Some("ak:did_core:web:principal.example.com".to_owned()),
         ..ArkretConfig::default()
     };
-    let grant_keyring = ed25519_keyring();
     let grant_url_builder = UrlBuilder::new("https://issuer.example/".parse().unwrap(), None, None);
     let grant_public_jwk = coauth_jose::jwk::PublicJsonWebKey::new(
         coauth_jose::jwk::JsonWebKeyPublicParameters::from(&PrivateKey::generate_ed25519(&mut rng)),
@@ -366,12 +364,11 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         arkret_identifiers::DidCoreId::new(principal_id).unwrap(),
         arkret_identifiers::DidCoreId::new(station_id).unwrap(),
     );
-    let grant_material = crate::services::session_grant::issue_session_grant(
+    let mut grant_material = crate::services::session_grant::issue_session_grant(
         &mut rng,
         &*clock,
         &grant_url_builder,
         &grant_config,
-        &grant_keyring,
         crate::services::session_grant::TestGrantIssuance {
             browser_session: &browser_session,
             session_public_key: grant_public_jwk,
@@ -393,7 +390,7 @@ async fn make_refresh_fixture(seed: u64, handle: &str) -> Option<RefreshFixture>
         &mut rng,
         &*clock,
         &browser_session,
-        &grant_material,
+        &mut grant_material,
     )
     .await
     .unwrap();

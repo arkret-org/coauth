@@ -174,6 +174,30 @@ pub(crate) async fn finalize_handoff_creation(
 ) -> Result<Vec<u8>, ArkretRouteError> {
     let local_account_id = Ulid::from_string(&checkpoint.local_account_id)
         .map_err(|_| indeterminate_handoff_replay())?;
+    // A durable authorization checkpoint is historical authentication, not a
+    // waiver of current lifecycle or the deployment's Recovery policy.
+    let user = repo
+        .user()
+        .lookup_for_gate(local_account_id)
+        .await?
+        .ok_or_else(indeterminate_handoff_replay)?;
+    use arkret_models_collaboration::objects::account_status::AccountStatus;
+    if user.status != AccountStatus::Active
+        && !(user.status == AccountStatus::Deactivated && arkret_config.allow_recovery_reactivation)
+    {
+        let code = match user.status {
+            AccountStatus::Deactivated => arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+            AccountStatus::Locked => arkret_wire::ErrorCode::ACCOUNT_LOCKED,
+            AccountStatus::Suspended => arkret_wire::ErrorCode::ACCOUNT_SUSPENDED,
+            AccountStatus::ErasurePending => arkret_wire::ErrorCode::ACCOUNT_ERASED,
+            _ => arkret_wire::ErrorCode::FAILED_PRECONDITION,
+        };
+        return Err(ArkretRouteError::coded(
+            StatusCode::FORBIDDEN,
+            code,
+            "current account lifecycle or deployment policy forbids a handoff",
+        ));
+    }
     let browser_session_id = checkpoint
         .browser_session_id
         .as_deref()

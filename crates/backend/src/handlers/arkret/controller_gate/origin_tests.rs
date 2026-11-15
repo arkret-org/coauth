@@ -246,7 +246,26 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
     )
     .unwrap();
     let final_cut = origin_cut(&fixture.pool).await;
-    assert_eq!(final_cut["events"], initial["events"]);
+    let events = final_cut["events"].as_array().unwrap();
+    let (queued, unchanged): (Vec<_>, Vec<_>) = events
+        .iter()
+        .partition(|row| row["envelope"]["event_id"].as_str() == Some(event.event_id.as_str()));
+    assert_eq!(
+        queued.len(),
+        1,
+        "the verified forward retains its exact Event"
+    );
+    assert_eq!(queued[0]["envelope"], serde_json::to_value(&event).unwrap());
+    assert_eq!(queued[0]["state"], "queued");
+    assert!(queued[0]["committed_at"].is_null());
+    assert_eq!(
+        unchanged,
+        initial["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .collect::<Vec<_>>()
+    );
     assert_eq!(final_cut["commits"], initial["commits"]);
     assert_eq!(final_cut["evidence"].as_array().unwrap().len(), 1);
     // The governance ingress consumes the exact emitted carrier and rejects a
@@ -266,7 +285,8 @@ async fn registered_gate_actual_issuance_origin_same_cut_and_governance_verifica
         content_backup_sources: None,
         producer_device_evidence: None,
         producer_agent_evidence: Some(evidence.clone()),
-    };
+        successor_device_evidence: None,
+};
     let mut tampered = request.clone();
     tampered
         .producer_agent_evidence

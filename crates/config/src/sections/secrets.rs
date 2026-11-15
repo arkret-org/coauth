@@ -308,10 +308,6 @@ fn build_runtime(bundle: StoredKeyBundle) -> anyhow::Result<RuntimeSecrets> {
     keyring
         .audit_signing_seed()
         .context("invalid audit signing key in stored key bundle")?;
-    ensure!(
-        keyring.session_grant_signing_key().is_some(),
-        "stored key bundle has no usable session-grant signing key"
-    );
     for algorithm in [
         JsonWebSignatureAlg::Rs256,
         JsonWebSignatureAlg::Es256,

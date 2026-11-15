@@ -25,7 +25,10 @@ use super::account_handoff::{
     authenticate_account_handoff, enforce_handoff_operation,
     verify_account_handoff_holder_without_lookup,
 };
-use super::session_grant::acquire_private_current_device_binding;
+use super::session_grant::{
+    acquire_private_current_device_admission, require_current_authority_fresh,
+    require_outer_dpop_fresh,
+};
 use super::{ArkretRouteError, DepotExt};
 use crate::handlers::account::auth::oidc_bridge::{
     VerifiedPrincipalIdentity, ensure_coland_account_registered,
@@ -37,8 +40,8 @@ use crate::services::account_status_publication::{
 use crate::services::coland_webvh;
 use crate::services::peer_protocol_client::{InternalAuthorityChannel, PeerProtocolClientError};
 use crate::services::session_grant::{
-    HumanGrantIssuance, SessionGrantIssuanceSeed, issue_session_grant_for_audience,
-    persist_session_grant,
+    HumanGrantIssuance, IssuanceCommit, SessionGrantIssuanceSeed, commit_session_grant_issuance,
+    issue_session_grant_for_audience,
 };
 use crate::services::station_trust::{owning_station_did_for, owning_station_id_for};
 
@@ -133,7 +136,7 @@ pub async fn account_register_endpoint(
     }
 
     let clock = make_clock();
-    let now = clock.now();
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let mut repo = depot.repo().await?;
     let context = repo
         .account_handoff()
@@ -220,7 +223,6 @@ pub async fn account_register_endpoint(
         .ok_or_else(|| failed_precondition("originating browser session no longer exists"))?;
     prerequisite_repo.cancel().await.ok();
     let keyring = depot.keyring()?;
-    let session_signing_key_id = super::preferred_signing_key_id(&keyring)?;
     // `account-lifecycle.md` §2.1.2 ruling B.2 keeps this: the control proof and
     // the registration DID evidence draft are verified *before* the first DID
     // registry I/O, behind the frozen-reservation barrier. A later genesis
@@ -648,20 +650,11 @@ pub async fn account_register_endpoint(
     })?;
     repo = depot.repo().await?;
 
-    let mut nonce = [0_u8; 32];
-    rand_core::RngCore::fill_bytes(&mut *rng, &mut nonce);
-    let issuance_seed = SessionGrantIssuanceSeed::new(
-        arkret_models_identity::SessionGrantIssuanceNonce::from_bytes(nonce).to_string(),
-        coauth_data::new_id(now, &mut *rng).to_string(),
-        now,
-        now + depot.arkret_config()?.session_grant_ttl,
-        session_signing_key_id,
-    )?;
     let initial = &identity_creation.initial_session;
     let session_public_key: coauth_jose::jwk::PublicJsonWebKey =
         serde_json::from_str(initial.session_public_key.as_str())
             .map_err(|error| proof_invalid(error.to_string()))?;
-    let device_binding = acquire_private_current_device_binding(
+    let device_admission = acquire_private_current_device_admission(
         depot,
         &account_id,
         initial.device_id.clone(),
@@ -672,10 +665,85 @@ pub async fn account_register_endpoint(
         now,
     )
     .await?;
+    let admission_deadline = device_admission.expires_at().min(grant.expires_at);
+    let dpop_valid_through = crate::services::dpop::verified_proof_valid_through(&replay_dpop)
+        .map_err(|error| proof_invalid(error.to_string()))?;
+    let device_binding = device_admission.binding;
+    // Allocate through the same issuer ledger as every other issuance. No
+    // response material exists before the ID and credential fences are owned.
+    let request_identity = format!("internal-register:{request_digest}");
+    #[derive(serde::Serialize)]
+    struct RegistrationGrantIntent<'a> {
+        registration_request_digest: &'a str,
+        account_id: &'a arkret_wire::AccountId,
+        device_id: &'a arkret_identifiers::DeviceId,
+        audience_id: &'a arkret_identifiers::DidCoreId,
+        session_public_key: &'a arkret_models_identity::CanonicalSessionPublicJwk,
+        scopes: &'a [arkret_models_identity::InitialSessionGrantOperation],
+        proof_kind: arkret_models_identity::SessionGrantProofKind,
+    }
+    let canonical_intent = arkret_canonical::canonical_json_bytes(&RegistrationGrantIntent {
+        registration_request_digest: request_digest.as_str(),
+        account_id: &account_id,
+        device_id: &initial.device_id,
+        audience_id: &initial.audience_id,
+        session_public_key: &initial.session_public_key,
+        scopes: &STANDARD_INITIAL_SESSION_GRANT_OPERATIONS,
+        proof_kind: arkret_models_identity::SessionGrantProofKind::AccountHandoff,
+    })?;
+    let reserved = repo
+        .oauth_session_grant()
+        .reserve_operation(
+            &mut *rng,
+            &*clock,
+            coauth_data::NewSessionGrantOperation {
+                issuer_id: owning_station_id_for(&depot.arkret_config()?),
+                operation: coauth_data::SessionGrantOperationDescriptor::Issue,
+                proof_kind: Some(arkret_models_identity::SessionGrantProofKind::AccountHandoff),
+                request_identity: &request_identity,
+                canonical_intent_digest: arkret_canonical::sha256_bytes(&canonical_intent),
+                canonical_intent: &canonical_intent,
+                target_session_grant_id: None,
+                grant_not_before: Some(now),
+                grant_expires_at: Some(now + depot.arkret_config()?.session_grant_ttl),
+                retained_until: now + chrono::Duration::days(7),
+            },
+        )
+        .await?;
+    let operation = match reserved {
+        coauth_data::SessionGrantReserveOutcome::Reserved(operation)
+        | coauth_data::SessionGrantReserveOutcome::Pending(operation) => operation,
+        coauth_data::SessionGrantReserveOutcome::Replay(operation) => {
+            let bytes = operation.canonical_outcome.ok_or_else(|| {
+                failed_precondition("initial grant replay has no retained outcome")
+            })?;
+            let outcome: AccountRegisterResponseBody = serde_json::from_slice(&bytes)?;
+            outcome.validate_against_request(&body)?;
+            repo.cancel().await.ok();
+            let checked_at = clock.now();
+            require_current_authority_fresh(admission_deadline, checked_at)?;
+            require_outer_dpop_fresh(dpop_valid_through, checked_at)?;
+            return Ok(Json(outcome));
+        }
+        coauth_data::SessionGrantReserveOutcome::Conflict(_) => {
+            repo.cancel().await.ok();
+            return Err(duplicate_conflict(
+                "initial grant request identity conflicts",
+            ));
+        }
+        coauth_data::SessionGrantReserveOutcome::Indeterminate(_) => {
+            repo.save().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "initial grant outcome is no longer available",
+            ));
+        }
+    };
+    let issuance_seed = SessionGrantIssuanceSeed::from_operation(&operation)?;
     let material = issue_session_grant_for_audience(
         &issuance_seed,
         &depot.arkret_config()?,
-        &keyring,
         HumanGrantIssuance {
             browser_session: &browser_session,
             session_public_key,
@@ -692,11 +760,11 @@ pub async fn account_register_endpoint(
             proof_kind: arkret_models_identity::SessionGrantProofKind::AccountHandoff,
         },
     )?;
-    persist_session_grant(&mut repo, &mut *rng, &*clock, &browser_session, &material).await?;
     let issued_session = SessionGrantResponseBody {
+        issuer_id: material.issuer_id.clone(),
         account_id: material.account_id.clone(),
         device_id: Some(initial.device_id.clone()),
-        session_grant: material.grant_jwt.clone(),
+        session_grant: material.session_grant.clone(),
         expires_at: material.expires_at_timestamp,
         session_grant_id: material.grant_id.clone(),
         session_public_key: initial.session_public_key.clone(),
@@ -722,6 +790,43 @@ pub async fn account_register_endpoint(
         .inspect_err(|error| {
             tracing::error!(%error, "identity-creation outcome validation failed");
         })?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(&outcome)?;
+    let checkpoint = serde_json::json!({"kind":"identity_creation_initial_session","request_digest":request_digest});
+    match commit_session_grant_issuance(
+        &mut repo,
+        &mut *rng,
+        &*clock,
+        IssuanceCommit {
+            operation_id: operation.id,
+            proof: coauth_data::SessionGrantProofAuthorization {
+                authorization_ref: &request_identity,
+                checkpoint: &checkpoint,
+                proof_expires_at: admission_deadline.min(material.expires_at_timestamp),
+            },
+            canonical_outcome: &canonical_outcome,
+            browser_session_id: Some(browser_session.id),
+            material: &material,
+        },
+    )
+    .await?
+    {
+        coauth_data::SessionGrantCommitOutcome::Committed(_) => {}
+        coauth_data::SessionGrantCommitOutcome::AuthorizationExpired(_) => {
+            repo.cancel().await.ok();
+            return Err(failed_precondition(
+                "initial grant handoff expired before commit",
+            ));
+        }
+        coauth_data::SessionGrantCommitOutcome::Replay(_)
+        | coauth_data::SessionGrantCommitOutcome::Indeterminate(_) => {
+            repo.cancel().await.ok();
+            return Err(ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "initial grant commit requires its original retained outcome",
+            ));
+        }
+    }
     let completion = repo
         .account_handoff()
         .mark_completed(&context, &request_digest, &outcome, now)
@@ -748,6 +853,16 @@ pub async fn account_register_endpoint(
     if !repo.account_handoff().consume_grant(&grant, now).await? {
         repo.cancel().await.ok();
         return Err(failed_precondition("account handoff was already consumed"));
+    }
+    let checked_at = clock.now();
+    let final_window = (|| {
+        require_current_authority_fresh(admission_deadline, checked_at)?;
+        require_outer_dpop_fresh(dpop_valid_through, checked_at)?;
+        Ok::<(), ArkretRouteError>(())
+    })();
+    if let Err(error) = final_window {
+        repo.cancel().await.ok();
+        return Err(error);
     }
     repo.save().await?;
     Ok(Json(outcome))

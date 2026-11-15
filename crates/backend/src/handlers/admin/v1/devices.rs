@@ -530,12 +530,11 @@ mod tests {
         // seeded grant has to be minted against the same clock; one minted at
         // the mock epoch is already years expired.
         let grant_clock = coauth_data::SystemClock::default();
-        let material = crate::services::session_grant::issue_session_grant(
+        let mut material = crate::services::session_grant::issue_session_grant(
             &mut rng,
             &grant_clock,
             &state.url_builder,
             &grant_config,
-            &state.keyring,
             crate::services::session_grant::TestGrantIssuance {
                 browser_session: &browser_session,
                 session_public_key: session_public,
@@ -554,7 +553,7 @@ mod tests {
             &mut rng,
             &grant_clock,
             &browser_session,
-            &material,
+            &mut material,
         )
         .await
         .unwrap();

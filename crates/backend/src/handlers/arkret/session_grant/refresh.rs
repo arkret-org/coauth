@@ -12,7 +12,6 @@ use coauth_data::{
     SessionGrantProofAuthorization, SessionGrantRefreshCommit,
     SessionGrantRefreshOutcome as LedgerRefreshOutcome, SessionGrantReserveOutcome,
 };
-use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 
 use super::*;
@@ -65,12 +64,12 @@ fn require_bound_device_id<'a>(
 fn validate_human_refresh_before_reservation(
     body: &HumanSessionGrantRefreshRequestBody,
     prior_grant: &coauth_data::SessionGrant,
-    prior_payload: &SignedSessionGrantClaims,
+    prior_payload: &SessionGrantMetadata,
     holder_jkt: &str,
-    now: DateTime<Utc>,
+    _now: DateTime<Utc>,
 ) -> Result<(), ArkretRouteError> {
     let proof = &body.accepted_device_possession_proof;
-    if proof.predecessor_session_grant_id != prior_grant.grant_id
+    if proof.predecessor_session_grant_ref != prior_grant.metadata.grant_ref()
         || proof.account_id != prior_payload.account_id
         || proof.device_id != body.device_id
         || proof.holder_jkt != holder_jkt
@@ -86,15 +85,10 @@ fn validate_human_refresh_before_reservation(
             "accepted-device refresh proof audience_id must match the session grant audience_id",
         ));
     }
-    if proof.issued_at > now + chrono::Duration::seconds(30) || now >= proof.expires_at {
-        return Err(refresh_proof_invalid(
-            "accepted-device refresh proof is outside its validity window",
-        ));
-    }
     let audience_id = prior_grant.audience_id.clone();
     let expected_digest = session_grant_refresh_request_digest(
-        &body.grant_jwt,
-        &prior_grant.grant_id,
+        &body.session_grant,
+        &prior_grant.metadata.grant_ref(),
         &prior_payload.account_id.principal_id,
         &body.device_id,
         &audience_id,
@@ -114,7 +108,7 @@ fn validate_human_refresh_before_reservation(
 // session-grant story: `refresh_session_grant` rotates an existing
 // DPoP-bound grant onto a new access token (keeping `cnf.jkt` constant),
 // and `debug_issue_dpop_grant` is the cotest harness seam that mints a
-// fully signed grant without going through OIDC.
+// opaque grant without going through OIDC.
 
 fn ensure_refreshable_credential_class(
     credential_class: SessionGrantCredentialClass,
@@ -135,8 +129,8 @@ fn ensure_refreshable_credential_class(
 ///
 /// * A `DPoP` header that proves possession of the same key the existing grant is bound to
 ///   (`cnf.jkt` on the old grant must match the new proof's `jkt`).
-/// * A request body carrying the prior grant JWT, the bound `device_id`, and a fresh human-device
-///   DID proof over the soft-logout restore transcript.
+/// * A request body carrying the prior opaque credential, the bound `device_id`, and a fresh
+///   human-device DID proof over the soft-logout restore transcript.
 #[handler]
 pub async fn refresh_session_grant(
     req: &mut Request,
@@ -174,16 +168,16 @@ pub async fn refresh_session_grant(
             error.to_string(),
         )
     })?;
-    let (grant_jwt, requested_audience, request_digest) = match &body {
+    let (session_grant, requested_audience, request_digest) = match &body {
         SessionGrantRefreshRequestBody::Human(request) => (
-            request.grant_jwt.as_str(),
+            &request.session_grant,
             request.audience_id.as_ref(),
             &request
                 .accepted_device_possession_proof
                 .session_intent_digest,
         ),
         SessionGrantRefreshRequestBody::Agent(request) => (
-            request.grant_jwt.as_str(),
+            &request.session_grant,
             request.audience_id.as_ref(),
             &request.agent_session_refresh_proof.request_canonical_digest,
         ),
@@ -194,57 +188,51 @@ pub async fn refresh_session_grant(
                 "Authorization: DPoP <session_grant> is required".to_owned(),
             )
         })?;
-    if presented_grant != grant_jwt {
+    if presented_grant != session_grant.as_str() {
         return Err(ArkretRouteError::Unauthorized(
-            "DPoP authorization credential does not match grant_jwt".to_owned(),
+            "DPoP authorization credential does not match session_grant".to_owned(),
         ));
     }
 
-    // 2. Parse + load the existing grant. We never verify the JWT signature here — the persisted
-    //    row IS the source of truth; the holder thumbprint is derived from the signed
-    //    session_public_key carried by the claims.
-    let jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(grant_jwt)
-        .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
-    let prior_payload = jwt.payload().clone();
-    prior_payload
-        .validate()
-        .map_err(|error| ArkretRouteError::BadRequest(format!("invalid grant_jwt: {error}")))?;
-    ensure_refreshable_credential_class(prior_payload.credential_class)?;
-    let expected_jkt = prior_payload
-        .session_public_key
-        .thumbprint_sha256()
-        .map_err(|error| {
-            ArkretRouteError::BadRequest(format!("invalid session_public_key: {error}"))
-        })?;
-
+    // The exact issuer-local record, never token contents, is the metadata authority.
+    let issuer_id = crate::services::station_trust::owning_station_id_for(&arkret_config);
     let mut repo = depot.repo().await?;
     let prior_grant = repo
         .oauth_session_grant()
-        .lookup_by_grant_jwt(grant_jwt)
+        .lookup_by_secret(&issuer_id, session_grant)
         .await?
         .ok_or_else(|| {
             ArkretRouteError::coded(
                 StatusCode::NOT_FOUND,
                 arkret_wire::ErrorCode::SESSION_GRANT_NOT_FOUND,
-                "no session grant matches the presented grant_jwt",
+                "presented opaque session grant was not found",
             )
         })?;
+    let prior_payload = prior_grant.metadata.clone();
+    prior_payload.validate()?;
+    ensure_refreshable_credential_class(prior_payload.credential_class)?;
+    let expected_jkt = prior_payload.cnf_jkt.clone();
 
-    // 3. Verify the DPoP proof against this exact endpoint, with the prior grant_jwt as the bound
-    //    access token (so `ath` MUST match).
+    // 3. Verify the DPoP proof against this exact endpoint, with the prior session_grant as the
+    //    bound access token (so `ath` MUST match).
     let now = clock.now();
     let htm = req.method().as_str().to_ascii_uppercase();
     let public_base_url = url_builder.http_base();
     let htu = dpop_htu(&public_base_url, req);
-    let verification =
-        DpopVerifier::verify_without_replay(&dpop_header, &htm, &htu, now, Some(grant_jwt))
-            .map_err(|error| {
-                ArkretRouteError::coded(
-                    StatusCode::UNAUTHORIZED,
-                    arkret_wire::ErrorCode::SIGNATURE_INVALID,
-                    error.to_string(),
-                )
-            })?;
+    let verification = DpopVerifier::verify_without_replay(
+        &dpop_header,
+        &htm,
+        &htu,
+        now,
+        Some(session_grant.as_str()),
+    )
+    .map_err(|error| {
+        ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::SIGNATURE_INVALID,
+            error.to_string(),
+        )
+    })?;
 
     DpopVerifier::require_matching_jkt(&verification.jkt, &expected_jkt).map_err(|error| {
         ArkretRouteError::coded(
@@ -253,6 +241,8 @@ pub async fn refresh_session_grant(
             error.to_string(),
         )
     })?;
+    let dpop_valid_through = crate::services::dpop::verified_proof_valid_through(&verification)
+        .map_err(|error| refresh_proof_invalid(error.to_string()))?;
 
     match (&body, prior_payload.proof_kind) {
         (
@@ -325,22 +315,8 @@ pub async fn refresh_session_grant(
         prior_grant.grant_id,
         request_digest.as_str()
     );
-    let mut redacted = serde_json::to_value(&body)?;
-    for proof_field in [
-        "accepted_device_possession_proof",
-        "agent_session_refresh_proof",
-    ] {
-        if let Some(proof) = redacted
-            .get_mut(proof_field)
-            .and_then(serde_json::Value::as_object_mut)
-        {
-            proof.remove("signature");
-            proof.remove("issued_at");
-            proof.remove("expires_at");
-        }
-    }
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
-        "request": redacted,
+        "request": body,
         "holder_jkt": verification.jkt,
     }))?;
     let canonical_intent_digest: [u8; 32] = arkret_canonical::sha256_bytes(&canonical_intent);
@@ -353,7 +329,6 @@ pub async fn refresh_session_grant(
         arkret_config.session_grant_ttl
     };
     let grant_expires_at = grant_not_before + ttl;
-    let signing_key_id = super::super::preferred_signing_key_id(&keyring)?;
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
@@ -369,11 +344,8 @@ pub async fn refresh_session_grant(
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
                 target_session_grant_id: Some(&prior_grant.grant_id),
-                issuance_nonce: None,
-                session_id: Some(&prior_payload.session_id),
                 grant_not_before: Some(grant_not_before),
                 grant_expires_at: Some(grant_expires_at),
-                signing_key_id: Some(&signing_key_id),
                 retained_until: grant_expires_at + chrono::Duration::days(7),
             },
         )
@@ -386,48 +358,9 @@ pub async fn refresh_session_grant(
             operation
         }
         SessionGrantReserveOutcome::Replay(operation) => {
-            let result_grant_id = operation.result_grant_id.as_ref().ok_or_else(|| {
-                ArkretRouteError::coded(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                    "refresh replay has no durable successor",
-                )
-            })?;
-            let successor = repo
-                .oauth_session_grant()
-                .lookup_by_grant_id(result_grant_id)
-                .await?
-                .ok_or_else(|| {
-                    ArkretRouteError::coded(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                        "refresh replay successor is unavailable",
-                    )
-                })?;
-            if now >= successor.expires_at {
-                repo.cancel().await.ok();
-                return Err(ArkretRouteError::session_grant_replay_expired(
-                    successor.grant_id,
-                ));
-            }
-            if successor.lifecycle_state != coauth_data::SessionGrantLifecycleState::Active {
-                let state = super::replay_terminal_state(successor.lifecycle_state)
-                    .expect("lifecycle state checked to be terminal above");
-                repo.cancel().await.ok();
-                return Err(ArkretRouteError::session_grant_replay_terminal(
-                    successor.grant_id,
-                    state,
-                ));
-            }
-            let bytes = operation.canonical_outcome.ok_or_else(|| {
-                ArkretRouteError::coded(
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
-                    "refresh replay has no canonical outcome",
-                )
-            })?;
-            repo.cancel().await.ok();
-            return Ok(ArkretCanonicalJson(bytes));
+            repo.cancel().await?;
+            return deliver_refresh_replay(depot, operation, &verification, request_digest.clone())
+                .await;
         }
         SessionGrantReserveOutcome::Conflict(_) => {
             repo.cancel().await.ok();
@@ -455,6 +388,25 @@ pub async fn refresh_session_grant(
         }
     };
 
+    // Resolve a concurrent accepted result before checking the original inner
+    // proof at a new time. Only this HTTP proof/current qualification is fresh.
+    let operation = repo
+        .oauth_session_grant()
+        .lock_operation(operation.id)
+        .await?;
+    if operation.state == coauth_data::SessionGrantOperationState::Committed {
+        repo.cancel().await?;
+        return deliver_refresh_replay(depot, operation, &verification, request_digest.clone())
+            .await;
+    }
+    if let SessionGrantRefreshRequestBody::Human(request) = &body {
+        let proof = &request.accepted_device_possession_proof;
+        if proof.issued_at > now + chrono::Duration::seconds(30) || now >= proof.expires_at {
+            return Err(refresh_proof_invalid(
+                "accepted-device refresh proof is outside its first-admission validity window",
+            ));
+        }
+    }
     if now >= prior_grant.expires_at {
         repo.cancel().await.ok();
         return Err(ArkretRouteError::session_grant_replay_expired(
@@ -514,7 +466,7 @@ pub async fn refresh_session_grant(
             &depot.encrypter()?,
             &arkret_config,
             &prior_payload,
-            &agent_request.grant_jwt,
+            &agent_request.session_grant,
             agent_request,
             proof,
         )
@@ -573,9 +525,13 @@ pub async fn refresh_session_grant(
             .iter()
             .map(|scope| scope.as_str().to_owned())
             .collect();
-        let mut scope_details = prior_payload.scope_details.clone().ok_or_else(|| {
+        let scope_details = prior_payload.scope_details.as_ref().ok_or_else(|| {
             refresh_proof_invalid("Agent session grant is missing its authorization scope binding")
         })?;
+        let mut scope_details = serde_json::to_value(scope_details)?
+            .as_object()
+            .cloned()
+            .ok_or_else(|| refresh_proof_invalid("Agent scope metadata is invalid"))?;
         crate::handlers::account::agents::revalidate_content_session_scope(
             &http_client,
             &arkret_config,
@@ -611,7 +567,6 @@ pub async fn refresh_session_grant(
         let new_material = mint_agent_session_grant(
             &issuance_seed,
             &arkret_config,
-            &keyring,
             AgentGrantIssuance {
                 agent_id: &prior_payload.account_id.principal_id,
                 local_account_id: LocalAccountId::new(controller_user_id.to_string())?,
@@ -635,10 +590,11 @@ pub async fn refresh_session_grant(
         )?;
         let audience_id = new_material.audience_id.clone();
         let outcome = SessionGrantResponseBody {
+            issuer_id: new_material.issuer_id.clone(),
             session_grant_id: new_material.grant_id.clone(),
             account_id: new_material.account_id.clone(),
             device_id: None,
-            session_grant: new_material.grant_jwt.clone(),
+            session_grant: new_material.session_grant.clone(),
             session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
                 &new_material.session_public_key,
             )?,
@@ -661,7 +617,9 @@ pub async fn refresh_session_grant(
                 "refresh DPoP JTI was already consumed",
             ));
         }
-        let proof_expires_at = proof.expires_at;
+        let proof_expires_at = current_agent_key_expiry(&authoritative_agent)?
+            .map_or(proof.expires_at, |expiry| expiry.min(proof.expires_at))
+            .min(authorization.expires_at.unwrap_or(proof.expires_at));
         let checkpoint = serde_json::json!({
             "kind": "agent_key_refresh",
             "agent_key_authorization_ref": authorization.authorized_event_id,
@@ -692,6 +650,30 @@ pub async fn refresh_session_grant(
                 },
             )
             .await?;
+        if matches!(&committed, LedgerRefreshOutcome::AuthorizationExpired(_)) {
+            repo.cancel().await?;
+            return Err(refresh_proof_invalid(
+                "refresh authorization expired before first acceptance",
+            ));
+        }
+        if let LedgerRefreshOutcome::Replay(operation) = &committed {
+            let operation = operation.clone();
+            repo.cancel().await?;
+            return deliver_refresh_replay(depot, operation, &verification, request_digest.clone())
+                .await;
+        }
+        if matches!(&committed, LedgerRefreshOutcome::Committed { .. }) {
+            let checked_at = clock.now();
+            let final_window = (|| {
+                require_current_authority_fresh(proof_expires_at, checked_at)?;
+                require_outer_dpop_fresh(dpop_valid_through, checked_at)?;
+                Ok::<(), ArkretRouteError>(())
+            })();
+            if let Err(error) = final_window {
+                repo.cancel().await.ok();
+                return Err(error);
+            }
+        }
         repo.save().await?;
         if matches!(&committed, LedgerRefreshOutcome::Committed { .. }) {
             super::super::test_chaos::maybe_delay_post_commit(
@@ -723,6 +705,9 @@ pub async fn refresh_session_grant(
                     state,
                 ))
             }
+            LedgerRefreshOutcome::AuthorizationExpired(_) => Err(refresh_proof_invalid(
+                "refresh authorization expired before first acceptance",
+            )),
             LedgerRefreshOutcome::Indeterminate(_) => Err(ArkretRouteError::coded(
                 StatusCode::SERVICE_UNAVAILABLE,
                 arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
@@ -832,7 +817,7 @@ pub async fn refresh_session_grant(
     let proof = &human_request.accepted_device_possession_proof;
 
     // 6. Rebuild the successor solely from the durable reservation seed. The
-    // signing window, nonce, chain id and signing key therefore remain byte
+    // issuance window, opaque credential, record id and chain id therefore remain byte
     // stable across a retry after an ambiguous transport failure.
     let audience_id = prior_grant.audience_id.clone();
     let scopes: Vec<String> = prior_grant
@@ -851,7 +836,7 @@ pub async fn refresh_session_grant(
             "human session-grant predecessor has no accepted-device binding",
         )
     })?;
-    let device_binding = acquire_private_current_device_binding(
+    let device_admission = acquire_private_current_device_admission(
         depot,
         &principal_binding.account_id,
         arkret_identifiers::DeviceId::new(device_id.to_owned())?,
@@ -861,9 +846,11 @@ pub async fn refresh_session_grant(
             proof.clone(),
         )),
         proof.session_intent_digest.clone(),
-        now,
+        clock.now(),
     )
     .await?;
+    let proof_expires_at = proof.expires_at.min(device_admission.expires_at());
+    let device_binding = device_admission.binding;
     if &device_binding != expected_device_binding {
         return Err(ArkretRouteError::coded(
             StatusCode::CONFLICT,
@@ -875,7 +862,6 @@ pub async fn refresh_session_grant(
     let new_material = issue_session_grant_for_audience(
         &issuance_seed,
         &arkret_config,
-        &keyring,
         HumanGrantIssuance {
             browser_session: &browser_session,
             session_public_key: crate::services::dpop::session_public_jwk(
@@ -895,10 +881,11 @@ pub async fn refresh_session_grant(
     let response_audience = new_material.audience_id.clone();
 
     let outcome = SessionGrantResponseBody {
+        issuer_id: new_material.issuer_id.clone(),
         session_grant_id: new_material.grant_id.clone(),
         account_id: new_material.account_id.clone(),
         device_id: Some(device_id),
-        session_grant: new_material.grant_jwt.clone(),
+        session_grant: new_material.session_grant.clone(),
         session_public_key: arkret_models_identity::CanonicalSessionPublicJwk::new(
             &new_material.session_public_key,
         )?,
@@ -921,7 +908,6 @@ pub async fn refresh_session_grant(
             "refresh DPoP JTI was already consumed",
         ));
     }
-    let proof_expires_at = proof.expires_at;
     let proof_digest =
         arkret_wire::AcceptedDevicePossessionProof::Refresh(proof.clone()).proof_digest()?;
     let authorization_ref = format!("device-refresh:{proof_digest}");
@@ -952,6 +938,30 @@ pub async fn refresh_session_grant(
             },
         )
         .await?;
+    if matches!(&committed, LedgerRefreshOutcome::AuthorizationExpired(_)) {
+        repo.cancel().await?;
+        return Err(refresh_proof_invalid(
+            "refresh authorization expired before first acceptance",
+        ));
+    }
+    if let LedgerRefreshOutcome::Replay(operation) = &committed {
+        let operation = operation.clone();
+        repo.cancel().await?;
+        return deliver_refresh_replay(depot, operation, &verification, request_digest.clone())
+            .await;
+    }
+    if matches!(&committed, LedgerRefreshOutcome::Committed { .. }) {
+        let checked_at = clock.now();
+        let final_window = (|| {
+            require_current_authority_fresh(proof_expires_at, checked_at)?;
+            require_outer_dpop_fresh(dpop_valid_through, checked_at)?;
+            Ok::<(), ArkretRouteError>(())
+        })();
+        if let Err(error) = final_window {
+            repo.cancel().await.ok();
+            return Err(error);
+        }
+    }
     repo.save().await?;
     if matches!(&committed, LedgerRefreshOutcome::Committed { .. }) {
         super::super::test_chaos::maybe_delay_post_commit(
@@ -973,7 +983,7 @@ pub async fn refresh_session_grant(
                 )
             }),
         LedgerRefreshOutcome::PredecessorTerminal(grant) => {
-            if grant.expires_at <= now {
+            if grant.expires_at <= clock.now() {
                 return Err(ArkretRouteError::session_grant_replay_expired(
                     grant.grant_id,
                 ));
@@ -985,12 +995,98 @@ pub async fn refresh_session_grant(
                 state,
             ))
         }
+        LedgerRefreshOutcome::AuthorizationExpired(_) => Err(refresh_proof_invalid(
+            "refresh authorization expired before first acceptance",
+        )),
         LedgerRefreshOutcome::Indeterminate(_) => Err(ArkretRouteError::coded(
             StatusCode::SERVICE_UNAVAILABLE,
             arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
             "refresh outcome is indeterminate",
         )),
     }
+}
+
+async fn deliver_refresh_replay(
+    depot: &Depot,
+    operation: coauth_data::SessionGrantOperation,
+    verification: &arkret_signatures::dpop::VerifiedDpopProof,
+    intent_digest: arkret_wire::Hash,
+) -> Result<ArkretCanonicalJson, ArkretRouteError> {
+    let grant_id = operation.result_grant_id.as_ref().ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+            "refresh replay has no durable successor",
+        )
+    })?;
+    let mut repo = depot.read_repo().await?;
+    let successor = repo
+        .oauth_session_grant()
+        .lookup_by_grant_id(&operation.issuer_id, grant_id)
+        .await?
+        .ok_or_else(|| {
+            ArkretRouteError::coded(
+                StatusCode::SERVICE_UNAVAILABLE,
+                arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+                "refresh replay successor is unavailable",
+            )
+        })?;
+    repo.cancel().await?;
+    let clock = crate::handlers::make_clock();
+    if clock.now() >= successor.expires_at {
+        return Err(ArkretRouteError::session_grant_replay_expired(
+            successor.grant_id,
+        ));
+    }
+    if let Some(state) = super::replay_terminal_state(successor.lifecycle_state) {
+        return Err(ArkretRouteError::session_grant_replay_terminal(
+            successor.grant_id,
+            state,
+        ));
+    }
+    let deadline = acquire_current_replay_authority(
+        depot,
+        &successor,
+        &verification.jkt,
+        intent_digest,
+        clock.now(),
+    )
+    .await?;
+    let valid_through = crate::services::dpop::verified_proof_valid_through(verification)
+        .map_err(|error| refresh_proof_invalid(error.to_string()))?;
+    let bytes = operation.canonical_outcome.ok_or_else(|| {
+        ArkretRouteError::coded(
+            StatusCode::SERVICE_UNAVAILABLE,
+            arkret_wire::ErrorCode::SESSION_GRANT_REPLAY_INDETERMINATE,
+            "refresh replay has no canonical outcome",
+        )
+    })?;
+    let mut repo = depot.repo().await?;
+    if !repo
+        .dpop_replay()
+        .consume_jti(crate::services::dpop::dpop_replay_record(
+            &verification.claims.jti,
+            clock.now(),
+        ))
+        .await?
+    {
+        repo.cancel().await.ok();
+        return Err(refresh_proof_invalid(
+            "refresh replay DPoP JTI was already consumed",
+        ));
+    }
+    let checked_at = clock.now();
+    let final_window = (|| {
+        require_current_authority_fresh(deadline, checked_at)?;
+        require_outer_dpop_fresh(valid_through, checked_at)?;
+        Ok::<(), ArkretRouteError>(())
+    })();
+    if let Err(error) = final_window {
+        repo.cancel().await.ok();
+        return Err(error);
+    }
+    repo.save().await?;
+    Ok(ArkretCanonicalJson(bytes))
 }
 
 #[cfg(test)]

@@ -60,10 +60,20 @@ struct PrivateCurrentDeviceResponse {
     accepted_commit_id: Option<RealmCommitId>,
 }
 
-/// Resolve and linearize the current-device decision through the owning
-/// Station's private TCB adapter. The adapter response is consumed here and
-/// never exposed as an Arkret receipt or canonical operation outcome.
-pub(crate) async fn acquire_private_current_device_binding(
+/// A verifier-owned lifetime from the existing authenticated Station response.
+/// It is never deserialized as an authorization assertion from an API caller.
+pub(crate) struct CurrentDeviceAdmission {
+    pub(crate) binding: SessionGrantDeviceBinding,
+    expires_at: DateTime<Utc>,
+}
+
+impl CurrentDeviceAdmission {
+    pub(crate) fn expires_at(&self) -> DateTime<Utc> {
+        self.expires_at
+    }
+}
+
+pub(crate) async fn acquire_private_current_device_admission(
     depot: &Depot,
     account_id: &AccountId,
     device_id: DeviceId,
@@ -72,7 +82,7 @@ pub(crate) async fn acquire_private_current_device_binding(
     accepted_device_possession_proof: Option<arkret_wire::AcceptedDevicePossessionProof>,
     intent_digest: Hash,
     now: DateTime<Utc>,
-) -> Result<SessionGrantDeviceBinding, ArkretRouteError> {
+) -> Result<CurrentDeviceAdmission, ArkretRouteError> {
     let config = depot.arkret_config()?;
     // Human PCR governance is permanently bound to this full Account Station.
     // Endpoint and key deployment changes cannot introduce another governor.
@@ -136,14 +146,17 @@ pub(crate) async fn acquire_private_current_device_binding(
     validate_private_response(&channel, &request, &outcome, now).map_err(gate_protocol_error)?;
 
     match outcome.decision {
-        PrivateCurrentDeviceDecision::Allow => Ok(SessionGrantDeviceBinding {
-            device_id: outcome.device_id,
-            authorization_event_id: outcome
-                .authorization_event_id
-                .ok_or_else(|| gate_protocol_error("allow omitted authorization Event"))?,
-            model_generation_ref: outcome
-                .device_generation_ref
-                .ok_or_else(|| gate_protocol_error("allow omitted device generation"))?,
+        PrivateCurrentDeviceDecision::Allow => Ok(CurrentDeviceAdmission {
+            binding: SessionGrantDeviceBinding {
+                device_id: outcome.device_id,
+                authorization_event_id: outcome
+                    .authorization_event_id
+                    .ok_or_else(|| gate_protocol_error("allow omitted authorization Event"))?,
+                model_generation_ref: outcome
+                    .device_generation_ref
+                    .ok_or_else(|| gate_protocol_error("allow omitted device generation"))?,
+            },
+            expires_at: outcome.expires_at,
         }),
         PrivateCurrentDeviceDecision::AuthorityMismatch => Err(ArkretRouteError::coded(
             StatusCode::FORBIDDEN,

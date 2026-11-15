@@ -1,35 +1,30 @@
-use arkret_models_identity::SessionGrantIssuancePreimage;
 use coauth_data::oauth::NewSessionGrant;
-use coauth_data::{BrowserSession, Clock, RepositoryAccess, SessionGrant};
+#[cfg(test)]
+use coauth_data::{BrowserSession, SessionGrant};
+use coauth_data::{Clock, RepositoryAccess};
 use coauth_oauth_types::scope::{Scope, ScopeToken};
+#[cfg(test)]
 use rand_core::RngCore;
 use ulid::Ulid;
 
 use super::SessionGrantMaterial;
 
+#[cfg(test)]
 pub(crate) async fn persist_session_grant_with_browser_session_id<R>(
     repo: &mut R,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     browser_session_id: Option<Ulid>,
-    material: &SessionGrantMaterial,
+    material: &mut SessionGrantMaterial,
 ) -> Result<SessionGrant, R::Error>
 where
-    R: RepositoryAccess + ?Sized,
+    R: RepositoryAccess<Error = coauth_data::RepositoryError> + ?Sized,
 {
-    // The repository has no single-call insert: a grant only becomes durable as
-    // the committed outcome of a reserved operation. Internal browser-session
-    // entry points (password, passkey, debug seeds) therefore reserve and commit
-    // here rather than carrying a second persistence path that bypasses the
-    // ledger.
-    //
-    // The signed preimage fixes this internal operation's identity. Internal
-    // callers sign fresh material once per login; they do not expose a replay
-    // API. Reusing it after a committed outcome is a caller invariant failure.
-    let request_identity = format!("internal-issue:{}", material.grant_id);
-    let issuance_preimage: SessionGrantIssuancePreimage =
-        serde_json::from_slice(&material.issuance_preimage)
-            .expect("signed session grant material carries a validated issuance preimage");
+    // Fixture templates carry no allocator authority. The mutable parameter
+    // makes every caller use the actual reserved ID/U/window in later HTTP.
+    let request_identity = format!("internal-test-issue:{}", material.grant_id);
+    let canonical_intent = arkret_canonical::canonical_json_bytes(&material.metadata)
+        .expect("validated fixture metadata must canonicalize");
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
@@ -38,66 +33,79 @@ where
             coauth_data::NewSessionGrantOperation {
                 issuer_id: material.issuer_id.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
-                proof_kind: issuance_preimage.proof_kind,
+                proof_kind: material.metadata.proof_kind,
                 request_identity: &request_identity,
-                canonical_intent_digest: material.issuance_digest,
-                canonical_intent: &material.issuance_preimage,
+                canonical_intent_digest: arkret_canonical::sha256_bytes(&canonical_intent),
+                canonical_intent: &canonical_intent,
                 target_session_grant_id: None,
-                issuance_nonce: Some(&material.issuance_nonce),
-                session_id: Some(&material.session_id),
                 grant_not_before: Some(material.not_before_timestamp),
                 grant_expires_at: Some(material.expires_at_timestamp),
-                signing_key_id: Some(&material.signing_key_id),
                 retained_until: material.expires_at_timestamp + chrono::Duration::days(7),
             },
         )
         .await?;
-
-    let operation_id = match reserved {
+    let operation = match reserved {
         coauth_data::SessionGrantReserveOutcome::Reserved(operation)
-        | coauth_data::SessionGrantReserveOutcome::Pending(operation) => operation.id,
-        coauth_data::SessionGrantReserveOutcome::Replay(operation)
-        | coauth_data::SessionGrantReserveOutcome::Conflict(operation)
-        | coauth_data::SessionGrantReserveOutcome::Indeterminate(operation) => operation.id,
+        | coauth_data::SessionGrantReserveOutcome::Pending(operation) => operation,
+        _ => {
+            return Err(coauth_data::RepositoryError::from_error(
+                std::io::Error::other(
+                    "fixture issuance must have its original uncommitted reservation",
+                ),
+            ));
+        }
     };
-
-    let checkpoint = serde_json::json!({
-        "kind": "internal_browser_session_issue",
-        "grant_id": material.grant_id,
-    });
+    let seed = super::SessionGrantIssuanceSeed::from_operation(&operation)
+        .map_err(coauth_data::RepositoryError::from_error)?;
+    material.grant_id = seed.grant_id.clone();
+    material.session_grant = seed.session_grant;
+    material.session_id = seed.session_id.clone();
+    material.not_before_timestamp = seed.not_before;
+    material.expires_at_timestamp = seed.expires_at;
+    material.expires_at = arkret_canonical::format_timestamp_canonical(seed.expires_at);
+    material.metadata.id = seed.grant_id;
+    material.metadata.session_id = seed.session_id;
+    material.metadata.not_before = seed.not_before;
+    material.metadata.expires_at = seed.expires_at;
+    material
+        .metadata
+        .validate()
+        .map_err(coauth_data::RepositoryError::from_error)?;
+    let canonical_outcome = arkret_canonical::canonical_json_bytes(material)
+        .expect("reserved fixture material must canonicalize");
+    let checkpoint =
+        serde_json::json!({"kind":"internal_test_session_issue","grant_id":material.grant_id});
     let committed = repo
         .oauth_session_grant()
         .commit_issuance(
             rng,
             clock,
-            operation_id,
+            operation.id,
             coauth_data::SessionGrantProofAuthorization {
                 authorization_ref: &request_identity,
                 checkpoint: &checkpoint,
                 proof_expires_at: material.expires_at_timestamp,
             },
             coauth_data::SessionGrantExactOutcome {
-                canonical_response: &material.issuance_preimage,
-                response_digest: material.issuance_digest,
+                canonical_response: &canonical_outcome,
+                response_digest: arkret_canonical::sha256_bytes(&canonical_outcome),
             },
             new_session_grant_record(browser_session_id, material),
         )
         .await?;
-
     match committed {
         coauth_data::SessionGrantCommitOutcome::Committed(grant) => Ok(grant),
-        coauth_data::SessionGrantCommitOutcome::Replay(operation)
-        | coauth_data::SessionGrantCommitOutcome::Indeterminate(operation) => {
-            // Each internal login signs fresh material, so its `grant_id` — and
-            // therefore its request identity — is unique to this attempt. A
-            // replay or tombstone here means the caller reused signed material
-            // across two logical issuances, which would hand out one grant under
-            // two identities.
-            panic!(
-                "internal browser-session issuance reused signed material: operation {} already \
-                 holds an outcome for grant {}",
-                operation.id, material.grant_id
-            )
+        coauth_data::SessionGrantCommitOutcome::AuthorizationExpired(_) => Err(
+            coauth_data::RepositoryError::from_error(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "issuer authorization expired while waiting for accepting locks",
+            )),
+        ),
+        coauth_data::SessionGrantCommitOutcome::Replay(_)
+        | coauth_data::SessionGrantCommitOutcome::Indeterminate(_) => {
+            Err(coauth_data::RepositoryError::from_error(
+                std::io::Error::other("fixture issuance did not commit its original reservation"),
+            ))
         }
     }
 }
@@ -111,7 +119,7 @@ pub(crate) fn new_session_grant_record(
         .iter()
         .map(|scope| scope.parse::<ScopeToken>())
         .collect::<Result<Scope, _>>()
-        .expect("signed session grant scopes must be valid OAuth scope tokens");
+        .expect("validated session grant scopes must be valid OAuth scope tokens");
 
     NewSessionGrant {
         grant_id: material.grant_id.clone(),
@@ -122,12 +130,9 @@ pub(crate) fn new_session_grant_record(
         device_id: material.device_id.as_deref(),
         audience_id: &material.audience_id,
         scope,
-        grant_jwt: &material.grant_jwt,
+        session_grant: &material.session_grant,
         session_id: &material.session_id,
-        issuance_nonce: &material.issuance_nonce,
-        issuance_preimage: &material.issuance_preimage,
-        issuance_digest: material.issuance_digest,
-        signing_key_id: &material.signing_key_id,
+        metadata: &material.metadata,
         session_public_key: &material.session_public_key,
         credential_class: &material.credential_class,
         not_before: material.not_before_timestamp,
@@ -179,15 +184,16 @@ where
         .await
 }
 
+#[cfg(test)]
 pub(crate) async fn persist_session_grant<R>(
     repo: &mut R,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
     browser_session: &BrowserSession,
-    material: &SessionGrantMaterial,
+    material: &mut SessionGrantMaterial,
 ) -> Result<SessionGrant, R::Error>
 where
-    R: RepositoryAccess + ?Sized,
+    R: RepositoryAccess<Error = coauth_data::RepositoryError> + ?Sized,
 {
     persist_session_grant_with_browser_session_id(
         repo,
@@ -204,10 +210,10 @@ pub(crate) async fn persist_unbound_session_grant<R>(
     repo: &mut R,
     rng: &mut (dyn RngCore + Send),
     clock: &dyn Clock,
-    material: &SessionGrantMaterial,
+    material: &mut SessionGrantMaterial,
 ) -> Result<SessionGrant, R::Error>
 where
-    R: RepositoryAccess + ?Sized,
+    R: RepositoryAccess<Error = coauth_data::RepositoryError> + ?Sized,
 {
     persist_session_grant_with_browser_session_id(repo, rng, clock, None, material).await
 }

@@ -58,6 +58,48 @@ pub async fn author_and_enqueue_transition(
     _requested_at: chrono::DateTime<chrono::Utc>,
     issuer_context: &AccountStatusIssuerContext,
 ) -> Result<AccountStatusPublicationPlan, AccountStatusPublicationError> {
+    let authority = DidCoreId::new(service_id.to_owned())
+        .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
+    let source = issuer_context
+        .prepare(repo, keyring, &authority, binding, clock.now())
+        .await
+        .map_err(AccountStatusPublicationError::InvalidBody)?;
+    author_and_enqueue_prepared_transition(
+        repo,
+        rng,
+        clock,
+        station,
+        keyring,
+        service_id,
+        user,
+        binding,
+        target_status,
+        reason_code,
+        _requested_at,
+        issuer_context,
+        &source,
+    )
+    .await
+}
+
+/// Accept a retained, verifier-owned source prepared before authority locks.
+/// Its binding, authoring time and current delegated identity are rechecked.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn author_and_enqueue_prepared_transition(
+    repo: &mut BoxRepository,
+    rng: &mut (dyn RngCore + Send),
+    clock: &dyn Clock,
+    station: &dyn coauth_principal::ConnectorAdmin,
+    keyring: &coauth_keyring::Keyring,
+    service_id: &str,
+    user: &User,
+    binding: &PrincipalDidBinding,
+    target_status: AccountStatus,
+    reason_code: Option<String>,
+    _requested_at: chrono::DateTime<chrono::Utc>,
+    issuer_context: &AccountStatusIssuerContext,
+    issuer_source: &issuer_source::PreparedAccountStatusIssuerSource,
+) -> Result<AccountStatusPublicationPlan, AccountStatusPublicationError> {
     let (destination_name, audience) = station
         .account_status_destination()
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
@@ -75,12 +117,6 @@ pub async fn author_and_enqueue_transition(
     }
     let local_account_id = LocalAccountId::new(user.id.to_string())
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
-    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
-    // Fetch/accept only a NEW author's known AA source before acquiring ledger locks.
-    let issuer_source = issuer_context
-        .prepare(repo, keyring, &account_authority_id, binding, now)
-        .await
-        .map_err(AccountStatusPublicationError::InvalidBody)?;
     let current = repo
         .account_status_ledger()
         .current_for_gate(account_authority_id.as_str(), local_account_id.as_str())

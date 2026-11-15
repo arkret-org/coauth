@@ -100,12 +100,11 @@ async fn mint(
         principal,
         &required_audience_for(&state.url_builder, &state.arkret_config),
     );
-    let material = issue_session_grant(
+    let mut material = issue_session_grant(
         &mut rng,
         &SystemClock::default(),
         &state.url_builder,
         &state.arkret_config,
-        &state.keyring,
         crate::services::session_grant::TestGrantIssuance {
             browser_session: &session,
             session_public_key: test_session_public_jwk(&key, format!("holder-{}", session.id)),
@@ -121,7 +120,7 @@ async fn mint(
         &mut rng,
         &SystemClock::default(),
         &session,
-        &material,
+        &mut material,
     )
     .await
     .unwrap();
@@ -194,7 +193,7 @@ async fn active(state: &TestState, id: &SessionGrantId) -> bool {
     let mut repo = state.repository().await.unwrap();
     let grant = repo
         .oauth_session_grant()
-        .lookup_by_grant_id(id)
+        .lookup_by_grant_id(&owning_station_id_for(&state.arkret_config), id)
         .await
         .unwrap()
         .unwrap();
@@ -301,7 +300,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
     let (grant, key) = mint(&state, &user, principal.as_str(), DEVICE).await;
     let (target, _) = mint(&state, &user, principal.as_str(), DEVICE).await;
     let (foreign, _) = mint(&state, &other, "ak:did_core:web:other.example", DEVICE).await;
-    let sdk = client(&base, &grant.grant_jwt, &key);
+    let sdk = client(&base, grant.session_grant.as_str(), &key);
     let loss = LoseResponse {
         armed: Arc::new(AtomicBool::new(false)),
         hits: Arc::new(AtomicUsize::new(0)),
@@ -393,7 +392,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
         "ak:device:01964137-0000-7000-8000-000000000002",
     )
     .await;
-    let device_sdk = client(&base, &device_grant.grant_jwt, &device_key);
+    let device_sdk = client(&base, device_grant.session_grant.as_str(), &device_key);
     let mut device_request = empty();
     device_request.target_device_id = Some(DeviceId::new(DEVICE).unwrap());
     sign_request(
@@ -412,7 +411,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
     assert!(active(&state, &spared.grant_id).await);
 
     let (all_grant, all_key) = mint(&state, &user, principal.as_str(), DEVICE).await;
-    let all_sdk = client(&base, &all_grant.grant_jwt, &all_key);
+    let all_sdk = client(&base, all_grant.session_grant.as_str(), &all_key);
     let mut all_request = empty();
     all_request.all_sessions = Some(true);
     sign_request(&all_grant, &did, &method, &mut all_request, "all-selector");
@@ -425,7 +424,7 @@ async fn session_revoke_sdk_real_http_pg_selectors_replay_and_isolation() {
     assert!(active(&state, &foreign.grant_id).await);
 
     let response = state.request(Request::post("/_coauth/internal/session-grants/introspect")
-        .bearer(INTERNAL_AUTHORITY_SHARED_SECRET).json(serde_json::json!({"grant_jwt": target.grant_jwt, "audience_id": target.audience_id}))).await;
+        .bearer(INTERNAL_AUTHORITY_SHARED_SECRET).json(serde_json::json!({"session_grant": target.session_grant, "audience_id": target.audience_id}))).await;
     response.assert_status(StatusCode::OK);
     let value: serde_json::Value = response.json();
     assert_eq!(value["active"], false);

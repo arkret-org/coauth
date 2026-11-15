@@ -1,3 +1,4 @@
+mod current_authority;
 mod device_revocation_gate;
 mod introspection;
 mod issue;
@@ -6,11 +7,17 @@ mod revoke;
 mod session_logout;
 mod types;
 
-pub(crate) use arkret_models_identity::SignedSessionGrantClaims;
-pub(crate) use device_revocation_gate::acquire_private_current_device_binding;
+pub(crate) use arkret_models_identity::SessionGrantMetadata;
+pub(crate) use current_authority::{
+    acquire_current_replay_authority, current_agent_key_expiry, require_current_authority_fresh,
+    require_outer_dpop_fresh,
+};
+pub(crate) use device_revocation_gate::{
+    CurrentDeviceAdmission, acquire_private_current_device_admission,
+};
 pub use introspection::introspect_session_grant;
 #[cfg(test)]
-pub(crate) use introspection::{introspection_status, session_grant_jwt_digest};
+pub(crate) use introspection::introspection_status;
 pub use issue::issue_session_grant_endpoint;
 pub(crate) use issue::map_oidc_exchange_error;
 pub use refresh::refresh_session_grant;

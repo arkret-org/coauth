@@ -1,9 +1,7 @@
 use arkret_identifiers::{DeviceId, DidCoreId, EventId};
 use arkret_models_identity::{
-    CanonicalSessionPublicJwk, SESSION_GRANT_CREDENTIAL_KIND, SESSION_GRANT_ISSUANCE_SCHEMA,
-    SessionGrantCredentialClass, SessionGrantDeviceBinding, SessionGrantHolderBinding,
-    SessionGrantIssuanceNonce, SessionGrantIssuancePreimage, SessionGrantProofKind,
-    SignedSessionGrantClaims,
+    CanonicalSessionPublicJwk, SessionGrantCredentialClass, SessionGrantDeviceBinding,
+    SessionGrantHolderBinding, SessionGrantMetadata, SessionGrantProofKind,
 };
 use chrono::Duration;
 use coauth_data::clock::MockClock;
@@ -25,7 +23,6 @@ use crate::PgRepositoryFactory;
 const TEST_SESSION_GRANT_ISSUER: &str = "ak:did_core:web:issuer_id.example";
 const TEST_SESSION_GRANT_SUBJECT: &str = "ak:did_core:web:subject_id.example";
 const TEST_SESSION_GRANT_AUDIENCE: &str = "ak:did_core:web:audience_id.example";
-const TEST_SESSION_GRANT_SIGNING_KEY_ID: &str = "test-signing-key";
 /// Accepted device-authorization Event the fixture device binding cites.
 ///
 /// `account-lifecycle.md` §2 only lets the origin Station sign a Standard
@@ -38,16 +35,13 @@ const TEST_DEVICE_AUTHORIZE_EVENT_ID: &str =
 
 /// Closed inputs a test needs to land one committed session grant.
 ///
-/// Everything the issuer_id ledger derives — grant id, issuance digest,
-/// canonical preimage and credential JWT — is computed by
-/// [`commit_test_session_grant`], because `commit_issuance` rejects any
-/// grant whose material is not the exact projection of its preimage.
+/// The UUIDv7 record ID and independent 32-byte secret are allocated once;
+/// commit checks every query projection against the sole metadata record.
 struct TestSessionGrantSeed<'a> {
     request_identity: &'a str,
     browser_session_id: Option<Ulid>,
     device_id: &'a str,
-    session_id: &'a str,
-    issuance_nonce: [u8; 32],
+    holder_seed: u8,
     scope: Scope,
 }
 
@@ -64,30 +58,8 @@ fn test_session_public_key(seed: u8) -> CanonicalSessionPublicJwk {
     .unwrap()
 }
 
-/// Serialize the credential the way the issuer_id publishes it.
-///
-/// The storage layer never verifies the JWS signature — that is the
-/// issuer_id's and the verifier's job — but it does re-parse the header and
-/// claims, so the two encoded segments must be exact.
-fn test_session_grant_jwt(claims: &SignedSessionGrantClaims) -> String {
-    let header = serde_json::json!({
-        "alg": "EdDSA",
-        "kid": TEST_SESSION_GRANT_SIGNING_KEY_ID,
-        "typ": "JWT",
-    });
-    format!(
-        "{}.{}.{}",
-        arkret_canonical::base64url_encode(serde_json::to_vec(&header).unwrap()),
-        arkret_canonical::base64url_encode(serde_json::to_vec(claims).unwrap()),
-        arkret_canonical::base64url_encode(b"test-session-grant-signature"),
-    )
-}
-
-/// Reserve then commit one grant through the issuer_id-ledger saga.
-///
-/// The repository has no single-call `add`: a grant only becomes durable as
-/// the committed outcome of a reserved operation, so tests that need a
-/// persisted grant must walk the same two steps production does.
+/// Persist a real opaque credential through the production reservation and
+/// atomic issuer-record commit; no signed-token parser or synthetic signature.
 async fn commit_test_session_grant<R>(
     repo: &mut R,
     rng: &mut ChaChaRng,
@@ -98,33 +70,38 @@ where
     R: RepositoryAccess + ?Sized,
     R::Error: std::fmt::Debug,
 {
-    let not_before = clock.now();
-    let expires_at = clock.now() + Duration::try_hours(1).unwrap();
-    let issuance_nonce = SessionGrantIssuanceNonce::from_bytes(seed.issuance_nonce);
+    let not_before = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let expires_at = not_before + Duration::hours(1);
+    let issuer = DidCoreId::new(TEST_SESSION_GRANT_ISSUER).unwrap();
+    let id = arkret_identifiers::SessionGrantId::new_v7_at(
+        u64::try_from(not_before.timestamp_millis()).unwrap(),
+    );
+    let key = test_session_public_key(seed.holder_seed);
     let mut scopes = seed
         .scope
         .iter()
-        .map(|scope| scope.as_str().to_owned())
+        .map(|s| s.as_str().to_owned())
         .collect::<Vec<_>>();
     scopes.sort_unstable();
     scopes.dedup();
-    let preimage = SessionGrantIssuancePreimage {
-        schema: SESSION_GRANT_ISSUANCE_SCHEMA.to_owned(),
-        issuer_id: DidCoreId::new(TEST_SESSION_GRANT_ISSUER).unwrap(),
-        issuance_nonce: issuance_nonce.clone(),
+    let mut metadata = SessionGrantMetadata {
+        id: id.clone(),
+        issuer_id: issuer.clone(),
         account_id: arkret_wire::AccountId::new(
             DidCoreId::new(TEST_SESSION_GRANT_SUBJECT).unwrap(),
             DidCoreId::new(TEST_SESSION_GRANT_AUDIENCE).unwrap(),
         ),
-        session_public_key: test_session_public_key(seed.issuance_nonce[0]),
+        device_id: Some(DeviceId::new(seed.device_id).unwrap()),
         audience_id: DidCoreId::new(TEST_SESSION_GRANT_AUDIENCE).unwrap(),
         scopes,
         not_before,
         expires_at,
-        session_id: seed.session_id.to_owned(),
+        session_id: "unallocated-test-template".into(),
+        cnf_jkt: key.thumbprint_sha256().unwrap(),
+        session_public_key: key,
         credential_class: SessionGrantCredentialClass::Standard,
         holder_binding: SessionGrantHolderBinding::HumanDevice {
-            device_binding: seed.device_id.to_owned(),
+            device_binding: seed.device_id.into(),
         },
         device_binding: Some(SessionGrantDeviceBinding {
             device_id: DeviceId::new(seed.device_id).unwrap(),
@@ -134,93 +111,78 @@ where
         proof_kind: Some(SessionGrantProofKind::AccountHandoff),
         scope_details: None,
     };
-    let issuance_preimage = preimage.canonical_bytes().unwrap();
-    let issuance_digest = preimage.issuance_digest().unwrap();
-    let grant_id = preimage.grant_id().unwrap();
-    let claims = SignedSessionGrantClaims {
-        kind: SESSION_GRANT_CREDENTIAL_KIND.to_owned(),
-        grant_id: grant_id.clone(),
-        issuer_id: preimage.issuer_id.clone(),
-        issuance_nonce: preimage.issuance_nonce.clone(),
-        account_id: preimage.account_id.clone(),
-        session_public_key: preimage.session_public_key.clone(),
-        audience_id: preimage.audience_id.clone(),
-        scopes: preimage.scopes.clone(),
-        not_before: preimage.not_before,
-        expires_at: preimage.expires_at,
-        session_id: preimage.session_id.clone(),
-        credential_class: preimage.credential_class,
-        holder_binding: preimage.holder_binding.clone(),
-        device_binding: preimage.device_binding.clone(),
-        proof_kind: preimage.proof_kind,
-        scope_details: preimage.scope_details.clone(),
-    };
-    let grant_jwt = test_session_grant_jwt(&claims);
-
-    let issuer_id = arkret_identifiers::DidCoreId::new(TEST_SESSION_GRANT_ISSUER.to_owned())
-        .expect("test session grant issuer_id");
+    metadata.validate().unwrap();
+    let canonical_intent = arkret_canonical::canonical_json_bytes(&metadata).unwrap();
+    let intent_digest = arkret_canonical::sha256_bytes(&canonical_intent);
     let reserved = repo
         .oauth_session_grant()
         .reserve_operation(
             rng,
             clock,
             coauth_data::NewSessionGrantOperation {
-                issuer_id: issuer_id.clone(),
+                issuer_id: issuer.clone(),
                 operation: coauth_data::SessionGrantOperationDescriptor::Issue,
-                // An `issue` reservation is only valid with a proof kind,
-                // and it must be the one signed into the preimage.
-                proof_kind: preimage.proof_kind,
+                proof_kind: metadata.proof_kind,
                 request_identity: seed.request_identity,
-                canonical_intent_digest: issuance_digest,
-                canonical_intent: &issuance_preimage,
+                canonical_intent_digest: intent_digest,
+                canonical_intent: &canonical_intent,
                 target_session_grant_id: None,
-                issuance_nonce: Some(issuance_nonce.as_str()),
-                session_id: Some(seed.session_id),
                 grant_not_before: Some(not_before),
                 grant_expires_at: Some(expires_at),
-                signing_key_id: Some(TEST_SESSION_GRANT_SIGNING_KEY_ID),
-                retained_until: clock.now() + Duration::try_days(7).unwrap(),
+                retained_until: clock.now() + Duration::days(7),
             },
         )
         .await
         .unwrap();
-    let operation_id = match reserved {
-        coauth_data::SessionGrantReserveOutcome::Reserved(operation) => operation.id,
-        other => panic!("expected a fresh reservation, got {other:?}"),
+    let operation = match reserved {
+        coauth_data::SessionGrantReserveOutcome::Reserved(o) => o,
+        other => panic!("fresh reservation expected: {other:?}"),
     };
-
-    let checkpoint = serde_json::json!({"kind": "test"});
+    let id = operation.reserved_grant_id.clone().unwrap();
+    let secret = operation.reserved_session_grant.clone().unwrap();
+    metadata.id = id.clone();
+    metadata.session_id = operation.session_id.clone().unwrap();
+    metadata.not_before = operation.grant_not_before.unwrap();
+    metadata.expires_at = operation.grant_expires_at.unwrap();
+    metadata.validate().unwrap();
+    let canonical_response = arkret_canonical::canonical_json_bytes(&metadata).unwrap();
+    assert!(
+        repo.oauth_session_grant()
+            .lookup_by_secret(&issuer, &secret)
+            .await
+            .unwrap()
+            .is_none(),
+        "a pending reservation cannot authorize its reserved secret"
+    );
+    let checkpoint = serde_json::json!({"kind":"storage_test_verified_issue","grant_id":id});
     let committed = repo
         .oauth_session_grant()
         .commit_issuance(
             rng,
             clock,
-            operation_id,
+            operation.id,
             coauth_data::SessionGrantProofAuthorization {
                 authorization_ref: seed.request_identity,
                 checkpoint: &checkpoint,
-                proof_expires_at: clock.now() + Duration::try_minutes(5).unwrap(),
+                proof_expires_at: expires_at,
             },
             coauth_data::SessionGrantExactOutcome {
-                canonical_response: &issuance_preimage,
-                response_digest: issuance_digest,
+                canonical_response: &canonical_response,
+                response_digest: arkret_canonical::sha256_bytes(&canonical_response),
             },
             NewSessionGrant {
-                grant_id,
+                grant_id: id.clone(),
                 browser_session_id: seed.browser_session_id,
-                issuer_id: &issuer_id,
-                subject_id: &preimage.account_id.principal_id,
+                issuer_id: &issuer,
+                subject_id: &metadata.account_id.principal_id,
                 local_account_id: &LocalAccountId::new("test-account").unwrap(),
                 device_id: Some(seed.device_id),
-                audience_id: &preimage.audience_id,
+                audience_id: &metadata.audience_id,
                 scope: seed.scope,
-                grant_jwt: &grant_jwt,
-                session_id: seed.session_id,
-                issuance_nonce: issuance_nonce.as_str(),
-                issuance_preimage: &issuance_preimage,
-                issuance_digest,
-                signing_key_id: TEST_SESSION_GRANT_SIGNING_KEY_ID,
-                session_public_key: preimage.session_public_key.as_str(),
+                session_grant: &secret,
+                metadata: &metadata,
+                session_id: &metadata.session_id,
+                session_public_key: metadata.session_public_key.as_str(),
                 credential_class: "standard",
                 not_before,
                 expires_at,
@@ -228,10 +190,392 @@ where
         )
         .await
         .unwrap();
+    let committed = match committed {
+        coauth_data::SessionGrantCommitOutcome::Committed(g) => g,
+        other => panic!("first commit expected: {other:?}"),
+    };
+    let mut wrong_bytes: [u8; 32] = arkret_canonical::base64url_decode(secret.as_str())
+        .unwrap()
+        .try_into()
+        .unwrap();
+    wrong_bytes[0] ^= 1;
+    let wrong_secret = arkret_identifiers::SessionGrantSecret::from_bytes(wrong_bytes);
+    assert!(
+        repo.oauth_session_grant()
+            .lookup_by_secret(&issuer, &wrong_secret)
+            .await
+            .unwrap()
+            .is_none(),
+        "metadata or a grant ID cannot substitute for the exact opaque bytes"
+    );
+    assert_eq!(committed.session_grant, secret);
+    assert_eq!(committed.metadata, metadata);
+    let wrong_issuer = DidCoreId::new("ak:did_core:web:other-issuer.example").unwrap();
+    assert!(
+        repo.oauth_session_grant()
+            .lookup_by_grant_id(&wrong_issuer, &id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        repo.oauth_session_grant()
+            .lookup_by_secret(&wrong_issuer, &secret)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        repo.oauth_session_grant()
+            .lookup_by_secret(&issuer, &secret)
+            .await
+            .unwrap()
+            .unwrap()
+            .grant_id,
+        id
+    );
+    committed
+}
 
-    match committed {
-        coauth_data::SessionGrantCommitOutcome::Committed(grant) => grant,
-        other => panic!("expected a first commit, got {other:?}"),
+fn exact_scope_record<'a>(
+    metadata: &'a SessionGrantMetadata,
+    secret: &'a arkret_identifiers::SessionGrantSecret,
+    local: &'a LocalAccountId,
+) -> NewSessionGrant<'a> {
+    NewSessionGrant {
+        grant_id: metadata.id.clone(),
+        browser_session_id: None,
+        issuer_id: &metadata.issuer_id,
+        subject_id: &metadata.account_id.principal_id,
+        local_account_id: local,
+        device_id: metadata.device_id.as_ref().map(DeviceId::as_str),
+        audience_id: &metadata.audience_id,
+        scope: metadata
+            .scopes
+            .iter()
+            .map(|scope| scope.parse().unwrap())
+            .collect(),
+        session_grant: secret,
+        metadata,
+        session_id: &metadata.session_id,
+        session_public_key: metadata.session_public_key.as_str(),
+        credential_class: "standard",
+        not_before: metadata.not_before,
+        expires_at: metadata.expires_at,
+    }
+}
+
+async fn exact_scope_ledger_snapshot(pool: &crate::test_utils::TestDatabase) -> serde_json::Value {
+    use horme::RunQueryDsl as _;
+    #[derive(diesel::QueryableByName)]
+    struct Snapshot {
+        #[diesel(sql_type = diesel::sql_types::Jsonb)]
+        value: serde_json::Value,
+    }
+    let mut connection = crate::pool::queries(pool);
+    diesel::sql_query("SELECT jsonb_build_object(
+        'grants', COALESCE((SELECT jsonb_agg(to_jsonb(g) ORDER BY g.id) FROM oauth_session_grants g), '[]'::jsonb),
+        'operations', COALESCE((SELECT jsonb_agg(to_jsonb(o) ORDER BY o.id) FROM oauth_session_grant_operations o), '[]'::jsonb)
+    ) AS value")
+        .get_result::<Snapshot>(&mut connection).await.unwrap().value
+}
+
+#[tokio::test]
+async fn opaque_refresh_rejects_every_changed_ceiling_with_zero_post_reservation_writes() {
+    use arkret_identifiers::{RealmId, SessionGrantId, StrandId};
+    use arkret_models_identity::{
+        AgentParticipationView, ParticipationBits, ParticipationNextReplaceInput,
+        ParticipationScope, SessionGrantScope, SessionGrantScopeConstraints,
+        SessionGrantScopeResources,
+    };
+    use coauth_data::{
+        NewSessionGrantOperation, SessionGrantCommitOutcome, SessionGrantExactOutcome,
+        SessionGrantOperationDescriptor, SessionGrantProofAuthorization, SessionGrantRefreshCommit,
+        SessionGrantRefreshOutcome, SessionGrantReserveOutcome,
+    };
+    let Some(pool) = crate::test_utils::setup_test_pool().await else {
+        return;
+    };
+    let factory = PgRepositoryFactory::new(pool.clone());
+    let mut rng = ChaChaRng::seed_from_u64(93);
+    let clock = MockClock::default();
+    let event = |byte| EventId::from_digest(arkret_canonical::DigestSuite::Sha256, [byte; 32]);
+    let realms = vec![
+        RealmId::from_event_id(&event(1)),
+        RealmId::from_event_id(&event(2)),
+    ];
+    let strands = vec![
+        StrandId::from_event_id(&event(3)),
+        StrandId::from_event_id(&event(4)),
+    ];
+    let holder = test_session_public_key(7);
+    let account = arkret_wire::AccountId::new(
+        DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
+        DidCoreId::new(TEST_SESSION_GRANT_AUDIENCE).unwrap(),
+    );
+    let local = LocalAccountId::new("exact-scope-test-account").unwrap();
+    let mut metadata = SessionGrantMetadata {
+        id: SessionGrantId::new_v7_at(clock.now().timestamp_millis().try_into().unwrap()),
+        issuer_id: DidCoreId::new(TEST_SESSION_GRANT_ISSUER).unwrap(),
+        account_id: account.clone(),
+        device_id: None,
+        audience_id: account.station_id.clone(),
+        scopes: vec!["ak.message.create".into(), "ak.message.read".into()],
+        not_before: clock.now(),
+        expires_at: clock.now() + Duration::hours(1),
+        session_id: "exact-refresh-ceiling-chain".into(),
+        cnf_jkt: holder.thumbprint_sha256().unwrap(),
+        session_public_key: holder,
+        credential_class: SessionGrantCredentialClass::Standard,
+        holder_binding: SessionGrantHolderBinding::AgentRuntime {
+            agent_id: account.principal_id.clone(),
+            agent_key_authorization_ref: event(5),
+            verification_method: arkret_wire::DidUrl::new("did:web:agent.example#runtime").unwrap(),
+        },
+        device_binding: None,
+        proof_kind: Some(SessionGrantProofKind::AgentKeyProof),
+        scope_details: Some(SessionGrantScope {
+            controller_principal_id: TEST_SESSION_GRANT_SUBJECT.parse().unwrap(),
+            agent_key_authorization_ref: event(5),
+            realm_ids: realms.clone(),
+            strand_ids: strands.clone(),
+            resources: SessionGrantScopeResources {
+                realm_ids: realms.clone(),
+                strand_ids: strands.clone(),
+            },
+            constraints: SessionGrantScopeConstraints {
+                allowed_tracks: vec!["chat".into(), "files".into()],
+                allowed_data_labels: vec!["internal".into(), "private".into()],
+                allowed_endpoints: vec!["https://one.example".into(), "https://two.example".into()],
+                allowed_strand_ids: Some(strands),
+            },
+            capability_grant_refs: vec![
+                arkret_identifiers::GrantId::from_event_id(&event(6)).to_string(),
+                arkret_identifiers::GrantId::from_event_id(&event(7)).to_string(),
+            ],
+            policy_refs: vec![event(8).to_string(), event(9).to_string()],
+            participations: None,
+        }),
+    };
+    metadata.validate().unwrap();
+    let intent = arkret_canonical::canonical_json_bytes(&metadata).unwrap();
+    let mut repo = factory.create().await.unwrap();
+    let initial = repo
+        .oauth_session_grant()
+        .reserve_operation(
+            &mut rng,
+            &clock,
+            NewSessionGrantOperation {
+                issuer_id: metadata.issuer_id.clone(),
+                operation: SessionGrantOperationDescriptor::Issue,
+                proof_kind: metadata.proof_kind,
+                request_identity: "exact-scope-initial",
+                canonical_intent_digest: arkret_canonical::sha256_bytes(&intent),
+                canonical_intent: &intent,
+                target_session_grant_id: None,
+                grant_not_before: Some(metadata.not_before),
+                grant_expires_at: Some(metadata.expires_at),
+                retained_until: clock.now() + Duration::days(7),
+            },
+        )
+        .await
+        .unwrap();
+    let SessionGrantReserveOutcome::Reserved(initial) = initial else {
+        panic!("initial reservation required");
+    };
+    metadata.id = initial.reserved_grant_id.clone().unwrap();
+    metadata.session_id = initial.session_id.clone().unwrap();
+    metadata.not_before = initial.grant_not_before.unwrap();
+    metadata.expires_at = initial.grant_expires_at.unwrap();
+    let old_secret = initial.reserved_session_grant.clone().unwrap();
+    let intent = arkret_canonical::canonical_json_bytes(&metadata).unwrap();
+    let checkpoint = serde_json::json!({"kind":"verified_storage_issue"});
+    let committed = repo
+        .oauth_session_grant()
+        .commit_issuance(
+            &mut rng,
+            &clock,
+            initial.id,
+            SessionGrantProofAuthorization {
+                authorization_ref: "exact-scope-initial-proof",
+                checkpoint: &checkpoint,
+                proof_expires_at: metadata.expires_at,
+            },
+            SessionGrantExactOutcome {
+                canonical_response: &intent,
+                response_digest: arkret_canonical::sha256_bytes(&intent),
+            },
+            exact_scope_record(&metadata, &old_secret, &local),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(committed, SessionGrantCommitOutcome::Committed(_)));
+    repo.save().await.unwrap();
+
+    for case in 0..13 {
+        let identity = format!("exact-refresh-ceiling-{case}");
+        let intent =
+            arkret_canonical::canonical_json_bytes(&serde_json::json!({"case":case})).unwrap();
+        let mut repo = factory.create().await.unwrap();
+        let reserved = repo
+            .oauth_session_grant()
+            .reserve_operation(
+                &mut rng,
+                &clock,
+                NewSessionGrantOperation {
+                    issuer_id: metadata.issuer_id.clone(),
+                    operation: SessionGrantOperationDescriptor::Refresh {
+                        predecessor_grant_id: metadata.id.clone(),
+                    },
+                    proof_kind: None,
+                    request_identity: &identity,
+                    canonical_intent_digest: arkret_canonical::sha256_bytes(&intent),
+                    canonical_intent: &intent,
+                    target_session_grant_id: Some(&metadata.id),
+                    grant_not_before: Some(clock.now()),
+                    grant_expires_at: Some(clock.now() + Duration::hours(1)),
+                    retained_until: clock.now() + Duration::days(7),
+                },
+            )
+            .await
+            .unwrap();
+        let SessionGrantReserveOutcome::Reserved(operation) = reserved else {
+            panic!("fresh refresh reservation required");
+        };
+        repo.save().await.unwrap();
+        let before = exact_scope_ledger_snapshot(&pool).await;
+        let secret = operation.reserved_session_grant.as_ref().unwrap();
+        let mut next = metadata.clone();
+        next.id = operation.reserved_grant_id.clone().unwrap();
+        next.not_before = operation.grant_not_before.unwrap();
+        next.expires_at = operation.grant_expires_at.unwrap();
+        let scope = next.scope_details.as_mut().unwrap();
+        match case {
+            0 => {
+                next.scopes.pop();
+            }
+            1 => {
+                next.scopes.push("ak.message.write".into());
+            }
+            2 => {
+                scope.realm_ids.pop();
+                scope.resources.realm_ids = scope.realm_ids.clone();
+            }
+            3 => {
+                scope.strand_ids.pop();
+                scope.resources.strand_ids = scope.strand_ids.clone();
+                scope.constraints.allowed_strand_ids = Some(scope.strand_ids.clone());
+            }
+            4 => {
+                scope.constraints.allowed_tracks.pop();
+            }
+            5 => {
+                scope.constraints.allowed_tracks.clear();
+            }
+            6 => {
+                scope.constraints.allowed_data_labels.clear();
+            }
+            7 => {
+                scope.constraints.allowed_endpoints.clear();
+            }
+            8 => {
+                scope.constraints.allowed_strand_ids = None;
+            }
+            9 => {
+                scope.realm_ids.push(RealmId::from_event_id(&event(10)));
+                scope.resources.realm_ids = scope.realm_ids.clone();
+            }
+            10 => {
+                scope.capability_grant_refs.pop();
+            }
+            11 => {
+                scope.policy_refs.pop();
+            }
+            _ => {
+                scope.participations = Some(vec![AgentParticipationView {
+                    target_scope: ParticipationScope::Realm {
+                        realm_id: realms[0].clone(),
+                    },
+                    selection: ParticipationBits::NONE,
+                    version: 1,
+                    next_replace_input: Some(ParticipationNextReplaceInput {
+                        expected_version: 1,
+                    }),
+                }]);
+            }
+        }
+        next.validate().unwrap();
+        let outcome = arkret_models_identity::SessionGrantResponseBody {
+            account_id: next.account_id.clone(),
+            issuer_id: next.issuer_id.clone(),
+            device_id: None,
+            session_grant: secret.clone(),
+            expires_at: next.expires_at,
+            session_grant_id: next.id.clone(),
+            session_public_key: next.session_public_key.clone(),
+            audience_id: next.audience_id.clone(),
+            granted_scope: next.scopes.clone(),
+            previous_session_grant_id: Some(metadata.id.clone()),
+        };
+        let bytes = arkret_canonical::canonical_json_bytes(&outcome).unwrap();
+        let mut repo = factory.create().await.unwrap();
+        let result = repo
+            .oauth_session_grant()
+            .commit_refresh(
+                &mut rng,
+                &clock,
+                SessionGrantRefreshCommit {
+                    operation_id: operation.id,
+                    authorization: SessionGrantProofAuthorization {
+                        authorization_ref: &identity,
+                        checkpoint: &checkpoint,
+                        proof_expires_at: metadata.expires_at,
+                    },
+                    outcome: SessionGrantExactOutcome {
+                        canonical_response: &bytes,
+                        response_digest: arkret_canonical::sha256_bytes(&bytes),
+                    },
+                    predecessor_grant_id: &metadata.id,
+                    successor: exact_scope_record(&next, secret, &local),
+                },
+            )
+            .await;
+        if case < 12 {
+            assert!(
+                result.is_err(),
+                "changed refresh ceiling was accepted: case {case}"
+            );
+            repo.save().await.unwrap();
+            assert!(
+                before == exact_scope_ledger_snapshot(&pool).await,
+                "refused refresh changed predecessor, successor, proof/checkpoint or operation: case {case}"
+            );
+        } else {
+            assert!(
+                matches!(result, Ok(SessionGrantRefreshOutcome::Committed { .. })),
+                "current participation observation must not rewrite the frozen ceiling"
+            );
+            repo.save().await.unwrap();
+            let mut repo = factory.read().await.unwrap();
+            let predecessor = repo
+                .oauth_session_grant()
+                .lookup_by_grant_id(&metadata.issuer_id, &metadata.id)
+                .await
+                .unwrap()
+                .unwrap();
+            let successor = repo
+                .oauth_session_grant()
+                .lookup_by_secret(&metadata.issuer_id, secret)
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                predecessor.lifecycle_state,
+                coauth_data::SessionGrantLifecycleState::Superseded
+            );
+            assert_eq!(successor.metadata, next);
+            repo.cancel().await.unwrap();
+        }
     }
 }
 
@@ -631,8 +975,7 @@ async fn refresh_token_chain_root_and_bulk_revoke() {
             request_identity: "refresh-chain-issue",
             browser_session_id: Some(user_session.id),
             device_id: "ak:device:019a0000-0000-7000-8000-000000000001",
-            session_id: "session-chain-1",
-            issuance_nonce: [0x11; 32],
+            holder_seed: 0x11,
             scope: scope.clone(),
         },
     )
@@ -817,8 +1160,7 @@ async fn revoke_if_active_consumes_a_grant_exactly_once() {
             request_identity: "revoke-if-active-issue",
             browser_session_id: Some(browser_session.id),
             device_id: "ak:device:019a0000-0000-7000-8000-00000000ca50",
-            session_id: "session-chain-cas",
-            issuance_nonce: [0x22; 32],
+            holder_seed: 0x22,
             scope,
         },
     )

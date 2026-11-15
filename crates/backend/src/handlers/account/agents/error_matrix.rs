@@ -27,12 +27,9 @@ use crate::AppError;
 // branch, then relies on coland projection state for pairing lifetime, agent
 // lifecycle, accepted runtime keys, and accountability-grant coverage.
 //
-// Session revocation strategy: agent runtime grants are stateless, short-lived
-// signed JWTs rather than durable browser-session rows. coauth caps the grant
-// TTL to 15 minutes; coland rechecks lifecycle/revocation state at the resource
-// edge during the freshness window, and normal projection gates reject after
-// convergence. Do not introduce a second coauth-local revocation table without
-// changing this strategy explicitly.
+// Agent sessions use the same durable issuer-local opaque ledger as human
+// sessions. Current runtime-key, controller and resource qualification remain
+// mandatory; the grant's immutable scope is only a ceiling, never live authority.
 // ─────────────────────────────────────────────────────────────────────────
 
 /// Wire-level rejection reasons for the `ak.gate.account.command.pair_agent_key.v1`

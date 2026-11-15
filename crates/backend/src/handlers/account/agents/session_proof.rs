@@ -30,14 +30,14 @@ const AGENT_REFRESH_PROOF_MAX_WINDOW: chrono::Duration = chrono::Duration::minut
 /// DID URL where a `did_core_id` belongs is a compile error rather than a
 /// runtime `ProofInvalid`.
 fn agent_session_refresh_request_digest(
-    prior_grant_jwt: &str,
+    prior_session_grant: &arkret_identifiers::SessionGrantSecret,
     principal_id: &DidCoreId,
     authorization_ref: &arkret_identifiers::EventId,
     audience: &DidCoreId,
     verification_method: &arkret_wire::DidUrl,
 ) -> Result<arkret_identifiers::Hash, AgentAuthRejection> {
     arkret_models_collaboration::session_grant_bodies::agent_session_refresh_request_digest(
-        prior_grant_jwt,
+        prior_session_grant,
         principal_id,
         authorization_ref,
         audience,
@@ -121,9 +121,9 @@ pub struct AgentSessionAuthorization {
     /// authorized key scope and policy/resource constraints; content capability
     /// tokens are additionally intersected with active capability grants.
     pub granted_scope: Vec<String>,
-    /// Materialized `scope_details` overlay baked into the session-grant JWT
+    /// Materialized `scope_details` overlay retained in the immutable issuer metadata
     /// payload (canonical resource constraints + optional participation
-    /// entries). This is the JWT-internal shape coland enforces against; it is
+    /// entries). This is the issuer-record metadata shape coland enforces against; it is
     /// not an unsigned field in the `SessionGrantResponseBody` wire DTO.
     pub scope_details: serde_json::Map<String, serde_json::Value>,
     /// Capped agent session TTL (≤ 15 min).
@@ -141,8 +141,8 @@ pub async fn validate_agent_session_refresh_proof<R>(
     authoritative_agent: &arkret_models_collaboration::agent_operations::AgentView,
     encrypter: &coauth_keyring::Encrypter,
     arkret_config: &ArkretConfig,
-    prior_claims: &arkret_models_identity::SignedSessionGrantClaims,
-    prior_grant_jwt: &str,
+    prior_claims: &arkret_models_identity::SessionGrantMetadata,
+    prior_session_grant: &arkret_identifiers::SessionGrantSecret,
     request: &arkret_models_collaboration::session_grant_bodies::AgentSessionGrantRefreshRequestBody,
     proof: &arkret_models_collaboration::session_grant_bodies::AgentSessionRefreshProof,
 ) -> Result<coauth_data::agent_key::AgentKeyAuthorization, AgentSessionProofError>
@@ -189,8 +189,7 @@ where
     let authorization_ref = prior_claims
         .scope_details
         .as_ref()
-        .and_then(|details| details.get("agent_key_authorization_ref"))
-        .and_then(Value::as_str)
+        .map(|details| details.agent_key_authorization_ref.as_str())
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .ok_or(AgentAuthRejection::ProofInvalid)?;
@@ -223,7 +222,7 @@ where
     )?;
 
     let expected_digest = agent_session_refresh_request_digest(
-        prior_grant_jwt,
+        prior_session_grant,
         &request.principal_id,
         &request.agent_key_authorization_ref,
         proof_audience,
@@ -2117,15 +2116,17 @@ mod tests {
         )
         .unwrap();
         let grant = serde_json::json!({
-            "id": "ak:session_grant:Af0GheZX08ev4L1fQoFdngIpe5c_9Lk7SQqfN4jztzDW",
+            "id": "ak:session_grant:0190c6aa-1234-7000-8000-000000000001",
             "issuer_id": "ak:did_core:web:account-authority.example",
             "account_id": {"principal_id":"ak:did_core:web:agent.example", "station_id":"ak:did_core:web:service.example"},
             "audience_id":"ak:did_core:web:service.example",
             "scopes":scope.granted_scope,
+            "not_before":"2026-10-12T12:00:00.000Z",
             "expires_at":"2026-10-12T12:04:00.000Z",
+            "session_id":"native-agent-scope-test",
             "revocation_ref":"org.arkret.coauth.session_grant:1",
             "session_public_key":r#"{"crv":"Ed25519","kty":"OKP","x":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
-            "cnf_jkt":"holder-thumbprint",
+            "cnf_jkt":arkret_models_identity::CanonicalSessionPublicJwk::new(r#"{"crv":"Ed25519","kty":"OKP","x":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#).unwrap().thumbprint_sha256().unwrap(),
             "credential_class":"standard",
             "holder_binding":{"kind":"agent_runtime","agent_id":"ak:did_core:web:agent.example", "agent_key_authorization_ref":authorization_ref,"verification_method":"did:web:agent.example#runtime"},
             "scope_details":details,
@@ -3144,14 +3145,14 @@ mod tests {
     #[test]
     fn agent_refresh_digest_binds_prior_grant_authorization_audience_and_runtime_key() {
         fn digest(
-            prior_grant_jwt: &str,
+            prior_session_grant: &arkret_identifiers::SessionGrantSecret,
             principal_id: &str,
             authorization_byte: u8,
             audience: &str,
             verification_method: &str,
         ) -> arkret_identifiers::Hash {
             agent_session_refresh_request_digest(
-                prior_grant_jwt,
+                prior_session_grant,
                 &DidCoreId::new(principal_id.to_owned()).unwrap(),
                 &arkret_identifiers::EventId::from_digest(
                     arkret_canonical::DigestSuite::Sha256,
@@ -3164,7 +3165,7 @@ mod tests {
         }
 
         let base = digest(
-            "grant.jwt.one",
+            &arkret_identifiers::SessionGrantSecret::from_bytes([11; 32]),
             "ak:did_core:web:agent.example",
             1,
             "ak:did_core:web:service.example",
@@ -3174,35 +3175,35 @@ mod tests {
 
         for changed in [
             digest(
-                "grant.jwt.two",
+                &arkret_identifiers::SessionGrantSecret::from_bytes([12; 32]),
                 "ak:did_core:web:agent.example",
                 1,
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
-                "grant.jwt.one",
+                &arkret_identifiers::SessionGrantSecret::from_bytes([11; 32]),
                 "ak:did_core:web:other-agent.example",
                 1,
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
-                "grant.jwt.one",
+                &arkret_identifiers::SessionGrantSecret::from_bytes([11; 32]),
                 "ak:did_core:web:agent.example",
                 2,
                 "ak:did_core:web:service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
-                "grant.jwt.one",
+                &arkret_identifiers::SessionGrantSecret::from_bytes([11; 32]),
                 "ak:did_core:web:agent.example",
                 1,
                 "ak:did_core:web:other-service.example",
                 "did:web:agent.example#runtime-key-1",
             ),
             digest(
-                "grant.jwt.one",
+                &arkret_identifiers::SessionGrantSecret::from_bytes([11; 32]),
                 "ak:did_core:web:agent.example",
                 1,
                 "ak:did_core:web:service.example",

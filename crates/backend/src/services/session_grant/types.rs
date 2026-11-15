@@ -1,6 +1,6 @@
-use arkret_identifiers::{DeviceId, DidCoreId, EventId, SessionGrantId};
+use arkret_identifiers::{DeviceId, DidCoreId, EventId, SessionGrantId, SessionGrantSecret};
 use arkret_models_identity::{
-    SessionGrantDeviceBinding, SessionGrantIssuanceNonce, SessionGrantProofKind,
+    SessionGrantDeviceBinding, SessionGrantMetadata, SessionGrantProofKind,
 };
 use arkret_wire::DidUrl;
 use chrono::{DateTime, Utc};
@@ -8,10 +8,12 @@ use coauth_data::{BrowserSession, LocalAccountId};
 use coauth_jose::jwk::PublicJsonWebKey;
 use serde::{Deserialize, Serialize};
 
+/// Issuer material. Query projections are checked against the sole metadata record at commit.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionGrantMaterial {
     pub grant_id: SessionGrantId,
-    pub grant_jwt: String,
+    pub session_grant: SessionGrantSecret,
+    pub metadata: SessionGrantMetadata,
     pub session_public_key: String,
     pub credential_class: String,
     pub expires_at: String,
@@ -24,102 +26,88 @@ pub struct SessionGrantMaterial {
     pub device_id: Option<String>,
     pub audience_id: DidCoreId,
     pub scopes: Vec<String>,
-    /// RFC 7638 JWK SHA-256 thumbprint (base64url) of the DPoP proof the
-    /// grant is bound to, when issuance happened on a request that
-    /// carried a `DPoP` header. `None` for unbound minting paths such as
-    /// internal admin minting or debug seeds without a `dpop_jwk`.
     pub dpop_jkt: Option<String>,
-    /// Stable refresh-chain id. It is allocated independently from `grant_id`.
     pub session_id: String,
-    /// Canonical issuer_id nonce committed by the signed issuance preimage.
-    pub issuance_nonce: String,
-    /// Exact RFC 8785/JCS bytes from which `grant_id` was derived.
-    pub issuance_preimage: Vec<u8>,
-    /// SHA-256 of `issuance_preimage`.
-    pub issuance_digest: [u8; 32],
-    /// Issuer key id used to sign the durable JWT outcome.
-    pub signing_key_id: String,
 }
 
-/// Issuer-generated values durably fixed by the operation reservation.
-///
-/// A retry MUST reconstruct this value from the reserved operation instead of
-/// drawing new randomness, otherwise the same request identity could produce a
-/// different preimage, grant id and JWT after an authorization checkpoint.
+/// Random values and the immutable window are allocated once in the existing reservation.
+/// A pending reservation does not authorize the secret; only the atomic grant commit does.
 #[derive(Debug, Clone)]
 pub(crate) struct SessionGrantIssuanceSeed {
-    pub issuance_nonce: SessionGrantIssuanceNonce,
+    pub grant_id: SessionGrantId,
+    pub session_grant: SessionGrantSecret,
     pub session_id: String,
     pub not_before: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
-    pub signing_key_id: String,
 }
 
 impl SessionGrantIssuanceSeed {
-    pub(crate) fn new(
-        issuance_nonce: impl Into<String>,
+    #[cfg(test)]
+    pub(crate) fn allocate(
+        rng: &mut (dyn rand_core::RngCore + Send),
         session_id: impl Into<String>,
         not_before: DateTime<Utc>,
         expires_at: DateTime<Utc>,
-        signing_key_id: impl Into<String>,
+    ) -> Result<Self, arkret_wire::WireError> {
+        let unix_ms = u64::try_from(not_before.timestamp_millis()).map_err(|_| {
+            arkret_wire::WireError::Protocol("issuer clock is outside UUIDv7 range".into())
+        })?;
+        let mut secret = [0_u8; 32];
+        rng.fill_bytes(&mut secret);
+        Self::new(
+            SessionGrantId::new_v7_at(unix_ms),
+            SessionGrantSecret::from_bytes(secret),
+            session_id,
+            not_before,
+            expires_at,
+        )
+    }
+
+    pub(crate) fn new(
+        grant_id: SessionGrantId,
+        session_grant: SessionGrantSecret,
+        session_id: impl Into<String>,
+        not_before: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
     ) -> Result<Self, arkret_wire::WireError> {
         let not_before = arkret_canonical::normalize_timestamp_canonical(not_before);
         let expires_at = arkret_canonical::normalize_timestamp_canonical(expires_at);
         let session_id = session_id.into();
-        if session_id.trim().is_empty() {
+        if session_id.trim().is_empty()
+            || session_id.starts_with("ak:")
+            || session_id.len() > 255
+            || expires_at <= not_before
+        {
             return Err(arkret_wire::WireError::Protocol(
-                "reserved session_id must not be empty".to_owned(),
-            ));
-        }
-        let signing_key_id = signing_key_id.into();
-        if expires_at <= not_before || signing_key_id.trim().is_empty() {
-            return Err(arkret_wire::WireError::Protocol(
-                "reserved issuance window and signing key id are invalid".to_owned(),
+                "invalid reserved session chain or issuance window".to_owned(),
             ));
         }
         Ok(Self {
-            issuance_nonce: SessionGrantIssuanceNonce::new(issuance_nonce)?,
+            grant_id,
+            session_grant,
             session_id,
             not_before,
             expires_at,
-            signing_key_id,
         })
     }
 
     pub(crate) fn from_operation(
         operation: &coauth_data::SessionGrantOperation,
     ) -> Result<Self, arkret_wire::WireError> {
-        let issuance_nonce = operation.issuance_nonce.clone().ok_or_else(|| {
+        let missing = || {
             arkret_wire::WireError::Protocol(
-                "reserved issue/refresh operation is missing issuance_nonce".to_owned(),
+                "reserved grant-producing operation has incomplete issuer material".to_owned(),
             )
-        })?;
-        let session_id = operation.session_id.clone().ok_or_else(|| {
-            arkret_wire::WireError::Protocol(
-                "reserved issue/refresh operation is missing session_id".to_owned(),
-            )
-        })?;
-        let not_before = operation.grant_not_before.ok_or_else(|| {
-            arkret_wire::WireError::Protocol(
-                "reserved issue/refresh operation is missing grant_not_before".to_owned(),
-            )
-        })?;
-        let expires_at = operation.grant_expires_at.ok_or_else(|| {
-            arkret_wire::WireError::Protocol(
-                "reserved issue/refresh operation is missing grant_expires_at".to_owned(),
-            )
-        })?;
-        let signing_key_id = operation.signing_key_id.clone().ok_or_else(|| {
-            arkret_wire::WireError::Protocol(
-                "reserved issue/refresh operation is missing signing_key_id".to_owned(),
-            )
-        })?;
+        };
         Self::new(
-            issuance_nonce,
-            session_id,
-            not_before,
-            expires_at,
-            signing_key_id,
+            operation.reserved_grant_id.clone().ok_or_else(missing)?,
+            operation
+                .reserved_session_grant
+                .clone()
+                .ok_or_else(missing)?,
+            operation.session_id.clone().ok_or_else(missing)?,
+            operation.grant_not_before.ok_or_else(missing)?,
+            operation.grant_expires_at.ok_or_else(missing)?,
         )
     }
 }

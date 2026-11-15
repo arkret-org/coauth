@@ -7,7 +7,6 @@ use coauth_data::{
     NewSessionGrantOperation, RepositoryAccess, SessionGrant, SessionGrantProofAuthorization,
     SessionGrantReserveOutcome, SessionGrantRevokeOutcome, SessionGrantRevokeSelector,
 };
-use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 use sha2::Digest as _;
 
@@ -190,10 +189,12 @@ fn verification_method_did(verification_method: &str) -> &str {
         .map_or(without_fragment, |(did, _)| did)
 }
 
-fn grant_payload(grant: &SessionGrant) -> Option<SignedSessionGrantClaims> {
-    Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str())
+fn grant_payload(grant: &SessionGrant) -> Option<SessionGrantMetadata> {
+    grant
+        .metadata
+        .validate()
         .ok()
-        .map(|jwt| jwt.payload().clone())
+        .map(|()| grant.metadata.clone())
 }
 
 fn grant_is_agent_delegated_to_controller(
@@ -209,8 +210,7 @@ fn grant_is_agent_delegated_to_controller(
     payload
         .scope_details
         .as_ref()
-        .and_then(|details| details.get("controller_principal_id"))
-        .and_then(serde_json::Value::as_str)
+        .map(|details| details.controller_principal_id.as_str())
         .is_some_and(|value| value == controller_principal_id)
 }
 
@@ -395,22 +395,18 @@ pub async fn revoke_session_grant_endpoint(
     let service_id = owning_station_id_for(&arkret_config);
     let now = clock.now();
     let mut repo = depot.repo().await?;
-    let presented_grant_jwt = dpop_session_grant(req)?.to_owned();
+    let presented_session_grant =
+        arkret_identifiers::SessionGrantSecret::new(dpop_session_grant(req)?)
+            .map_err(|_| lifecycle_proof_invalid("invalid opaque session credential"))?;
     let dpop_header = dpop_header_from_request(req)
         .ok_or_else(|| lifecycle_proof_required("session revoke requires holder DPoP proof"))?;
-    let presented_claims = Jwt::<SignedSessionGrantClaims>::try_from(presented_grant_jwt.as_str())
-        .map_err(|_| ArkretRouteError::Unauthorized("session grant is not parseable".to_owned()))?
-        .payload()
-        .clone();
-    presented_claims.validate().map_err(|error| {
-        ArkretRouteError::Unauthorized(format!("invalid session grant: {error}"))
-    })?;
     let current_grant = repo
         .oauth_session_grant()
-        .lookup_by_grant_jwt(&presented_grant_jwt)
+        .lookup_by_secret(&service_id, &presented_session_grant)
         .await?
         .ok_or_else(session_grant_not_found)?;
-    if presented_claims.grant_id != current_grant.grant_id
+    let presented_claims = current_grant.metadata.clone();
+    if presented_claims.id != current_grant.grant_id
         || presented_claims.issuer_id != current_grant.issuer_id
         || presented_claims.account_id.principal_id != current_grant.subject_id
     {
@@ -425,7 +421,7 @@ pub async fn revoke_session_grant_endpoint(
         &htm,
         &htu,
         now,
-        Some(&presented_grant_jwt),
+        Some(presented_session_grant.as_str()),
     )
     .map_err(|error| lifecycle_proof_invalid(error.to_string()))?;
     let expected_jkt = presented_claims
@@ -439,7 +435,7 @@ pub async fn revoke_session_grant_endpoint(
     if current_grant.issuer_id != service_id
         || grant_payload(&current_grant).is_none_or(|claims| {
             claims.validate().is_err()
-                || claims.grant_id != current_grant.grant_id
+                || claims.id != current_grant.grant_id
                 || claims.issuer_id != current_grant.issuer_id
                 || claims.account_id.principal_id != current_grant.subject_id
         })
@@ -475,7 +471,7 @@ pub async fn revoke_session_grant_endpoint(
         RevokeSelector::Grant(target_session_grant_id) => {
             let target = repo
                 .oauth_session_grant()
-                .lookup_by_grant_id(target_session_grant_id)
+                .lookup_by_grant_id(&service_id, target_session_grant_id)
                 .await?
                 .filter(|grant| {
                     grant_is_owned_by_current_principal(grant, current_principal_id.as_str())
@@ -536,11 +532,8 @@ pub async fn revoke_session_grant_endpoint(
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
                 target_session_grant_id: target_session_grant_id.as_ref(),
-                issuance_nonce: None,
-                session_id: None,
                 grant_not_before: None,
                 grant_expires_at: None,
-                signing_key_id: None,
                 retained_until: proof_expires_at + Duration::days(7),
             },
         )
@@ -735,19 +728,12 @@ mod tests {
     use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig};
     use coauth_iana::jose::{JsonWebKeyOperation, JsonWebKeyUse};
     use coauth_jose::jwk::JsonWebKeyPublicParameters;
-    use coauth_keyring::{JsonWebKeySet, Keyring, PrivateKey};
+    use coauth_keyring::PrivateKey;
     use coauth_oauth_types::scope::Scope;
     use rand_chacha::ChaChaRng;
     use rand_core::SeedableRng;
 
     use super::*;
-
-    fn test_keyring() -> Keyring {
-        let mut rng = ChaChaRng::seed_from_u64(0x4e17);
-        let ed25519 = coauth_keyring::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-            .with_kid("test-ed25519");
-        Keyring::new(JsonWebKeySet::new(vec![ed25519]))
-    }
 
     fn personal_did_web_config() -> ArkretConfig {
         ArkretConfig {
@@ -772,36 +758,30 @@ mod tests {
         )
         .unwrap();
         let issuance_seed = SessionGrantIssuanceSeed::new(
-            arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x51; 32]).to_string(),
+            SessionGrantId::new_v7_at(1_794_657_600_000),
+            arkret_identifiers::SessionGrantSecret::from_bytes([0x51; 32]),
             "agent-revoke-test-session",
             now,
             now + Duration::minutes(15),
-            "test-ed25519",
         )
         .unwrap();
         let material = mint_agent_session_grant(
             &issuance_seed,
             &personal_did_web_config(),
-            &test_keyring(),
             AgentGrantIssuance {
                 agent_id: &DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
                 local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
                 audience_id: DidCoreId::new("ak:did_core:web:coland.example").unwrap(),
                 scopes: vec!["ak.self.committed_event.stream.subscribe.v1".to_owned()],
-                dpop_jkt: "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB".to_owned(),
+                dpop_jkt: arkret_models_identity::CanonicalSessionPublicJwk::new(session_public_key.clone()).unwrap().thumbprint_sha256().unwrap(),
                 session_public_key,
-                scope_details: serde_json::Map::from_iter([
-                    (
-                        "controller_principal_id".to_owned(),
-                        serde_json::json!(controller_principal_id),
-                    ),
-                    (
-                        "resources".to_owned(),
-                        serde_json::json!({
-                            "realm_refs": ["ak:realm:team"],
-                        }),
-                    ),
-                ]),
+                scope_details: serde_json::json!({
+                    "controller_principal_id": controller_principal_id,
+                    "agent_key_authorization_ref":"ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK",
+                    "realm_ids":[], "strand_ids":[], "resources":{"realm_ids":[],"strand_ids":[]},
+                    "constraints":{"allowed_tracks":[],"allowed_data_labels":[],"allowed_endpoints":[]},
+                    "capability_grant_refs":[],"policy_refs":[],
+                }).as_object().unwrap().clone(),
                 agent_key_authorization_ref: arkret_identifiers::EventId::new(
                     "ak:event:AQilOsNi6WF7kBMfOVLw4LjFp75pXSq5WJ0WMmJw3kgK",
                 )
@@ -824,12 +804,9 @@ mod tests {
             scope: Scope::from_iter(["ak.self.committed_event.stream.subscribe.v1"
                 .parse()
                 .unwrap()]),
-            grant_jwt: material.grant_jwt,
+            session_grant: material.session_grant,
             session_id: material.session_id,
-            issuance_nonce: material.issuance_nonce,
-            issuance_preimage: material.issuance_preimage,
-            issuance_digest: material.issuance_digest,
-            signing_key_id: material.signing_key_id,
+            metadata: material.metadata,
             session_public_key: material.session_public_key,
             credential_class: material.credential_class,
             created_at: now,
@@ -844,37 +821,37 @@ mod tests {
 
     #[test]
     fn agent_key_proof_grant_is_owned_by_accountable_controller_only() {
-        let grant = agent_session_grant("did:web:controller.example");
+        let grant = agent_session_grant("ak:did_core:web:controller.example");
 
         // Agent SessionGrants carry no device coordinate (decision 0088).
         assert_eq!(grant.device_id, None);
 
         assert!(grant_is_agent_delegated_to_controller(
             &grant,
-            "did:web:controller.example"
+            "ak:did_core:web:controller.example"
         ));
         assert!(grant_is_owned_by_current_principal(
             &grant,
-            "did:web:controller.example"
+            "ak:did_core:web:controller.example"
         ));
         assert!(!grant_is_agent_delegated_to_controller(
             &grant,
-            "did:web:other-controller.example"
+            "ak:did_core:web:other-controller.example"
         ));
         assert!(!grant_is_owned_by_current_principal(
             &grant,
-            "did:web:other-controller.example"
+            "ak:did_core:web:other-controller.example"
         ));
     }
 
     #[test]
     fn malformed_or_non_agent_grant_is_not_controller_delegated() {
-        let mut grant = agent_session_grant("did:web:controller.example");
-        grant.grant_jwt = "header.payload.signature".to_owned();
+        let mut grant = agent_session_grant("ak:did_core:web:controller.example");
+        grant.metadata.scope_details = None;
 
         assert!(!grant_is_agent_delegated_to_controller(
             &grant,
-            "did:web:controller.example"
+            "ak:did_core:web:controller.example"
         ));
     }
 }

@@ -1,5 +1,5 @@
-use arkret_identifiers::{DidCoreId, SessionGrantId};
-use arkret_models_identity::SessionGrantProofKind;
+use arkret_identifiers::{DidCoreId, SessionGrantId, SessionGrantSecret};
+use arkret_models_identity::{SessionGrantMetadata, SessionGrantProofKind};
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
 use rand_core::RngCore;
@@ -8,6 +8,7 @@ use ulid::Ulid;
 
 use crate::oauth::{
     LocalAccountId, SessionGrant, SessionGrantOperation, SessionGrantOperationDescriptor,
+    SessionGrantOperationKind,
 };
 use crate::pagination::Page;
 use crate::storage::Pagination;
@@ -123,15 +124,15 @@ impl<'a> SessionGrantFilter<'a> {
 #[derive(Debug)]
 /// Parameters for creating a persisted Arkret session grant.
 pub struct NewSessionGrant<'a> {
-    /// Protocol-visible session grant id (`ak:grant:<uuidv7>`).
+    /// Protocol-visible session grant id (`ak:session_grant:<uuidv7>`).
     pub grant_id: SessionGrantId,
     /// Browser session that the grant is bound to.
     pub browser_session_id: Option<Ulid>,
-    /// DID issuer_id of the signed grant.
+    /// DID issuer_id of the issuer record.
     pub issuer_id: &'a DidCoreId,
     /// DID subject_id authorized by the grant.
     pub subject_id: &'a DidCoreId,
-    /// Service-local account bound into the exact signed grant identity.
+    /// Service-local account bound into the exact issuer record identity.
     pub local_account_id: &'a LocalAccountId,
     /// Optional Arkret client device id.
     pub device_id: Option<&'a str>,
@@ -139,21 +140,15 @@ pub struct NewSessionGrant<'a> {
     pub audience_id: &'a DidCoreId,
     /// Granted OAuth scope set.
     pub scope: Scope,
-    /// Signed session grant JWT.
-    pub grant_jwt: &'a str,
+    /// Exact canonical opaque credential.
+    pub session_grant: &'a SessionGrantSecret,
+    /// Sole authorization metadata source, with checked query projections.
+    pub metadata: &'a SessionGrantMetadata,
     /// Stable, independently allocated refresh-chain identifier.
     pub session_id: &'a str,
-    /// Canonical Base64URL issuer_id nonce included in the signed claims.
-    pub issuance_nonce: &'a str,
-    /// Exact canonical JCS issuance preimage committed by the issuer_id.
-    pub issuance_preimage: &'a [u8],
-    /// SHA-256 digest of `issuance_preimage` and digest portion of `grant_id`.
-    pub issuance_digest: [u8; 32],
-    /// Issuer signing-key id used for the durable JWT outcome.
-    pub signing_key_id: &'a str,
     /// Public key generated for this session grant.
     pub session_public_key: &'a str,
-    /// Closed signed credential class (`standard`).
+    /// Closed credential class (`standard`).
     pub credential_class: &'a str,
     /// Grant expiration timestamp.
     pub not_before: DateTime<Utc>,
@@ -182,17 +177,10 @@ pub struct NewSessionGrantOperation<'a> {
     pub canonical_intent: &'a [u8],
     /// Locked predecessor for refresh; absent for issue and selector-based revoke.
     pub target_session_grant_id: Option<&'a SessionGrantId>,
-    /// Existing issuance nonce for an internally pre-minted initial grant.
-    /// External issue operations leave this absent so reservation allocates it.
-    pub issuance_nonce: Option<&'a str>,
-    /// Existing rotation-chain id for refresh; initial issuance allocates when absent.
-    pub session_id: Option<&'a str>,
     /// Immutable signing window for a grant-producing operation.
     pub grant_not_before: Option<DateTime<Utc>>,
     /// Immutable grant expiry selected at reservation time.
     pub grant_expires_at: Option<DateTime<Utc>>,
-    /// Signing key selected at reservation time; retries never switch keys.
-    pub signing_key_id: Option<&'a str>,
     /// Caller retention request; the repository applies its stronger policy floor.
     pub retained_until: DateTime<Utc>,
 }
@@ -273,6 +261,8 @@ pub enum SessionGrantCommitOutcome {
     Committed(SessionGrant),
     /// A prior commit won; return its byte-exact operation outcome.
     Replay(SessionGrantOperation),
+    /// No first outcome was written: authorization expired after the final locks.
+    AuthorizationExpired(SessionGrantOperation),
     /// The operation is an evicted tombstone.
     Indeterminate(SessionGrantOperation),
 }
@@ -289,6 +279,8 @@ pub enum SessionGrantRefreshOutcome {
     },
     /// A prior refresh committed the byte-exact outcome.
     Replay(SessionGrantOperation),
+    /// No successor was written: first authorization expired after final locks.
+    AuthorizationExpired(SessionGrantOperation),
     /// The predecessor was already revoked or superseded by another operation.
     PredecessorTerminal(Box<SessionGrant>),
     /// The operation is an evicted tombstone.
@@ -334,6 +326,15 @@ repository_impl! {
             operation: NewSessionGrantOperation<'_>,
         ) -> Result<SessionGrantReserveOutcome, Self::Error>;
 
+        /// Read the exact existing issuer namespace without creating a reservation.
+        async fn lookup_operation_by_identity(
+            &mut self,
+            issuer_id: &DidCoreId,
+            kind: SessionGrantOperationKind,
+            proof_kind: Option<SessionGrantProofKind>,
+            request_identity: &str,
+        ) -> Result<Option<SessionGrantOperation>, Self::Error>;
+
         /// Lock an issuance operation before consuming a local one-shot proof.
         async fn lock_operation(
             &mut self,
@@ -348,7 +349,7 @@ repository_impl! {
             authorization: SessionGrantProofAuthorization<'_>,
         ) -> Result<SessionGrantOperation, Self::Error>;
 
-        /// Atomically persist the exact JWT outcome and commit its operation.
+        /// Atomically persist the exact opaque outcome and commit its operation.
         async fn commit_issuance(
             &mut self,
             rng: &mut (dyn RngCore + Send),
@@ -382,13 +383,15 @@ repository_impl! {
         /// Look up a session grant by protocol-visible grant id.
         async fn lookup_by_grant_id(
             &mut self,
+            issuer_id: &DidCoreId,
             grant_id: &SessionGrantId,
         ) -> Result<Option<SessionGrant>, Self::Error>;
 
-        /// Look up a session grant by its signed JWT.
-        async fn lookup_by_grant_jwt(
+        /// Hash-indexed issuer-local lookup followed by exact opaque credential comparison.
+        async fn lookup_by_secret(
             &mut self,
-            grant_jwt: &str,
+            issuer_id: &DidCoreId,
+            session_grant: &SessionGrantSecret,
         ) -> Result<Option<SessionGrant>, Self::Error>;
 
         /// List session grants matching the supplied filter.

@@ -500,6 +500,36 @@ impl<'a> InternalAuthorityChannel<'a> {
         &self.destination_service_id
     }
 
+    /// Read only the immutable completed Recovery through the registered ordinary GET.
+    /// The caller still validates full Account, receipt digest and original C signature.
+    pub(crate) async fn get_recovery_completion(
+        &self,
+        transaction_id: &arkret_identifiers::TransactionId,
+    ) -> Result<arkret_models_crypto::SecurityTransaction, PeerProtocolClientError> {
+        let url = self
+            .base_url
+            .join(&format!(
+                "/_arkret/self/security-transactions/{transaction_id}"
+            ))
+            .map_err(|error| PeerProtocolClientError::InvalidUrl(error.to_string()))?;
+        let response = outbound_http::send_with_policy(
+            outbound_http::coland_policy("security_transaction_resource_get")
+                .with_timeout(Duration::from_secs(5)),
+            || {
+                self.http_client
+                    .get(url.clone())
+                    .bearer_auth(self.credential)
+                    .header(
+                        "Arkret-Operation",
+                        ServiceOperationId::SELF_SECURITY_TRANSACTION_RESOURCE_GET_V1,
+                    )
+            },
+        )
+        .await
+        .map_err(|error| PeerProtocolClientError::Http(error.to_string()))?;
+        parse_json_response(response).await
+    }
+
     /// POST one implementation-private Station-TCB intent. The configured
     /// origin and per-edge credential supply the boundary; no Arkret operation
     /// selector or service-signature scenario is involved.

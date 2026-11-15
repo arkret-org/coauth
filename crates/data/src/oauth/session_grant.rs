@@ -1,8 +1,8 @@
 use std::fmt;
 use std::str::FromStr;
 
-use arkret_identifiers::{DidCoreId, SessionGrantId};
-use arkret_models_identity::SessionGrantProofKind;
+use arkret_identifiers::{DidCoreId, SessionGrantId, SessionGrantSecret};
+use arkret_models_identity::{SessionGrantMetadata, SessionGrantProofKind};
 use chrono::{DateTime, Utc};
 use coauth_oauth_types::scope::Scope;
 use serde::{Deserialize, Serialize};
@@ -186,7 +186,7 @@ pub enum SessionGrantOperationState {
 }
 
 /// Durable request-identity record used for exact replay and conflict detection.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct SessionGrantOperation {
     pub id: Ulid,
     pub issuer_id: DidCoreId,
@@ -195,11 +195,13 @@ pub struct SessionGrantOperation {
     pub request_identity: String,
     pub canonical_intent_digest: [u8; 32],
     pub canonical_intent: Option<Vec<u8>>,
-    pub issuance_nonce: Option<String>,
+    pub reserved_grant_id: Option<SessionGrantId>,
+    /// Non-secret issuer allocation fence; retained after replay material eviction.
+    pub reserved_credential_digest: Option<[u8; 32]>,
+    pub reserved_session_grant: Option<SessionGrantSecret>,
     pub session_id: Option<String>,
     pub grant_not_before: Option<DateTime<Utc>>,
     pub grant_expires_at: Option<DateTime<Utc>>,
-    pub signing_key_id: Option<String>,
     pub proof_authorization_ref: Option<String>,
     pub proof_authorization_checkpoint: Option<Value>,
     pub proof_expires_at: Option<DateTime<Utc>>,
@@ -214,6 +216,18 @@ pub struct SessionGrantOperation {
     pub committed_at: Option<DateTime<Utc>>,
 }
 
+impl std::fmt::Debug for SessionGrantOperation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SessionGrantOperation")
+            .field("id", &self.id)
+            .field("issuer_id", &self.issuer_id)
+            .field("operation", &self.operation)
+            .field("state", &self.state)
+            .field("result_grant_id", &self.result_grant_id)
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SessionGrant {
     pub id: Ulid,
@@ -225,12 +239,9 @@ pub struct SessionGrant {
     pub device_id: Option<String>,
     pub audience_id: DidCoreId,
     pub scope: Scope,
-    pub grant_jwt: String,
+    pub session_grant: SessionGrantSecret,
+    pub metadata: SessionGrantMetadata,
     pub session_id: String,
-    pub issuance_nonce: String,
-    pub issuance_preimage: Vec<u8>,
-    pub issuance_digest: [u8; 32],
-    pub signing_key_id: String,
     pub session_public_key: String,
     pub credential_class: String,
     pub created_at: DateTime<Utc>,
@@ -248,6 +259,7 @@ impl SessionGrant {
         self.lifecycle_state == SessionGrantLifecycleState::Active
             && self.revoked_at.is_none()
             && self.superseded_at.is_none()
+            && self.metadata.not_before <= clock.now()
             && self.expires_at > clock.now()
     }
 

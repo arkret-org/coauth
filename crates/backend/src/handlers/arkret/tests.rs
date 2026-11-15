@@ -1,10 +1,9 @@
 use arkret_models_collaboration::session_grants::{
-    AuthenticationSessionTerminationResponseBody, SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND,
-    SessionGrantHolderProofClaims, SessionGrantValidationResponseBody,
+    AuthenticationSessionTerminationResponseBody, SessionGrantHolderProofClaims,
+    SessionGrantValidationResponseBody,
 };
 use arkret_models_identity::{
     SessionGrantAdminIntrospectionStatus, SessionGrantCredentialClass, SessionGrantHolderBinding,
-    SignedSessionGrantClaims,
 };
 use chrono::{Duration, Utc};
 use coauth_config::{ArkretConfig, DeploymentProfileConfig, PrincipalMethodConfig, StationConfig};
@@ -29,9 +28,8 @@ use crate::services::session_grant::issue_session_grant;
 #[cfg(test)]
 use crate::services::session_grant::persist_unbound_session_grant;
 use crate::services::session_grant::{
-    AgentGrantIssuance, HumanGrantIssuance, RecoveryGrantIssuance, SessionGrantIssuanceSeed,
-    SessionGrantMaterial, issue_recovery_session_grant_for_audience,
-    issue_session_grant_for_audience, mint_agent_session_grant, persist_session_grant,
+    AgentGrantIssuance, RecoveryGrantIssuance, SessionGrantIssuanceSeed, SessionGrantMaterial,
+    issue_recovery_session_grant_for_audience, mint_agent_session_grant, persist_session_grant,
 };
 use crate::services::station_trust::{owning_station_id_for, required_audience_for};
 
@@ -140,10 +138,7 @@ async fn human_approval_endpoint_renders_closed_claim_required_details() {
 }
 
 fn test_keyring() -> Keyring {
-    let mut rng = ChaChaRng::seed_from_u64(42);
-    let ed25519 = coauth_keyring::JsonWebKey::new(PrivateKey::generate_ed25519(&mut rng))
-        .with_kid(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID);
-    Keyring::new(JsonWebKeySet::new(vec![ed25519]))
+    Keyring::new(JsonWebKeySet::new(Vec::new()))
 }
 
 fn test_account_authority_keyring() -> Keyring {
@@ -180,31 +175,91 @@ fn test_session_public_jwk(session_key: &PrivateKey, kid: impl Into<String>) -> 
         .with_kid(kid)
 }
 
-fn jwt_payload_value(jwt: &str) -> serde_json::Value {
-    use base64ct::{Base64UrlUnpadded, Encoding as _};
-
-    let payload = jwt
-        .split('.')
-        .nth(1)
-        .expect("compact JWT must contain a payload segment");
-    let bytes = Base64UrlUnpadded::decode_vec(payload).expect("payload must be base64url");
-    serde_json::from_slice(&bytes).expect("payload must be JSON")
+fn assert_opaque_credential(secret: &arkret_wire::SessionGrantSecret) {
+    assert_eq!(secret.as_str().len(), 43);
+    assert!(!secret.as_str().contains('.'));
+    let bytes = arkret_canonical::base64url_decode(secret.as_str()).unwrap();
+    assert_eq!(bytes.len(), 32);
+    assert_eq!(arkret_canonical::base64url_encode(bytes), secret.as_str());
 }
 
-fn assert_session_grant_jwt_omits_server_identity_metadata(raw_payload: &serde_json::Value) {
-    for field in [
-        "principal_id",
-        "provenance_anchor",
-        "provenanceAnchor",
-        "browser_session_id",
-        "device_id",
-        "revocation_ref",
-        "proof",
-    ] {
-        assert!(
-            raw_payload.get(field).is_none(),
-            "session grant JWT must not inline redundant `{field}`"
-        );
+fn test_session_thumbprint(key: &PrivateKey) -> String {
+    arkret_models_identity::CanonicalSessionPublicJwk::new(
+        serde_json::to_string(&test_session_public_jwk(key, "holder")).unwrap(),
+    )
+    .unwrap()
+    .thumbprint_sha256()
+    .unwrap()
+}
+
+/// A structurally valid issuer record for metadata-view/status unit tests.
+/// Integration tests below obtain records through the real atomic ledger.
+fn metadata_record_fixture(now: chrono::DateTime<Utc>, subject: &str) -> SessionGrant {
+    let now = arkret_canonical::normalize_timestamp_canonical(now);
+    let issuer = arkret_identifiers::DidCoreId::new("ak:did_core:web:auth.example.com").unwrap();
+    let audience =
+        arkret_identifiers::DidCoreId::new("ak:did_core:web:coland.example.com").unwrap();
+    let subject = arkret_identifiers::DidCoreId::new(subject).unwrap();
+    let device =
+        arkret_wire::DeviceId::new("ak:device:01964137-0000-7000-8000-000000000001").unwrap();
+    let id = arkret_wire::SessionGrantId::new_v7_at(u64::try_from(now.timestamp_millis()).unwrap());
+    let mut rng = ChaChaRng::seed_from_u64(11);
+    let key = PrivateKey::generate_ed25519(&mut rng);
+    let public_key = arkret_models_identity::CanonicalSessionPublicJwk::new(
+        serde_json::to_string(&test_session_public_jwk(&key, "metadata-test-holder")).unwrap(),
+    )
+    .unwrap();
+    let expires_at = now + Duration::minutes(5);
+    let metadata = arkret_models_identity::SessionGrantMetadata {
+        id: id.clone(),
+        issuer_id: issuer.clone(),
+        account_id: arkret_wire::AccountId::new(subject.clone(), audience.clone()),
+        device_id: Some(device.clone()),
+        audience_id: audience.clone(),
+        scopes: vec![STATION_SESSION_BIND_SCOPE.to_owned()],
+        not_before: now,
+        expires_at,
+        session_id: "test-session".into(),
+        cnf_jkt: public_key.thumbprint_sha256().unwrap(),
+        session_public_key: public_key.clone(),
+        credential_class: SessionGrantCredentialClass::Standard,
+        holder_binding: SessionGrantHolderBinding::HumanDevice {
+            device_binding: device.to_string(),
+        },
+        device_binding: Some(arkret_models_identity::SessionGrantDeviceBinding {
+            device_id: device.clone(),
+            authorization_event_id: arkret_wire::EventId::new(
+                "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
+            )
+            .unwrap(),
+            model_generation_ref: 1,
+        }),
+        proof_kind: Some(arkret_models_identity::SessionGrantProofKind::AccountHandoff),
+        scope_details: None,
+    };
+    metadata.validate().unwrap();
+    SessionGrant {
+        id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
+        grant_id: id,
+        browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
+        issuer_id: issuer,
+        subject_id: subject,
+        local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
+        device_id: Some(device.to_string()),
+        audience_id: audience,
+        scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
+        session_grant: arkret_wire::SessionGrantSecret::from_bytes([0x11; 32]),
+        metadata,
+        session_id: "test-session".into(),
+        session_public_key: public_key.as_str().to_owned(),
+        credential_class: "standard".into(),
+        created_at: now,
+        expires_at,
+        lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,
+        revoked_at: None,
+        superseded_at: None,
+        successor_grant_id: None,
+        issuance_operation_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCQ").unwrap(),
     }
 }
 
@@ -217,7 +272,7 @@ fn assert_principal_id_occurs_once(raw_payload: &serde_json::Value, principal_id
     assert_eq!(
         serialized.matches(principal_id).count(),
         1,
-        "session grant JWT must carry the principal id exactly once"
+        "issuer metadata must carry the principal id exactly once"
     );
 }
 
@@ -225,8 +280,8 @@ fn assert_principal_id_occurs_once(raw_payload: &serde_json::Value, principal_id
 fn debug_dpop_grant_outcome_carries_typed_local_account_id() {
     let local_account_id = coauth_data::LocalAccountId::new("test-account").unwrap();
     let outcome = DebugIssueDpopGrantOutcome {
-        grant_id: "ak:session_grant:test".to_owned(),
-        grant_jwt: "header.payload.signature".to_owned(),
+        grant_id: "ak:session_grant:01964137-0000-7000-8000-000000000099".to_owned(),
+        session_grant: arkret_wire::SessionGrantSecret::from_bytes([0x21; 32]),
         dpop_jkt: "test-jkt".to_owned(),
         local_account_id: local_account_id.clone(),
         account_id: test_account_id(
@@ -438,7 +493,6 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     let clock = SystemClock::default();
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let arkret_config = personal_node_did_web_config();
-    let keyring = test_keyring();
     let now = clock.now();
     let mut fixture_rng = ChaChaRng::seed_from_u64(9);
     let browser_session = BrowserSession::samples(now, &mut fixture_rng)
@@ -463,7 +517,6 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
         &clock,
         &url_builder,
         &arkret_config,
-        &keyring,
         crate::services::session_grant::TestGrantIssuance {
             browser_session: &browser_session,
             session_public_key,
@@ -481,12 +534,10 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
     )
     .unwrap();
 
-    let jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str()).unwrap();
-    jwt.verify_with_jwks(&keyring.public_jwks()).unwrap();
-
-    let payload = jwt.payload();
-    assert_eq!(payload.kind, "ak.session.grant");
-    assert_eq!(payload.grant_id, grant.grant_id);
+    assert_opaque_credential(&grant.session_grant);
+    let payload = &grant.metadata;
+    payload.validate().unwrap();
+    assert_eq!(payload.id, grant.grant_id);
     assert_eq!(payload.account_id.principal_id.as_str(), principal_id);
     assert_eq!(
         payload.audience_id.as_str(),
@@ -505,8 +556,8 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
         payload.expires_at - payload.not_before,
         Duration::try_hours(8).unwrap()
     );
-    let raw_payload = jwt_payload_value(&grant.grant_jwt);
-    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
+    assert_opaque_credential(&grant.session_grant);
+    let raw_payload = serde_json::to_value(&grant.metadata).unwrap();
     assert_principal_id_occurs_once(&raw_payload, payload.account_id.principal_id.as_str());
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
@@ -521,14 +572,13 @@ fn session_grant_is_signed_for_the_bound_principal_id() {
 fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     let url_builder = UrlBuilder::new("https://example.com/".parse().unwrap(), None, None);
     let arkret_config = personal_node_did_web_config();
-    let keyring = test_keyring();
     let now = arkret_canonical::normalize_timestamp_canonical(Utc::now());
     let seed = SessionGrantIssuanceSeed::new(
-        arkret_canonical::base64url_encode([0x33; 32]),
+        arkret_wire::SessionGrantId::new_v7_at(u64::try_from(now.timestamp_millis()).unwrap()),
+        arkret_wire::SessionGrantSecret::from_bytes([0x33; 32]),
         "recovery-session-chain-1",
         now,
         now + Duration::minutes(15),
-        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     let mut signing_rng = ChaChaRng::seed_from_u64(77);
@@ -545,7 +595,6 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     let material = issue_recovery_session_grant_for_audience(
         &seed,
         &arkret_config,
-        &keyring,
         RecoveryGrantIssuance {
             session_public_key: holder_jwk,
             audience_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
@@ -556,14 +605,14 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
             subject_id: &principal_core_id,
             local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
             account_id: &authority,
-            dpop_jkt: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned(),
+            dpop_jkt: test_session_thumbprint(&holder_key),
         },
     )
     .unwrap();
 
-    let jwt = Jwt::<SignedSessionGrantClaims>::try_from(material.grant_jwt.as_str()).unwrap();
-    jwt.verify_with_jwks(&keyring.public_jwks()).unwrap();
-    let payload = jwt.payload();
+    assert_opaque_credential(&material.session_grant);
+    let payload = &material.metadata;
+    payload.validate().unwrap();
     assert_eq!(
         payload.credential_class,
         SessionGrantCredentialClass::RecoverySession
@@ -584,18 +633,17 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
     );
 
     let overlong_seed = SessionGrantIssuanceSeed::new(
-        arkret_canonical::base64url_encode([0x44; 32]),
+        arkret_wire::SessionGrantId::new_v7_at(u64::try_from(now.timestamp_millis()).unwrap()),
+        arkret_wire::SessionGrantSecret::from_bytes([0x44; 32]),
         "recovery-session-chain-2",
         now,
         now + Duration::minutes(15) + Duration::milliseconds(1),
-        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
     assert!(
         issue_recovery_session_grant_for_audience(
             &overlong_seed,
             &arkret_config,
-            &keyring,
             RecoveryGrantIssuance {
                 session_public_key: test_session_public_jwk(&holder_key, "recovery-holder-key"),
                 audience_id: arkret_identifiers::DidCoreId::new(required_audience_for(
@@ -613,7 +661,7 @@ fn recovery_session_grant_is_candidate_bound_short_lived_and_scope_closed() {
                 subject_id: &principal_core_id,
                 local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
                 account_id: &authority,
-                dpop_jkt: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".to_owned()
+                dpop_jkt: test_session_thumbprint(&holder_key)
             }
         )
         .is_err()
@@ -636,7 +684,6 @@ fn session_grant_uses_configured_ttl() {
         session_grant_ttl: Duration::try_minutes(15).unwrap(),
         ..ArkretConfig::default()
     };
-    let keyring = test_keyring();
     let now = clock.now();
     let mut fixture_rng = ChaChaRng::seed_from_u64(9);
     let browser_session = BrowserSession::samples(now, &mut fixture_rng)
@@ -660,7 +707,6 @@ fn session_grant_uses_configured_ttl() {
         &clock,
         &url_builder,
         &arkret_config,
-        &keyring,
         crate::services::session_grant::TestGrantIssuance {
             browser_session: &browser_session,
             session_public_key,
@@ -679,8 +725,9 @@ fn session_grant_uses_configured_ttl() {
     )
     .unwrap();
 
-    let jwt = Jwt::<SignedSessionGrantClaims>::try_from(grant.grant_jwt.as_str()).unwrap();
-    let payload = jwt.payload();
+    assert_opaque_credential(&grant.session_grant);
+    let payload = &grant.metadata;
+    payload.validate().unwrap();
     assert_eq!(
         payload.expires_at - payload.not_before,
         Duration::try_minutes(15).unwrap()
@@ -691,42 +738,10 @@ fn session_grant_uses_configured_ttl() {
 #[test]
 fn session_grant_record_exposes_metadata_without_secrets() {
     let now = Utc::now();
-    let grant = SessionGrant {
-        id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: arkret_identifiers::SessionGrantId::new(
-            "ak:session_grant:AbmggbDOpDR8J1xRW3EU4354odEGafHu4vk9FVv4vimH".to_owned(),
-        )
-        .unwrap(),
-        browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
-        issuer_id: arkret_identifiers::DidCoreId::new(
-            "ak:did_core:web:auth.example.com".to_owned(),
-        )
-        .unwrap(),
-        subject_id: arkret_identifiers::DidCoreId::new(
-            "ak:did_core:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP",
-        )
-        .unwrap(),
-        local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
-        device_id: Some("device-1".to_owned()),
-        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:coland.example.com")
-            .unwrap(),
-        scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
-        grant_jwt: "header.payload.signature".to_owned(),
-        session_id: "test-session".to_owned(),
-        issuance_nonce: arkret_canonical::base64url_encode([0x11; 32]),
-        issuance_preimage: Vec::new(),
-        issuance_digest: [0_u8; 32],
-        signing_key_id: coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
-        session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
-        credential_class: "standard".to_owned(),
-        created_at: now,
-        expires_at: now + chrono::Duration::minutes(5),
-        lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,
-        revoked_at: None,
-        superseded_at: None,
-        successor_grant_id: None,
-        issuance_operation_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCQ").unwrap(),
-    };
+    let grant = metadata_record_fixture(
+        now,
+        "ak:did_core:web:auth.example.com:users:01J44Q10GR4AMTFZEEF936DTCP",
+    );
 
     let body = serde_json::to_value(SessionGrantRecord::from(grant)).unwrap();
 
@@ -735,7 +750,7 @@ fn session_grant_record_exposes_metadata_without_secrets() {
         body["scopes"],
         serde_json::json!([STATION_SESSION_BIND_SCOPE])
     );
-    assert!(body.get("grant_jwt").is_none());
+    assert!(body.get("session_grant").is_none());
     assert!(body.get("session_public_key").is_none());
     assert!(body.get("session_private_key_pem").is_none());
 }
@@ -745,43 +760,10 @@ fn session_grant_introspection_statuses_are_minimal_and_standardized() {
     let now = Utc::now();
     let mut rng = ChaChaRng::seed_from_u64(14);
     let mut user = User::samples(now, &mut rng).into_iter().next().unwrap();
-    let mut grant = SessionGrant {
-        id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCM").unwrap(),
-        grant_id: arkret_identifiers::SessionGrantId::new(
-            "ak:session_grant:AYBAST92B1EGBqtdtlrlJuiZM2Ck4_22_a2eeLbVSQku".to_owned(),
-        )
-        .unwrap(),
-        browser_session_id: Some(Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCN").unwrap()),
-        issuer_id: arkret_identifiers::DidCoreId::new(
-            "ak:did_core:web:auth.example.com".to_owned(),
-        )
-        .unwrap(),
-        subject_id: arkret_identifiers::DidCoreId::new(format!(
-            "ak:did_core:web:auth.example.com:users:{}",
-            user.id
-        ))
-        .unwrap(),
-        local_account_id: coauth_data::LocalAccountId::new(user.id.to_string()).unwrap(),
-        device_id: Some("device-1".to_owned()),
-        audience_id: arkret_identifiers::DidCoreId::new("ak:did_core:web:coland.example.com")
-            .unwrap(),
-        scope: Scope::from_iter([STATION_SESSION_BIND_SCOPE.parse().unwrap()]),
-        grant_jwt: "header.payload.signature".to_owned(),
-        session_id: "test-session".to_owned(),
-        issuance_nonce: arkret_canonical::base64url_encode([0x22; 32]),
-        issuance_preimage: Vec::new(),
-        issuance_digest: [0_u8; 32],
-        signing_key_id: coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID.to_owned(),
-        session_public_key: "{\"kty\":\"OKP\"}".to_owned(),
-        credential_class: "standard".to_owned(),
-        created_at: now,
-        expires_at: now + chrono::Duration::minutes(5),
-        lifecycle_state: coauth_data::SessionGrantLifecycleState::Active,
-        revoked_at: None,
-        superseded_at: None,
-        successor_grant_id: None,
-        issuance_operation_id: Ulid::from_string("01J44Q10GR4AMTFZEEF936DTCR").unwrap(),
-    };
+    let mut grant = metadata_record_fixture(
+        now,
+        &format!("ak:did_core:web:auth.example.com:users:{}", user.id),
+    );
 
     assert_eq!(
         introspection_status(
@@ -849,24 +831,32 @@ async fn seed_persisted_session_grant(
         .await
         .unwrap();
     let session_key = PrivateKey::generate_ed25519(&mut rng);
-    let grant_config = personal_node_did_web_config();
-    // The HTTP layer authorizes introspection against `state.arkret_config`,
-    // so it has to carry the same Station the grant is issued for.
-    state.arkret_config = grant_config.clone();
+    let mut grant_config = personal_node_did_web_config();
+    grant_config.deployment_profile = DeploymentProfileConfig::Organization;
+    grant_config.principal_method = PrincipalMethodConfig::DidWebvh;
+    grant_config.admin_audience = None;
+    state.arkret_config = grant_config;
+    state.configure_status_issuer_webvh();
+    let grant_config = state.arkret_config.clone();
+    // The HTTP metadata test starts from a previously accepted binding, with
+    // the real issuer receipt and current local account lifecycle retained.
+    repo.save().await.unwrap();
+    let principal_id = state
+        .seed_principal_binding(&user, &format!("introspection-{}", user.id))
+        .await;
+    let mut repo = state.repository().await.unwrap();
     // Grant liveness is evaluated against the wall clock the handlers read; a
     // grant minted at the mock epoch is already expired.
     let grant_clock = coauth_data::SystemClock::default();
-    let principal_id = format!("ak:did_core:web:auth.example.com:users:{}", user.id);
     let account_id = test_account_id(
         &principal_id,
         &required_audience_for(&state.url_builder, &grant_config),
     );
-    let material = issue_session_grant(
+    let mut material = issue_session_grant(
         &mut rng,
         &grant_clock,
         &state.url_builder,
         &grant_config,
-        &state.keyring,
         crate::services::session_grant::TestGrantIssuance {
             browser_session: &browser_session,
             session_public_key: test_session_public_jwk(
@@ -883,11 +873,11 @@ async fn seed_persisted_session_grant(
         },
     )
     .unwrap();
-    let raw_payload = jwt_payload_value(&material.grant_jwt);
-    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
+    assert_opaque_credential(&material.session_grant);
+    let raw_payload = serde_json::to_value(&material.metadata).unwrap();
     assert!(raw_payload.get("session_public_key").is_some());
-    // The grant JWT carries its DPoP holder binding as the canonical public
-    // key; refresh and introspection derive the thumbprint from that one source.
+    // The exact issuer record carries the canonical public holder key and JKT;
+    // refresh and introspection verify both against that sole metadata source.
     // (spec zh/sync/service-http-binding.md, session-grants surface).
     assert!(raw_payload.get("cnf").is_none());
     let grant = persist_session_grant(
@@ -895,7 +885,7 @@ async fn seed_persisted_session_grant(
         &mut rng,
         &grant_clock,
         &browser_session,
-        &material,
+        &mut material,
     )
     .await
     .unwrap();
@@ -914,7 +904,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
     let (browser_session, grant, material, _session_key) =
         seed_persisted_session_grant(&mut state).await;
     let logout_body = serde_json::json!({
-        "grant_jwt": material.grant_jwt,
+        "session_grant": material.session_grant,
         "reason_code": "account_logout",
     });
 
@@ -934,7 +924,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
         let mut repo = state.repository().await.unwrap();
         let stored_grant = repo
             .oauth_session_grant()
-            .lookup_by_grant_jwt(&material.grant_jwt)
+            .lookup_by_secret(&material.issuer_id, &material.session_grant)
             .await
             .unwrap()
             .expect("logout keeps the exact grant ledger row");
@@ -961,7 +951,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
             Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
-                    "grant_jwt": material.grant_jwt,
+                    "session_grant": material.session_grant,
                     "audience_id": grant.audience_id,
                 })),
         )
@@ -988,7 +978,7 @@ async fn auth_session_logout_revokes_exact_grant_finishes_browser_session_and_re
     let mut repo = state.repository().await.unwrap();
     let replayed_grant = repo
         .oauth_session_grant()
-        .lookup_by_grant_jwt(&material.grant_jwt)
+        .lookup_by_secret(&material.issuer_id, &material.session_grant)
         .await
         .unwrap()
         .unwrap();
@@ -1024,7 +1014,7 @@ async fn auth_session_logout_rejects_unbound_bearers_without_state_change() {
         "ak:did_core:web:other-station.example",
     );
     let logout_body = serde_json::json!({
-        "grant_jwt": material.grant_jwt,
+        "session_grant": material.session_grant,
         "reason_code": "account_logout",
     });
 
@@ -1054,7 +1044,7 @@ async fn auth_session_logout_rejects_unbound_bearers_without_state_change() {
     let mut repo = state.repository().await.unwrap();
     let stored_grant = repo
         .oauth_session_grant()
-        .lookup_by_grant_jwt(&material.grant_jwt)
+        .lookup_by_secret(&material.issuer_id, &material.session_grant)
         .await
         .unwrap()
         .unwrap();
@@ -1085,9 +1075,12 @@ fn session_grant_introspection_proof(
         .unwrap();
     let header = JsonWebSignatureHeader::new(JsonWebSignatureAlg::Ed25519);
     let claims = SessionGrantHolderProofClaims {
-        kind: SESSION_GRANT_HOLDER_PROOF_CLAIMS_KIND.to_owned(),
-        session_grant_id: grant.grant_id.to_string(),
-        grant_jwt_digest: session_grant_jwt_digest(&material.grant_jwt),
+        context: arkret_models_collaboration::session_grants::SessionGrantHolderProofContext::V1,
+        session_grant_ref: material.metadata.grant_ref(),
+        session_grant_digest: arkret_wire::Hash::new(arkret_canonical::sha256_digest(
+            material.session_grant.as_str().as_bytes(),
+        ))
+        .unwrap(),
         audience_id: grant.audience_id.clone(),
         challenge: challenge.to_owned(),
         issued_at: now,
@@ -1181,7 +1174,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
             Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
-                    "grant_jwt": material.grant_jwt,
+                    "session_grant": material.session_grant,
                     "audience_id": grant.audience_id,
                 })),
         )
@@ -1190,7 +1183,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
-    assert_eq!(body["proof_required"], true);
+    assert_eq!(body["proof_required"], false);
     // Introspection is READ-ONLY: it MUST NOT consume the grant (consumption /
     // single-use rotation is the refresh endpoint's job). So one_time_use is
     // never reported as already-consumed here, and a follow-up introspect of
@@ -1205,7 +1198,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     );
     assert_eq!(body["grant"]["audience_id"], grant.audience_id.as_str());
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
-    assert!(body["grant"].get("grant_jwt").is_none());
+    assert!(body["grant"].get("session_grant").is_none());
     assert!(body["grant"].get("scope_details").is_none());
     let human_roundtrip: SessionGrantValidationResponseBody =
         serde_json::from_value(body.clone()).expect("closed human introspection metadata");
@@ -1247,7 +1240,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
-    assert_eq!(body["proof_required"], true);
+    assert_eq!(body["proof_required"], false);
     assert_eq!(body["grant"]["revoked_at"], serde_json::Value::Null);
 
     let challenge = format!("introspect-{}", grant.grant_id);
@@ -1292,7 +1285,7 @@ async fn session_grant_http_introspection_returns_minimal_metadata() {
 /// ② contract D4: a DPoP-bound grant MUST surface its `cnf.jkt` to the
 /// Station through introspection so it can verify the per-request DPoP
 /// proof. The thumbprint is not a stored column — it is read back out of the
-/// signed grant JWT — so this exercises the full persist → introspect round-trip.
+/// committed issuer record — so this exercises the full persist → introspect round-trip.
 #[tokio::test]
 async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant() {
     setup();
@@ -1301,96 +1294,11 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     };
     let mut state = TestState::from_pool(pool.clone()).await.unwrap();
 
-    let mut rng = state.rng();
-    let mut repo = state.repository().await.unwrap();
-    let user = repo
-        .user()
-        .add(&mut rng, &*state.clock, "alice".to_owned())
-        .await
-        .unwrap();
-    let browser_session = repo
-        .browser_session()
-        .add(
-            &mut rng,
-            &*state.clock,
-            &user,
-            Some("Mozilla/5.0".to_owned()),
-        )
-        .await
-        .unwrap();
-    let session_key = PrivateKey::generate_ed25519(&mut rng);
-    let bound_jkt = "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD".to_owned();
-    let grant_config = personal_node_did_web_config();
-    // The HTTP layer authorizes introspection against `state.arkret_config`.
-    state.arkret_config = grant_config.clone();
-    // Grant liveness is evaluated against the wall clock the handlers read.
-    let grant_clock = coauth_data::SystemClock::default();
-    let issued_at = coauth_data::Clock::now(&grant_clock);
-    let issuance_seed = SessionGrantIssuanceSeed::new(
-        arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x31; 32]).to_string(),
-        browser_session.id.to_string(),
-        issued_at,
-        issued_at + grant_config.session_grant_ttl,
-        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
-    )
-    .unwrap();
-    let principal_id = arkret_identifiers::DidCoreId::new(format!(
-        "ak:did_core:web:auth.example.com:users:{}",
-        user.id
-    ))
-    .unwrap();
-    let audience = required_audience_for(&state.url_builder, &grant_config);
-    let account_id = test_account_id(principal_id.as_str(), &audience);
-    let material = issue_session_grant_for_audience(
-        &issuance_seed,
-        &grant_config,
-        &state.keyring,
-        HumanGrantIssuance {
-            browser_session: &browser_session,
-            session_public_key: test_session_public_jwk(
-                &session_key,
-                format!("session-{}", browser_session.id),
-            ),
-            audience_id: arkret_identifiers::DidCoreId::new(audience).unwrap(),
-            device_id: arkret_identifiers::DeviceId::new(
-                "ak:device:01964137-0000-7000-8000-000000000001",
-            )
-            .unwrap(),
-            scopes: vec![STATION_SESSION_BIND_SCOPE.to_owned()],
-            subject_override: Some(&principal_id),
-            account_id: &account_id,
-            dpop_jkt: bound_jkt.clone(),
-            device_binding: arkret_models_identity::SessionGrantDeviceBinding {
-                device_id: arkret_identifiers::DeviceId::new(
-                    "ak:device:01964137-0000-7000-8000-000000000001",
-                )
-                .unwrap(),
-                authorization_event_id: arkret_identifiers::EventId::new(
-                    "ak:event:AfAnsJqSlM9bHVI7P1QBMOEW3p5P1PNQu7BBMpiSnD_e",
-                )
-                .unwrap(),
-                model_generation_ref: 1,
-            },
-            proof_kind: arkret_models_identity::SessionGrantProofKind::AccountHandoff,
-        },
-    )
-    .unwrap();
-    let raw_payload = jwt_payload_value(&material.grant_jwt);
-    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
-    assert!(raw_payload.get("session_public_key").is_some());
-    assert!(raw_payload.get("cnf").is_none());
-    let grant = persist_session_grant(
-        &mut repo,
-        &mut rng,
-        &grant_clock,
-        &browser_session,
-        &material,
-    )
-    .await
-    .unwrap();
-    repo.save().await.unwrap();
+    let (_browser_session, grant, material, session_key) =
+        seed_persisted_session_grant(&mut state).await;
 
-    // ① A `cnf`-bound grant introspected WITHOUT a client-carried grant-binding DPoP proof
+    // ① Exact issuer metadata can be read without a client-carried holder probe;
+    // the resource independently verifies each actual request DPoP.
     // still reports active WITH metadata over the authenticated S2S channel:
     // the Station binds the request DPoP to the returned `cnf_jkt`
     // itself (service-operation-dtos.schema.json). `proof_required` is an
@@ -1400,7 +1308,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
             Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
-                    "grant_jwt": material.grant_jwt,
+                    "session_grant": material.session_grant,
                     "audience_id": grant.audience_id,
                 })),
         )
@@ -1409,7 +1317,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
     let body: serde_json::Value = response.json();
     assert_eq!(body["active"], true, "{body}");
     assert_eq!(body["status"], "active");
-    assert_eq!(body["proof_required"], true);
+    assert_eq!(body["proof_required"], false);
     assert_eq!(
         body["grant"]["cnf_jkt"],
         expected_cnf_jkt(&grant.session_public_key)
@@ -1424,7 +1332,7 @@ async fn session_grant_http_introspection_exposes_cnf_jkt_for_dpop_bound_grant()
             Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
-                    "grant_jwt": material.grant_jwt,
+                    "session_grant": material.session_grant,
                     "audience_id": grant.audience_id,
                     "proof": {
                         "challenge": challenge,
@@ -1556,7 +1464,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
         ),
     ]);
     // Exercise the exact owner-overlay materializer used by issue and refresh
-    // before persisting the real issuer JWT and invoking HTTP introspection.
+    // before persisting the real issuer record and invoking HTTP introspection.
     crate::handlers::account::agents::apply_agent_participation_overlay(
         &mut scope_details,
         serde_json::json!([]),
@@ -1565,23 +1473,25 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
     assert_eq!(scope_details["participations"], serde_json::json!([]));
     assert!(!scope_details.contains_key("participation"));
     let issuance_seed = SessionGrantIssuanceSeed::new(
-        arkret_models_identity::SessionGrantIssuanceNonce::from_bytes([0x41; 32]).to_string(),
+        arkret_wire::SessionGrantId::new_v7_at(u64::try_from(now.timestamp_millis()).unwrap()),
+        arkret_wire::SessionGrantSecret::from_bytes([0x41; 32]),
         "agent-test-session",
         now,
         now + Duration::try_minutes(15).unwrap(),
-        coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID,
     )
     .unwrap();
-    let material = mint_agent_session_grant(
+    let mut material = mint_agent_session_grant(
         &issuance_seed,
         &state.arkret_config,
-        &state.keyring,
         AgentGrantIssuance {
             agent_id: &arkret_identifiers::DidCoreId::new("ak:did_core:web:agent.example").unwrap(),
             local_account_id: coauth_data::LocalAccountId::new("test-account").unwrap(),
             audience_id: audience.clone(),
             scopes: vec!["ak.agent.action:message.send".to_owned()],
-            dpop_jkt: "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC".to_owned(),
+            dpop_jkt: arkret_models_identity::CanonicalSessionPublicJwk::new(&session_public_key)
+                .unwrap()
+                .thumbprint_sha256()
+                .unwrap(),
             session_public_key: session_public_key.clone(),
             scope_details: scope_details.clone(),
             agent_key_authorization_ref: arkret_identifiers::EventId::new(authorization_event_id)
@@ -1591,8 +1501,8 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
         },
     )
     .unwrap();
-    let raw_payload = jwt_payload_value(&material.grant_jwt);
-    assert_session_grant_jwt_omits_server_identity_metadata(&raw_payload);
+    assert_opaque_credential(&material.session_grant);
+    let raw_payload = serde_json::to_value(&material.metadata).unwrap();
     // Unlike a human grant, an agent grant names the agent twice by contract:
     // once as the credential `subject_id` and once inside the agent-runtime
     // holder binding, which is what binds the runtime key to it.
@@ -1606,7 +1516,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
     );
     assert!(raw_payload.get("session_public_key").is_some());
     assert!(raw_payload.get("cnf").is_none());
-    // Proof kind stays in the signed claims; the registered introspection
+    // Proof kind stays in the issuer metadata; the registered introspection
     // metadata must retain the exact signed resource/constraint overlay.
     assert_eq!(raw_payload["proof_kind"], "agent_key_proof");
     assert_eq!(
@@ -1660,7 +1570,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
         &mut repo,
         &mut rng,
         &coauth_data::SystemClock::default(),
-        &material,
+        &mut material,
     )
     .await
     .unwrap();
@@ -1676,7 +1586,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
             Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(bearer)
                 .json(serde_json::json!({
-                    "grant_jwt": material.grant_jwt,
+                    "session_grant": material.session_grant,
                     "audience_id": audience,
                     "proof": {
                         "challenge": challenge,
@@ -1719,7 +1629,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
         serde_json::json!(["messages"])
     );
     // No caller overlay or mutable key-authorization row may widen the
-    // immutable issuer claims; no unregistered freshness field is added.
+    // immutable issuer metadata; no unregistered freshness field is added.
     assert_eq!(body["grant"]["freshness_state"], serde_json::Value::Null);
     assert_eq!(
         body["grant"]["cnf_jkt"],
@@ -1737,9 +1647,11 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
     assert_eq!(body["grant"]["id"], persisted.grant_id.to_string());
     let roundtrip: SessionGrantValidationResponseBody = serde_json::from_value(body.clone())
         .expect("agent introspection response must satisfy the shared closed wire model");
+    let expected_scope_details: arkret_models_identity::SessionGrantScope =
+        serde_json::from_value(serde_json::Value::Object(scope_details.clone())).unwrap();
     assert_eq!(
         roundtrip.grant.as_ref().unwrap().scope_details.as_ref(),
-        Some(&scope_details)
+        Some(&expected_scope_details)
     );
     let mut singular = body.clone();
     let singular_scope = singular["grant"]["scope_details"].as_object_mut().unwrap();
@@ -1799,7 +1711,7 @@ async fn session_grant_http_introspection_rejects_agent_without_current_authorit
     assert!(serde_json::from_value::<SessionGrantValidationResponseBody>(invalid).is_err());
 }
 
-/// `id` and `grant_jwt` are an exactly-one selector: rejecting both-missing
+/// `id` and `session_grant` are an exactly-one selector: rejecting both-missing
 /// AND both-present, rather than silently preferring `id`.
 #[tokio::test]
 async fn session_grant_introspection_rejects_ambiguous_selector() {
@@ -1823,7 +1735,7 @@ async fn session_grant_introspection_rejects_ambiguous_selector() {
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
                     "id": grant.grant_id.to_string(),
-                    "grant_jwt": material.grant_jwt,
+                    "session_grant": material.session_grant,
                     "audience_id": grant.audience_id,
                 })),
         )
@@ -1909,7 +1821,7 @@ async fn canonical_session_revoke_commits_exact_grant_to_issuer_ledger() {
     let path = "/_arkret/gate/account/session-grants/revoke";
     let htu = format!("https://example.com{path}");
     let proof = build_dpop_proof(
-        &DpopProofRequest::new("POST", &htu).access_token(&material.grant_jwt),
+        &DpopProofRequest::new("POST", &htu).access_token(material.session_grant.as_str()),
         &sdk_signing_key,
     )
     .unwrap();
@@ -1917,7 +1829,10 @@ async fn canonical_session_revoke_commits_exact_grant_to_issuer_ledger() {
     let missing_proof = state
         .request(
             Request::post(path)
-                .header("authorization", format!("DPoP {}", material.grant_jwt))
+                .header(
+                    "authorization",
+                    format!("DPoP {}", material.session_grant.as_str()),
+                )
                 .empty(),
         )
         .await;
@@ -1926,7 +1841,10 @@ async fn canonical_session_revoke_commits_exact_grant_to_issuer_ledger() {
     let response = state
         .request(
             Request::post(path)
-                .header("authorization", format!("DPoP {}", material.grant_jwt))
+                .header(
+                    "authorization",
+                    format!("DPoP {}", material.session_grant.as_str()),
+                )
                 .header("dpop", proof.header_value)
                 .empty(),
         )
@@ -1944,7 +1862,7 @@ async fn canonical_session_revoke_commits_exact_grant_to_issuer_ledger() {
             Request::post("/_coauth/internal/session-grants/introspect")
                 .bearer(INTERNAL_AUTHORITY_SHARED_SECRET)
                 .json(serde_json::json!({
-                    "grant_jwt": material.grant_jwt,
+                    "session_grant": material.session_grant,
                     "audience_id": grant.audience_id,
                 })),
         )
@@ -1955,14 +1873,17 @@ async fn canonical_session_revoke_commits_exact_grant_to_issuer_ledger() {
     assert_eq!(body["status"], "revoked");
 
     let retry_proof = build_dpop_proof(
-        &DpopProofRequest::new("POST", &htu).access_token(&material.grant_jwt),
+        &DpopProofRequest::new("POST", &htu).access_token(material.session_grant.as_str()),
         &sdk_signing_key,
     )
     .unwrap();
     let retry = state
         .request(
             Request::post(path)
-                .header("authorization", format!("DPoP {}", material.grant_jwt))
+                .header(
+                    "authorization",
+                    format!("DPoP {}", material.session_grant.as_str()),
+                )
                 .header("dpop", retry_proof.header_value)
                 .empty(),
         )

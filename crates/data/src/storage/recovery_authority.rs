@@ -11,10 +11,21 @@ repository_impl! {
         /// Backend-specific persistence error.
         type Error;
 
-        /// Look up the first accepted issuance by its recovery transaction id.
+        /// Serialize first acceptance and authoritative unaccepted/expired decisions.
+        /// Caller must hold one explicit repository transaction until its decision commits.
+        async fn lock_completion_business_key(
+            &mut self,
+            issuer_id: &arkret_identifiers::DidCoreId,
+            account_id: &arkret_wire::AccountId,
+            transaction_id: &arkret_identifiers::TransactionId,
+        ) -> Result<(), Self::Error>;
+
+        /// Look up the first accepted issuance by its issuer and full-account recovery transaction key.
         async fn lookup_completion_issuance(
             &mut self,
-            transaction_id: &str,
+            issuer_id: &arkret_identifiers::DidCoreId,
+            account_id: &arkret_wire::AccountId,
+            transaction_id: &arkret_identifiers::TransactionId,
         ) -> Result<Option<RecoveryCompletionGrantIssuance>, Self::Error>;
 
         /// Insert the first accepted issuance. A false result means another

@@ -1,11 +1,9 @@
 use arkret_models_collaboration::session_grants::{
     AuthenticationSessionTerminationInput, AuthenticationSessionTerminationResponseBody,
 };
-use coauth_jose::jwt::Jwt;
 use salvo::prelude::*;
 use sha2::Digest as _;
 
-use super::*;
 use crate::handlers::arkret::*;
 
 /// Deployment-private Auth-side hard-logout adapter.
@@ -22,19 +20,13 @@ pub async fn logout_auth_session(
         .parse_json()
         .await
         .map_err(|_| ArkretRouteError::BadRequest("invalid json body".to_owned()))?;
-    if body.grant_jwt.trim().is_empty() {
-        return Err(ArkretRouteError::BadRequest("missing grant_jwt".to_owned()));
-    }
-
-    // Reject malformed bodies, but do not require the row to still exist. The
-    // operation is idempotent once a valid grant-shaped identifier is presented
-    // by an authenticated service caller.
-    let _jwt: Jwt<'_, SignedSessionGrantClaims> = Jwt::try_from(body.grant_jwt.as_str())
-        .map_err(|_| ArkretRouteError::BadRequest("grant_jwt is not parseable".to_owned()))?;
-
     Ok(Json(
-        terminate_auth_side_session_by_grant_jwt(depot, &caller_service_id, &body.grant_jwt)
-            .await?,
+        terminate_auth_side_session_by_session_grant(
+            depot,
+            &caller_service_id,
+            &body.session_grant,
+        )
+        .await?,
     ))
 }
 
@@ -70,18 +62,19 @@ fn require_auth_session_logout_service_caller(
     ))
 }
 
-async fn terminate_auth_side_session_by_grant_jwt(
+async fn terminate_auth_side_session_by_session_grant(
     depot: &Depot,
     caller_service_id: &str,
-    grant_jwt: &str,
+    session_grant: &arkret_identifiers::SessionGrantSecret,
 ) -> Result<AuthenticationSessionTerminationResponseBody, ArkretRouteError> {
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
     let mut repo = depot.repo().await?;
+    let issuer_id = owning_station_id_for(&depot.arkret_config()?);
 
     let Some(grant) = repo
         .oauth_session_grant()
-        .lookup_by_grant_jwt(grant_jwt)
+        .lookup_by_secret(&issuer_id, session_grant)
         .await?
     else {
         repo.cancel().await?;
@@ -100,15 +93,15 @@ async fn terminate_auth_side_session_by_grant_jwt(
 
     let canonical_intent = arkret_canonical::canonical_json_bytes(&serde_json::json!({
         "operation": "auth_session_logout",
-        "grant_jwt_digest": format!(
+        "session_grant_digest": format!(
             "sha256:{}",
-            hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
+            hex::encode(sha2::Sha256::digest(session_grant.as_str().as_bytes()))
         ),
     }))?;
     let canonical_intent_digest: [u8; 32] = sha2::Sha256::digest(&canonical_intent).into();
     let request_identity = format!(
         "auth-session-logout:{}",
-        hex::encode(sha2::Sha256::digest(grant_jwt.as_bytes()))
+        hex::encode(sha2::Sha256::digest(session_grant.as_str().as_bytes()))
     );
     let now = clock.now();
     let reserved = repo
@@ -128,11 +121,8 @@ async fn terminate_auth_side_session_by_grant_jwt(
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
                 target_session_grant_id: Some(&grant.grant_id),
-                issuance_nonce: None,
-                session_id: None,
                 grant_not_before: None,
                 grant_expires_at: None,
-                signing_key_id: None,
                 retained_until: now + chrono::Duration::days(7),
             },
         )

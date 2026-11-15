@@ -145,11 +145,8 @@ pub async fn revoke_session_grant(
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
                 target_session_grant_id: None,
-                issuance_nonce: None,
-                session_id: None,
                 grant_not_before: None,
                 grant_expires_at: None,
-                signing_key_id: None,
                 retained_until: now + chrono::Duration::days(7),
             },
         )

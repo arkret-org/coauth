@@ -47,7 +47,6 @@ use coauth_config::ArkretConfig;
 #[cfg(debug_assertions)]
 use coauth_data::user::{PrincipalDidRepository as _, UserRepository as _};
 use coauth_data::{RepositoryAccess, UrlBuilder, User};
-use coauth_jose::constraints::Constrainable;
 use coauth_oauth_types::scope::Scope;
 use salvo::prelude::*;
 #[cfg(debug_assertions)]
@@ -244,24 +243,6 @@ impl From<crate::AppError> for ArkretRouteError {
             _ => Self::coded(status, arkret_wire::ErrorCode::INTERNAL_ERROR, message),
         }
     }
-}
-
-/// Resolve the `kid` of the preferred service signing key.
-///
-/// A session-grant reservation stamps the operation with the key that will
-/// later sign the credential, so the reservation and the issuance cannot drift
-/// onto different keys. A keyring without a usable key is a deployment
-/// misconfiguration, never a request failure, which is why both arms collapse
-/// onto [`SessionGrantError::NoSigningKey`].
-pub(crate) fn preferred_signing_key_id(
-    keyring: &coauth_keyring::Keyring,
-) -> Result<String, ArkretRouteError> {
-    let (_, signing_key) = crate::services::preferred_service_signing_key(keyring)
-        .ok_or(SessionGrantError::NoSigningKey)?;
-    Ok(signing_key
-        .kid()
-        .ok_or(SessionGrantError::NoSigningKey)?
-        .to_owned())
 }
 
 /// Authorization decision for a session-grant administrative endpoint.
@@ -991,7 +972,7 @@ pub struct DebugIssueDpopGrantRequestBody {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DebugIssueDpopGrantOutcome {
     pub grant_id: String,
-    pub grant_jwt: String,
+    pub session_grant: arkret_identifiers::SessionGrantSecret,
     pub dpop_jkt: String,
     pub local_account_id: coauth_data::LocalAccountId,
     pub account_id: arkret_wire::AccountId,
@@ -1067,7 +1048,6 @@ pub async fn debug_issue_dpop_grant(
 
     let url_builder = depot.url_builder()?;
     let arkret_config = depot.arkret_config()?;
-    let keyring = depot.keyring()?;
     let clock = crate::handlers::make_clock();
     let mut rng = crate::handlers::make_rng();
 
@@ -1126,11 +1106,6 @@ pub async fn debug_issue_dpop_grant(
     let request_identity = format!("cotest:sha256:{}", hex::encode(canonical_intent_digest));
     let not_before = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let expires_at = not_before + arkret_config.session_grant_ttl;
-    let (_, signing_key) = crate::services::preferred_service_signing_key(&keyring)
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
-    let signing_key_id = signing_key
-        .kid()
-        .ok_or_else(|| ArkretRouteError::Internal(Box::new(SessionGrantError::NoSigningKey)))?;
     let issuer_id = owning_station_id_for(&arkret_config);
     let reserved = repo
         .oauth_session_grant()
@@ -1145,11 +1120,8 @@ pub async fn debug_issue_dpop_grant(
                 canonical_intent_digest,
                 canonical_intent: &canonical_intent,
                 target_session_grant_id: None,
-                issuance_nonce: None,
-                session_id: None,
                 grant_not_before: Some(not_before),
                 grant_expires_at: Some(expires_at),
-                signing_key_id: Some(signing_key_id),
                 retained_until: expires_at + chrono::Duration::days(7),
             },
         )
@@ -1208,7 +1180,6 @@ pub async fn debug_issue_dpop_grant(
     let material = issue_session_grant_for_audience(
         &SessionGrantIssuanceSeed::from_operation(&operation)?,
         &arkret_config,
-        &keyring,
         HumanGrantIssuance {
             browser_session: &browser_session,
             session_public_key: public_jwk,
@@ -1231,7 +1202,7 @@ pub async fn debug_issue_dpop_grant(
     )?;
     let outcome = DebugIssueDpopGrantOutcome {
         grant_id: material.grant_id.to_string(),
-        grant_jwt: material.grant_jwt.clone(),
+        session_grant: material.session_grant.clone(),
         dpop_jkt: jkt,
         local_account_id: material.local_account_id.clone(),
         account_id,
@@ -1268,6 +1239,14 @@ pub async fn debug_issue_dpop_grant(
     );
     let response = match committed {
         coauth_data::SessionGrantCommitOutcome::Committed(_) => canonical_outcome,
+        coauth_data::SessionGrantCommitOutcome::AuthorizationExpired(_) => {
+            repo.cancel().await?;
+            return Err(ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::UNAUTHENTICATED,
+                "issuer authorization expired before first acceptance",
+            ));
+        }
         coauth_data::SessionGrantCommitOutcome::Replay(operation) => {
             operation.canonical_outcome.ok_or_else(|| {
                 ArkretRouteError::coded(

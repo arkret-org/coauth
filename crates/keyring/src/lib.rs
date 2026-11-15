@@ -716,30 +716,6 @@ pub enum AccountAuthorityKeyError {
 /// signer has to be a key chosen on purpose and kept stable.
 pub const AUDIT_SIGNING_KEY_ID: &str = "coauth-audit-signing-v1";
 
-/// Stable key identifier reserved for signing `ak.session.grant` credentials.
-///
-/// Grants are verified through this deployment's published JWKS by the `kid`
-/// in their JWT header, so any published key *can* verify. What must not drift
-/// is *which* key signs: an algorithm-only lookup returns the last matching key
-/// in the configured list, so adding or reordering an Ed25519 key silently
-/// moved grant issuance onto a key designated for something else entirely.
-pub const SESSION_GRANT_SIGNING_KEY_ID: &str = "coauth-session-grant-v1";
-
-/// Signature algorithms this deployment will sign service credentials with,
-/// most preferred first.
-const SERVICE_SIGNING_ALG_PREFERENCE: [JsonWebSignatureAlg; 10] = [
-    JsonWebSignatureAlg::Ed25519,
-    JsonWebSignatureAlg::Es512,
-    JsonWebSignatureAlg::Es384,
-    JsonWebSignatureAlg::Es256,
-    JsonWebSignatureAlg::Rs512,
-    JsonWebSignatureAlg::Rs384,
-    JsonWebSignatureAlg::Rs256,
-    JsonWebSignatureAlg::Ps512,
-    JsonWebSignatureAlg::Ps384,
-    JsonWebSignatureAlg::Ps256,
-];
-
 /// Invalid audit signing key selection from the configured key backend.
 #[derive(Debug, Error)]
 pub enum AuditSigningKeyError {
@@ -871,29 +847,6 @@ impl Keyring {
         }
 
         Ok(signer)
-    }
-
-    /// The key that signs `ak.session.grant` credentials, with the algorithm to
-    /// sign them under.
-    ///
-    /// Resolves the key designated by [`SESSION_GRANT_SIGNING_KEY_ID`], picking
-    /// the most preferred algorithm that key can actually sign with. A keyring
-    /// that does not carry the designated kid issues no grants: selecting by
-    /// algorithm order instead would move grant issuance - and the `kid` every
-    /// client reads out of a grant - whenever a key is added or reordered.
-    pub fn session_grant_signing_key(
-        &self,
-    ) -> Option<(JsonWebSignatureAlg, &JsonWebKey<PrivateKey>)> {
-        let key = self
-            .inner
-            .iter()
-            .find(|jwk| jwk.kid() == Some(SESSION_GRANT_SIGNING_KEY_ID))?;
-        // Capability-tested rather than inferred: the algorithm chosen here
-        // is the one the signing path will build a signer for.
-        SERVICE_SIGNING_ALG_PREFERENCE
-            .iter()
-            .find(|alg| key.parameters().signing_key_for_alg(alg).is_ok())
-            .map(|alg| (alg.clone(), key))
     }
 
     /// Get a signer for the given algorithm, reusing a previously built signer

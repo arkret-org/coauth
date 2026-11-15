@@ -1,19 +1,8 @@
 use anyhow::Error as AnyhowError;
-use coauth_jose::jwt::JwtSignatureError;
-use coauth_keyring::WrongAlgorithmError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SessionGrantError {
-    #[error("no signing key is configured for Arkret session grants")]
-    NoSigningKey,
-
-    #[error(transparent)]
-    JwtSignature(#[from] JwtSignatureError),
-
-    #[error(transparent)]
-    WrongAlgorithm(#[from] WrongAlgorithmError),
-
     #[error(transparent)]
     Serialize(#[from] serde_json::Error),
 

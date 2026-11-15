@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 
 const MAGIC: &[u8; 8] = b"COAUTHK1";
 const FORMAT_VERSION: u16 = 1;
-const INITIAL_KEY_COUNT: usize = 8;
+const INITIAL_KEY_COUNT: usize = 7;
 const MAX_KEY_COUNT: usize = 64;
 
 pub(super) struct StoredKey {
@@ -117,7 +117,6 @@ where
     let ec_k256_key = spawn_keygen(rng, PrivateKey::generate_ec_k256).await?;
     let account_authority_key = spawn_keygen(rng, PrivateKey::generate_ed25519).await?;
     let audit_signing_key = spawn_keygen(rng, PrivateKey::generate_ed25519).await?;
-    let session_grant_key = spawn_keygen(rng, PrivateKey::generate_ed25519).await?;
 
     let mut encryption_key = [0u8; 32];
     rng.fill_bytes(&mut encryption_key);
@@ -134,10 +133,6 @@ where
         stored_key(
             audit_signing_key,
             Some(coauth_keyring::AUDIT_SIGNING_KEY_ID),
-        )?,
-        stored_key(
-            session_grant_key,
-            Some(coauth_keyring::SESSION_GRANT_SIGNING_KEY_ID),
         )?,
     ];
     debug_assert_eq!(keys.len(), INITIAL_KEY_COUNT);

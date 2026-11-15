@@ -1,8 +1,7 @@
-use arkret_identifiers::{DidCoreId, SessionGrantId};
+use arkret_identifiers::{DidCoreId, SessionGrantId, SessionGrantSecret};
 use arkret_models_collaboration::account_lifecycle::SessionRevokeResponseBody as WireSessionRevokeOutcome;
 use arkret_models_identity::{
-    SessionGrantCredentialClass, SessionGrantHolderBinding, SessionGrantIssuancePreimage,
-    SessionGrantProofKind, SignedSessionGrantClaims,
+    SessionGrantCredentialClass, SessionGrantMetadata, SessionGrantProofKind,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -26,7 +25,7 @@ use ulid::Ulid;
 use uuid::Uuid;
 
 use crate::schema::{oauth_session_grant_operations, oauth_session_grants, user_sessions};
-use crate::session_grant_codec::session_grant_id_from_bytes;
+use crate::session_grant_codec::session_grant_id_from_uuid;
 use crate::{DatabaseError, DatabaseInconsistencyError};
 
 /// PostgreSQL implementation of [`SessionGrantRepository`].
@@ -82,7 +81,7 @@ fn fixed_digest(value: &[u8], label: &'static str) -> Result<[u8; 32], std::io::
     })
 }
 
-#[derive(Debug, Clone, Queryable, Selectable)]
+#[derive(Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_session_grant_operations)]
 struct SessionGrantOperationRow {
     id: Uuid,
@@ -93,20 +92,21 @@ struct SessionGrantOperationRow {
     canonical_intent_digest: Vec<u8>,
     canonical_intent: Option<Vec<u8>>,
     operation_selector: Option<Value>,
-    issuance_nonce: Option<String>,
+    reserved_grant_id: Option<Uuid>,
+    reserved_credential_digest: Option<Vec<u8>>,
+    reserved_session_grant: Option<String>,
     session_id: Option<String>,
     grant_not_before: Option<DateTime<Utc>>,
     grant_expires_at: Option<DateTime<Utc>>,
-    signing_key_id: Option<String>,
     state: String,
     proof_authorization_ref: Option<String>,
     proof_authorization_checkpoint: Option<Value>,
     proof_expires_at: Option<DateTime<Utc>>,
     outcome_digest: Option<Vec<u8>>,
     canonical_outcome: Option<Vec<u8>>,
-    target_session_grant_id: Option<Vec<u8>>,
-    result_grant_id: Option<Vec<u8>>,
-    affected_grant_ids: Vec<Option<Vec<u8>>>,
+    target_session_grant_id: Option<Uuid>,
+    result_grant_id: Option<Uuid>,
+    affected_grant_ids: Vec<Option<Uuid>>,
     retained_until: DateTime<Utc>,
     committed_at: Option<DateTime<Utc>>,
     created_at: DateTime<Utc>,
@@ -193,27 +193,25 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
             .map_err(|error| inconsistent("outcome_digest", Box::new(error)))?;
         let target_session_grant_id = value
             .target_session_grant_id
-            .as_deref()
-            .map(session_grant_id_from_bytes)
+            .map(session_grant_id_from_uuid)
             .transpose()
             .map_err(|error| inconsistent("target_session_grant_id", Box::new(error)))?;
         let result_grant_id = value
             .result_grant_id
-            .as_deref()
-            .map(session_grant_id_from_bytes)
+            .map(session_grant_id_from_uuid)
             .transpose()
             .map_err(|error| inconsistent("result_grant_id", Box::new(error)))?;
         let affected_grant_ids = value
             .affected_grant_ids
             .iter()
             .map(|stored| {
-                stored.as_deref().ok_or_else(|| {
+                stored.as_ref().copied().ok_or_else(|| {
                     arkret_identifiers::IdentifierError::InvalidId(
                         "affected grant id must not be NULL".to_owned(),
                     )
                 })
             })
-            .map(|stored| stored.and_then(session_grant_id_from_bytes))
+            .map(|stored| stored.and_then(session_grant_id_from_uuid))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| inconsistent("affected_grant_ids", Box::new(error)))?;
         let state = operation_state_from_wire(&value.state).map_err(|message| {
@@ -226,6 +224,22 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
             )
         })?;
 
+        let reserved_credential_digest = value
+            .reserved_credential_digest
+            .as_deref()
+            .map(|digest| fixed_digest(digest, "reserved_credential_digest"))
+            .transpose()
+            .map_err(|error| inconsistent("reserved_credential_digest", Box::new(error)))?;
+        if let Some(secret) = &value.reserved_session_grant
+            && reserved_credential_digest != Some(arkret_canonical::sha256_bytes(secret.as_bytes()))
+        {
+            return Err(inconsistent(
+                "reserved_credential_digest",
+                Box::new(std::io::Error::other(
+                    "reserved credential does not match its immutable allocation fence",
+                )),
+            ));
+        }
         Ok(Self {
             id,
             issuer_id: value.issuer_id,
@@ -234,11 +248,20 @@ impl TryFrom<SessionGrantOperationRow> for SessionGrantOperation {
             request_identity: value.request_identity,
             canonical_intent_digest,
             canonical_intent: value.canonical_intent,
-            issuance_nonce: value.issuance_nonce,
+            reserved_grant_id: value
+                .reserved_grant_id
+                .map(session_grant_id_from_uuid)
+                .transpose()
+                .map_err(|error| inconsistent("reserved_grant_id", Box::new(error)))?,
+            reserved_credential_digest,
+            reserved_session_grant: value
+                .reserved_session_grant
+                .map(SessionGrantSecret::new)
+                .transpose()
+                .map_err(|error| inconsistent("reserved_session_grant", Box::new(error)))?,
             session_id: value.session_id,
             grant_not_before: value.grant_not_before,
             grant_expires_at: value.grant_expires_at,
-            signing_key_id: value.signing_key_id,
             state,
             proof_authorization_ref: value.proof_authorization_ref,
             proof_authorization_checkpoint: value.proof_authorization_checkpoint,
@@ -266,22 +289,23 @@ struct NewSessionGrantOperationRow<'a> {
     canonical_intent_digest: Vec<u8>,
     canonical_intent: Option<&'a [u8]>,
     operation_selector: Option<Value>,
-    issuance_nonce: Option<String>,
+    reserved_grant_id: Option<Uuid>,
+    reserved_credential_digest: Option<Vec<u8>>,
+    reserved_session_grant: Option<String>,
     session_id: Option<String>,
     grant_not_before: Option<DateTime<Utc>>,
     grant_expires_at: Option<DateTime<Utc>>,
-    signing_key_id: Option<&'a str>,
     state: &'static str,
-    target_session_grant_id: Option<Vec<u8>>,
+    target_session_grant_id: Option<Uuid>,
     retained_until: DateTime<Utc>,
     created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Queryable, Selectable)]
+#[derive(Clone, Queryable, Selectable)]
 #[diesel(table_name = oauth_session_grants)]
 struct SessionGrantLookup {
     id: Uuid,
-    grant_id: Vec<u8>,
+    grant_id: Uuid,
     issuance_operation_id: Uuid,
     user_session_id: Option<Uuid>,
     issuer_id: DidCoreId,
@@ -290,19 +314,17 @@ struct SessionGrantLookup {
     device_id: Option<String>,
     audience_id: DidCoreId,
     scope_list: Vec<String>,
-    grant_jwt: String,
+    session_grant: String,
+    credential_digest: Vec<u8>,
+    canonical_metadata: Vec<u8>,
     session_id: String,
-    issuance_nonce: String,
-    issuance_preimage: Vec<u8>,
-    issuance_digest: Vec<u8>,
-    signing_key_id: String,
     session_public_key: String,
     credential_class: String,
     expires_at: DateTime<Utc>,
     lifecycle_state: String,
     revoked_at: Option<DateTime<Utc>>,
     superseded_at: Option<DateTime<Utc>>,
-    successor_grant_id: Option<Vec<u8>>,
+    successor_grant_id: Option<Uuid>,
     created_at: DateTime<Utc>,
 }
 
@@ -317,7 +339,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 
     fn try_from(value: SessionGrantLookup) -> Result<Self, Self::Error> {
         let id = Ulid::from(value.id);
-        let grant_id = session_grant_id_from_bytes(&value.grant_id).map_err(|error| {
+        let grant_id = session_grant_id_from_uuid(value.grant_id).map_err(|error| {
             DatabaseInconsistencyError::on("oauth_session_grants")
                 .column("grant_id")
                 .row(id)
@@ -334,13 +356,37 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
                 .row(id)
                 .source(e)
         })?;
-        let issuance_digest =
-            fixed_digest(&value.issuance_digest, "issuance_digest").map_err(|error| {
+        let metadata: SessionGrantMetadata = serde_json::from_slice(&value.canonical_metadata)
+            .map_err(|error| {
                 DatabaseInconsistencyError::on("oauth_session_grants")
-                    .column("issuance_digest")
+                    .column("canonical_metadata")
                     .row(id)
                     .source(error)
             })?;
+        let session_grant =
+            SessionGrantSecret::new(value.session_grant.clone()).map_err(|error| {
+                DatabaseInconsistencyError::on("oauth_session_grants")
+                    .column("session_grant")
+                    .row(id)
+                    .source(error)
+            })?;
+        if arkret_canonical::sha256_bytes(session_grant.as_str().as_bytes()).as_slice()
+            != value.credential_digest.as_slice()
+            || arkret_canonical::canonical_json_bytes(&metadata).map_err(|error| {
+                DatabaseInconsistencyError::on("oauth_session_grants")
+                    .column("canonical_metadata")
+                    .row(id)
+                    .source(error)
+            })? != value.canonical_metadata
+        {
+            return Err(DatabaseInconsistencyError::on("oauth_session_grants")
+                .column("canonical_metadata")
+                .row(id)
+                .source(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid exact credential digest or canonical metadata",
+                )));
+        }
         let lifecycle_state = lifecycle_from_wire(&value.lifecycle_state).map_err(|message| {
             DatabaseInconsistencyError::on("oauth_session_grants")
                 .column("lifecycle_state")
@@ -352,8 +398,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
         })?;
         let successor_grant_id = value
             .successor_grant_id
-            .as_deref()
-            .map(session_grant_id_from_bytes)
+            .map(session_grant_id_from_uuid)
             .transpose()
             .map_err(|error| {
                 DatabaseInconsistencyError::on("oauth_session_grants")
@@ -362,7 +407,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
                     .source(error)
             })?;
 
-        Ok(Self {
+        let grant = Self {
             id,
             grant_id,
             browser_session_id: value.user_session_id.map(Into::into),
@@ -377,12 +422,9 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
             device_id: value.device_id,
             audience_id: value.audience_id,
             scope,
-            grant_jwt: value.grant_jwt,
+            session_grant,
+            metadata,
             session_id: value.session_id,
-            issuance_nonce: value.issuance_nonce,
-            issuance_preimage: value.issuance_preimage,
-            issuance_digest,
-            signing_key_id: value.signing_key_id,
             session_public_key: value.session_public_key,
             credential_class: value.credential_class,
             created_at: value.created_at,
@@ -392,7 +434,31 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
             superseded_at: value.superseded_at,
             successor_grant_id,
             issuance_operation_id: value.issuance_operation_id.into(),
+        };
+        validate_grant_projection(&NewSessionGrant {
+            grant_id: grant.grant_id.clone(),
+            browser_session_id: grant.browser_session_id,
+            issuer_id: &grant.issuer_id,
+            subject_id: &grant.subject_id,
+            local_account_id: &grant.local_account_id,
+            device_id: grant.device_id.as_deref(),
+            audience_id: &grant.audience_id,
+            scope: grant.scope.clone(),
+            session_grant: &grant.session_grant,
+            metadata: &grant.metadata,
+            session_id: &grant.session_id,
+            session_public_key: &grant.session_public_key,
+            credential_class: &grant.credential_class,
+            not_before: grant.metadata.not_before,
+            expires_at: grant.expires_at,
         })
+        .map_err(|error| {
+            DatabaseInconsistencyError::on("oauth_session_grants")
+                .column("canonical_metadata")
+                .row(id)
+                .source(error)
+        })?;
+        Ok(grant)
     }
 }
 
@@ -400,7 +466,7 @@ impl TryFrom<SessionGrantLookup> for SessionGrant {
 #[diesel(table_name = oauth_session_grants)]
 struct NewSessionGrantRow<'a> {
     id: Uuid,
-    grant_id: Vec<u8>,
+    grant_id: Uuid,
     issuance_operation_id: Uuid,
     user_session_id: Option<Uuid>,
     issuer_id: &'a DidCoreId,
@@ -409,12 +475,10 @@ struct NewSessionGrantRow<'a> {
     device_id: Option<&'a str>,
     audience_id: &'a DidCoreId,
     scope_list: Vec<String>,
-    grant_jwt: &'a str,
+    session_grant: &'a str,
+    credential_digest: Vec<u8>,
+    canonical_metadata: Vec<u8>,
     session_id: &'a str,
-    issuance_nonce: &'a str,
-    issuance_preimage: &'a [u8],
-    issuance_digest: Vec<u8>,
-    signing_key_id: &'a str,
     session_public_key: &'a str,
     credential_class: &'a str,
     expires_at: DateTime<Utc>,
@@ -422,166 +486,76 @@ struct NewSessionGrantRow<'a> {
     created_at: DateTime<Utc>,
 }
 
-fn validate_grant_material(
-    operation: &SessionGrantOperation,
-    grant: &NewSessionGrant<'_>,
-) -> Result<(), DatabaseError> {
-    let preimage: SessionGrantIssuancePreimage = serde_json::from_slice(grant.issuance_preimage)?;
-    preimage
+fn validate_grant_projection(grant: &NewSessionGrant<'_>) -> Result<(), DatabaseError> {
+    let metadata = grant.metadata;
+    metadata
         .validate()
         .map_err(|_| DatabaseError::invalid_operation())?;
-    let canonical_preimage = preimage
-        .canonical_bytes()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-
-    let mut jwt_parts = grant.grant_jwt.split('.');
-    let header_segment = jwt_parts
-        .next()
-        .ok_or_else(DatabaseError::invalid_operation)?;
-    let claims_segment = jwt_parts
-        .next()
-        .ok_or_else(DatabaseError::invalid_operation)?;
-    let signature_segment = jwt_parts
-        .next()
-        .ok_or_else(DatabaseError::invalid_operation)?;
-    if signature_segment.is_empty() || jwt_parts.next().is_some() {
-        return Err(DatabaseError::invalid_operation());
-    }
-    let header_bytes = arkret_canonical::base64url_decode(header_segment)?;
-    let header: Value = serde_json::from_slice(&header_bytes)?;
-    let header_kid = header
-        .as_object()
-        .and_then(|header| header.get("kid"))
-        .and_then(Value::as_str)
-        .ok_or_else(DatabaseError::invalid_operation)?;
-    let claims_bytes = arkret_canonical::base64url_decode(claims_segment)?;
-    let claims: SignedSessionGrantClaims = serde_json::from_slice(&claims_bytes)?;
-    claims
-        .validate()
-        .map_err(|_| DatabaseError::invalid_operation())?;
-
-    let claim_preimage = claims.issuance_preimage();
-    let scope_list = grant
+    let scopes = grant
         .scope
         .iter()
         .map(|scope| scope.as_str().to_owned())
         .collect::<Vec<_>>();
-    let credential_class = serde_json::to_value(preimage.credential_class)
-        .ok()
-        .and_then(|value| value.as_str().map(ToOwned::to_owned))
-        .ok_or_else(DatabaseError::invalid_operation)?;
+    let class = match metadata.credential_class {
+        SessionGrantCredentialClass::Standard => "standard",
+        SessionGrantCredentialClass::RecoverySession => "recovery_session",
+    };
     let constraints = [
+        ("record_id", metadata.id == grant.grant_id),
+        ("issuer", metadata.issuer_id == *grant.issuer_id),
         (
-            "operation_issuance_nonce",
-            operation.issuance_nonce.as_deref() == Some(grant.issuance_nonce),
+            "principal",
+            metadata.account_id.principal_id == *grant.subject_id,
         ),
         (
-            "operation_session_id",
-            operation.session_id.as_deref() == Some(grant.session_id),
+            "station",
+            metadata.account_id.station_id == *grant.audience_id,
+        ),
+        ("audience", metadata.audience_id == *grant.audience_id),
+        (
+            "device",
+            metadata.device_id.as_ref().map(|id| id.as_str()) == grant.device_id,
         ),
         (
-            "operation_not_before",
-            operation.grant_not_before == Some(grant.not_before),
+            "session_key",
+            metadata.session_public_key.as_str() == grant.session_public_key,
         ),
-        (
-            "operation_expires_at",
-            operation.grant_expires_at == Some(grant.expires_at),
-        ),
-        (
-            "operation_signing_key",
-            operation.signing_key_id.as_deref() == Some(grant.signing_key_id),
-        ),
-        (
-            "grant_id_digest",
-            grant.grant_id.issuance_digest() == grant.issuance_digest,
-        ),
-        (
-            "preimage_digest",
-            arkret_canonical::sha256_bytes(grant.issuance_preimage) == grant.issuance_digest,
-        ),
-        (
-            "session_id_domain",
-            grant.session_id != grant.grant_id.as_str(),
-        ),
-        (
-            "canonical_preimage",
-            canonical_preimage == grant.issuance_preimage,
-        ),
-        ("claims_preimage", claims.issuance_preimage() == preimage),
-        (
-            "claims_grant_id_derivation",
-            claim_preimage.grant_id().ok().as_ref() == Some(&grant.grant_id),
-        ),
-        ("header_kid", header_kid == grant.signing_key_id),
-        ("preimage_issuer", preimage.issuer_id == *grant.issuer_id),
-        ("operation_issuer", operation.issuer_id == *grant.issuer_id),
-        (
-            "preimage_subject",
-            preimage.account_id.principal_id == *grant.subject_id,
-        ),
-        (
-            "preimage_station",
-            preimage.account_id.station_id == *grant.audience_id,
-        ),
-        (
-            "preimage_audience",
-            preimage.audience_id == *grant.audience_id,
-        ),
-        (
-            "preimage_issuance_nonce",
-            preimage.issuance_nonce.as_str() == grant.issuance_nonce,
-        ),
-        (
-            "preimage_session_key",
-            preimage.session_public_key.as_str() == grant.session_public_key,
-        ),
-        ("preimage_scopes", preimage.scopes == scope_list),
-        (
-            "preimage_not_before",
-            preimage.not_before == grant.not_before,
-        ),
-        (
-            "preimage_expires_at",
-            preimage.expires_at == grant.expires_at,
-        ),
-        (
-            "preimage_session_id",
-            preimage.session_id == grant.session_id,
-        ),
-        (
-            "credential_class",
-            credential_class == grant.credential_class,
-        ),
-        ("claims_grant_id", claims.grant_id == grant.grant_id),
-        (
-            "issue_proof_kind",
-            operation.operation.kind() != SessionGrantOperationKind::Issue
-                || operation.proof_kind == preimage.proof_kind,
-        ),
-        (
-            "non_issue_proof_kind",
-            operation.operation.kind() == SessionGrantOperationKind::Issue
-                || operation.proof_kind.is_none(),
-        ),
+        ("scopes", metadata.scopes == scopes),
+        ("not_before", metadata.not_before == grant.not_before),
+        ("expires_at", metadata.expires_at == grant.expires_at),
+        ("session_id", metadata.session_id == grant.session_id),
+        ("class", class == grant.credential_class),
     ];
     if let Some((constraint, _)) = constraints.iter().find(|(_, valid)| !valid) {
-        tracing::error!(constraint, "session grant material constraint failed");
+        tracing::error!(
+            constraint,
+            "session grant metadata projection constraint failed"
+        );
         return Err(DatabaseError::invalid_operation());
     }
-    let bound_device_id = if let Some(binding) = preimage.device_binding.as_ref() {
-        Some(binding.device_id.as_str())
-    } else {
-        match &preimage.holder_binding {
-            SessionGrantHolderBinding::HumanDevice { device_binding } => {
-                Some(device_binding.as_str())
-            }
-            SessionGrantHolderBinding::RecoveryCandidateDevice { device_id } => {
-                Some(device_id.as_str())
-            }
-            SessionGrantHolderBinding::AgentRuntime { .. } => None,
-        }
-    };
-    if grant.device_id != bound_device_id {
+    Ok(())
+}
+
+fn validate_grant_material(
+    operation: &SessionGrantOperation,
+    grant: &NewSessionGrant<'_>,
+) -> Result<(), DatabaseError> {
+    validate_grant_projection(grant)?;
+    if operation.reserved_grant_id.as_ref() != Some(&grant.grant_id)
+        || operation.reserved_credential_digest
+            != Some(arkret_canonical::sha256_bytes(
+                grant.session_grant.as_str().as_bytes(),
+            ))
+        || operation.reserved_session_grant.as_ref() != Some(grant.session_grant)
+        || operation.issuer_id != *grant.issuer_id
+        || operation.session_id.as_deref() != Some(grant.session_id)
+        || operation.grant_not_before != Some(grant.not_before)
+        || operation.grant_expires_at != Some(grant.expires_at)
+        || (operation.operation.kind() == SessionGrantOperationKind::Issue
+            && operation.proof_kind != grant.metadata.proof_kind)
+        || (operation.operation.kind() != SessionGrantOperationKind::Issue
+            && operation.proof_kind.is_some())
+    {
         return Err(DatabaseError::invalid_operation());
     }
     Ok(())
@@ -591,29 +565,43 @@ fn validate_refresh_chain(
     predecessor: &SessionGrant,
     successor: &NewSessionGrant<'_>,
 ) -> Result<(), DatabaseError> {
-    let predecessor_preimage: SessionGrantIssuancePreimage =
-        serde_json::from_slice(&predecessor.issuance_preimage)?;
-    let successor_preimage: SessionGrantIssuancePreimage =
-        serde_json::from_slice(successor.issuance_preimage)?;
-    let common_binding_mismatch = predecessor_preimage.issuer_id != successor_preimage.issuer_id
-        || predecessor_preimage.account_id != successor_preimage.account_id
-        || predecessor_preimage.audience_id != successor_preimage.audience_id
-        || predecessor_preimage.session_id != successor_preimage.session_id
-        || predecessor_preimage.session_public_key != successor_preimage.session_public_key
-        || successor_preimage
-            .scopes
-            .iter()
-            .any(|scope| !predecessor_preimage.scopes.contains(scope));
-    if common_binding_mismatch {
-        return Err(DatabaseError::invalid_operation());
-    }
-
-    if predecessor_preimage.credential_class != SessionGrantCredentialClass::Standard
-        || successor_preimage.credential_class != SessionGrantCredentialClass::Standard
-        || predecessor_preimage.holder_binding != successor_preimage.holder_binding
-        || predecessor_preimage.device_binding != successor_preimage.device_binding
+    let old = &predecessor.metadata;
+    let new = successor.metadata;
+    if old.issuer_id != new.issuer_id
+        || old.account_id != new.account_id
+        || old.audience_id != new.audience_id
+        || old.session_id != new.session_id
+        || old.session_public_key != new.session_public_key
+        || old.cnf_jkt != new.cnf_jkt
+        || old.credential_class != SessionGrantCredentialClass::Standard
+        || new.credential_class != SessionGrantCredentialClass::Standard
+        || old.holder_binding != new.holder_binding
+        || old.device_binding != new.device_binding
+        || old.id == new.id
+        || predecessor.session_grant == *successor.session_grant
+        || new.scopes != old.scopes
     {
         return Err(DatabaseError::invalid_operation());
+    }
+    match (&old.scope_details, &new.scope_details) {
+        (None, None) => {}
+        (Some(old), Some(new)) => {
+            if old.controller_principal_id != new.controller_principal_id
+                || old.agent_key_authorization_ref != new.agent_key_authorization_ref
+                || new.realm_ids != old.realm_ids
+                || new.strand_ids != old.strand_ids
+                || new.resources != old.resources
+                || new.constraints != old.constraints
+                || new.capability_grant_refs != old.capability_grant_refs
+                || new.policy_refs != old.policy_refs
+            {
+                return Err(DatabaseError::invalid_operation());
+            }
+            // Participation is a current observational overlay, not part of
+            // the frozen action/resource/constraint ceiling. Its refresh may
+            // change while the actual use-time selection gate remains in force.
+        }
+        _ => return Err(DatabaseError::invalid_operation()),
     }
     Ok(())
 }
@@ -623,10 +611,10 @@ fn new_grant_row<'a>(
     operation_id: Ulid,
     created_at: DateTime<Utc>,
     grant: &'a NewSessionGrant<'a>,
-) -> NewSessionGrantRow<'a> {
-    NewSessionGrantRow {
+) -> Result<NewSessionGrantRow<'a>, DatabaseError> {
+    Ok(NewSessionGrantRow {
         id: Uuid::from(id),
-        grant_id: grant.grant_id.token_bytes().to_vec(),
+        grant_id: grant.grant_id.uuid(),
         issuance_operation_id: Uuid::from(operation_id),
         user_session_id: grant.browser_session_id.map(Uuid::from),
         issuer_id: grant.issuer_id,
@@ -639,18 +627,17 @@ fn new_grant_row<'a>(
             .iter()
             .map(|token| token.as_str().to_owned())
             .collect(),
-        grant_jwt: grant.grant_jwt,
+        session_grant: grant.session_grant.as_str(),
+        credential_digest: arkret_canonical::sha256_bytes(grant.session_grant.as_str().as_bytes())
+            .to_vec(),
+        canonical_metadata: arkret_canonical::canonical_json_bytes(grant.metadata)?,
         session_id: grant.session_id,
-        issuance_nonce: grant.issuance_nonce,
-        issuance_preimage: grant.issuance_preimage,
-        issuance_digest: grant.issuance_digest.to_vec(),
-        signing_key_id: grant.signing_key_id,
         session_public_key: grant.session_public_key,
         credential_class: grant.credential_class,
         expires_at: grant.expires_at,
         lifecycle_state: "active",
         created_at,
-    }
+    })
 }
 
 fn owned_grant(
@@ -669,12 +656,9 @@ fn owned_grant(
         device_id: grant.device_id.map(ToOwned::to_owned),
         audience_id: grant.audience_id.clone(),
         scope: grant.scope,
-        grant_jwt: grant.grant_jwt.to_owned(),
+        session_grant: grant.session_grant.clone(),
+        metadata: grant.metadata.clone(),
         session_id: grant.session_id.to_owned(),
-        issuance_nonce: grant.issuance_nonce.to_owned(),
-        issuance_preimage: grant.issuance_preimage.to_vec(),
-        issuance_digest: grant.issuance_digest,
-        signing_key_id: grant.signing_key_id.to_owned(),
         session_public_key: grant.session_public_key.to_owned(),
         credential_class: grant.credential_class.to_owned(),
         created_at,
@@ -705,10 +689,12 @@ async fn load_operation_for_update(
 
 async fn load_grant_by_protocol_id(
     conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
+    issuer_id: &DidCoreId,
     grant_id: &SessionGrantId,
 ) -> Result<Option<SessionGrant>, DatabaseError> {
     oauth_session_grants::table
-        .filter(oauth_session_grants::grant_id.eq(grant_id.token_bytes().to_vec()))
+        .filter(oauth_session_grants::issuer_id.eq(issuer_id))
+        .filter(oauth_session_grants::grant_id.eq(grant_id.uuid()))
         .select(SessionGrantLookup::as_select())
         .first::<SessionGrantLookup>(conn)
         .await
@@ -720,10 +706,12 @@ async fn load_grant_by_protocol_id(
 
 async fn load_grant_by_protocol_id_for_update(
     conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
+    issuer_id: &DidCoreId,
     grant_id: &SessionGrantId,
 ) -> Result<Option<SessionGrant>, DatabaseError> {
     oauth_session_grants::table
-        .filter(oauth_session_grants::grant_id.eq(grant_id.token_bytes().to_vec()))
+        .filter(oauth_session_grants::issuer_id.eq(issuer_id))
+        .filter(oauth_session_grants::grant_id.eq(grant_id.uuid()))
         .for_update()
         .select(SessionGrantLookup::as_select())
         .first::<SessionGrantLookup>(conn)
@@ -787,11 +775,14 @@ mod authorization_checkpoint_tests {
             request_identity: "oidc-code-hash".to_owned(),
             canonical_intent_digest: [7; 32],
             canonical_intent: Some(br#"{"kind":"oidc"}"#.to_vec()),
-            issuance_nonce: Some("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8".to_owned()),
+            reserved_grant_id: Some(SessionGrantId::new_v7_at(1_794_657_600_000)),
+            reserved_credential_digest: Some(arkret_canonical::sha256_bytes(
+                SessionGrantSecret::from_bytes([42; 32]).as_str().as_bytes(),
+            )),
+            reserved_session_grant: Some(SessionGrantSecret::from_bytes([42; 32])),
             session_id: Some("session-1".to_owned()),
             grant_not_before: Some(now - chrono::Duration::try_minutes(10).unwrap()),
             grant_expires_at: Some(now + chrono::Duration::try_minutes(50).unwrap()),
-            signing_key_id: Some("key-1".to_owned()),
             proof_authorization_ref: Some(authorization.authorization_ref.to_owned()),
             proof_authorization_checkpoint: Some(authorization.checkpoint.clone()),
             proof_expires_at: Some(authorization.proof_expires_at),
@@ -874,12 +865,10 @@ async fn evict_operation(
         .set((
             oauth_session_grant_operations::state.eq("evicted"),
             oauth_session_grant_operations::canonical_intent.eq(None::<Vec<u8>>),
-            oauth_session_grant_operations::operation_selector.eq(None::<Value>),
-            oauth_session_grant_operations::issuance_nonce.eq(None::<String>),
+            oauth_session_grant_operations::reserved_session_grant.eq(None::<String>),
             oauth_session_grant_operations::session_id.eq(None::<String>),
             oauth_session_grant_operations::grant_not_before.eq(None::<DateTime<Utc>>),
             oauth_session_grant_operations::grant_expires_at.eq(None::<DateTime<Utc>>),
-            oauth_session_grant_operations::signing_key_id.eq(None::<String>),
             oauth_session_grant_operations::proof_authorization_ref.eq(None::<String>),
             oauth_session_grant_operations::proof_authorization_checkpoint.eq(None::<Value>),
             oauth_session_grant_operations::proof_expires_at.eq(None::<DateTime<Utc>>),
@@ -933,7 +922,7 @@ async fn commit_operation_outcome(
     } = commit;
     let affected_grant_ids = affected_grant_ids
         .iter()
-        .map(|id| Some(id.token_bytes().to_vec()))
+        .map(|id| Some(id.uuid()))
         .collect::<Vec<_>>();
     let rows = diesel::update(
         oauth_session_grant_operations::table
@@ -951,9 +940,8 @@ async fn commit_operation_outcome(
         oauth_session_grant_operations::canonical_outcome
             .eq(Some(outcome.canonical_response.to_vec())),
         oauth_session_grant_operations::target_session_grant_id
-            .eq(target_session_grant_id.map(|id| id.token_bytes().to_vec())),
-        oauth_session_grant_operations::result_grant_id
-            .eq(result_grant_id.map(|id| id.token_bytes().to_vec())),
+            .eq(target_session_grant_id.map(|id| id.uuid())),
+        oauth_session_grant_operations::result_grant_id.eq(result_grant_id.map(|id| id.uuid())),
         oauth_session_grant_operations::affected_grant_ids.eq(affected_grant_ids),
         oauth_session_grant_operations::retained_until.eq(retained_until),
         oauth_session_grant_operations::committed_at.eq(Some(committed_at)),
@@ -1007,11 +995,77 @@ macro_rules! apply_session_grant_filter {
     }};
 }
 
+const MAX_SESSION_GRANT_ALLOCATION_ATTEMPTS: usize = 32;
+
+async fn existing_reservation_outcome(
+    conn: &mut impl horme::GetConnection<Connection = diesel_async::AsyncPgConnection>,
+    requested: &NewSessionGrantOperation<'_>,
+    now: DateTime<Utc>,
+    stored: SessionGrantOperation,
+) -> Result<SessionGrantReserveOutcome, DatabaseError> {
+    if stored.canonical_intent_digest != requested.canonical_intent_digest
+        || stored.operation != requested.operation
+        || stored.target_session_grant_id.as_ref() != requested.target_session_grant_id
+        || (stored.state != SessionGrantOperationState::Evicted
+            && stored.canonical_intent.as_deref() != Some(requested.canonical_intent))
+    {
+        return Ok(SessionGrantReserveOutcome::Conflict(stored));
+    }
+    if stored.state == SessionGrantOperationState::Evicted {
+        return Ok(SessionGrantReserveOutcome::Indeterminate(stored));
+    }
+    if now >= stored.retained_until {
+        return Ok(SessionGrantReserveOutcome::Indeterminate(
+            evict_operation(conn, stored.id).await?,
+        ));
+    }
+    Ok(if stored.state == SessionGrantOperationState::Committed {
+        SessionGrantReserveOutcome::Replay(stored)
+    } else {
+        SessionGrantReserveOutcome::Pending(stored)
+    })
+}
+
+#[cfg(test)]
+mod collision_tests;
+
 #[async_trait]
 impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Sync>
     SessionGrantRepository for PgOAuthSessionGrantRepository<'_, P>
 {
     type Error = DatabaseError;
+
+    async fn lookup_operation_by_identity(
+        &mut self,
+        issuer_id: &DidCoreId,
+        kind: SessionGrantOperationKind,
+        proof_kind: Option<SessionGrantProofKind>,
+        request_identity: &str,
+    ) -> Result<Option<SessionGrantOperation>, Self::Error> {
+        let query = oauth_session_grant_operations::table
+            .filter(oauth_session_grant_operations::issuer_id.eq(issuer_id))
+            .filter(oauth_session_grant_operations::operation_kind.eq(kind.as_str()))
+            .filter(oauth_session_grant_operations::request_identity.eq(request_identity))
+            .into_boxed();
+        let row = if let Some(proof_kind) = proof_kind {
+            query
+                .filter(oauth_session_grant_operations::proof_kind.eq(proof_kind_wire(proof_kind)?))
+                .select(SessionGrantOperationRow::as_select())
+                .first::<SessionGrantOperationRow>(self.conn)
+                .await
+                .optional()?
+        } else {
+            query
+                .filter(oauth_session_grant_operations::proof_kind.is_null())
+                .select(SessionGrantOperationRow::as_select())
+                .first::<SessionGrantOperationRow>(self.conn)
+                .await
+                .optional()?
+        };
+        row.map(SessionGrantOperation::try_from)
+            .transpose()
+            .map_err(Into::into)
+    }
 
     async fn lock_operation(
         &mut self,
@@ -1036,162 +1090,150 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             return Err(DatabaseError::invalid_operation());
         }
         let operation_kind = operation.operation.kind();
-        let operation_selector = match &operation.operation {
-            SessionGrantOperationDescriptor::Issue => None,
-            SessionGrantOperationDescriptor::Refresh {
-                predecessor_grant_id,
-            } => Some(serde_json::json!({
-                "predecessor_grant_id": predecessor_grant_id,
-            })),
-            SessionGrantOperationDescriptor::Revoke { selector } => {
-                Some(serde_json::to_value(selector)?)
-            }
-        };
         let proof_kind = operation.proof_kind.map(proof_kind_wire).transpose()?;
         if (operation_kind == SessionGrantOperationKind::Issue) != proof_kind.is_some() {
             return Err(DatabaseError::invalid_operation());
         }
+        // An already reserved identity always wins before any new entropy or
+        // predecessor lookup. A retry can never repair or replace its seed.
+        if let Some(stored) = self
+            .lookup_operation_by_identity(
+                &operation.issuer_id,
+                operation_kind,
+                operation.proof_kind,
+                operation.request_identity,
+            )
+            .await?
+        {
+            return existing_reservation_outcome(self.conn, &operation, now, stored).await;
+        }
         let grant_producing = operation_kind != SessionGrantOperationKind::Revoke;
         if grant_producing
             && (operation.grant_not_before.is_none()
-                || operation.grant_expires_at <= operation.grant_not_before
-                || operation
-                    .signing_key_id
-                    .is_none_or(|kid| kid.trim().is_empty()))
+                || operation.grant_expires_at <= operation.grant_not_before)
         {
             return Err(DatabaseError::invalid_operation());
         }
-        let inherited_session_id = match operation_kind {
-            SessionGrantOperationKind::Issue => {
-                if operation.target_session_grant_id.is_some()
-                    || operation.issuance_nonce.is_some() != operation.session_id.is_some()
-                    || operation
-                        .issuance_nonce
-                        .is_some_and(|nonce| nonce.trim().is_empty())
-                    || operation
-                        .session_id
-                        .is_some_and(|session_id| session_id.trim().is_empty())
-                {
+        let (operation_selector, inherited_session_id) = match &operation.operation {
+            SessionGrantOperationDescriptor::Issue => {
+                if operation.target_session_grant_id.is_some() {
                     return Err(DatabaseError::invalid_operation());
                 }
-                operation.session_id.map(ToOwned::to_owned)
+                (None, None)
             }
-            SessionGrantOperationKind::Refresh => {
-                if operation.issuance_nonce.is_some() {
+            SessionGrantOperationDescriptor::Refresh {
+                predecessor_grant_id,
+            } => {
+                if operation.target_session_grant_id != Some(predecessor_grant_id) {
                     return Err(DatabaseError::invalid_operation());
                 }
-                let target = operation
-                    .target_session_grant_id
-                    .ok_or_else(DatabaseError::invalid_operation)?;
-                let predecessor = load_grant_by_protocol_id(self.conn, target)
-                    .await?
-                    .ok_or_else(DatabaseError::invalid_operation)?;
-                if predecessor.issuer_id != operation.issuer_id
-                    || operation
-                        .session_id
-                        .is_some_and(|session_id| session_id != predecessor.session_id)
-                {
+                let predecessor = load_grant_by_protocol_id(
+                    self.conn,
+                    &operation.issuer_id,
+                    predecessor_grant_id,
+                )
+                .await?
+                .ok_or_else(DatabaseError::invalid_operation)?;
+                if predecessor.metadata.credential_class != SessionGrantCredentialClass::Standard {
                     return Err(DatabaseError::invalid_operation());
                 }
-                Some(predecessor.session_id)
+                (
+                    Some(serde_json::json!({"predecessor_grant_id":predecessor_grant_id})),
+                    Some(predecessor.session_id),
+                )
             }
-            SessionGrantOperationKind::Revoke => {
-                if operation.issuance_nonce.is_some() || operation.session_id.is_some() {
+            SessionGrantOperationDescriptor::Revoke { selector } => {
+                if operation.grant_not_before.is_some() || operation.grant_expires_at.is_some() {
                     return Err(DatabaseError::invalid_operation());
                 }
-                None
+                (Some(serde_json::to_value(selector)?), None)
             }
         };
-        let (issuance_nonce, session_id) = if grant_producing {
-            let issuance_nonce = if let Some(nonce) = operation.issuance_nonce {
-                nonce.to_owned()
-            } else {
-                let mut nonce = [0_u8; 32];
-                rng.fill_bytes(&mut nonce);
-                arkret_canonical::base64url_encode(nonce)
-            };
-            let session_id = inherited_session_id
-                .unwrap_or_else(|| format!("session-chain:{}", new_id(now, rng)));
-            (Some(issuance_nonce), Some(session_id))
-        } else {
-            (None, None)
-        };
+        let unix_ms = u64::try_from(now.timestamp_millis())
+            .map_err(|_| DatabaseError::invalid_operation())?;
+        if unix_ms >= 1_u64 << 48 {
+            return Err(DatabaseError::invalid_operation());
+        }
         let retained_until = operation
             .retained_until
             .max(now + chrono::Duration::seconds(MIN_SESSION_GRANT_OPERATION_RETENTION_SECONDS));
-        let id = new_id(now, rng);
-        let row = NewSessionGrantOperationRow {
-            id: Uuid::from(id),
-            issuer_id: &operation.issuer_id,
-            operation_kind: operation_kind.as_str(),
-            proof_kind: proof_kind.as_deref(),
-            request_identity: operation.request_identity,
-            canonical_intent_digest: operation.canonical_intent_digest.to_vec(),
-            canonical_intent: Some(operation.canonical_intent),
-            operation_selector,
-            issuance_nonce,
-            session_id,
-            grant_not_before: operation.grant_not_before,
-            grant_expires_at: operation.grant_expires_at,
-            signing_key_id: operation.signing_key_id,
-            state: "reserved",
-            target_session_grant_id: operation
-                .target_session_grant_id
-                .map(|id| id.token_bytes().to_vec()),
-            retained_until,
-            created_at: now,
-        };
-        let inserted = diesel::insert_into(oauth_session_grant_operations::table)
-            .values(&row)
-            .on_conflict_do_nothing()
-            .execute(self.conn)
-            .await?
-            == 1;
-
-        let stored_query = oauth_session_grant_operations::table
-            .filter(oauth_session_grant_operations::issuer_id.eq(operation.issuer_id.as_str()))
-            .filter(oauth_session_grant_operations::operation_kind.eq(operation_kind.as_str()))
-            .filter(oauth_session_grant_operations::request_identity.eq(operation.request_identity))
-            .into_boxed();
-        let stored = if let Some(proof_kind) = proof_kind.as_deref() {
-            stored_query
-                .filter(oauth_session_grant_operations::proof_kind.eq(proof_kind))
-                .select(SessionGrantOperationRow::as_select())
-                .first::<SessionGrantOperationRow>(self.conn)
-                .await?
-        } else {
-            stored_query
-                .filter(oauth_session_grant_operations::proof_kind.is_null())
-                .select(SessionGrantOperationRow::as_select())
-                .first::<SessionGrantOperationRow>(self.conn)
-                .await?
-        };
-        let stored = SessionGrantOperation::try_from(stored)?;
-        if inserted {
-            return Ok(SessionGrantReserveOutcome::Reserved(stored));
-        }
-        if stored.state == SessionGrantOperationState::Evicted {
-            return if stored.canonical_intent_digest == operation.canonical_intent_digest {
-                Ok(SessionGrantReserveOutcome::Indeterminate(stored))
-            } else {
-                Ok(SessionGrantReserveOutcome::Conflict(stored))
+        for _ in 0..MAX_SESSION_GRANT_ALLOCATION_ATTEMPTS {
+            let (reserved_grant_id, reserved_credential_digest, reserved_session_grant, session_id) =
+                if grant_producing {
+                    // ID and U use independent issuer entropy. Their sole
+                    // uniqueness authority is this row's atomic insertion.
+                    let grant_id = SessionGrantId::try_from_uuid(Uuid::from(new_id(now, rng)))
+                        .map_err(DatabaseError::to_invalid_operation)?
+                        .uuid();
+                    let mut secret = [0_u8; 32];
+                    rng.fill_bytes(&mut secret);
+                    let secret = SessionGrantSecret::from_bytes(secret).into_string();
+                    let digest = arkret_canonical::sha256_bytes(secret.as_bytes()).to_vec();
+                    (
+                        Some(grant_id),
+                        Some(digest),
+                        Some(secret),
+                        Some(
+                            inherited_session_id
+                                .clone()
+                                .unwrap_or_else(|| format!("session-chain:{}", new_id(now, rng))),
+                        ),
+                    )
+                } else {
+                    (None, None, None, None)
+                };
+            let id = new_id(now, rng);
+            let row = NewSessionGrantOperationRow {
+                id: Uuid::from(id),
+                issuer_id: &operation.issuer_id,
+                operation_kind: operation_kind.as_str(),
+                proof_kind: proof_kind.as_deref(),
+                request_identity: operation.request_identity,
+                canonical_intent_digest: operation.canonical_intent_digest.to_vec(),
+                canonical_intent: Some(operation.canonical_intent),
+                operation_selector: operation_selector.clone(),
+                reserved_grant_id,
+                reserved_credential_digest,
+                reserved_session_grant,
+                session_id,
+                grant_not_before: operation.grant_not_before,
+                grant_expires_at: operation.grant_expires_at,
+                state: "reserved",
+                target_session_grant_id: operation
+                    .target_session_grant_id
+                    .map(SessionGrantId::uuid),
+                retained_until,
+                created_at: now,
             };
+            let inserted = diesel::insert_into(oauth_session_grant_operations::table)
+                .values(&row)
+                .on_conflict_do_nothing()
+                .execute(self.conn)
+                .await?
+                == 1;
+            if inserted {
+                return Ok(SessionGrantReserveOutcome::Reserved(
+                    load_operation_for_update(self.conn, id).await?,
+                ));
+            }
+            // ON CONFLICT waits for a competing owner. If it won this request
+            // identity, return that immutable result; only an unreserved
+            // candidate allocation collision may draw again.
+            if let Some(stored) = self
+                .lookup_operation_by_identity(
+                    &operation.issuer_id,
+                    operation_kind,
+                    operation.proof_kind,
+                    operation.request_identity,
+                )
+                .await?
+            {
+                return existing_reservation_outcome(self.conn, &operation, now, stored).await;
+            }
         }
-        if stored.canonical_intent_digest != operation.canonical_intent_digest
-            || stored.canonical_intent.as_deref() != Some(operation.canonical_intent)
-            || stored.operation != operation.operation
-            || stored.target_session_grant_id.as_ref() != operation.target_session_grant_id
-        {
-            return Ok(SessionGrantReserveOutcome::Conflict(stored));
-        }
-        if now >= stored.retained_until {
-            let evicted = evict_operation(self.conn, stored.id).await?;
-            return Ok(SessionGrantReserveOutcome::Indeterminate(evicted));
-        }
-        if stored.state != SessionGrantOperationState::Committed {
-            return Ok(SessionGrantReserveOutcome::Pending(stored));
-        }
-        Ok(SessionGrantReserveOutcome::Replay(stored))
+        Err(DatabaseError::to_invalid_operation(std::io::Error::other(
+            "issuer allocation collision retry limit exhausted",
+        )))
     }
 
     #[tracing::instrument(
@@ -1262,20 +1304,13 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         grant: NewSessionGrant<'_>,
     ) -> Result<SessionGrantCommitOutcome, Self::Error> {
         validate_exact_outcome(outcome)?;
-        let now = clock.now();
-        let id = new_id(now, rng);
+        let allocated_at = clock.now();
+        let id = new_id(allocated_at, rng);
         horme::transaction(self.conn, async move |conn| {
             let operation = load_operation_for_update(conn, operation_id).await?;
             if operation.state == SessionGrantOperationState::Evicted
-                || now >= operation.retained_until
+                || clock.now() >= operation.retained_until
             {
-                return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
-            }
-            if operation
-                .grant_expires_at
-                .is_some_and(|expires_at| now >= expires_at)
-            {
-                let operation = evict_operation(conn, operation_id).await?;
                 return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
             }
             if operation.operation.kind() != SessionGrantOperationKind::Issue {
@@ -1284,12 +1319,27 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             if operation.state == SessionGrantOperationState::Committed {
                 return Ok(SessionGrantCommitOutcome::Replay(operation));
             }
+            // Keep the global operation -> subject order. Neither lock wait
+            // can extend a first authorization or a retained gate witness.
+            lock_session_grant_subject(conn, grant.issuer_id, grant.subject_id).await?;
+            let now = clock.now();
+            if operation
+                .grant_expires_at
+                .is_some_and(|expires_at| now >= expires_at)
+            {
+                let operation = evict_operation(conn, operation_id).await?;
+                return Ok(SessionGrantCommitOutcome::Indeterminate(operation));
+            }
+            if operation.state == SessionGrantOperationState::Reserved
+                && authorization.proof_expires_at <= now
+            {
+                return Ok(SessionGrantCommitOutcome::AuthorizationExpired(operation));
+            }
             validate_authorization(&operation, authorization, now)?;
             validate_grant_material(&operation, &grant)?;
-            lock_session_grant_subject(conn, grant.issuer_id, grant.subject_id).await?;
             let retained_until = operation.retained_until.max(authorization.proof_expires_at);
             let grant_id = grant.grant_id.clone();
-            let row = new_grant_row(id, operation_id, now, &grant);
+            let row = new_grant_row(id, operation_id, now, &grant)?;
             diesel::insert_into(oauth_session_grants::table)
                 .values(&row)
                 .execute(conn)
@@ -1332,20 +1382,13 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             successor,
         } = commit;
         validate_exact_outcome(outcome)?;
-        let now = clock.now();
-        let successor_row_id = new_id(now, rng);
+        let allocated_at = clock.now();
+        let successor_row_id = new_id(allocated_at, rng);
         horme::transaction(self.conn, async move |conn| {
             let operation = load_operation_for_update(conn, operation_id).await?;
             if operation.state == SessionGrantOperationState::Evicted
-                || now >= operation.retained_until
+                || clock.now() >= operation.retained_until
             {
-                return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
-            }
-            if operation
-                .grant_expires_at
-                .is_some_and(|expires_at| now >= expires_at)
-            {
-                let operation = evict_operation(conn, operation_id).await?;
                 return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
             }
             if operation.operation.kind() != SessionGrantOperationKind::Refresh
@@ -1353,16 +1396,15 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             {
                 return Err(DatabaseError::invalid_operation());
             }
-            validate_authorization(&operation, authorization, now)?;
             if operation.state == SessionGrantOperationState::Committed {
                 return Ok(SessionGrantRefreshOutcome::Replay(operation));
             }
-
             validate_grant_material(&operation, &successor)?;
             lock_session_grant_subject(conn, successor.issuer_id, successor.subject_id).await?;
-            let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
-                .await?
-                .ok_or_else(DatabaseError::invalid_operation)?;
+            let predecessor =
+                load_grant_by_protocol_id(conn, &operation.issuer_id, predecessor_grant_id)
+                    .await?
+                    .ok_or_else(DatabaseError::invalid_operation)?;
             if predecessor.issuer_id != *successor.issuer_id
                 || predecessor.subject_id != *successor.subject_id
                 || predecessor.session_id != successor.session_id
@@ -1370,9 +1412,29 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 return Err(DatabaseError::invalid_operation());
             }
             validate_refresh_chain(&predecessor, &successor)?;
-            let predecessor = load_grant_by_protocol_id_for_update(conn, predecessor_grant_id)
-                .await?
-                .ok_or_else(DatabaseError::invalid_operation)?;
+            let predecessor = load_grant_by_protocol_id_for_update(
+                conn,
+                &operation.issuer_id,
+                predecessor_grant_id,
+            )
+            .await?
+            .ok_or_else(DatabaseError::invalid_operation)?;
+            // All potentially blocking current-row locks precede the one
+            // accepting time. A fresh witness cannot survive either wait.
+            let now = clock.now();
+            if operation
+                .grant_expires_at
+                .is_some_and(|expiry| now >= expiry)
+            {
+                let operation = evict_operation(conn, operation_id).await?;
+                return Ok(SessionGrantRefreshOutcome::Indeterminate(operation));
+            }
+            if operation.state == SessionGrantOperationState::Reserved
+                && now >= authorization.proof_expires_at
+            {
+                return Ok(SessionGrantRefreshOutcome::AuthorizationExpired(operation));
+            }
+            validate_authorization(&operation, authorization, now)?;
             if predecessor.lifecycle_state != SessionGrantLifecycleState::Active
                 || predecessor.expires_at <= now
             {
@@ -1387,7 +1449,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                     operation_id,
                     now,
                     &successor,
-                ))
+                )?)
                 .execute(conn)
                 .await?;
             let changed = diesel::update(
@@ -1398,8 +1460,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             .set((
                 oauth_session_grants::lifecycle_state.eq("superseded"),
                 oauth_session_grants::superseded_at.eq(Some(now)),
-                oauth_session_grants::successor_grant_id
-                    .eq(Some(successor_grant_id.token_bytes().to_vec())),
+                oauth_session_grants::successor_grant_id.eq(Some(successor_grant_id.uuid())),
             ))
             .execute(conn)
             .await?;
@@ -1420,9 +1481,10 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 },
             )
             .await?;
-            let predecessor = load_grant_by_protocol_id(conn, predecessor_grant_id)
-                .await?
-                .ok_or_else(DatabaseError::invalid_operation)?;
+            let predecessor =
+                load_grant_by_protocol_id(conn, &operation.issuer_id, predecessor_grant_id)
+                    .await?
+                    .ok_or_else(DatabaseError::invalid_operation)?;
             Ok(SessionGrantRefreshOutcome::Committed {
                 predecessor: Box::new(predecessor),
                 successor: Box::new(owned_grant(successor_row_id, operation_id, now, successor)),
@@ -1449,14 +1511,14 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             if operation.operation.kind() != SessionGrantOperationKind::Revoke {
                 return Err(DatabaseError::invalid_operation());
             }
-            validate_authorization(&operation, authorization, now)?;
             if operation.state == SessionGrantOperationState::Committed {
                 return Ok(SessionGrantRevokeOutcome::Replay(operation));
             }
+            validate_authorization(&operation, authorization, now)?;
 
             let (subject_id, expected_selector) = match selector {
                 SessionGrantRevokeSelector::Grant(grant_id) => {
-                    let grant = load_grant_by_protocol_id(conn, grant_id)
+                    let grant = load_grant_by_protocol_id(conn, &operation.issuer_id, grant_id)
                         .await?
                         .ok_or_else(DatabaseError::invalid_operation)?;
                     if grant.issuer_id != operation.issuer_id {
@@ -1501,8 +1563,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 .into_boxed();
             match selector {
                 SessionGrantRevokeSelector::Grant(grant_id) => {
-                    query = query
-                        .filter(oauth_session_grants::grant_id.eq(grant_id.token_bytes().to_vec()));
+                    query = query.filter(oauth_session_grants::grant_id.eq(grant_id.uuid()));
                 }
                 SessionGrantRevokeSelector::Device { device_id, .. } => {
                     query = query.filter(oauth_session_grants::device_id.eq(Some(device_id)));
@@ -1520,9 +1581,13 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             let mut matched = Vec::with_capacity(candidates.len());
             for candidate in candidates {
                 matched.push(
-                    load_grant_by_protocol_id_for_update(conn, &candidate.grant_id)
-                        .await?
-                        .ok_or_else(DatabaseError::invalid_operation)?,
+                    load_grant_by_protocol_id_for_update(
+                        conn,
+                        &operation.issuer_id,
+                        &candidate.grant_id,
+                    )
+                    .await?
+                    .ok_or_else(DatabaseError::invalid_operation)?,
                 );
             }
             let mut active_ids = matched
@@ -1535,12 +1600,10 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 .collect::<Vec<_>>();
             active_ids.sort();
             if !active_ids.is_empty() {
-                let active_bytes = active_ids
-                    .iter()
-                    .map(|id| id.token_bytes().to_vec())
-                    .collect::<Vec<_>>();
+                let active_bytes = active_ids.iter().map(|id| id.uuid()).collect::<Vec<_>>();
                 let changed = diesel::update(
                     oauth_session_grants::table
+                        .filter(oauth_session_grants::issuer_id.eq(&operation.issuer_id))
                         .filter(oauth_session_grants::grant_id.eq_any(active_bytes))
                         .filter(oauth_session_grants::lifecycle_state.eq("active")),
                 )
@@ -1590,7 +1653,7 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             let mut grants = Vec::with_capacity(active_ids.len());
             for grant_id in &active_ids {
                 grants.push(
-                    load_grant_by_protocol_id(conn, grant_id)
+                    load_grant_by_protocol_id(conn, &operation.issuer_id, grant_id)
                         .await?
                         .ok_or_else(DatabaseError::invalid_operation)?,
                 );
@@ -1621,32 +1684,27 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
     #[tracing::instrument(name = "db.oauth_session_grant.lookup_by_grant_id", skip_all, err)]
     async fn lookup_by_grant_id(
         &mut self,
+        issuer_id: &DidCoreId,
         grant_id: &SessionGrantId,
     ) -> Result<Option<SessionGrant>, Self::Error> {
-        let row = oauth_session_grants::table
-            .filter(oauth_session_grants::grant_id.eq(grant_id.token_bytes().to_vec()))
-            .select(SessionGrantLookup::as_select())
-            .first::<SessionGrantLookup>(self.conn)
-            .await
-            .optional()?;
-
-        row.map(SessionGrant::try_from)
-            .transpose()
-            .map_err(Into::into)
+        load_grant_by_protocol_id(self.conn, issuer_id, grant_id).await
     }
 
-    #[tracing::instrument(name = "db.oauth_session_grant.lookup_by_grant_jwt", skip_all, err)]
-    async fn lookup_by_grant_jwt(
+    #[tracing::instrument(name = "db.oauth_session_grant.lookup_by_secret", skip_all, err)]
+    async fn lookup_by_secret(
         &mut self,
-        grant_jwt: &str,
+        issuer_id: &DidCoreId,
+        secret: &SessionGrantSecret,
     ) -> Result<Option<SessionGrant>, Self::Error> {
+        let digest = arkret_canonical::sha256_bytes(secret.as_str().as_bytes());
         let row = oauth_session_grants::table
-            .filter(oauth_session_grants::grant_jwt.eq(grant_jwt))
+            .filter(oauth_session_grants::issuer_id.eq(issuer_id))
+            .filter(oauth_session_grants::credential_digest.eq(digest.to_vec()))
+            .filter(oauth_session_grants::session_grant.eq(secret.as_str()))
             .select(SessionGrantLookup::as_select())
             .first::<SessionGrantLookup>(self.conn)
             .await
             .optional()?;
-
         row.map(SessionGrant::try_from)
             .transpose()
             .map_err(Into::into)
@@ -1806,4 +1864,199 @@ struct SessionGrantCleanupResult {
     count: i64,
     #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Timestamptz>)]
     last_ts: Option<DateTime<Utc>>,
+}
+
+#[cfg(test)]
+mod opaque_record_tests {
+    use arkret_models_identity::{
+        CanonicalSessionPublicJwk, SessionGrantDeviceBinding, SessionGrantHolderBinding,
+    };
+
+    use super::*;
+
+    fn metadata() -> SessionGrantMetadata {
+        let public_key = CanonicalSessionPublicJwk::new(
+            r#"{"crv":"Ed25519","kty":"OKP","x":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}"#,
+        )
+        .unwrap();
+        let account = arkret_wire::AccountId::new(
+            "ak:did_core:web:alice.example".parse().unwrap(),
+            "ak:did_core:web:station.example".parse().unwrap(),
+        );
+        let device_id: arkret_identifiers::DeviceId =
+            "ak:device:0190c6aa-1234-7000-8000-000000000001"
+                .parse()
+                .unwrap();
+        SessionGrantMetadata {
+            id: SessionGrantId::new_v7_at(1_794_657_600_000),
+            issuer_id: "ak:did_core:web:issuer.example".parse().unwrap(),
+            account_id: account.clone(),
+            device_id: Some(device_id.clone()),
+            audience_id: account.station_id,
+            scopes: vec!["ak.message.create".into(), "ak.message.read".into()],
+            not_before: "2026-11-14T12:00:00.000Z".parse().unwrap(),
+            expires_at: "2026-11-14T12:15:00.000Z".parse().unwrap(),
+            session_id: "opaque-record-test-chain".into(),
+            cnf_jkt: public_key.thumbprint_sha256().unwrap(),
+            session_public_key: public_key,
+            credential_class: SessionGrantCredentialClass::Standard,
+            holder_binding: SessionGrantHolderBinding::HumanDevice {
+                device_binding: device_id.to_string(),
+            },
+            device_binding: Some(SessionGrantDeviceBinding {
+                device_id,
+                authorization_event_id: "ak:event:AQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                    .parse()
+                    .unwrap(),
+                model_generation_ref: 1,
+            }),
+            proof_kind: Some(SessionGrantProofKind::AccountHandoff),
+            scope_details: None,
+        }
+    }
+    fn grant<'a>(
+        metadata: &'a SessionGrantMetadata,
+        secret: &'a SessionGrantSecret,
+        local: &'a LocalAccountId,
+    ) -> NewSessionGrant<'a> {
+        NewSessionGrant {
+            grant_id: metadata.id.clone(),
+            browser_session_id: None,
+            issuer_id: &metadata.issuer_id,
+            subject_id: &metadata.account_id.principal_id,
+            local_account_id: local,
+            device_id: metadata.device_id.as_ref().map(|id| id.as_str()),
+            audience_id: &metadata.audience_id,
+            scope: metadata
+                .scopes
+                .iter()
+                .map(|scope| scope.parse::<ScopeToken>().unwrap())
+                .collect(),
+            session_grant: secret,
+            metadata,
+            session_id: &metadata.session_id,
+            session_public_key: metadata.session_public_key.as_str(),
+            credential_class: "standard",
+            not_before: metadata.not_before,
+            expires_at: metadata.expires_at,
+        }
+    }
+    fn operation(
+        metadata: &SessionGrantMetadata,
+        secret: &SessionGrantSecret,
+    ) -> SessionGrantOperation {
+        let intent = br#"{"request_id":"first"}"#.to_vec();
+        SessionGrantOperation {
+            id: Ulid::from(1_u128),
+            issuer_id: metadata.issuer_id.clone(),
+            operation: SessionGrantOperationDescriptor::Issue,
+            proof_kind: metadata.proof_kind,
+            request_identity: "logical-issue".into(),
+            canonical_intent_digest: arkret_canonical::sha256_bytes(&intent),
+            canonical_intent: Some(intent),
+            reserved_grant_id: Some(metadata.id.clone()),
+            reserved_credential_digest: Some(arkret_canonical::sha256_bytes(
+                secret.as_str().as_bytes(),
+            )),
+            reserved_session_grant: Some(secret.clone()),
+            session_id: Some(metadata.session_id.clone()),
+            grant_not_before: Some(metadata.not_before),
+            grant_expires_at: Some(metadata.expires_at),
+            proof_authorization_ref: None,
+            proof_authorization_checkpoint: None,
+            proof_expires_at: None,
+            outcome_digest: None,
+            canonical_outcome: None,
+            state: SessionGrantOperationState::Reserved,
+            target_session_grant_id: None,
+            result_grant_id: None,
+            affected_grant_ids: vec![],
+            retained_until: metadata.expires_at + chrono::Duration::days(7),
+            created_at: metadata.not_before,
+            committed_at: None,
+        }
+    }
+    #[test]
+    fn valid_material_requires_exact_reserved_secret_record_and_metadata() {
+        let metadata = metadata();
+        let secret = SessionGrantSecret::from_bytes([1; 32]);
+        let local = LocalAccountId::new("local-account").unwrap();
+        let operation = operation(&metadata, &secret);
+        validate_grant_material(&operation, &grant(&metadata, &secret, &local)).unwrap();
+        let other = SessionGrantSecret::from_bytes([2; 32]);
+        assert!(validate_grant_material(&operation, &grant(&metadata, &other, &local)).is_err());
+        let mut changed = operation.clone();
+        changed.reserved_grant_id = Some(SessionGrantId::new_v7_at(1_794_657_600_001));
+        assert!(validate_grant_material(&changed, &grant(&metadata, &secret, &local)).is_err());
+        let mut changed = operation.clone();
+        changed.issuer_id = "ak:did_core:web:another.example".parse().unwrap();
+        assert!(validate_grant_material(&changed, &grant(&metadata, &secret, &local)).is_err());
+        let mut changed = operation.clone();
+        changed.reserved_session_grant = None;
+        assert!(validate_grant_material(&changed, &grant(&metadata, &secret, &local)).is_err());
+        let mut changed = operation;
+        changed.grant_expires_at = Some(metadata.expires_at + chrono::Duration::milliseconds(1));
+        assert!(validate_grant_material(&changed, &grant(&metadata, &secret, &local)).is_err());
+    }
+    #[test]
+    fn query_projections_cannot_replace_immutable_authorization_metadata() {
+        let metadata = metadata();
+        let secret = SessionGrantSecret::from_bytes([1; 32]);
+        let local = LocalAccountId::new("local-account").unwrap();
+        let other: DidCoreId = "ak:did_core:web:another.example".parse().unwrap();
+        let mut changed = grant(&metadata, &secret, &local);
+        changed.subject_id = &other;
+        assert!(validate_grant_projection(&changed).is_err());
+        let mut changed = grant(&metadata, &secret, &local);
+        changed.audience_id = &other;
+        assert!(validate_grant_projection(&changed).is_err());
+        let mut changed = grant(&metadata, &secret, &local);
+        changed.session_id = "other-chain";
+        assert!(validate_grant_projection(&changed).is_err());
+        let mut changed = grant(&metadata, &secret, &local);
+        changed.scope = "ak.message.read".parse().unwrap();
+        assert!(validate_grant_projection(&changed).is_err());
+    }
+    #[test]
+    fn refresh_preserves_one_holder_chain_and_the_exact_scope() {
+        let old = metadata();
+        let old_secret = SessionGrantSecret::from_bytes([1; 32]);
+        let new_secret = SessionGrantSecret::from_bytes([2; 32]);
+        let local = LocalAccountId::new("local-account").unwrap();
+        let predecessor = owned_grant(
+            Ulid::from(1_u128),
+            Ulid::from(2_u128),
+            old.not_before,
+            grant(&old, &old_secret, &local),
+        );
+        let mut next = old.clone();
+        next.id = SessionGrantId::new_v7_at(1_794_657_600_001);
+        validate_refresh_chain(&predecessor, &grant(&next, &new_secret, &local)).unwrap();
+        assert!(validate_refresh_chain(&predecessor, &grant(&next, &old_secret, &local)).is_err());
+        for change in 0..7 {
+            let mut changed = next.clone();
+            match change {
+                0 => changed.id = old.id.clone(),
+                1 => changed.issuer_id = "ak:did_core:web:another.example".parse().unwrap(),
+                2 => changed.session_id = "other-chain".into(),
+                3 => changed.scopes.push("ak.message.write".into()),
+                4 => {
+                    changed
+                        .device_binding
+                        .as_mut()
+                        .unwrap()
+                        .model_generation_ref += 1
+                }
+                5 => changed.credential_class = SessionGrantCredentialClass::RecoverySession,
+                _ => {
+                    changed.scopes.pop();
+                }
+            }
+            assert!(
+                validate_refresh_chain(&predecessor, &grant(&changed, &new_secret, &local))
+                    .is_err(),
+                "case {change}"
+            );
+        }
+    }
 }

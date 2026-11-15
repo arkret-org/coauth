@@ -644,6 +644,89 @@ async fn identity_registration_http_recovery_keeps_exact_proof_and_does_not_repe
         completed.json();
     outcome.validate_against_request(&register).unwrap();
     let mut conn = state.repository_factory.pool().get().await.unwrap();
+    #[derive(diesel::QueryableByName)]
+    struct InitialGrantRecord {
+        #[diesel(sql_type = diesel::sql_types::Uuid)]
+        reserved_grant_id: uuid::Uuid,
+        #[diesel(sql_type = diesel::sql_types::Binary)]
+        reserved_credential_digest: Vec<u8>,
+        #[diesel(sql_type = diesel::sql_types::Text)]
+        reserved_session_grant: String,
+        #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+        grant_not_before: chrono::DateTime<chrono::Utc>,
+        #[diesel(sql_type = diesel::sql_types::Timestamptz)]
+        grant_expires_at: chrono::DateTime<chrono::Utc>,
+        #[diesel(sql_type = diesel::sql_types::Binary)]
+        canonical_outcome: Vec<u8>,
+        #[diesel(sql_type = diesel::sql_types::Binary)]
+        canonical_metadata: Vec<u8>,
+    }
+    let initial_record = diesel::sql_query(
+        "SELECT o.reserved_grant_id, o.reserved_credential_digest, \
+         o.reserved_session_grant, o.grant_not_before, o.grant_expires_at, \
+         o.canonical_outcome, g.canonical_metadata \
+         FROM oauth_session_grant_operations o \
+         JOIN oauth_session_grants g ON g.issuance_operation_id = o.id",
+    )
+    .get_result::<InitialGrantRecord>(&mut conn)
+    .await
+    .unwrap();
+    let metadata: arkret_models_identity::SessionGrantMetadata =
+        serde_json::from_slice(&initial_record.canonical_metadata).unwrap();
+    metadata.validate().unwrap();
+    assert_eq!(
+        metadata.id.uuid(),
+        initial_record.reserved_grant_id,
+        "the HTTP outcome must use the allocator's original record ID"
+    );
+    assert_eq!(metadata.id, outcome.issued_session.session_grant_id);
+    assert_eq!(metadata.issuer_id, outcome.issued_session.issuer_id);
+    assert_eq!(metadata.account_id, outcome.issued_session.account_id);
+    assert!(
+        initial_record.reserved_session_grant == outcome.issued_session.session_grant.as_str(),
+        "the HTTP outcome must use the allocator's original opaque credential"
+    );
+    assert!(
+        initial_record.reserved_credential_digest
+            == arkret_canonical::sha256_bytes(
+                outcome.issued_session.session_grant.as_str().as_bytes()
+            ),
+        "the reserved credential fence must bind the actual returned credential"
+    );
+    assert_eq!(metadata.not_before, initial_record.grant_not_before);
+    assert_eq!(metadata.expires_at, initial_record.grant_expires_at);
+    assert_eq!(metadata.expires_at, outcome.issued_session.expires_at);
+    for timestamp in [
+        initial_record.grant_not_before,
+        initial_record.grant_expires_at,
+    ] {
+        assert_eq!(timestamp.timestamp_subsec_nanos() % 1_000_000, 0);
+    }
+    // Check the canonical wire strings as well as parsed timestamp equality.
+    let metadata_json: serde_json::Value =
+        serde_json::from_slice(&initial_record.canonical_metadata).unwrap();
+    let response_json: serde_json::Value = completed.json();
+    assert_eq!(
+        metadata_json["not_before"],
+        serde_json::Value::String(arkret_canonical::format_timestamp_canonical(
+            initial_record.grant_not_before
+        ))
+    );
+    assert_eq!(
+        metadata_json["expires_at"],
+        serde_json::Value::String(arkret_canonical::format_timestamp_canonical(
+            initial_record.grant_expires_at
+        ))
+    );
+    assert_eq!(
+        response_json["issued_session"]["expires_at"],
+        metadata_json["expires_at"]
+    );
+    assert!(
+        initial_record.canonical_outcome
+            == arkret_canonical::canonical_json_bytes(&outcome).unwrap(),
+        "the retained outcome must be the exact canonical returned response"
+    );
     let phase = diesel::sql_query("SELECT state FROM identity_creation_leases")
         .get_result::<Phase>(&mut conn)
         .await
