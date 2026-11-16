@@ -186,7 +186,7 @@ pub(crate) async fn author_and_enqueue_prepared_transition(
         .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;
     let record = arkret_signatures::account_status::sign_account_status_record(
         unsigned,
-        binding.binding_receipt.proof.verification_method.clone(),
+        issuer_source.verification_method().clone(),
         &crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes(&signing_seed),
     )
     .map_err(|error| AccountStatusPublicationError::InvalidBody(error.to_string()))?;

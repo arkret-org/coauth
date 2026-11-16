@@ -147,6 +147,37 @@ pub async fn resolve_verified_webvh_service_document_at(
     did: &arkret_identifiers::Did,
     decided_at: chrono::DateTime<chrono::Utc>,
 ) -> Result<DidDocument, DidResolveError> {
+    let verified = resolve_verified_webvh_service_history(egress, did).await?;
+    verified_webvh_document_at(did, &verified, decided_at)
+}
+
+/// Fetch the current native lineage while selecting the immutable original
+/// service document. Infrastructure relocation never requires the retired
+/// endpoint to remain available and never changes the stable service core.
+pub async fn resolve_verified_webvh_service_document_at_from_current(
+    _http_client: &reqwest::Client,
+    egress: &ResolverEgressPolicy,
+    current_did: &arkret_identifiers::Did,
+    original_did: &arkret_identifiers::Did,
+    decided_at: chrono::DateTime<chrono::Utc>,
+) -> Result<DidDocument, DidResolveError> {
+    if arkret_wire::project_did_to_core_id(current_did)
+        .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?
+        != arkret_wire::project_did_to_core_id(original_did)
+            .map_err(|error| DidResolveError::InvalidDid(error.to_string()))?
+    {
+        return Err(DidResolveError::BadResolverResponse(
+            "historical service core differs from current lineage".into(),
+        ));
+    }
+    let verified = resolve_verified_webvh_service_history(egress, current_did).await?;
+    verified_webvh_document_at(original_did, &verified, decided_at)
+}
+
+async fn resolve_verified_webvh_service_history(
+    egress: &ResolverEgressPolicy,
+    did: &arkret_identifiers::Did,
+) -> Result<arkret_identity::VerifiedDidWebvhLog, DidResolveError> {
     if !did.as_str().starts_with("did:webvh:") {
         return Err(DidResolveError::UnsupportedMethod);
     }
@@ -179,8 +210,7 @@ pub async fn resolve_verified_webvh_service_document_at(
         }
         history.extend_from_slice(&chunk);
     }
-    let verified = verify_historical_webvh_service_chain(did, &history)?;
-    verified_webvh_document_at(did, &verified, decided_at)
+    verify_historical_webvh_service_chain(did, &history)
 }
 
 fn verify_historical_webvh_service_chain(

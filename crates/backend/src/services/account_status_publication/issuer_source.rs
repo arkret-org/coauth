@@ -89,10 +89,7 @@ impl AccountStatusIssuerContext {
             crate::services::peer_protocol_client::ACCOUNT_AUTHORITY_VERIFICATION_METHOD_FRAGMENT
         ))
         .map_err(str::to_owned)?;
-        if &own != authority
-            || binding.binding_receipt.account_authority_id != own
-            || binding.binding_receipt.proof.verification_method != method
-        {
+        if &own != authority || binding.binding_receipt.account_authority_id != own {
             return Err("account_status_actual_issuer_mismatch".into());
         }
         let source = crate::services::did_binding::authority_document(
@@ -110,6 +107,45 @@ impl AccountStatusIssuerContext {
         )
         .await
         .map_err(|e| e.to_string())?;
+        // A prior immutable registration receipt keeps its original method.
+        // Infrastructure relocation changes the current method representation,
+        // never the AccountId, PCR binding or original receipt bytes.
+        if binding.binding_receipt.proof.verification_method != method {
+            let receipt = &binding.binding_receipt;
+            let original_did = arkret_identity::verification_method_did(
+                receipt.proof.verification_method.as_str(),
+            )
+            .map_err(|error| error.to_string())?;
+            if arkret_wire::project_did_to_core_id(&original_did)
+                .map_err(|error| error.to_string())?
+                != own
+            {
+                return Err("account_status_original_issuer_mismatch".into());
+            }
+            let original =
+                crate::services::did_resolver::resolve_verified_webvh_service_document_at_from_current(
+                    &self.http_client,
+                    self.resolver.resolver_egress_policy(),
+                    &did,
+                    &original_did,
+                    receipt.issued_at,
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            let original = crate::services::did_binding::to_shared_document(&original)
+                .map_err(|error| error.to_string())?;
+            arkret_identity::verify_jws_with_document_relationship(
+                &receipt
+                    .canonical_proof_binding_bytes()
+                    .map_err(|error| error.to_string())?,
+                &receipt.proof.jws,
+                &receipt.proof.verification_method,
+                &original_did,
+                &original,
+                arkret_identity::DidVerificationRelationship::AssertionMethod,
+            )
+            .map_err(|error| error.to_string())?;
+        }
         self.ensure_current_authority(authority)?;
         PreparedAccountStatusIssuerSource::from_accepted_document(
             source, authority, &method, keyring, now,
@@ -138,6 +174,10 @@ struct RetainedAccountStatusIssuerSource {
 }
 
 impl PreparedAccountStatusIssuerSource {
+    pub(super) fn verification_method(&self) -> &DidUrl {
+        &self.verification_method
+    }
+
     pub fn from_accepted_document(
         source: AuthorityDocument,
         authority_id: &DidCoreId,

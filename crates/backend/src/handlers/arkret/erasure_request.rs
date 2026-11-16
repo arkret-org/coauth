@@ -105,10 +105,18 @@ pub async fn request_account_erasure(
             .browser_session()
             .lookup(session_id)
             .await?
-            .filter(|session| session.finished_at.is_none())
             .ok_or_else(|| {
                 ArkretRouteError::Unauthorized("session is finished or unknown".to_owned())
             })?;
+        // Status is disclosed only after the authenticated cookie resolved
+        // to its actual bound session and user. An issued terminal record
+        // fences retries even before the asynchronous session cleanup runs.
+        require_erasure_entry_status(&session.user)?;
+        if session.finished_at.is_some() {
+            return Err(ArkretRouteError::Unauthorized(
+                "session is finished or unknown".to_owned(),
+            ));
+        }
         let last_authenticated_at = repo
             .browser_session()
             .get_last_authentication(&session)
@@ -175,6 +183,10 @@ pub(crate) async fn accept_erasure_request(
     body: &AccountRequestErasureRequestBody,
     issuer_context: &crate::services::account_status_publication::AccountStatusIssuerContext,
 ) -> Result<Vec<u8>, ArkretRouteError> {
+    let current_user =
+        current_erasure_caller(repo, clock, arkret_config, user, last_authenticated_at).await?;
+    let user = &current_user;
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
     let request_digest = body
         .canonical_request_digest()
         .map_err(|error| ArkretRouteError::BadRequest(error.to_string()))?
@@ -186,57 +198,16 @@ pub(crate) async fn accept_erasure_request(
     // bytes — or a request_id owned by another account — is
     // `duplicate_conflict` with zero writes.
     if let Some(existing) = repo.user_erasure_request().lookup(&request_id).await? {
-        if existing.user_id == user.id && existing.request_digest == request_digest {
-            return Ok(existing.canonical_outcome);
-        }
-        return Err(duplicate_conflict());
-    }
-
-    // ── Entry conditions (§8.1): only active / soft_logged_out / suspended
-    // may enter; the remaining states fail at the authentication layer with
-    // their §3 status codes.
-    match user.status {
-        AccountStatus::Active | AccountStatus::SoftLoggedOut | AccountStatus::Suspended => {}
-        AccountStatus::Locked => {
-            return Err(ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                arkret_wire::ErrorCode::ACCOUNT_LOCKED,
-                "account is locked",
-            ));
-        }
-        AccountStatus::Deactivated => {
-            return Err(ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
-                "account is deactivated",
-            ));
-        }
-        AccountStatus::ErasurePending => {
-            return Err(ArkretRouteError::coded(
-                StatusCode::UNAUTHORIZED,
-                arkret_wire::ErrorCode::ACCOUNT_ERASED,
-                "account erasure is already pending",
-            ));
-        }
-    }
-
-    // ── Fresh high-risk action authentication (§8.1): judged locally from
-    // this deployment's own authentication facts. No configured policy, no
-    // authentication fact, or a stale one all fail closed with zero writes.
-    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
-    let fresh = arkret_config
-        .erasure_request_max_auth_age
-        .is_some_and(|max_age| {
-            last_authenticated_at.is_some_and(|authenticated_at| {
-                now.signed_duration_since(authenticated_at) <= max_age
-            })
-        });
-    if !fresh {
-        return Err(ArkretRouteError::coded(
-            StatusCode::UNAUTHORIZED,
-            arkret_wire::ErrorCode::REAUTHENTICATION_REQUIRED,
-            "this high-risk action requires fresh authentication",
-        ));
+        return replay_or_pending(
+            repo,
+            clock,
+            arkret_config,
+            user,
+            last_authenticated_at,
+            &request_digest,
+            Some(existing),
+        )
+        .await;
     }
 
     // ── Single live intent (§8.1): a different request_id while a live
@@ -298,15 +269,17 @@ pub(crate) async fn accept_erasure_request(
         })
         .await?;
     if !inserted {
-        return match repo.user_erasure_request().lookup(&request_id).await? {
-            Some(existing)
-                if existing.user_id == user.id && existing.request_digest == request_digest =>
-            {
-                Ok(existing.canonical_outcome)
-            }
-            Some(_) => Err(duplicate_conflict()),
-            None => Err(already_pending()),
-        };
+        let existing = repo.user_erasure_request().lookup(&request_id).await?;
+        return replay_or_pending(
+            repo,
+            clock,
+            arkret_config,
+            user,
+            last_authenticated_at,
+            &request_digest,
+            existing,
+        )
+        .await;
     }
 
     // ── Trigger the existing `erasure_pending` issuance flow (§8): sign and
@@ -390,6 +363,94 @@ pub(crate) async fn accept_erasure_request(
         .await?;
 
     Ok(canonical_outcome)
+}
+
+async fn current_erasure_caller(
+    repo: &mut BoxRepository,
+    clock: &dyn Clock,
+    arkret_config: &ArkretConfig,
+    user: &User,
+    last_authenticated_at: Option<DateTime<Utc>>,
+) -> Result<User, ArkretRouteError> {
+    let current_user = repo
+        .user()
+        .lookup(user.id)
+        .await?
+        .ok_or_else(|| ArkretRouteError::Unauthorized("session user is unknown".to_owned()))?;
+    require_erasure_entry_status(&current_user)?;
+    // ── Fresh high-risk action authentication (§8.1): judged locally from
+    // this deployment's own authentication facts. No configured policy, no
+    // authentication fact, or a stale one all fail closed with zero writes.
+    let now = arkret_canonical::normalize_timestamp_canonical(clock.now());
+    let fresh = arkret_config
+        .erasure_request_max_auth_age
+        .is_some_and(|max_age| {
+            last_authenticated_at.is_some_and(|authenticated_at| {
+                now.signed_duration_since(authenticated_at) <= max_age
+            })
+        });
+    if !fresh {
+        return Err(ArkretRouteError::coded(
+            StatusCode::UNAUTHORIZED,
+            arkret_wire::ErrorCode::REAUTHENTICATION_REQUIRED,
+            "this high-risk action requires fresh authentication",
+        ));
+    }
+    Ok(current_user)
+}
+
+async fn replay_or_pending(
+    repo: &mut BoxRepository,
+    clock: &dyn Clock,
+    arkret_config: &ArkretConfig,
+    user: &User,
+    last_authenticated_at: Option<DateTime<Utc>>,
+    request_digest: &str,
+    existing: Option<coauth_data::UserErasureRequest>,
+) -> Result<Vec<u8>, ArkretRouteError> {
+    // The immutable outcome was observed before this final current read.
+    // At READ COMMITTED an issued intent and its terminal status commit
+    // together, so this cannot answer 200 from an earlier Active snapshot.
+    // A live outcome can linearize at this read without a new lock or network.
+    let current =
+        current_erasure_caller(repo, clock, arkret_config, user, last_authenticated_at).await?;
+    match existing {
+        Some(existing)
+            if existing.user_id == current.id && existing.request_digest == request_digest =>
+        {
+            Ok(existing.canonical_outcome)
+        }
+        Some(_) => Err(duplicate_conflict()),
+        None => Err(already_pending()),
+    }
+}
+
+fn require_erasure_entry_status(user: &User) -> Result<(), ArkretRouteError> {
+    match user.status {
+        AccountStatus::Active | AccountStatus::SoftLoggedOut | AccountStatus::Suspended => {}
+        AccountStatus::Locked => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::ACCOUNT_LOCKED,
+                "account is locked",
+            ));
+        }
+        AccountStatus::Deactivated => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::ACCOUNT_DEACTIVATED,
+                "account is deactivated",
+            ));
+        }
+        AccountStatus::ErasurePending => {
+            return Err(ArkretRouteError::coded(
+                StatusCode::UNAUTHORIZED,
+                arkret_wire::ErrorCode::ACCOUNT_ERASED,
+                "account erasure is already pending",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn duplicate_conflict() -> ArkretRouteError {
@@ -583,9 +644,9 @@ mod tests {
     #[tokio::test]
     async fn without_deployment_policy_every_request_is_reauthentication_required() {
         setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
         let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
@@ -604,9 +665,9 @@ mod tests {
     #[tokio::test]
     async fn stale_or_absent_authentication_is_reauthentication_required() {
         setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
         let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
@@ -627,11 +688,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn acceptance_records_intent_issues_record_and_replays_byte_identically() {
+    async fn acceptance_retains_original_bytes_and_terminal_record_fences_exact_replay() {
         setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
         let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
@@ -682,13 +743,39 @@ mod tests {
         );
         repo.cancel().await.ok();
 
-        // Exact replay returns the first outcome byte-for-byte, even though
-        // the account is now erasure_pending (the replay check precedes the
-        // entry-condition check).
-        let replay = call(&state, &config, &reloaded, Some(Utc::now()), &body)
+        assert_eq!(intent.canonical_outcome, first);
+        let error = call(&state, &config, &reloaded, Some(Utc::now()), &body)
             .await
+            .unwrap_err();
+        assert_coded(&error, arkret_wire::ErrorCode::ACCOUNT_ERASED);
+        // A stale captured Active user cannot bypass the current issuer gate.
+        let error = call(&state, &config, &user, Some(Utc::now()), &body)
+            .await
+            .unwrap_err();
+        assert_coded(&error, arkret_wire::ErrorCode::ACCOUNT_ERASED);
+        let mut repo = state.repository().await.unwrap();
+        let retained = repo
+            .user_erasure_request()
+            .lookup(body.request_id.as_str())
+            .await
+            .unwrap()
             .unwrap();
-        assert_eq!(replay, first);
+        assert_eq!(retained.canonical_outcome, first);
+        assert_eq!(
+            retained.account_status_record_id,
+            intent.account_status_record_id
+        );
+        let retained_head = repo
+            .account_status_ledger()
+            .current(
+                owning_station_id_for(&state.arkret_config).as_str(),
+                &user.id.to_string(),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained_head, head);
+        repo.cancel().await.ok();
 
         // A NEW request_id on the erasure_pending account fails at the
         // authentication layer with account_erased.
@@ -707,9 +794,9 @@ mod tests {
     #[tokio::test]
     async fn same_request_id_with_different_canonical_bytes_is_duplicate_conflict() {
         setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
         let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
@@ -748,11 +835,144 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn observed_intent_then_final_current_read_fences_overlapping_terminal_commit() {
+        setup();
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
+        let state = TestState::from_pool_with_station(pool).await.unwrap();
+        let user = seed_account(&state).await;
+        let config = fresh_config(&state);
+        let body = request_body();
+        let clock = SystemClock::default();
+        let authenticated_at = Some(Utc::now());
+        let mut earlier_transaction = state.repository().await.unwrap();
+        let captured_active = current_erasure_caller(
+            &mut earlier_transaction,
+            &clock,
+            &config,
+            &user,
+            authenticated_at,
+        )
+        .await
+        .unwrap();
+        assert_eq!(captured_active.status, AccountStatus::Active);
+        // This second real PostgreSQL transaction atomically commits the
+        // intent and terminal record while the first transaction stays open.
+        let first = call(&state, &config, &user, authenticated_at, &body)
+            .await
+            .unwrap();
+        let observed = earlier_transaction
+            .user_erasure_request()
+            .lookup(body.request_id.as_str())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(observed.record_issued_at.is_some());
+        assert_eq!(observed.canonical_outcome, first);
+        let digest = body.canonical_request_digest().unwrap().to_string();
+        for (requested_digest, existing) in [
+            (digest.as_str(), Some(observed.clone())),
+            ("sha256:another-canonical-body", Some(observed.clone())),
+            (digest.as_str(), None),
+        ] {
+            let error = replay_or_pending(
+                &mut earlier_transaction,
+                &clock,
+                &config,
+                &captured_active,
+                authenticated_at,
+                requested_digest,
+                existing,
+            )
+            .await
+            .unwrap_err();
+            assert_coded(&error, arkret_wire::ErrorCode::ACCOUNT_ERASED);
+        }
+        let retained = earlier_transaction
+            .user_erasure_request()
+            .lookup(body.request_id.as_str())
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(retained, observed);
+        earlier_transaction.cancel().await.ok();
+    }
+
+    #[tokio::test]
+    async fn active_unissued_intent_exact_replay_keeps_its_original_bytes() {
+        setup();
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
+        let state = TestState::from_pool_with_station(pool).await.unwrap();
+        let user = seed_account(&state).await;
+        let body = request_body();
+        let recorded_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
+        let mut repo = state.repository().await.unwrap();
+        let binding = repo
+            .principal_did()
+            .get_for_user_and_audience(&user, TEST_STATION_AUDIENCE)
+            .await
+            .unwrap()
+            .unwrap();
+        let original = arkret_canonical::canonical_json_bytes(&AccountRequestErasureResponseBody {
+            request_id: body.request_id.clone(),
+            principal_id: binding.principal_id,
+            recorded_at,
+            withdrawal_window_ends_at: None,
+        })
+        .unwrap();
+        repo.user_erasure_request()
+            .insert(NewUserErasureRequest {
+                request_id: body.request_id.to_string(),
+                user_id: user.id,
+                request_digest: body.canonical_request_digest().unwrap().to_string(),
+                canonical_outcome: original.clone(),
+                recorded_at,
+                withdrawal_window_ends_at: None,
+            })
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+        let replay = call(
+            &state,
+            &fresh_config(&state),
+            &user,
+            Some(Utc::now()),
+            &body,
+        )
+        .await
+        .unwrap();
+        assert_eq!(replay, original);
+        for authentication in [None, Some(Utc::now() - Duration::try_hours(2).unwrap())] {
+            let refused = call(&state, &fresh_config(&state), &user, authentication, &body)
+                .await
+                .unwrap_err();
+            assert_coded(&refused, arkret_wire::ErrorCode::REAUTHENTICATION_REQUIRED);
+        }
+        let refused = call(&state, &state.arkret_config, &user, Some(Utc::now()), &body)
+            .await
+            .unwrap_err();
+        assert_coded(&refused, arkret_wire::ErrorCode::REAUTHENTICATION_REQUIRED);
+        let mut repo = state.repository().await.unwrap();
+        let retained = repo
+            .user_erasure_request()
+            .lookup(body.request_id.as_str())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(retained.record_issued_at.is_none());
+        assert_eq!(retained.canonical_outcome, original);
+        repo.cancel().await.ok();
+    }
+
+    #[tokio::test]
     async fn second_request_id_with_live_intent_is_erasure_request_already_pending() {
         setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
         let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
@@ -799,9 +1019,9 @@ mod tests {
     #[tokio::test]
     async fn entry_conditions_follow_the_section_8_1_matrix() {
         setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
         let state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
@@ -854,11 +1074,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn http_endpoint_accepts_a_fresh_browser_session_and_replays() {
+    async fn http_terminal_record_fences_live_and_finished_bound_browser_sessions() {
         setup();
-        let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
-            return;
-        };
+        let pool = coauth_storage_postgres::test_utils::setup_test_pool()
+            .await
+            .expect("actual PostgreSQL is required for Account erasure authentication");
         let mut state = TestState::from_pool_with_station(pool.clone())
             .await
             .unwrap();
@@ -925,7 +1145,8 @@ mod tests {
         assert_eq!(outcome["request_id"], request_id);
         assert!(outcome.get("withdrawal_window_ends_at").is_none());
 
-        // Exact replay over HTTP is byte-identical.
+        // No dispatcher runs in TestState: the browser session is still
+        // live, while the authority record already committed terminal.
         let replay = state
             .request(cookies.with_cookies(
                 Request::post("/_arkret/gate/account/erasure-requests").json(serde_json::json!({
@@ -933,8 +1154,42 @@ mod tests {
                 })),
             ))
             .await;
-        replay.assert_status(hyper::StatusCode::OK);
-        assert_eq!(replay.body().to_owned(), first_body);
+        replay.assert_status(hyper::StatusCode::UNAUTHORIZED);
+        let error: arkret_wire::problem_details::Problem = replay.json();
+        assert_eq!(error.code(), "account_erased");
+        let mut repo = state.repository().await.unwrap();
+        assert!(
+            repo.browser_session()
+                .lookup(session.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .finished_at
+                .is_none()
+        );
+        let stored = repo
+            .user_erasure_request()
+            .lookup(&request_id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(stored.canonical_outcome, first_body.as_bytes());
+        repo.browser_session()
+            .finish(&clock, session.clone())
+            .await
+            .unwrap();
+        repo.save().await.unwrap();
+        let finished = state
+            .request(
+                cookies.with_cookies(
+                    Request::post("/_arkret/gate/account/erasure-requests")
+                        .json(serde_json::json!({"request_id":request_id})),
+                ),
+            )
+            .await;
+        finished.assert_status(hyper::StatusCode::UNAUTHORIZED);
+        let error: arkret_wire::problem_details::Problem = finished.json();
+        assert_eq!(error.code(), "account_erased");
 
         // A distinct request_id now fails at the authentication layer:
         // the account is erasure_pending.
