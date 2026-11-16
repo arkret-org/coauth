@@ -387,7 +387,6 @@ diesel::table! {
         user_id -> Uuid,
         hashed_password -> Text,
         version -> Int4,
-        upgraded_from_id -> Nullable<Uuid>,
         created_at -> Timestamptz,
     }
 }

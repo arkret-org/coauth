@@ -197,7 +197,7 @@ impl UserCreationRequest<'_> {
 
         if let Some((version, hashed_password)) = hashed_password {
             repo.user_password()
-                .add(rng, clock, &user, version, hashed_password, None)
+                .add(rng, clock, &user, version, hashed_password)
                 .await?;
         }
 

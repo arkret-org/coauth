@@ -304,7 +304,6 @@ pub struct Password {
     pub id: Ulid,
     pub hashed_password: String,
     pub version: u16,
-    pub upgraded_from_id: Option<Ulid>,
     pub created_at: DateTime<Utc>,
 }
 

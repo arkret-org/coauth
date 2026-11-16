@@ -154,12 +154,9 @@
       "description": "Configuration related to user passwords",
       "default": {
         "enabled": true,
-        "schemes": [
-          {
-            "version": 1,
-            "algorithm": "argon2id"
-          }
-        ],
+        "scheme": {
+          "algorithm": "argon2id"
+        },
         "minimum_complexity": 3
       },
       "allOf": [
@@ -2663,18 +2660,16 @@
           "type": "boolean",
           "default": true
         },
-        "schemes": {
-          "description": "Ordered list of hashing schemes (newest version wins for new passwords)",
-          "type": "array",
-          "items": {
-            "$ref": "#/definitions/HashingScheme"
-          },
-          "default": [
+        "scheme": {
+          "description": "Parameters for the active password hashing algorithm",
+          "allOf": [
             {
-              "version": 1,
-              "algorithm": "argon2id"
+              "$ref": "#/definitions/HashingScheme"
             }
-          ]
+          ],
+          "default": {
+            "algorithm": "argon2id"
+          }
         },
         "minimum_complexity": {
           "description": "Minimum zxcvbn complexity score (0-4):\n  0 = <100 guesses, 1 = <10k, 2 = <1M, 3 = <100M, 4 = beyond",
@@ -2684,19 +2679,13 @@
           "maximum": 4,
           "default": 3
         }
-      }
+      },
+      "additionalProperties": false
     },
     "HashingScheme": {
-      "description": "A versioned set of parameters that controls how passwords are hashed",
+      "description": "Parameters for the active password hashing algorithm",
       "type": "object",
       "properties": {
-        "version": {
-          "description": "Monotonic version tag -- the highest version is used for new passwords",
-          "type": "integer",
-          "format": "uint16",
-          "minimum": 0,
-          "maximum": 65535
-        },
         "algorithm": {
           "description": "Which hashing algorithm to apply",
           "allOf": [
@@ -2704,10 +2693,6 @@
               "$ref": "#/definitions/Algorithm"
             }
           ]
-        },
-        "unicode_normalization": {
-          "description": "Apply NFKC normalization before hashing. Normally `false`; enable only\nwhen importing hashes that were produced with that normalization step.",
-          "type": "boolean"
         },
         "cost": {
           "description": "bcrypt work-factor (only relevant for bcrypt)",
@@ -2735,9 +2720,9 @@
         }
       },
       "required": [
-        "version",
         "algorithm"
-      ]
+      ],
+      "additionalProperties": false
     },
     "Algorithm": {
       "description": "Supported password hashing algorithms",

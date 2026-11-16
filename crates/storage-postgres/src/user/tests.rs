@@ -1153,14 +1153,7 @@ async fn test_user_password_repo() {
     // Insert a first password
     let first_password = repo
         .user_password()
-        .add(
-            &mut rng,
-            &clock,
-            &user,
-            1,
-            FIRST_PASSWORD_HASH.to_owned(),
-            None,
-        )
+        .add(&mut rng, &clock, &user, 1, FIRST_PASSWORD_HASH.to_owned())
         .await
         .unwrap();
 
@@ -1175,7 +1168,6 @@ async fn test_user_password_repo() {
     assert_eq!(first_password.id, first_password_lookup.id);
     assert_eq!(first_password_lookup.hashed_password, FIRST_PASSWORD_HASH);
     assert_eq!(first_password_lookup.version, 1);
-    assert_eq!(first_password_lookup.upgraded_from_id, None);
 
     // Getting the last inserted password is based on the clock, so we need to
     // advance it
@@ -1183,14 +1175,7 @@ async fn test_user_password_repo() {
 
     let second_password = repo
         .user_password()
-        .add(
-            &mut rng,
-            &clock,
-            &user,
-            2,
-            SECOND_PASSWORD_HASH.to_owned(),
-            Some(&first_password),
-        )
+        .add(&mut rng, &clock, &user, 1, SECOND_PASSWORD_HASH.to_owned())
         .await
         .unwrap();
 
@@ -1204,11 +1189,7 @@ async fn test_user_password_repo() {
 
     assert_eq!(second_password.id, second_password_lookup.id);
     assert_eq!(second_password_lookup.hashed_password, SECOND_PASSWORD_HASH);
-    assert_eq!(second_password_lookup.version, 2);
-    assert_eq!(
-        second_password_lookup.upgraded_from_id,
-        Some(first_password.id)
-    );
+    assert_eq!(second_password_lookup.version, 1);
 
     repo.save().await.unwrap();
 }

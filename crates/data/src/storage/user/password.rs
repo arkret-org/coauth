@@ -34,7 +34,6 @@ repository_impl! {
         /// * `user`: The user to set the password for
         /// * `version`: The version of the hashing scheme used
         /// * `hashed_password`: The hashed password
-        /// * `upgraded_from`: The password this password was upgraded from, if any
         ///
         /// # Errors
         ///
@@ -46,7 +45,6 @@ repository_impl! {
             user: &User,
             version: u16,
             hashed_password: String,
-            upgraded_from: Option<&Password>,
         ) -> Result<Password, Self::Error>;
     }
 }

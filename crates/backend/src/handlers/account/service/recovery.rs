@@ -362,7 +362,7 @@ pub async fn complete_account_recovery(
         .map_err(CompleteAccountRecoveryError::Password)?;
 
     repo.user_password()
-        .add(rng, clock, &user, version, hash, None)
+        .add(rng, clock, &user, version, hash)
         .await?;
 
     // Recovery has no concept of a trusted current session, so revoke *all*

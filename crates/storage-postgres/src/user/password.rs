@@ -32,7 +32,6 @@ struct UserPasswordLookup {
     id: Uuid,
     hashed_password: String,
     version: i32,
-    upgraded_from_id: Option<Uuid>,
     created_at: DateTime<Utc>,
 }
 
@@ -43,7 +42,6 @@ struct NewUserPassword {
     user_id: Uuid,
     hashed_password: String,
     version: i32,
-    upgraded_from_id: Option<Uuid>,
     created_at: DateTime<Utc>,
 }
 
@@ -82,7 +80,6 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 .source(e)
         })?;
 
-        let upgraded_from_id = res.upgraded_from_id.map(Ulid::from);
         let created_at = res.created_at;
         let hashed_password = res.hashed_password;
 
@@ -90,7 +87,6 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             id,
             hashed_password,
             version,
-            upgraded_from_id,
             created_at,
         }))
     }
@@ -113,20 +109,16 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
         user: &User,
         version: u16,
         hashed_password: String,
-        upgraded_from: Option<&Password>,
     ) -> Result<Password, Self::Error> {
         let created_at = clock.now();
         let id = new_id(created_at, rng);
         tracing::Span::current().record("user_password.id", tracing::field::display(id));
-
-        let upgraded_from_id = upgraded_from.map(|p| p.id);
 
         let new_password = NewUserPassword {
             id: Uuid::from(id),
             user_id: Uuid::from(user.id),
             hashed_password: hashed_password.clone(),
             version: i32::from(version),
-            upgraded_from_id: upgraded_from_id.map(Uuid::from),
             created_at,
         };
 
@@ -139,7 +131,6 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
             id,
             hashed_password,
             version,
-            upgraded_from_id,
             created_at,
         })
     }

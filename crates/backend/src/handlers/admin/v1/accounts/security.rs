@@ -98,7 +98,7 @@ pub async fn set_password(req: &mut Request, depot: &Depot) -> AppResult<StatusC
             })?;
 
     repo.user_password()
-        .add(&mut rng, &clock, &user, version, hashed_password, None)
+        .add(&mut rng, &clock, &user, version, hashed_password)
         .await?;
 
     let (keyring, service_id, audit_fail_closed) = audit_signing_context(depot)?;

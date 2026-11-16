@@ -121,34 +121,21 @@ pub async fn login_with_password(
         return Ok(PasswordLoginOutcome::InvalidCredentials);
     };
 
-    let user_password = match password_manager
-        .verify_and_upgrade(
-            &mut *rng,
+    match password_manager
+        .verify(
             user_password.version,
             request.password,
             user_password.hashed_password.clone(),
         )
         .await
     {
-        Ok(PasswordVerificationResult::Matched(Some((version, new_password_hash)))) => {
-            repo.user_password()
-                .add(
-                    &mut *rng,
-                    clock,
-                    &user,
-                    version,
-                    new_password_hash,
-                    Some(&user_password),
-                )
-                .await?
-        }
-        Ok(PasswordVerificationResult::Matched(None)) => user_password,
+        Ok(PasswordVerificationResult::Matched) => {}
         Ok(PasswordVerificationResult::NotMatched) => {
             limiter.record_failed_login(&user).await;
             return Ok(PasswordLoginOutcome::InvalidCredentials);
         }
         Err(error) => return Err(PasswordLoginError::Password(error)),
-    };
+    }
 
     // The password verified and the account was not locked out when we
     // checked, so this run is over. Ordering matters: reaching this after a
@@ -322,7 +309,6 @@ mod lockout_wiring_tests {
                 &user,
                 version,
                 hashed_password,
-                None,
             )
             .await
             .unwrap();

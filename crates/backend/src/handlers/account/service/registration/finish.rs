@@ -270,7 +270,6 @@ pub async fn complete_registration(
                 &user,
                 password.version,
                 password.hashed_password,
-                None,
             )
             .await?;
 

@@ -89,12 +89,6 @@ pub(crate) fn capture_entry_request() {
     }
 }
 
-pub(crate) fn save_parts(kind: &str, id: &str) {
-    if let Some(action) = from_parts(kind, id) {
-        save(&action);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

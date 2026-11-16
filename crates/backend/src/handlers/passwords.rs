@@ -3,13 +3,10 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::Context;
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
-use futures_util::future::OptionFuture;
 use pbkdf2::Pbkdf2;
 use rand_core::{CryptoRng, RngCore, SeedableRng};
 use thiserror::Error;
@@ -19,20 +16,18 @@ use zxcvbn::zxcvbn;
 pub type SchemeVersion = u16;
 
 /// Outcome of verifying a password against its stored hash.
-///
-/// `T` carries optional upgrade data when the hashing scheme changed.
 #[must_use]
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum PasswordVerificationResult<T = ()> {
+pub enum PasswordVerificationResult {
     /// The supplied password matched.
-    Matched(T),
+    Matched,
     /// The supplied password did not match.
     NotMatched,
 }
 
-impl PasswordVerificationResult<()> {
+impl PasswordVerificationResult {
     fn matched() -> Self {
-        Self::Matched(())
+        Self::Matched
     }
 
     fn not_matched() -> Self {
@@ -40,22 +35,14 @@ impl PasswordVerificationResult<()> {
     }
 }
 
-impl<T> PasswordVerificationResult<T> {
-    /// Map the inner data to a different type, preserving the match status.
-    fn map_data<N>(self, data: N) -> PasswordVerificationResult<N> {
-        match self {
-            Self::Matched(_) => PasswordVerificationResult::Matched(data),
-            Self::NotMatched => PasswordVerificationResult::NotMatched,
-        }
-    }
-
+impl PasswordVerificationResult {
     #[must_use]
     pub fn is_success(&self) -> bool {
-        matches!(self, Self::Matched(_))
+        matches!(self, Self::Matched)
     }
 }
 
-impl From<bool> for PasswordVerificationResult<()> {
+impl From<bool> for PasswordVerificationResult {
     fn from(ok: bool) -> Self {
         if ok {
             Self::matched()
@@ -79,42 +66,18 @@ struct InnerPasswordManager {
     /// by zxcvbn.
     minimum_complexity: u8,
     current_hasher: Hasher,
-    current_version: SchemeVersion,
-
-    /// A map of "old" hashers used only for verification
-    other_hashers: HashMap<SchemeVersion, Hasher>,
 }
 
 impl PasswordManager {
-    /// Creates a new [`PasswordManager`] from an iterator and a minimum allowed
-    /// complexity score between 0 and 4. The first item in
-    /// the iterator will be the default hashing scheme.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the iterator was empty
-    pub fn new<I: IntoIterator<Item = (SchemeVersion, Hasher)>>(
-        minimum_complexity: u8,
-        iter: I,
-    ) -> Result<Self, anyhow::Error> {
-        let mut iter = iter.into_iter();
-
-        // Take the first hasher as the current hasher
-        let (current_version, current_hasher) = iter
-            .next()
-            .context("Iterator must have at least one item")?;
-
-        // Collect the other hashers in a map used only in verification
-        let other_hashers = iter.collect();
-
-        Ok(Self {
+    /// Creates a password manager with one active hasher and complexity score.
+    #[must_use]
+    pub fn new(minimum_complexity: u8, hasher: Hasher) -> Self {
+        Self {
             inner: Some(Arc::new(InnerPasswordManager {
                 minimum_complexity,
-                current_hasher,
-                current_version,
-                other_hashers,
+                current_hasher: hasher,
             })),
-        })
+        }
     }
 
     /// Creates a new disabled password manager
@@ -207,16 +170,12 @@ impl PasswordManager {
         let rng = rand_chacha::ChaChaRng::from_rng(rng)?;
         let span = tracing::Span::current();
 
-        // `inner` is being moved in the blocking task, so we need to copy the version
-        // first
-        let version = inner.current_version;
-
         let hashed = tokio::task::spawn_blocking(move || {
             span.in_scope(move || inner.current_hasher.hash_blocking(rng, password))
         })
         .await??;
 
-        Ok((version, hashed))
+        Ok((1, hashed))
     }
 
     /// Verify a password hash for the given hashing scheme.
@@ -237,107 +196,45 @@ impl PasswordManager {
 
         let outcome = tokio::task::spawn_blocking(move || {
             span.in_scope(move || {
-                let hasher = if scheme == inner.current_version {
-                    &inner.current_hasher
-                } else {
-                    inner
-                        .other_hashers
-                        .get(&scheme)
-                        .context("Hashing scheme not found")?
-                };
-
-                hasher.verify_blocking(&hashed_password, password)
+                anyhow::ensure!(scheme == 1, "Password hash must use the current v1 scheme");
+                inner
+                    .current_hasher
+                    .verify_blocking(&hashed_password, password)
             })
         })
         .await??;
 
         Ok(outcome)
     }
-
-    /// Verify a password hash for the given hashing scheme, and upgrade it on
-    /// the fly, if it was not hashed with the default scheme
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the password hash verification failed or if the
-    /// password manager is disabled
-    #[tracing::instrument(name = "passwords.verify_and_upgrade", skip_all, fields(%scheme))]
-    pub async fn verify_and_upgrade<R: CryptoRng + RngCore + Send>(
-        &self,
-        rng: R,
-        scheme: SchemeVersion,
-        password: Zeroizing<String>,
-        hashed_password: String,
-    ) -> Result<PasswordVerificationResult<Option<(SchemeVersion, String)>>, anyhow::Error> {
-        let inner = self.get_inner()?;
-
-        // If the current scheme isn't the default one, we also hash with the default
-        // one so that
-        let new_hash_fut: OptionFuture<_> = (scheme != inner.current_version)
-            .then(|| self.hash(rng, password.clone()))
-            .into();
-
-        let verify_fut = self.verify(scheme, password, hashed_password);
-
-        let (new_hash_res, verify_res) = tokio::join!(new_hash_fut, verify_fut);
-        let verification_outcome = verify_res?;
-
-        let new_hash = new_hash_res.transpose()?;
-
-        Ok(verification_outcome.map_data(new_hash))
-    }
 }
 
 /// A hashing scheme, with an optional pepper
 pub struct Hasher {
     algorithm: Algorithm,
-    /// When true, the password is NFKC-normalised before hashing.
-    nfkc_normalize: bool,
+    /// Optional pepper mixed into the password hash.
     pepper: Option<Vec<u8>>,
 }
 
 impl Hasher {
     /// Creates a new hashing scheme based on the bcrypt algorithm
     #[must_use]
-    pub const fn bcrypt(cost: Option<u32>, pepper: Option<Vec<u8>>, nfkc_normalize: bool) -> Self {
+    pub const fn bcrypt(cost: Option<u32>, pepper: Option<Vec<u8>>) -> Self {
         let algorithm = Algorithm::Bcrypt { cost };
-        Self {
-            algorithm,
-            nfkc_normalize,
-            pepper,
-        }
+        Self { algorithm, pepper }
     }
 
     /// Creates a new hashing scheme based on the argon2id algorithm
     #[must_use]
-    pub const fn argon2id(pepper: Option<Vec<u8>>, nfkc_normalize: bool) -> Self {
+    pub const fn argon2id(pepper: Option<Vec<u8>>) -> Self {
         let algorithm = Algorithm::Argon2id;
-        Self {
-            algorithm,
-            nfkc_normalize,
-            pepper,
-        }
+        Self { algorithm, pepper }
     }
 
     /// Creates a new hashing scheme based on the pbkdf2 algorithm
     #[must_use]
-    pub const fn pbkdf2(pepper: Option<Vec<u8>>, nfkc_normalize: bool) -> Self {
+    pub const fn pbkdf2(pepper: Option<Vec<u8>>) -> Self {
         let algorithm = Algorithm::Pbkdf2;
-        Self {
-            algorithm,
-            nfkc_normalize,
-            pepper,
-        }
-    }
-
-    /// Apply NFKC normalization to the password if configured.
-    fn maybe_normalize(&self, pwd: Zeroizing<String>) -> Zeroizing<String> {
-        if self.nfkc_normalize {
-            let normalizer = icu_normalizer::ComposingNormalizer::new_nfkc();
-            Zeroizing::new(normalizer.normalize(&pwd).to_string())
-        } else {
-            pwd
-        }
+        Self { algorithm, pepper }
     }
 
     fn hash_blocking<R: CryptoRng + RngCore>(
@@ -345,7 +242,6 @@ impl Hasher {
         rng: R,
         password: Zeroizing<String>,
     ) -> Result<String, anyhow::Error> {
-        let password = self.maybe_normalize(password);
         self.algorithm
             .hash_blocking(rng, password.as_bytes(), self.pepper.as_deref())
     }
@@ -355,7 +251,6 @@ impl Hasher {
         hashed_password: &str,
         password: Zeroizing<String>,
     ) -> Result<PasswordVerificationResult, anyhow::Error> {
-        let password = self.maybe_normalize(password);
         self.algorithm
             .verify_blocking(hashed_password, password.as_bytes(), self.pepper.as_deref())
     }
@@ -503,7 +398,7 @@ mod tests {
         assert_eq!(
             alg.verify_blocking(&hash, password, Some(pepper))
                 .expect("Verification failed"),
-            PasswordVerificationResult::Matched(())
+            PasswordVerificationResult::Matched
         );
         assert_eq!(
             alg.verify_blocking(&hash, password2, Some(pepper))
@@ -530,7 +425,7 @@ mod tests {
         assert_eq!(
             alg.verify_blocking(&hash, password, None)
                 .expect("Verification failed"),
-            PasswordVerificationResult::Matched(())
+            PasswordVerificationResult::Matched
         );
         assert_eq!(
             alg.verify_blocking(&hash, password2, None)
@@ -562,7 +457,7 @@ mod tests {
         assert_eq!(
             alg.verify_blocking(&hash, password, Some(pepper))
                 .expect("Verification failed"),
-            PasswordVerificationResult::Matched(())
+            PasswordVerificationResult::Matched
         );
         assert_eq!(
             alg.verify_blocking(&hash, password2, Some(pepper))
@@ -589,7 +484,7 @@ mod tests {
         assert_eq!(
             alg.verify_blocking(&hash, password, None)
                 .expect("Verification failed"),
-            PasswordVerificationResult::Matched(())
+            PasswordVerificationResult::Matched
         );
         assert_eq!(
             alg.verify_blocking(&hash, password2, None)
@@ -621,7 +516,7 @@ mod tests {
         assert_eq!(
             alg.verify_blocking(&hash, password, Some(pepper))
                 .expect("Verification failed"),
-            PasswordVerificationResult::Matched(())
+            PasswordVerificationResult::Matched
         );
         assert_eq!(
             alg.verify_blocking(&hash, password2, Some(pepper))
@@ -648,7 +543,7 @@ mod tests {
         assert_eq!(
             alg.verify_blocking(&hash, password, None)
                 .expect("Verification failed"),
-            PasswordVerificationResult::Matched(())
+            PasswordVerificationResult::Matched
         );
         assert_eq!(
             alg.verify_blocking(&hash, password2, None)
@@ -667,7 +562,7 @@ mod tests {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(7);
         let password = Zeroizing::new("hunter2".to_owned());
 
-        let manager = PasswordManager::new(0, [(1, Hasher::argon2id(None, false))]).unwrap();
+        let manager = PasswordManager::new(0, Hasher::argon2id(None));
         manager
             .dummy_verify(&mut rng, password.clone())
             .await
@@ -681,185 +576,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hash_verify_and_upgrade() {
-        // Tests the whole password manager, by hashing a password and upgrading it
-        // after changing the hashing schemes. The salt generation is done with a seeded
-        // RNG, so that we can do stable snapshots of hashed passwords
+    async fn active_scheme_verifies_password_and_rejects_unknown_tag() {
         let mut rng = rand_chacha::ChaChaRng::seed_from_u64(42);
         let password = Zeroizing::new("hunter2".to_owned());
-        let wrong_password = Zeroizing::new("wrong-password".to_owned());
-
-        let manager = PasswordManager::new(
-            0,
-            [
-                // Start with one hashing scheme: bcrypt + pepper.
-                (
-                    1,
-                    Hasher::bcrypt(Some(10), Some(b"a-secret-pepper".to_vec()), false),
-                ),
-            ],
-        )
-        .unwrap();
-
-        let (version, hash) = manager
-            .hash(&mut rng, password.clone())
-            .await
-            .expect("Failed to hash");
-
-        assert_eq!(version, 1);
-        insta::assert_snapshot!(hash);
-
-        // Just verifying works
-        let res = manager
-            .verify(version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::Matched(()));
-
-        // And doesn't work with the wrong password
-        let res = manager
-            .verify(version, wrong_password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::NotMatched);
-
-        // Verifying with the wrong version doesn't work
-        manager
-            .verify(2, password.clone(), hash.clone())
-            .await
-            .expect_err("Verification should have failed");
-
-        // Upgrading does nothing
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-
-        assert_eq!(res, PasswordVerificationResult::Matched(None));
-
-        // Upgrading still verify that the password matches
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, wrong_password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::NotMatched);
-
-        let manager = PasswordManager::new(
-            0,
-            [
-                (2, Hasher::argon2id(None, false)),
-                (
-                    1,
-                    Hasher::bcrypt(Some(10), Some(b"a-secret-pepper".to_vec()), false),
-                ),
-            ],
-        )
-        .unwrap();
-
-        // Verifying still works
-        let res = manager
-            .verify(version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::Matched(()));
-
-        // And doesn't work with the wrong password
-        let res = manager
-            .verify(version, wrong_password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::NotMatched);
-
-        // Upgrading does re-hash
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-
-        let PasswordVerificationResult::Matched(Some((version, hash))) = res else {
-            panic!("Expected a successful upgrade");
-        };
-        assert_eq!(version, 2);
-        insta::assert_snapshot!(hash);
-
-        // Upgrading works with the new hash, but does not upgrade
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-
-        assert_eq!(res, PasswordVerificationResult::Matched(None));
-
-        // Upgrading still verify that the password matches
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, wrong_password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::NotMatched);
-
-        // Upgrading still verify that the password matches
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, wrong_password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::NotMatched);
-
-        let manager = PasswordManager::new(
-            0,
-            [
-                (
-                    3,
-                    Hasher::argon2id(Some(b"a-secret-pepper".to_vec()), false),
-                ),
-                (2, Hasher::argon2id(None, false)),
-                (
-                    1,
-                    Hasher::bcrypt(Some(10), Some(b"a-secret-pepper".to_vec()), false),
-                ),
-            ],
-        )
-        .unwrap();
-
-        // Verifying still works
-        let res = manager
-            .verify(version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::Matched(()));
-
-        // And doesn't work with the wrong password
-        let res = manager
-            .verify(version, wrong_password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::NotMatched);
-
-        // Upgrading does re-hash
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-
-        let PasswordVerificationResult::Matched(Some((version, hash))) = res else {
-            panic!("Expected a successful upgrade");
-        };
-
-        assert_eq!(version, 3);
-        insta::assert_snapshot!(hash);
-
-        // Upgrading works with the new hash, but does not upgrade
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-
-        assert_eq!(res, PasswordVerificationResult::Matched(None));
-
-        // Upgrading still verify that the password matches
-        let res = manager
-            .verify_and_upgrade(&mut rng, version, wrong_password.clone(), hash.clone())
-            .await
-            .expect("Failed to verify");
-        assert_eq!(res, PasswordVerificationResult::NotMatched);
+        for hasher in [
+            Hasher::argon2id(None),
+            Hasher::bcrypt(Some(10), Some(b"a-secret-pepper".to_vec())),
+            Hasher::pbkdf2(None),
+        ] {
+            let manager = PasswordManager::new(0, hasher);
+            let (version, hash) = manager.hash(&mut rng, password.clone()).await.unwrap();
+            assert_eq!(version, 1);
+            assert_eq!(
+                manager
+                    .verify(version, password.clone(), hash.clone())
+                    .await
+                    .unwrap(),
+                PasswordVerificationResult::Matched
+            );
+            assert_eq!(
+                manager
+                    .verify(
+                        version,
+                        Zeroizing::new("wrong-password".to_owned()),
+                        hash.clone()
+                    )
+                    .await
+                    .unwrap(),
+                PasswordVerificationResult::NotMatched
+            );
+            manager
+                .verify(2, password.clone(), hash)
+                .await
+                .expect_err("unknown scheme tag must fail closed");
+        }
     }
 }

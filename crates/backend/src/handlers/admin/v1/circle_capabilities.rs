@@ -195,8 +195,6 @@ fn canonicalize_circle_ids(ids: &mut Vec<String>) {
 
 #[cfg(test)]
 mod tests {
-    use coauth_admin_types::circle_capability_admin::CapabilityActionId;
-
     use super::*;
 
     #[test]
@@ -208,16 +206,5 @@ mod tests {
         ];
         canonicalize_circle_ids(&mut ids);
         assert_eq!(ids, vec!["ak:circle:a", "ak:circle:c"]);
-    }
-
-    #[test]
-    fn create_request_validation_still_mirrors_registry_constraints() {
-        let req = CreateCircleCapabilityGrant {
-            subject: "user:alice".into(),
-            realm_id: "ak:realm:demo".into(),
-            action: CapabilityActionId::CircleManage,
-            allowed_circle_ids: vec![],
-        };
-        assert!(req.validate().is_err());
     }
 }

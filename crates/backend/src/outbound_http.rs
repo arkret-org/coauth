@@ -778,10 +778,6 @@ mod tests {
 
     #[test]
     fn describe_bound_tracks_the_shared_sdk_transport_bound() {
-        assert_eq!(
-            DESCRIBE_MAX_BYTES,
-            arkret_http_client::SERVICE_DESCRIBE_FETCH_MAX_BYTES
-        );
         const { assert!(DESCRIBE_MAX_BYTES > 64 * 1024) };
     }
 

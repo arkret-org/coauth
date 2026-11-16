@@ -1188,7 +1188,6 @@ CREATE TABLE public.user_passwords (
     user_id uuid NOT NULL,
     hashed_password text NOT NULL,
     version integer NOT NULL,
-    upgraded_from_id uuid,
     created_at timestamp with time zone NOT NULL
 );
 
@@ -1995,9 +1994,6 @@ ALTER TABLE ONLY public.user_email_authentications
 
 ALTER TABLE ONLY public.user_emails
     ADD CONSTRAINT user_emails_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.user_passwords
-    ADD CONSTRAINT user_passwords_upgraded_from_id_fkey FOREIGN KEY (upgraded_from_id) REFERENCES public.user_passwords(id);
 
 ALTER TABLE ONLY public.user_passwords
     ADD CONSTRAINT user_passwords_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);

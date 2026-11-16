@@ -71,8 +71,7 @@ account:
   bootstrap_admin_token: ${COAUTH_ACCOUNT__BOOTSTRAP_ADMIN_TOKEN}
 passwords:
   enabled: true
-  schemes:
-  - version: 1
+  scheme:
     algorithm: argon2id
   minimum_complexity: 3
 arkret:

@@ -78,7 +78,6 @@ http-body = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
 icu_locid = { workspace = true }
-icu_normalizer = { workspace = true }
 ipnetwork = { workspace = true }
 listenfd = { workspace = true }
 mime = { workspace = true }

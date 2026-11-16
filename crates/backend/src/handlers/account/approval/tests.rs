@@ -205,7 +205,6 @@ impl Fixture {
                 &session.user,
                 1,
                 "fixture-password-hash".to_owned(),
-                None,
             )
             .await
             .unwrap();
