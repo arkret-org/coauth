@@ -559,6 +559,28 @@ mod tests {
         .unwrap();
         repo.save().await.unwrap();
 
+        let cascade_at = DateTime::from_timestamp(grant.created_at.timestamp() + 1, 0).unwrap();
+        let frozen_clock = coauth_data::clock::MockClock::new(cascade_at);
+        let mut repo = state.repository().await.unwrap();
+        let first = cascade_revoke_session_grants(&mut repo, &frozen_clock, device_id)
+            .await
+            .unwrap();
+        assert_eq!(first.revoked_session_grants, 1);
+        assert_eq!(first.revoked_at, cascade_at);
+        let revoked = repo
+            .oauth_session_grant()
+            .lookup(grant.id)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(revoked.revoked_at, Some(cascade_at));
+        let empty = cascade_revoke_session_grants(&mut repo, &frozen_clock, device_id)
+            .await
+            .unwrap();
+        assert_eq!(empty.revoked_session_grants, 0);
+        assert_eq!(empty.revoked_at, cascade_at);
+        repo.cancel().await.unwrap();
+
         let response = state
             .request(
                 Request::get("/_coauth/admin/devices")
@@ -580,10 +602,13 @@ mod tests {
                     .json(serde_json::json!({ "reason": "lost device" })),
             )
             .await;
+        let revoke_finished_at = coauth_data::Clock::now(&grant_clock);
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
         assert_eq!(body["device"]["id"], device_id);
         assert_eq!(body["revoked_session_grants"], 1);
+        let revoked_at: DateTime<Utc> =
+            serde_json::from_value(body["device"]["revoked_at"].clone()).unwrap();
 
         let mut repo = state.repository().await.unwrap();
         let revoked = repo
@@ -592,7 +617,35 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert!(revoked.revoked_at.is_some());
+        let persisted_at = arkret_canonical::normalize_timestamp_canonical(
+            revoked
+                .revoked_at
+                .expect("the actual grant must be revoked"),
+        );
+        let outcome_at = arkret_canonical::normalize_timestamp_canonical(revoked_at);
+        let finished_at = arkret_canonical::normalize_timestamp_canonical(revoke_finished_at);
+        assert!(
+            outcome_at <= persisted_at && persisted_at <= finished_at,
+            "grant revocation {persisted_at} must be inside cascade {outcome_at}..={finished_at}",
+        );
+        let logs = repo
+            .audit()
+            .list_admin_operations(
+                AdminOperationFilter::new()
+                    .for_resource_type("device")
+                    .with_limit(100),
+            )
+            .await
+            .unwrap();
+        let log = logs
+            .iter()
+            .find(|log| log.details["device_id"] == device_id)
+            .expect("the same transaction records the device revocation audit");
+        assert_eq!(log.details["revoked_session_grants"], 1);
+        let audit_at: DateTime<Utc> =
+            serde_json::from_value(log.details["revoked_at"].clone()).unwrap();
+        assert_eq!(audit_at, revoked_at);
+
         repo.cancel().await.unwrap();
     }
 }

@@ -25,8 +25,6 @@ pub enum DeviceRevokeError {
 /// Outcome of a device-revoke cascade.
 #[derive(Debug, Clone)]
 pub struct DeviceRevocationStatusView {
-    /// The device id passed in.
-    pub device_id: String,
     /// Number of session grants revoked.
     pub revoked_session_grants: usize,
     /// Time the cascade was applied.
@@ -72,85 +70,7 @@ pub async fn cascade_revoke_session_grants(
     }
 
     Ok(DeviceRevocationStatusView {
-        device_id: device_id.to_owned(),
         revoked_session_grants: total,
         revoked_at: now,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    //! Tests for the cascade-revoke service.
-    //!
-    //! Notes:
-    //!   * Two of the tests below run *without* a real DB. They assert pure-data invariants — the
-    //!     shape of the [`DeviceRevocationStatusView`] and the idempotency contract of the input
-    //!     arguments.
-    //!   * Round 23 already covered the happy-path with a DB-backed test in
-    //!     `handlers/admin/v1/devices.rs` (covered by the 115 pre-existing pool tests). The two
-    //!     unit tests here are the round-24 regression net for cases that don't need a Postgres
-    //!     pool — specifically, the idempotency / clock-stamp invariants.
-    use chrono::TimeZone as _;
-
-    use super::*;
-
-    #[test]
-    fn outcome_shape_is_canonical() {
-        // The wire shape of `DeviceRevocationStatusView` is part of the
-        // admin-handler contract (it is serialised back to the
-        // operator). Lock down the field names + their typed payload:
-        // a regression here would break every codmin client.
-        let now = Utc::now();
-        let outcome = DeviceRevocationStatusView {
-            device_id: "ak:device:0196419b-0000-7000-8000-000000000006".to_owned(),
-            revoked_session_grants: 0,
-            revoked_at: now,
-        };
-        assert_eq!(
-            outcome.device_id,
-            "ak:device:0196419b-0000-7000-8000-000000000006"
-        );
-        assert_eq!(outcome.revoked_session_grants, 0);
-        assert_eq!(outcome.revoked_at, now);
-    }
-
-    #[test]
-    fn empty_cascade_is_zero_grants() {
-        // Idempotency contract: re-running cascade_revoke on a device
-        // that has already had every grant revoked MUST return
-        // `revoked_session_grants = 0` rather than erroring. The loop
-        // body in `cascade_revoke_session_grants` already encodes this
-        // (the `active_at(now)` filter excludes revoked grants), but
-        // the test pins the documented contract.
-        let zero_outcome = DeviceRevocationStatusView {
-            device_id: "device-without-grants".to_owned(),
-            revoked_session_grants: 0,
-            revoked_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
-        };
-        // A second cascade against the same device id should produce
-        // the same shape with the same count of `0` revoked grants.
-        let again = DeviceRevocationStatusView {
-            device_id: zero_outcome.device_id.clone(),
-            revoked_session_grants: 0,
-            revoked_at: zero_outcome.revoked_at,
-        };
-        assert_eq!(again.revoked_session_grants, 0);
-        assert_eq!(again.device_id, zero_outcome.device_id);
-    }
-
-    #[test]
-    fn revoked_at_uses_caller_clock() {
-        // Test the clock-stamp invariant: `revoked_at` MUST be the
-        // value of `clock.now()` taken at the start of the cascade,
-        // not a fresh `Utc::now()`. This guarantees that the cascade,
-        // the audit-log entry, and the `revoked_at` exposed to the
-        // operator share the same instant.
-        let frozen = Utc.timestamp_opt(1_700_000_000, 0).unwrap();
-        let outcome = DeviceRevocationStatusView {
-            device_id: "device-1".to_owned(),
-            revoked_session_grants: 3,
-            revoked_at: frozen,
-        };
-        assert_eq!(outcome.revoked_at, frozen);
-    }
 }
