@@ -197,7 +197,8 @@ pub(crate) async fn accept_erasure_request(
     // outcome byte-for-byte; the same request_id with different canonical
     // bytes — or a request_id owned by another account — is
     // `duplicate_conflict` with zero writes.
-    if let Some(existing) = repo.user_erasure_request().lookup(&request_id).await? {
+    let existing = repo.user_erasure_request().lookup(&request_id).await?;
+    if let Some(existing) = existing {
         return replay_or_pending(
             repo,
             clock,
