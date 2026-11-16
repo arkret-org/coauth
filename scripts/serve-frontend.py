@@ -14,7 +14,10 @@ from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "crates" / "frontend"
-API_PATHS = ("/_coauth/", "/api/", "/upstream/", "/.well-known/", "/oauth2/")
+API_PATHS = (
+    "/_coauth/", "/api/", "/upstream/authorize/", "/upstream/callback/",
+    "/upstream/backchannel-logout/", "/.well-known/", "/oauth2/",
+)
 API_ROUTES = {"/authorize", "/health", "/connection-info", "/oauth/token", "/oauth/revoke"}
 HOP_HEADERS = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade"}
 
@@ -24,13 +27,21 @@ def main():
     parser.add_argument("--port", type=int, default=8182)
     parser.add_argument("--backend", default="http://127.0.0.1:7080")
     parser.add_argument("--watch", action="store_true")
+    parser.add_argument("--assets-dir", type=Path, help="Serve existing frontend assets without rebuilding")
     args = parser.parse_args()
     backend = urlsplit(args.backend)
     if backend.scheme not in {"http", "https"} or not backend.hostname:
         parser.error("--backend must be an HTTP(S) origin")
-    output = ROOT / "dist"
+    output = (args.assets_dir or ROOT / "dist").resolve()
     build = [sys.executable, str(ROOT / "scripts" / "build-frontend.py"), "--out-dir", str(output)]
-    subprocess.run(build, cwd=ROOT, check=True)
+    if args.assets_dir:
+        if args.watch:
+            parser.error("--assets-dir cannot be combined with --watch")
+        for asset in ("index.html", "ui-build-info.json", "assets/pkg/coauth_frontend.js", "assets/pkg/coauth_frontend_bg.wasm"):
+            if not (output / asset).is_file():
+                parser.error(f"Frontend asset is missing: {output / asset}")
+    else:
+        subprocess.run(build, cwd=ROOT, check=True)
     revision = [1]
     stopped = threading.Event()
 

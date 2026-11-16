@@ -6,7 +6,7 @@ const base = process.env.COAUTH_TEST_URL || 'http://127.0.0.1:4183';
 const out = path.resolve(process.env.COAUTH_TEST_ARTIFACTS || path.join(__dirname, '../../../artifacts/frontend-preferences'));
 (async () => {
   await fs.mkdir(out, { recursive: true });
-  const browser = await chromium.launch({ channel: 'msedge' });
+  const browser = await chromium.launch({ channel: process.env.COAUTH_BROWSER_CHANNEL || 'msedge' });
   const results = [];
   async function scenario(name, route, run, options = {}) {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });

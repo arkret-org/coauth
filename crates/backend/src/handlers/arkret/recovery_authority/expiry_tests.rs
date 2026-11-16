@@ -243,6 +243,38 @@ async fn seed_first_attempt(
     Ok(canonical_outcome)
 }
 
+async fn wait_for_completion_business_lock(
+    pool: &coauth_storage_postgres::test_utils::TestDatabase,
+    request: &RecoveryCompletionGrantRequestBody,
+    issuer: &arkret_identifiers::DidCoreId,
+) {
+    use horme::RunQueryDsl as _;
+
+    let identity = arkret_canonical::canonical_json_bytes(&serde_json::json!({
+        "issuer_id": issuer,
+        "operation": arkret_wire::ServiceOperationId::GATE_ACCOUNT_COMMAND_ISSUE_RECOVERY_COMPLETION_GRANT_V1,
+        "account_id": request.terminal_receipt.account_id,
+        "transaction_id": request.terminal_receipt.transaction_id,
+    })).unwrap();
+    let key = coauth_storage_postgres::advisory_lock::advisory_lock_key(&format!(
+        "coauth:recovery-completion:{}",
+        arkret_canonical::sha256_digest(identity)
+    ));
+    let mut observer = coauth_storage_postgres::pool::queries(pool);
+    tokio::time::timeout(WaitDuration::from_secs(5), async {
+        loop {
+            let blocked = diesel::sql_query("SELECT EXISTS(SELECT 1 FROM pg_locks w JOIN pg_locks h ON h.locktype=w.locktype AND h.database=w.database AND h.classid=w.classid AND h.objid=w.objid AND h.objsubid=w.objsubid WHERE w.locktype='advisory' AND NOT w.granted AND h.granted AND w.database=(SELECT oid FROM pg_database WHERE datname=current_database()) AND w.classid=0 AND w.objid::bigint=$1 AND h.pid=ANY(pg_blocking_pids(w.pid))) AS acquired")
+                .bind::<diesel::sql_types::BigInt, _>(key)
+                .get_result::<coauth_storage_postgres::advisory_lock::AdvisoryLockResult>(&mut observer)
+                .await.unwrap().acquired;
+            if blocked {
+                break;
+            }
+            tokio::time::sleep(WaitDuration::from_millis(10)).await;
+        }
+    }).await.expect("completion inspector must actually wait on its exact business-key lock");
+}
+
 #[tokio::test]
 async fn old_request_waiting_for_the_business_lock_cannot_accept_after_expiry() {
     let Some(pool) = coauth_storage_postgres::test_utils::setup_test_pool().await else {
@@ -264,24 +296,19 @@ async fn old_request_waiting_for_the_business_lock_cannot_accept_after_expiry() 
         )
         .await
         .unwrap();
-    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let observed_request = request.clone();
+    let observed_issuer = issuer.clone();
     let next_factory = factory.clone();
     let next_clock = Arc::clone(&clock);
-    let mut waiting = tokio::spawn(async move {
+    let waiting = tokio::spawn(async move {
         let mut repo = next_factory.create().await.unwrap();
-        started_tx.send(()).unwrap();
         let result = inspect_completion_attempt(&mut repo, &request, &issuer, &*next_clock)
             .await
             .unwrap();
         repo.cancel().await.unwrap();
         result
     });
-    started_rx.await.unwrap();
-    assert!(
-        tokio::time::timeout(WaitDuration::from_millis(50), &mut waiting)
-            .await
-            .is_err()
-    );
+    wait_for_completion_business_lock(&pool, &observed_request, &observed_issuer).await;
     clock.advance(Duration::minutes(6));
     holder.cancel().await.unwrap();
     assert!(matches!(
@@ -316,24 +343,19 @@ async fn accepted_before_the_expiry_probe_replays_original_bytes_after_old_pop_e
         .unwrap();
     let bytes = seed_accepted(&mut holder, &request, &completion, &clock).await;
     let stored_request = request.clone();
-    let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+    let observed_request = request.clone();
+    let observed_issuer = issuer.clone();
     let next_factory = factory.clone();
     let next_clock = Arc::clone(&clock);
-    let mut waiting = tokio::spawn(async move {
+    let waiting = tokio::spawn(async move {
         let mut repo = next_factory.create().await.unwrap();
-        started_tx.send(()).unwrap();
         let result = inspect_completion_attempt(&mut repo, &request, &issuer, &*next_clock)
             .await
             .unwrap();
         repo.cancel().await.unwrap();
         result
     });
-    started_rx.await.unwrap();
-    assert!(
-        tokio::time::timeout(WaitDuration::from_millis(50), &mut waiting)
-            .await
-            .is_err()
-    );
+    wait_for_completion_business_lock(&pool, &observed_request, &observed_issuer).await;
     clock.advance(Duration::minutes(6));
     holder.save().await.unwrap();
     let CompletionAttempt::Accepted(record) =

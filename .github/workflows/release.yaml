@@ -474,6 +474,35 @@ jobs:
           test -f frontend-dist/assets/pkg/coauth_frontend_bg.wasm
           test -f frontend-dist/assets/sapid.css
           test -f frontend-dist/ui-build-info.json
+      - name: Set up frontend browser checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install frontend browser checks
+        run: |
+          npm ci --prefix crates/frontend
+          npm exec --prefix crates/frontend -- playwright install --with-deps chromium
+      - name: Verify the freshly built frontend
+        env:
+          COAUTH_TEST_URL: http://127.0.0.1:4183
+          COAUTH_BROWSER_CHANNEL: chromium
+          COAUTH_TEST_ARTIFACTS: ${{ runner.temp }}/coauth-frontend-checks
+        shell: bash
+        run: |
+          python3 scripts/serve-frontend.py --assets-dir frontend-dist --port 4183 > "${RUNNER_TEMP}/coauth-frontend-serve.log" 2>&1 &
+          frontend_pid=$!
+          trap 'kill "$frontend_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 150); do
+            kill -0 "$frontend_pid" || exit 1
+            if curl --fail --silent "${COAUTH_TEST_URL}/ui-build-info.json" -o "${RUNNER_TEMP}/coauth-frontend-served.json" && cmp -s frontend-dist/ui-build-info.json "${RUNNER_TEMP}/coauth-frontend-served.json"; then
+              ready=1
+              break
+            fi
+            sleep 0.2
+          done
+          test "$ready" = 1
+          npm test --prefix crates/frontend
       - uses: actions/upload-artifact@v4
         with:
           name: coauth-frontend
