@@ -169,7 +169,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(res, PasswordVerificationResult::Matched(()));
+        assert_eq!(res, PasswordVerificationResult::Matched);
     }
 
     #[tokio::test]
@@ -232,7 +232,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert_eq!(res, PasswordVerificationResult::Matched(()));
+        assert_eq!(res, PasswordVerificationResult::Matched);
     }
 
     #[tokio::test]
