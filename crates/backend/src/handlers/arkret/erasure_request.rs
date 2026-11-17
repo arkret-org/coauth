@@ -841,7 +841,9 @@ mod tests {
         let pool = coauth_storage_postgres::test_utils::setup_test_pool()
             .await
             .expect("actual PostgreSQL is required for Account erasure authentication");
-        let state = TestState::from_pool_with_station(pool).await.unwrap();
+        let state = TestState::from_pool_with_station(pool.clone())
+            .await
+            .unwrap();
         let user = seed_account(&state).await;
         let config = fresh_config(&state);
         let body = request_body();
@@ -906,7 +908,9 @@ mod tests {
         let pool = coauth_storage_postgres::test_utils::setup_test_pool()
             .await
             .expect("actual PostgreSQL is required for Account erasure authentication");
-        let state = TestState::from_pool_with_station(pool).await.unwrap();
+        let state = TestState::from_pool_with_station(pool.clone())
+            .await
+            .unwrap();
         let user = seed_account(&state).await;
         let body = request_body();
         let recorded_at = arkret_canonical::normalize_timestamp_canonical(Utc::now());
