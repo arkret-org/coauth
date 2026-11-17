@@ -11,9 +11,6 @@
 //! Station activates the frozen candidate after its authorize Event is
 //! committed to the Agent-PCR Realm stream; polling only observes this
 //! transition.
-#[cfg(test)]
-use std::collections::BTreeMap;
-
 use arkret_models_collaboration::events_payloads::agent::AgentKeyAuthorizePayload;
 use chrono::{DateTime, Utc};
 use coauth_data::RepositoryAccess;
@@ -659,29 +656,6 @@ fn definitive_initial_pairing_refusal(error: &anyhow::Error) -> Option<ArkretRou
     ))
 }
 
-/// Verify the controller's requested-scope proof through the SDK's canonical
-/// detached-JWS carrier. Shape-only parsing plus raw-signature verification
-/// would accept protected headers outside the Arkret v1 profile (for example a
-/// non-Ed25519 `alg`, an attached payload, or unsupported extensions).
-#[cfg(test)]
-fn verify_requested_scope_disclosure_proof(
-    detached_jws: &str,
-    transcript: &[u8],
-    verification_method: &str,
-    public_key: &arkret_signatures::PublicKeyMaterial,
-) -> Result<(), AppError> {
-    let verified = arkret_signatures::Ed25519DetachedJwsVerifier::new()
-        .verify_detached_jws_with_metadata(detached_jws, transcript, public_key)
-        .map_err(|_| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    if verified
-        .key_id()
-        .is_some_and(|key_id| key_id != verification_method)
-    {
-        return Err(AgentAuthRejection::ProofInvalid.into_app_error());
-    }
-    Ok(())
-}
-
 /// The controller-signed authorize Event after every business-field check.
 ///
 /// `payload` is the SDK's closed `ak.agent.key.authorize` type, so the
@@ -932,8 +906,8 @@ fn ensure_body_pairing_request_id_present(pairing_request_id: &str) -> Result<()
 ///
 /// This is the AUTH-1 edge check: it only proves the proof *names* a method
 /// under the controller's DID, so a principal-binding bug cannot hide behind a
-/// crypto bug. The signature itself is verified later, against key material
-/// this service resolved, by [`verify_controller_authorize_event_proof`].
+/// crypto bug. The owning Station verifies the signature when admitting the
+/// unchanged controller-signed command.
 fn ensure_authorize_event_has_controller_signature(
     event: &arkret_wire::Event,
     controller_principal_id: &str,
@@ -951,103 +925,6 @@ fn ensure_authorize_event_has_controller_signature(
             "authorize_event proof verification_method controller must match executed_by.account_id.principal_id",
         ));
     }
-    Ok(())
-}
-
-/// Controller signing keys resolved by this service, never by the request.
-///
-/// `key-management.md` §3.6.1 makes the Account Authority verify the controller
-/// Event proof independently, and
-/// `service-http-binding.md` forbids trusting an upstream "already verified"
-/// boolean. The request body may name
-/// *which* published method signed, but it may never supply the key that
-/// checks the signature.
-#[cfg(test)]
-struct ControllerSigningKeys {
-    document: arkret_models_identity::DidDocument,
-    accepted_device_material: BTreeMap<String, arkret_signatures::PublicKeyMaterial>,
-}
-
-#[cfg(test)]
-impl ControllerSigningKeys {
-    /// Published key material for one controller verification method.
-    ///
-    /// A method the resolved document does not publish is a rejection, not a
-    /// fallback to anything the caller sent.
-    fn material(
-        &self,
-        verification_method: &str,
-    ) -> Result<arkret_signatures::PublicKeyMaterial, AppError> {
-        if let Some(material) = self.accepted_device_material.get(verification_method) {
-            return Ok(material.clone());
-        }
-        arkret_identity::resolve_verification_method_key_from_document(
-            &self.document,
-            verification_method,
-        )
-        .map(|resolved| resolved.public_key)
-        .map_err(|error| {
-            tracing::debug!(%verification_method, %error, "controller verification method is not published");
-            AgentAuthRejection::ProofInvalid.into_app_error()
-        })
-    }
-}
-
-/// Resolve the authoritative controller's published DID document.
-///
-/// The DID is taken from this deployment's accepted principal binding for the
-/// exact `AccountId` the authoritative Agent key state names, so a caller
-/// cannot steer the resolution by writing a controller DID into the evidence
-/// it wants accepted. The document itself comes from the same
-/// freshness-bounded authority path the other controller gates use, so key
-/// rotation and deactivation reach this endpoint the way they reach them.
-#[cfg(test)]
-fn controller_station_for_pairing<'a>(
-    config: &'a coauth_config::ArkretConfig,
-    resolver: &crate::services::station_trust::StationTrustResolver,
-    station_id: &arkret_identifiers::DidCoreId,
-) -> Result<&'a coauth_config::StationConfig, AppError> {
-    config
-        .stations
-        .iter()
-        .find(|station| {
-            crate::services::station_trust::effective_audience(station, resolver).as_ref()
-                == Some(station_id)
-        })
-        .ok_or_else(|| {
-            AppError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "controller Station is not configured or its trusted identity is unavailable",
-            )
-        })
-}
-
-/// Verify the producer proof on the controller-signed authorize Event.
-///
-/// The signed transcript is the proof binding object, not the raw Event bytes;
-/// the SDK verifier builds it from the proof plus `actor_id` and re-derives the
-/// covered `event_digest` from the canonical preimage passed in here. Requiring
-#[cfg(test)]
-fn verify_controller_authorize_event_proof(
-    event: &arkret_wire::Event,
-    controller_keys: &ControllerSigningKeys,
-) -> Result<(), AppError> {
-    let canonical_bytes = authorize_event_preimage_bytes(event)?;
-    let proof = event
-        .producer_proof
-        .as_ref()
-        .ok_or_else(|| AgentAuthRejection::ProofInvalid.into_app_error())?;
-    let material = controller_keys.material(proof.verification_method.as_str())?;
-    arkret_signatures::proof::verify_ed25519_detached_jws_proof(
-        proof,
-        &canonical_bytes,
-        &event.actor_id,
-        &material,
-    )
-    .map_err(|error| {
-        tracing::debug!(%error, "controller authorize Event proof failed verification");
-        AgentAuthRejection::ProofInvalid.into_app_error()
-    })?;
     Ok(())
 }
 

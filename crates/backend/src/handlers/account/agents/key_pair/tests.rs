@@ -147,127 +147,12 @@ fn valid_authorize_event_typed(pairing_request_id: &str) -> arkret_wire::Event {
     authored.into_event()
 }
 
-fn authorize_event_proof_transcript(event: &arkret_wire::Event) -> Vec<u8> {
-    arkret_canonical::canonical_json_bytes(&event.digest_payload().expect("digest preimage"))
-        .expect("canonical digest preimage")
-}
-
-fn controller_did_document(
-    method_id: &str,
-    published_key: &[u8; 32],
-) -> arkret_models_identity::DidDocument {
-    serde_json::from_value(json!({
-        "id": CONTROLLER_FULL,
-        "verificationMethod": [{
-            "id": method_id,
-            "type": "Multikey",
-            "controller": CONTROLLER_FULL,
-            "publicKeyMultibase":
-                arkret_canonical::ed25519_pubkey_to_did_key_multibase(published_key),
-        }],
-        "authentication": [method_id],
-        "assertionMethod": [method_id],
-    }))
-    .expect("controller DID document")
-}
-
-fn controller_signing_keys() -> ControllerSigningKeys {
-    ControllerSigningKeys {
-        document: controller_did_document(
-            CONTROLLER_VM,
-            &controller_signer().verifying_key().to_bytes(),
-        ),
-        accepted_device_material: BTreeMap::new(),
-    }
-}
-
-fn impostor_controller_signing_keys() -> ControllerSigningKeys {
-    ControllerSigningKeys {
-        document: controller_did_document(
-            CONTROLLER_VM,
-            &ed25519_dalek::SigningKey::from_bytes(&[44u8; 32])
-                .verifying_key()
-                .to_bytes(),
-        ),
-        accepted_device_material: BTreeMap::new(),
-    }
-}
-
-fn tamper_jws_signature(jws: &str) -> String {
-    let mut jws = jws.to_owned();
-    let signature_start = jws.rfind('.').expect("compact JWS") + 1;
-    let flipped = if jws.as_bytes()[signature_start] == b'A' {
-        "B"
-    } else {
-        "A"
-    };
-    jws.replace_range(signature_start..=signature_start, flipped);
-    jws
-}
-
-#[test]
-fn requested_scope_disclosure_uses_canonical_detached_jws_verifier() {
-    let signer =
-        arkret_signatures::Ed25519DetachedJwsSigner::from_seed(CONTROLLER_KEY_SEED, CONTROLLER_VM);
-    let material = arkret_signatures::PublicKeyMaterial::Ed25519Raw {
-        bytes: signer.verifying_key().to_bytes().to_vec(),
-    };
-    let transcript = b"requested-scope disclosure proof transcript";
-    let jws = signer.sign_detached_jws(transcript);
-
-    assert!(
-        verify_requested_scope_disclosure_proof(&jws, transcript, CONTROLLER_VM, &material).is_ok()
-    );
-    assert!(
-        verify_requested_scope_disclosure_proof(
-            &jws,
-            b"tampered requested-scope disclosure proof transcript",
-            CONTROLLER_VM,
-            &material,
-        )
-        .is_err()
-    );
-
-    let attached = jws.replacen("..", ".YXR0YWNoZWQ.", 1);
-    assert!(
-        verify_requested_scope_disclosure_proof(&attached, transcript, CONTROLLER_VM, &material,)
-            .is_err()
-    );
-}
-
 fn valid_authorize_event(pairing_request_id: &str) -> Value {
     serde_json::to_value(valid_authorize_event_typed(pairing_request_id)).unwrap()
 }
 
 fn authorize_event(value: Value) -> arkret_wire::Event {
     serde_json::from_value(value).expect("test authorize_event envelope is a wire Event")
-}
-
-#[test]
-fn controller_station_for_pairing_uses_trusted_enrollment() {
-    let station_id = arkret_identifiers::DidCoreId::new(AUDIENCE).unwrap();
-    let mut config = coauth_config::ArkretConfig::default();
-    config.stations.push(coauth_config::StationConfig {
-        name: "controller".to_owned(),
-        endpoint: "https://controller-station.example/".parse().unwrap(),
-        internal_authority_shared_secret: None,
-        embedded_webvh_registration_bearer: None,
-        trust_domain: None,
-    });
-    let resolver = crate::services::station_trust::StationTrustResolver::new();
-    assert!(controller_station_for_pairing(&config, &resolver, &station_id).is_err());
-    resolver.insert_for_test(&config.stations[0].endpoint, AUDIENCE);
-    assert_eq!(
-        controller_station_for_pairing(&config, &resolver, &station_id)
-            .unwrap()
-            .name,
-        "controller"
-    );
-    let other_id = arkret_identifiers::DidCoreId::new("ak:did_core:web:other.example").unwrap();
-    assert!(controller_station_for_pairing(&config, &resolver, &other_id).is_err());
-    resolver.insert_for_test(&config.stations[0].endpoint, other_id.to_string());
-    assert!(controller_station_for_pairing(&config, &resolver, &station_id).is_err());
-    assert!(controller_station_for_pairing(&config, &resolver, &other_id).is_ok());
 }
 
 #[test]
@@ -309,38 +194,6 @@ fn pairing_scope_precheck_returns_key_reason_before_queueing() {
         error,
         AgentAuthRejection::AgentProvisionScopeMigrationRequired
     );
-}
-
-#[test]
-fn authorize_event_controller_proof_verifies_and_one_changed_byte_breaks_it() {
-    let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    let proof = event
-        .producer_proof
-        .as_ref()
-        .expect("producer proof")
-        .clone();
-    let material = arkret_signatures::proof::PublicKeyMaterial::Ed25519Raw {
-        bytes: controller_signer().verifying_key().to_bytes().to_vec(),
-    };
-    let transcript = authorize_event_proof_transcript(&event);
-    arkret_signatures::proof::verify_ed25519_detached_jws_proof(
-        &proof,
-        &transcript,
-        &event.actor_id,
-        &material,
-    )
-    .expect("the controller proof on the fixture must really verify");
-
-    let mut tampered = transcript.clone();
-    let last = tampered.len() - 2;
-    tampered[last] ^= 0x01;
-    arkret_signatures::proof::verify_ed25519_detached_jws_proof(
-        &proof,
-        &tampered,
-        &event.actor_id,
-        &material,
-    )
-    .expect_err("one changed transcript byte must invalidate the controller proof");
 }
 
 #[test]
@@ -558,40 +411,6 @@ fn authorize_event_pairing_evidence_rejects_durable_ref() {
 }
 
 #[test]
-fn pairing_verifies_the_authorize_event_proof_against_the_resolved_controller_key() {
-    let keys = controller_signing_keys();
-    let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    verify_controller_authorize_event_proof(&event, &keys)
-        .expect("the controller Event proof must verify against the published controller key");
-
-    let mut tampered = valid_authorize_event_typed(PAIRING_REQUEST_ID);
-    let proof = tampered.producer_proof.as_mut().expect("producer proof");
-    proof.jws = tamper_jws_signature(&proof.jws);
-    let err = verify_controller_authorize_event_proof(&tampered, &keys)
-        .expect_err("one changed signature byte must fail closed");
-    assert_eq!(err.status(), http::StatusCode::UNAUTHORIZED);
-
-    // The endpoint's own resolution decides the key. The very proof the
-    // fixture just accepted is rejected once the controller document publishes
-    // a different key under the method that proof names -- which is what stops
-    // a caller submitting evidence signed by a key of its own.
-    verify_controller_authorize_event_proof(&event, &impostor_controller_signing_keys())
-        .expect_err("a proof only verifies under the key the controller document publishes");
-
-    // An unpublished method is a rejection, not a fallback to whatever key
-    // material travelled with the request.
-    let other_method = ControllerSigningKeys {
-        document: controller_did_document(
-            &format!("{CONTROLLER_FULL}#some-other-key"),
-            &controller_signer().verifying_key().to_bytes(),
-        ),
-        accepted_device_material: BTreeMap::new(),
-    };
-    verify_controller_authorize_event_proof(&event, &other_method)
-        .expect_err("a verification method absent from the controller document must reject");
-}
-
-#[test]
 fn authorize_event_key_is_the_only_runtime_key_authority() {
     let event = valid_authorize_event_typed(PAIRING_REQUEST_ID);
     let key = arkret_models_identity::agent_signer_evidence::AgentAuthorizedSigningKey::from_event(
@@ -607,7 +426,6 @@ fn authorize_event_key_is_the_only_runtime_key_authority() {
     changed.payload.get_mut("public_key").unwrap()["key"] =
         json!(Base64UrlUnpadded::encode_string(&[7u8; 32]));
     assert!(verify_authorize_event_identity(&changed).is_err());
-    assert!(verify_controller_authorize_event_proof(&changed, &controller_signing_keys()).is_err());
 }
 
 #[test]
