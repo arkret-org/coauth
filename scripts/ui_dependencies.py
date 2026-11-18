@@ -17,7 +17,7 @@ def cargo_metadata(root, environment=None):
     env = cargo_environment(root, environment)
     metadata = json.loads(subprocess.check_output(
         ["cargo", "metadata", "--locked", "--all-features", "--format-version", "1"],
-        cwd=root, env=env, text=True))
+        cwd=root, env=env, text=True, encoding="utf-8"))
     return metadata
 
 
