@@ -2909,6 +2909,28 @@ mod tests {
     }
 
     #[test]
+    fn agent_membership_discovery_requires_its_own_key_scope_without_content_grants() {
+        let operation = arkret_wire::ServiceOperationId::SELF_ACCOUNT_STREAM_SUBSCRIBE_V1;
+        let requested = vec![operation.to_owned()];
+        let key = serde_json::json!({"actions": requested,"resources":[{"kind":"operation","operation":operation}]}).to_string();
+        let issue = |key: &str| {
+            intersect_agent_session_scope(
+                key,
+                &requested,
+                &AgentScopeRequestInput::default(),
+                &AgentSessionCapabilityScope::default(),
+                None,
+                None,
+                "did:example:agent",
+            )
+        };
+        let grant = issue(&key).unwrap();
+        assert_eq!(grant.granted_scope, requested);
+        assert!(grant.realm_ids.is_empty() && grant.strand_ids.is_empty());
+        assert!(issue(&canonical_agent_key_scope()).is_err());
+    }
+
+    #[test]
     fn account_global_service_scope_does_not_require_realm_policy() {
         let effective_scope = intersect_agent_session_scope(
             &canonical_agent_key_scope(),
