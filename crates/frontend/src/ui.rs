@@ -82,7 +82,7 @@ pub fn disclosure(
         sapid::collapsible(format!("{}-{key}", scope.id().slot()))
             .unstyled()
             .class("collapsible-section")
-            .label(label.to_owned())
+            .label(label.clone())
             .default_open(open)
             .content_policy(sapid::ContentPolicy::KeepMounted)
             .content(move || content.take().unwrap_or_else(|| block("", vec![]))),
@@ -102,8 +102,8 @@ pub fn dialog(
         sapid::dialog(format!("{}-{key}", scope.id().slot()))
             .unstyled()
             .class("account-dialog")
-            .label(label.to_owned())
-            .title(label.to_owned())
+            .label(label.clone())
+            .title(label.clone())
             .close_label(crate::translations::t(if key == "edit-profile" {
                 "action-cancel"
             } else {
@@ -112,7 +112,7 @@ pub fn dialog(
             .open(open)
             .on_open_change(move |next| open.revise(|value| *value = next))
             .trigger_content({
-                let label = label.to_owned();
+                let label = label.clone();
                 let class = class.to_owned();
                 move || {
                     Box::new(
@@ -466,8 +466,7 @@ pub fn field(
                                             .and_then(|index| index.parse::<usize>().ok())
                                     })
                                     .and_then(|index| proposal_options.get(index))
-                                    .map(|(value, _)| value.clone())
-                                    .unwrap_or_default();
+                                    .map_or_default(|(value, _)| value.clone());
                                 value.revise(|old| *old = next);
                             })
                             .show_in(scope)
@@ -736,7 +735,7 @@ where
         sapid::button()
             .unstyled()
             .class(class.to_owned())
-            .label(label.to_owned())
+            .label(label.clone())
             .enabled(enabled)
             .on_press(move || {
                 if !state.busy.get_untracked() {

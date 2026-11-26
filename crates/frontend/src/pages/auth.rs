@@ -98,7 +98,7 @@ fn login_form(scope: &Scope, providers: ProvidersOutcome, query: String) -> View
                     }));
                 }
                 if passkey_enabled{
-                    body.push(ui::action(scope,&crate::translations::t("ui-sign-in-with-a-passkey"),"btn btn-secondary btn-block",state,move ||async move{crate::passkey::authenticate(handle.get_untracked()).await?;ui::auth_success()}));
+                    body.push(ui::action(scope,crate::translations::t("ui-sign-in-with-a-passkey"),"btn btn-secondary btn-block",state,move ||async move{crate::passkey::authenticate(handle.get_untracked()).await?;ui::auth_success()}));
                 }
                 if !fixed_hint{body.push(button(t("coauth-approval-use-another-account"),"btn btn-tertiary btn-block",move ||{password_value.revise(String::clear);state.feedback.revise(|v|*v=None);step.revise(|v|*v=false);}));}
                 if providers.account_recovery_allowed{body.push(link(t("coauth-login-forgot-password"),"/recover","link login-links"));}
@@ -180,7 +180,7 @@ pub fn recovery_start(scope: &Scope) -> View {
         .email()
         .required();
     auth_card(
-        &crate::translations::t("ui-recover-account-sign-in"),
+        crate::translations::t("ui-recover-account-sign-in"),
         vec![
             copy(
                 "recovery-stage",
@@ -219,7 +219,7 @@ pub fn recovery_start(scope: &Scope) -> View {
                         Ok(None)
                     } else {
                         Err(response.error.unwrap_or_else(|| {
-                            crate::translations::t("ui-unable-to-start-recovery").into()
+                            crate::translations::t("ui-unable-to-start-recovery")
                         }))
                     }
                 },
@@ -265,7 +265,7 @@ pub fn recovery_progress(scope: &Scope, id: String) -> View {
                 body.push(state.messages());
                 body.push(ui::action(
                     scope,
-                    &crate::translations::t("ui-resend-recovery-email"),
+                    crate::translations::t("ui-resend-recovery-email"),
                     "btn btn-secondary btn-block",
                     state,
                     move || {
@@ -273,9 +273,7 @@ pub fn recovery_progress(scope: &Scope, id: String) -> View {
                         async move {
                             api::api_post::<serde_json::Value>(&path, serde_json::json!({}))
                                 .await?;
-                            Ok(Some(
-                                crate::translations::t("ui-recovery-email-resent").into(),
-                            ))
+                            Ok(Some(crate::translations::t("ui-recovery-email-resent")))
                         }
                     },
                 ));
@@ -286,7 +284,7 @@ pub fn recovery_progress(scope: &Scope, id: String) -> View {
             "/login",
             "link",
         ));
-        auth_card(&crate::translations::t("ui-check-your-email"), body)
+        auth_card(crate::translations::t("ui-check-your-email"), body)
     })
 }
 pub fn password_change(scope: &Scope) -> View {
@@ -348,7 +346,7 @@ pub fn password_recovery(scope: &Scope) -> View {
     let ticket = get_query("ticket").unwrap_or_default();
     if ticket.is_empty() {
         return auth_card(
-            &crate::translations::t("ui-reset-password"),
+            crate::translations::t("ui-reset-password"),
             vec![
                 alert(
                     crate::translations::t("ui-no-recovery-ticket-found-in-the-url"),
@@ -442,7 +440,7 @@ pub fn password_recovery(scope: &Scope) -> View {
                 children.push(state.messages());
                 children.push(ui::action(
                     scope,
-                    &crate::translations::t("ui-send-a-new-recovery-email"),
+                    crate::translations::t("ui-send-a-new-recovery-email"),
                     "btn btn-secondary btn-block",
                     state,
                     move || {
@@ -457,12 +455,9 @@ pub fn password_recovery(scope: &Scope) -> View {
                                 go_to_url(&url)?;
                                 Ok(None)
                             } else {
-                                Ok(Some(
-                                    crate::translations::t(
-                                        "ui-recovery-email-sent-check-your-inbox",
-                                    )
-                                    .into(),
-                                ))
+                                Ok(Some(crate::translations::t(
+                                    "ui-recovery-email-sent-check-your-inbox",
+                                )))
                             }
                         }
                     },
@@ -478,7 +473,7 @@ pub fn password_recovery(scope: &Scope) -> View {
             "/login",
             "link",
         ));
-        auth_card(&crate::translations::t("ui-reset-password"), children)
+        auth_card(crate::translations::t("ui-reset-password"), children)
     })
 }
 pub fn email_verify(scope: &Scope, id: String) -> View {
@@ -491,7 +486,7 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
     ui::resource_body(data, move |scope, response| {
         if response.completed_at.is_some() {
             return auth_card(
-                &crate::translations::t("ui-email-verified"),
+                crate::translations::t("ui-email-verified"),
                 vec![
                     copy(
                         "alert alert-success",
@@ -534,10 +529,10 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
                             Ok(None)
                         }
                         CompleteEmailAuthStatus::InvalidCode => {
-                            Err(crate::translations::t("ui-invalid-verification-code").into())
+                            Err(crate::translations::t("ui-invalid-verification-code"))
                         }
                         CompleteEmailAuthStatus::NotFound => {
-                            Err(crate::translations::t("ui-verification-not-found").into())
+                            Err(crate::translations::t("ui-verification-not-found"))
                         }
                     }
                 }
@@ -546,7 +541,7 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
         let request = id.clone();
         children.push(ui::action(
             scope,
-            &crate::translations::t("ui-resend-code"),
+            crate::translations::t("ui-resend-code"),
             "btn btn-secondary btn-block",
             state,
             move || {
@@ -554,9 +549,7 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
                 async move {
                     api::api_post::<ResendEmailAuthCodePayload>(&path, serde_json::json!({}))
                         .await?;
-                    Ok(Some(
-                        crate::translations::t("ui-verification-code-sent").into(),
-                    ))
+                    Ok(Some(crate::translations::t("ui-verification-code-sent")))
                 }
             },
         ));
@@ -565,14 +558,14 @@ pub fn email_verify(scope: &Scope, id: String) -> View {
             "/settings",
             "link",
         ));
-        auth_card(&crate::translations::t("ui-verify-your-email"), children)
+        auth_card(crate::translations::t("ui-verify-your-email"), children)
     })
 }
 pub fn validate_passwords(password: &str, confirmation: &str) -> std::result::Result<(), String> {
     if password.is_empty() {
-        Err(crate::translations::t("ui-password-is-required").into())
+        Err(crate::translations::t("ui-password-is-required"))
     } else if password != confirmation {
-        Err(crate::translations::t("ui-passwords-do-not-match").into())
+        Err(crate::translations::t("ui-passwords-do-not-match"))
     } else {
         Ok(())
     }
@@ -605,5 +598,4 @@ fn password_error(status: &SetPasswordStatus) -> String {
         }
         _ => crate::translations::t("ui-an-error-occurred-while-changing-your-password"),
     }
-    .into()
 }

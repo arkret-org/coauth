@@ -196,7 +196,7 @@ pub async fn private_stage_device_pairing_adapter(
     authenticate_private_pairing_adapter(req, depot)?;
     let body: DevicePairingStageRequestBody =
         req.parse_json().await.map_err(|_| internal_not_found())?;
-    let idempotency_key = super::account_status::required_header(req, "idempotency-key")?;
+    let idempotency_key = super::required_header(req, "idempotency-key")?;
     if !valid_stage_idempotency_key(&idempotency_key) {
         return Err(internal_not_found());
     }

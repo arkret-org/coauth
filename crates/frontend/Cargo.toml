@@ -17,6 +17,11 @@ crate-type = ["cdylib", "rlib"]
 # Web Crypto backend explicitly.
 getrandom = { workspace = true, features = ["wasm_js"] }
 glory = { workspace = true, features = ["web"] }
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
+web-sys = { workspace = true, features = ["BlobPropertyBag", "CredentialCreationOptions", "CredentialRequestOptions", "CredentialsContainer", "HtmlDocument", "HtmlFormElement", "HtmlIFrameElement", "HtmlInputElement", "Navigator", "NodeList", "PublicKeyCredential", "console"] }
+wasm-bindgen-futures = { workspace = true }
+webauthn-rs-proto = { workspace = true, features = ["wasm"] }
 
 [dependencies]
 arkret-locale = { workspace = true, features = ["serde"] }
@@ -26,16 +31,11 @@ glory = { workspace = true }
 sapid = { workspace = true, features = ["files"] }
 fluent-bundle = { workspace = true }
 gloo-timers = { workspace = true }
-js-sys = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 ulid.workspace = true
 unic-langid = { workspace = true }
-wasm-bindgen = { workspace = true }
-wasm-bindgen-futures = { workspace = true }
-web-sys = { workspace = true, features = ["BlobPropertyBag", "CredentialCreationOptions", "CredentialRequestOptions", "CredentialsContainer", "HtmlDocument", "HtmlFormElement", "HtmlIFrameElement", "HtmlInputElement", "Navigator", "NodeList", "PublicKeyCredential", "console"] }
-webauthn-rs-proto = { workspace = true, features = ["wasm"] }
 zxcvbn = { workspace = true }
 
 [lints]

@@ -60,8 +60,7 @@ pub enum PeerProtocolClientError {
         "peer protocol server returned status {status}{problem_suffix}",
         problem_suffix = problem
             .as_ref()
-            .map(|problem| format!(": {}: {}", problem.code(), problem.detail))
-            .unwrap_or_default()
+            .map_or_default(|problem| format!(": {}: {}", problem.code(), problem.detail))
     )]
     Status {
         status: u16,
@@ -586,13 +585,10 @@ fn request_parts(
     SignedRequestParts {
         method: method.to_owned(),
         target_uri: url.as_str().to_owned(),
-        authority: url
-            .host_str()
-            .map(|host| match url.port() {
-                Some(port) => format!("{host}:{port}"),
-                None => host.to_owned(),
-            })
-            .unwrap_or_default(),
+        authority: url.host_str().map_or_default(|host| match url.port() {
+            Some(port) => format!("{host}:{port}"),
+            None => host.to_owned(),
+        }),
         path: url.path().to_owned(),
         headers: headers
             .iter()

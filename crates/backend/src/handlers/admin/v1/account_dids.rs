@@ -758,7 +758,7 @@ fn upsert_added_did_binding(
     let binding = AccountDidBinding {
         id: did_binding_detail_string(&log.details, "binding_id")
             .unwrap_or_else(|| format!("acctdid-{}", binding_slug(&did))),
-        account_id: log.resource_id.map(|id| id.to_string()).unwrap_or_default(),
+        account_id: log.resource_id.map_or_default(|id| id.to_string()),
         did: did.clone(),
         kind,
         state: DidBindingState::Active,

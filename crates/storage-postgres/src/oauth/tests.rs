@@ -191,7 +191,7 @@ where
         .await
         .unwrap();
     let committed = match committed {
-        coauth_data::SessionGrantCommitOutcome::Committed(g) => g,
+        coauth_data::SessionGrantCommitOutcome::Committed(grant) => *grant,
         other => panic!("first commit expected: {other:?}"),
     };
     let mut wrong_bytes: [u8; 32] = arkret_canonical::base64url_decode(secret.as_str())

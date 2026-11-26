@@ -28,10 +28,7 @@ anyhow = { workspace = true }
 # config-side validation never drifts from the SDK. `default-features =
 # false` keeps the optional `salvo` surface out of the config build.
 arkret-identifiers = { workspace = true }
-arkret-identity = { workspace = true }
 arkret-keystore = { workspace = true, features = ["keystore-macos", "keystore-linux", "keystore-windows", "keystore-encrypted-file"] }
-arkret-models-identity = { workspace = true }
-arkret-wire = { workspace = true }
 base64 = { workspace = true }
 camino = { workspace = true }
 chrono = { workspace = true }
@@ -40,11 +37,7 @@ coauth-iana = { workspace = true }
 coauth-jose = { workspace = true }
 coauth-keyring = { workspace = true }
 figment = { workspace = true }
-futures-util = { workspace = true }
-hex = { workspace = true }
-indoc = { workspace = true }
 ipnetwork = { workspace = true }
-pem-rfc7468 = { workspace = true }
 rand_chacha = { workspace = true }
 rand_core = { workspace = true }
 rustls-pki-types = { workspace = true }

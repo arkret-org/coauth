@@ -214,8 +214,6 @@ icu_datetime = { version = "2.3.0", features = ["compiled_data"] }
 icu_experimental = { version = "0.6.0", features = ["compiled_data"] }
 icu_locid = { package = "icu_locale_core", version = "2.3.0", features = ["alloc"] }
 icu_locid_transform = { package = "icu_locale", version = "2.3.1", features = ["compiled_data"] }
-icu_normalizer = { version = "2.3.0", features = ["compiled_data"] }
-indoc = "2.0.7"
 insta = { version = "1.48.0", features = ["yaml", "json"] }
 ipnetwork = { version = "0.21", features = ["serde"] }
 itertools = "0.15.0"
@@ -418,6 +416,13 @@ writeable = "0.6.4"
 x509-cert = "0.2.5"
 zeroize = "1.9.0"
 zxcvbn = "3.1.1"
+
+# The backend's cross-service tests link both applications. Optimize the test
+# binary for size so its unwind information fits Apple's 24-bit offsets.
+[profile.test]
+opt-level = "s"
+codegen-units = 8
+incremental = false
 
 # A few profile opt-level tweaks to make the test suite run faster.
 [profile.dev.package]

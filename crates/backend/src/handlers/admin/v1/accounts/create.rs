@@ -348,8 +348,7 @@ pub async fn batch_invite(
     let request_reference_for_log = parameters
         .consent_gate
         .as_ref()
-        .map(|g| g.request_reference.clone())
-        .unwrap_or_default();
+        .map_or_default(|g| g.request_reference.clone());
     match gate_outcome {
         BatchInviteGateOutcome::Allow => {}
         BatchInviteGateOutcome::ConsentRequired => {

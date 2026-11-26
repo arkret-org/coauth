@@ -64,6 +64,17 @@ pub const CLAIM_SESSION_ID: &str = "org.arkret.session_id";
 
 pub const STATION_SESSION_BIND_SCOPE: &str = "urn:arkret:station:session.bind";
 
+/// Missing or blank selector headers share the route's non-enumerating outcome.
+fn required_header(req: &Request, name: &str) -> Result<String, ArkretRouteError> {
+    req.headers()
+        .get(name)
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or(ArkretRouteError::NotFound)
+}
+
 #[derive(Debug, Error)]
 pub enum ArkretRouteError {
     #[error(transparent)]

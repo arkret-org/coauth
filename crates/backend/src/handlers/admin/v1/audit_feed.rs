@@ -63,7 +63,7 @@ fn audit_entry_from_log(
         admin_user_id: Some(log.admin_user_id.to_string()),
         operation: format_operation(&log.operation),
         resource_kind: log.resource_type,
-        resource_id: log.resource_id.map(|id| id.to_string()).unwrap_or_default(),
+        resource_id: log.resource_id.map_or_default(|id| id.to_string()),
         details,
         created_at: log.created_at,
         signature_status,

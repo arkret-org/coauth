@@ -240,15 +240,12 @@ pub async fn introspect_session_grant(
         status = SessionGrantAdminIntrospectionStatus::Revoked;
     }
     let proof_required = false;
-    if status == SessionGrantAdminIntrospectionStatus::Active {
-        match presented_proof.as_ref() {
-            Some(proof) => {
-                status = verify_session_grant_introspection_proof(&grant, proof, clock.now());
-            }
-            // The authenticated issuer response supplies the immutable key binding;
-            // the resource server independently checks the actual request DPoP.
-            None => {}
-        }
+    // Without a presented proof the resource server checks the actual request
+    // DPoP independently against the authenticated issuer's key binding.
+    if status == SessionGrantAdminIntrospectionStatus::Active
+        && let Some(proof) = presented_proof.as_ref()
+    {
+        status = verify_session_grant_introspection_proof(&grant, proof, clock.now());
     }
     let mut active = status == SessionGrantAdminIntrospectionStatus::Active;
 

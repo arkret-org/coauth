@@ -197,8 +197,7 @@ fn profile_editor(
                 crate::translations::t("ui-principal-id"),
                 user.principal
                     .as_ref()
-                    .map(|p| p.principal_address.clone())
-                    .unwrap_or_default(),
+                    .map_or_default(|p| p.principal_address.clone()),
             )
             .readonly(true),
         ],
@@ -212,8 +211,7 @@ fn profile_editor(
                 if !locale.is_empty() && crate::translations::UiLocale::from_tag(locale).is_none() {
                     return Err(crate::translations::t(
                         "ui-choose-a-supported-account-language-en-or-zh-cn",
-                    )
-                    .into());
+                    ));
                 }
                 let response=api::api_patch::<PatchViewerProfileOutcome>("/self/viewer/profile",serde_json::json!({"display_name":(!values[0].is_empty()).then(||values[0].clone()),"avatar_url":avatar.get_untracked(),"preferred_locale":(!locale.is_empty()).then_some(locale)})).await?;
                 crate::translations::set_account_locale(
@@ -253,7 +251,7 @@ fn profile_editor(
     ui::dialog(
         scope,
         "edit-profile",
-        &crate::translations::t("ui-edit-profile"),
+        crate::translations::t("ui-edit-profile"),
         "btn btn-tertiary btn-sm",
         body,
         open,
@@ -280,7 +278,6 @@ fn avatar_upload(scope: &Scope, avatar: Cage<Option<String>>, state: Action) -> 
                 } else {
                     crate::translations::t("ui-upload-avatar")
                 }
-                .to_owned()
             }))
             .controller_ref(controller)
             .configuration(glory::render::FileConfig {
@@ -300,7 +297,7 @@ fn avatar_upload(scope: &Scope, avatar: Cage<Option<String>>, state: Action) -> 
                         *value = Some(Err(crate::translations::t_with(
                             "ui-avatar-selection-rejected",
                             &[("reason", &format!("{reason:?}"))],
-                        )))
+                        )));
                     });
                 }
             })
@@ -316,10 +313,9 @@ fn avatar_upload(scope: &Scope, avatar: Cage<Option<String>>, state: Action) -> 
                     let url = upload_avatar(owner, control.clone(), file).await?;
                     avatar.revise(|value| *value = Some(url));
                     let _ = control.clear();
-                    Ok(Some(
-                        crate::translations::t("ui-avatar-uploaded-save-your-profile-to-apply-it")
-                            .into(),
-                    ))
+                    Ok(Some(crate::translations::t(
+                        "ui-avatar-uploaded-save-your-profile-to-apply-it",
+                    )))
                 });
             }),
     )
@@ -374,7 +370,9 @@ async fn upload_avatar(
         .await
         .map_err(|error| error.to_string())?;
         if chunk.is_empty() {
-            return Err(crate::translations::t("ui-unable-to-read-the-complete-avatar").into());
+            return Err(crate::translations::t(
+                "ui-unable-to-read-the-complete-avatar",
+            ));
         }
         offset += chunk.len() as u64;
         bytes.extend(chunk);
@@ -427,7 +425,7 @@ async fn upload_avatar(
     js_sys::Reflect::get(&json, &JsValue::from_str("avatar_url"))
         .ok()
         .and_then(|v| v.as_string())
-        .ok_or_else(|| crate::translations::t("ui-avatar-response-did-not-provide-a-url").into())
+        .ok_or_else(|| crate::translations::t("ui-avatar-response-did-not-provide-a-url"))
 }
 #[cfg(not(target_arch = "wasm32"))]
 async fn upload_avatar(
@@ -435,7 +433,9 @@ async fn upload_avatar(
     _: sapid::FileController,
     _: glory::render::FileInfo,
 ) -> std::result::Result<String, String> {
-    Err(crate::translations::t("ui-avatar-upload-requires-a-browser").into())
+    Err(crate::translations::t(
+        "ui-avatar-upload-requires-a-browser",
+    ))
 }
 
 pub fn overview(scope: &Scope) -> View {
@@ -452,29 +452,21 @@ fn overview_for_user(scope: &Scope, user: coauth_account_types::ViewerUser) -> V
         api::api_get::<SecuritySummaryOutcome>("/self/viewer/security")
     });
     ui::resource_body(security, move |_, summary| {
-        let pending_emails = user
-            .emails
-            .as_ref()
-            .map(|emails| {
-                emails
-                    .edges
-                    .iter()
-                    .filter(|edge| edge.node.confirmed_at.is_none())
-                    .map(|edge| edge.node.email.clone())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        let mut sessions = user
-            .browser_sessions
-            .as_ref()
-            .map(|connection| {
-                connection
-                    .edges
-                    .iter()
-                    .map(|edge| edge.node.clone())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+        let pending_emails = user.emails.as_ref().map_or_default(|emails| {
+            emails
+                .edges
+                .iter()
+                .filter(|edge| edge.node.confirmed_at.is_none())
+                .map(|edge| edge.node.email.clone())
+                .collect::<Vec<_>>()
+        });
+        let mut sessions = user.browser_sessions.as_ref().map_or_default(|connection| {
+            connection
+                .edges
+                .iter()
+                .map(|edge| edge.node.clone())
+                .collect::<Vec<_>>()
+        });
         sessions.sort_by_key(|session| {
             std::cmp::Reverse(
                 session
@@ -492,16 +484,14 @@ fn overview_for_user(scope: &Scope, user: coauth_account_types::ViewerUser) -> V
                         "font-semibold",
                         session
                             .display_name
-                            .unwrap_or_else(|| crate::translations::t("ui-browser-session").into()),
+                            .unwrap_or_else(|| crate::translations::t("ui-browser-session")),
                     ),
                     copy(
                         "text-sm text-secondary",
-                        session
-                            .last_active_at
-                            .map(|value| crate::utils::format_date(&value))
-                            .unwrap_or_else(|| {
-                                crate::translations::t("ui-activity-time-unavailable")
-                            }),
+                        session.last_active_at.map_or_else(
+                            || crate::translations::t("ui-activity-time-unavailable"),
+                            |value| crate::utils::format_date(&value),
+                        ),
                     ),
                     link(
                         crate::translations::t("ui-view-session"),
@@ -534,28 +524,27 @@ fn overview_for_user(scope: &Scope, user: coauth_account_types::ViewerUser) -> V
                 vec![
                     details(vec![
                         (
-                            crate::translations::t("ui-password-sign-in").into(),
+                            crate::translations::t("ui-password-sign-in"),
                             if summary.has_password {
                                 crate::translations::t("ui-available")
                             } else {
                                 crate::translations::t("ui-not-configured")
-                            }
-                            .into(),
+                            },
                         ),
                         (
-                            crate::translations::t("ui-active-sessions").into(),
+                            crate::translations::t("ui-active-sessions"),
                             summary.active_sessions_count.to_string(),
                         ),
                         (
-                            crate::translations::t("ui-linked-identity-providers").into(),
+                            crate::translations::t("ui-linked-identity-providers"),
                             summary.linked_providers_count.to_string(),
                         ),
                         (
-                            crate::translations::t("ui-verified-email-addresses").into(),
+                            crate::translations::t("ui-verified-email-addresses"),
                             summary.verified_emails_count.to_string(),
                         ),
                         (
-                            crate::translations::t("ui-verified-phone-numbers").into(),
+                            crate::translations::t("ui-verified-phone-numbers"),
                             summary.verified_phones_count.to_string(),
                         ),
                     ]),
@@ -625,8 +614,7 @@ pub fn settings(scope: &Scope) -> View {
         let emails = user
             .emails
             .as_ref()
-            .map(|v| v.edges.iter().map(|v| v.node.clone()).collect::<Vec<_>>())
-            .unwrap_or_default();
+            .map_or_default(|v| v.edges.iter().map(|v| v.node.clone()).collect::<Vec<_>>());
         if response.site_config.email_change_allowed || !emails.is_empty() {
             let mut contacts = vec![];
             for email in emails {
@@ -673,7 +661,7 @@ pub fn settings(scope: &Scope) -> View {
                     let reload = reload.clone();
                     row.push(ui::action(
                         scope,
-                        &crate::translations::t("ui-remove"),
+                        crate::translations::t("ui-remove"),
                         "btn btn-destructive btn-sm",
                         actions,
                         move || {
@@ -687,8 +675,7 @@ pub fn settings(scope: &Scope) -> View {
                                         Ok(None)
                                     }
                                     RemoveEmailStatus::NotFound => {
-                                        Err(crate::translations::t("ui-email-address-not-found")
-                                            .into())
+                                        Err(crate::translations::t("ui-email-address-not-found"))
                                     }
                                 }
                             }
@@ -726,10 +713,9 @@ pub fn settings(scope: &Scope) -> View {
                             }
                             AddEmailStatus::Exists => Err(crate::translations::t(
                                 "ui-this-email-address-is-already-in-use",
-                            )
-                            .into()),
+                            )),
                             AddEmailStatus::Invalid => {
-                                Err(crate::translations::t("ui-invalid-email-address").into())
+                                Err(crate::translations::t("ui-invalid-email-address"))
                             }
                             AddEmailStatus::Denied => Err(format!(
                                 "{} {}",
@@ -743,7 +729,7 @@ pub fn settings(scope: &Scope) -> View {
             body.push(ui::disclosure(
                 scope,
                 "contact-info",
-                &crate::translations::t("ui-contact-info"),
+                crate::translations::t("ui-contact-info"),
                 stack(contacts),
                 true,
             ));
@@ -753,7 +739,7 @@ pub fn settings(scope: &Scope) -> View {
             body.push(ui::disclosure(
                 scope,
                 "account-password",
-                &crate::translations::t("ui-account-password"),
+                crate::translations::t("ui-account-password"),
                 block(
                     "password-preview",
                     vec![
@@ -782,7 +768,7 @@ pub fn settings(scope: &Scope) -> View {
         let signout_open = scope.cage(false);
         let signout = ui::action(
             scope,
-            &crate::translations::t("ui-sign-out"),
+            crate::translations::t("ui-sign-out"),
             "btn btn-destructive-solid",
             actions,
             move || {
@@ -790,7 +776,7 @@ pub fn settings(scope: &Scope) -> View {
                 async move {
                     let response = api::api_delete::<EndSessionPayload>(&path).await?;
                     if response.status != EndSessionStatus::Ended {
-                        return Err(crate::translations::t("ui-session-could-not-be-ended").into());
+                        return Err(crate::translations::t("ui-session-could-not-be-ended"));
                     }
                     go("/login")?;
                     Ok(None)
@@ -800,7 +786,7 @@ pub fn settings(scope: &Scope) -> View {
         body.push(ui::dialog(
             scope,
             "sign-out",
-            &crate::translations::t("ui-sign-out"),
+            crate::translations::t("ui-sign-out"),
             "btn btn-destructive btn-lg",
             stack(vec![
                 plain(crate::translations::t(
@@ -836,8 +822,7 @@ fn deactivation(
     let address = user
         .principal
         .as_ref()
-        .map(|value| value.principal_address.clone())
-        .unwrap_or_default();
+        .map_or_default(|value| value.principal_address.clone());
     let field = Field::new(
         scope,
         if password_mode {
@@ -894,14 +879,12 @@ fn deactivation(
                 if !ready.get_untracked() {
                     return Err(crate::translations::t(
                         "ui-please-wait-before-confirming-this-action",
-                    )
-                    .into());
+                    ));
                 }
                 if !password_mode && (expected.is_empty() || values[0] != expected) {
                     return Err(crate::translations::t(
                         "ui-enter-the-account-address-exactly-to-confirm",
-                    )
-                    .into());
+                    ));
                 }
                 let mut body = serde_json::json!({"principal_erase":erase.get_untracked()});
                 if password_mode {
@@ -915,10 +898,10 @@ fn deactivation(
                         Ok(None)
                     }
                     DeactivateUserStatus::IncorrectPassword => {
-                        Err(crate::translations::t("ui-incorrect-password").into())
+                        Err(crate::translations::t("ui-incorrect-password"))
                     }
                     DeactivateUserStatus::NotFound => {
-                        Err(crate::translations::t("ui-account-not-found").into())
+                        Err(crate::translations::t("ui-account-not-found"))
                     }
                 }
             }
@@ -936,7 +919,7 @@ fn deactivation(
         ui::checkbox(
             scope,
             "erase-data",
-            &crate::translations::t("ui-erase-all-my-data"),
+            crate::translations::t("ui-erase-all-my-data"),
             erase,
             true,
         ),
@@ -958,7 +941,7 @@ fn deactivation(
     ui::dialog(
         scope,
         "deactivate-account",
-        &crate::translations::t("ui-deactivate-account"),
+        crate::translations::t("ui-deactivate-account"),
         "btn btn-tertiary text-destructive",
         content,
         open,
@@ -993,7 +976,7 @@ fn identity_section(
         let name = account
             .provider_name
             .or(account.provider_brand)
-            .unwrap_or_else(|| crate::translations::t("ui-external-provider").into());
+            .unwrap_or_else(|| crate::translations::t("ui-external-provider"));
         let subject = account.human_account_name.unwrap_or(account.subject);
         let id = account.id;
         let reload = viewer.clone();
@@ -1008,7 +991,7 @@ fn identity_section(
         } else {
             ui::action(
                 scope,
-                &crate::translations::t("ui-unlink"),
+                crate::translations::t("ui-unlink"),
                 "btn btn-destructive btn-sm",
                 state,
                 move || {
@@ -1017,7 +1000,7 @@ fn identity_section(
                     async move {
                         api::api_delete::<UnlinkOutcome>(&path).await?;
                         reload.reload();
-                        Ok(Some(crate::translations::t("ui-identity-unlinked").into()))
+                        Ok(Some(crate::translations::t("ui-identity-unlinked")))
                     }
                 },
             )
@@ -1059,7 +1042,7 @@ fn identity_section(
     ui::disclosure(
         scope,
         "linked-accounts",
-        &crate::translations::t("ui-linked-accounts"),
+        crate::translations::t("ui-linked-accounts"),
         stack(body),
         true,
     )
@@ -1109,7 +1092,7 @@ pub fn identities(scope: &Scope) -> View {
             let label = account
                 .provider_name
                 .or(account.provider_brand)
-                .unwrap_or_else(|| crate::translations::t("ui-external-provider").into());
+                .unwrap_or_else(|| crate::translations::t("ui-external-provider"));
             let id = account.id.clone();
             let reload = reload.clone();
             let remove = if count <= 1 {
@@ -1123,7 +1106,7 @@ pub fn identities(scope: &Scope) -> View {
             } else {
                 ui::action(
                     scope,
-                    &crate::translations::t("ui-unlink"),
+                    crate::translations::t("ui-unlink"),
                     "btn btn-destructive btn-sm",
                     state,
                     move || {
@@ -1132,7 +1115,7 @@ pub fn identities(scope: &Scope) -> View {
                         async move {
                             api::api_delete::<UnlinkOutcome>(&path).await?;
                             reload.reload();
-                            Ok(Some(crate::translations::t("ui-identity-unlinked").into()))
+                            Ok(Some(crate::translations::t("ui-identity-unlinked")))
                         }
                     },
                 )
@@ -1291,7 +1274,7 @@ pub fn notifications(scope: &Scope) -> View {
         children.push(state.messages());
         children.push(ui::action(
             scope,
-            &crate::translations::t("ui-save-preferences"),
+            crate::translations::t("ui-save-preferences"),
             "btn btn-primary",
             state,
             move || async move {
@@ -1305,10 +1288,10 @@ pub fn notifications(scope: &Scope) -> View {
                         .preferences
                         .iter()
                         .map(|p| (p.channel.clone(), p.enabled))
-                        .collect()
+                        .collect();
                 });
                 prefs.revise(|value| *value = response.preferences);
-                Ok(Some(crate::translations::t("ui-preferences-saved").into()))
+                Ok(Some(crate::translations::t("ui-preferences-saved")))
             },
         ));
         stack(children)

@@ -92,7 +92,7 @@ pub fn page(scope: &Scope) -> View {
                     let label = (!values[0].trim().is_empty()).then(|| values[0].trim().into());
                     crate::passkey::register(None, label).await?;
                     reload.reload();
-                    Ok(Some(crate::translations::t("ui-passkey-added").into()))
+                    Ok(Some(crate::translations::t("ui-passkey-added")))
                 }
             },
         ));
@@ -221,7 +221,7 @@ fn passkey(
     );
     let rename = ui::action(
         scope,
-        &crate::translations::t("ui-save-name"),
+        crate::translations::t("ui-save-name"),
         "btn btn-secondary btn-sm",
         state,
         move || {
@@ -231,7 +231,7 @@ fn passkey(
             async move {
                 api::api_patch::<PasskeyMutationOutcome>(&path,serde_json::json!({"label":(!value.trim().is_empty()).then(||value.trim().to_owned())})).await?;
                 source.reload();
-                Ok(Some(crate::translations::t("ui-passkey-name-saved").into()))
+                Ok(Some(crate::translations::t("ui-passkey-name-saved")))
             }
         },
     );

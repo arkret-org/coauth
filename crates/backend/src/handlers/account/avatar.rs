@@ -40,10 +40,7 @@ pub async fn upload_avatar(
         .await
         .ok_or_else(|| RouteError::BadRequest("missing 'avatar' file field".into()))?;
 
-    let content_type = file
-        .content_type()
-        .map(|s| s.to_string())
-        .unwrap_or_default();
+    let content_type = file.content_type().map_or_default(|s| s.to_string());
 
     // Validate content type
     if !matches!(

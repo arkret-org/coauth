@@ -185,13 +185,11 @@ impl TryFrom<ProviderLookup> for UpstreamOAuthProvider {
 
         let additional_authorization_parameters: Vec<(String, String)> = value
             .additional_parameters
-            .map(|v| serde_json::from_value(v).unwrap_or_default())
-            .unwrap_or_default();
+            .map_or_default(|v| serde_json::from_value(v).unwrap_or_default());
 
         let claims_imports: provider::ClaimsImports = value
             .claims_imports
-            .map(|v| serde_json::from_value(v).unwrap_or_default())
-            .unwrap_or_default();
+            .map_or_default(|v| serde_json::from_value(v).unwrap_or_default());
 
         let on_backchannel_logout = value
             .on_backchannel_logout

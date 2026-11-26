@@ -1466,13 +1466,11 @@ fn intersect_agent_session_scope(
                     policy
                         .allowed_data_labels
                         .as_ref()
-                        .map(|values| values.iter().cloned().collect())
-                        .unwrap_or_default(),
+                        .map_or_default(|values| values.iter().cloned().collect()),
                     policy
                         .allowed_endpoints
                         .as_ref()
-                        .map(|values| values.iter().cloned().collect())
-                        .unwrap_or_default(),
+                        .map_or_default(|values| values.iter().cloned().collect()),
                 )
             };
 
@@ -1507,9 +1505,7 @@ fn intersect_agent_session_scope(
             Vec::new(),
             Vec::new(),
             Vec::new(),
-            realm_policy
-                .map(|policy| policy.policy_refs.iter().cloned().collect())
-                .unwrap_or_default(),
+            realm_policy.map_or_default(|policy| policy.policy_refs.iter().cloned().collect()),
         )
     };
 

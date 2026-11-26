@@ -55,7 +55,7 @@ fn submit_consent_form(
     _action: &str,
     _csrf: &str,
 ) -> std::result::Result<(), String> {
-    Err(crate::translations::t("ui-consent-form-submission-requires-a-browser").to_owned())
+    Err(crate::translations::t("ui-consent-form-submission-requires-a-browser").clone())
 }
 
 async fn authorization_decision(
@@ -87,13 +87,13 @@ async fn authorization_decision(
     if response.status != "success" {
         return Err(response
             .error
-            .unwrap_or_else(|| crate::translations::t("ui-authorization-failed").into()));
+            .unwrap_or_else(|| crate::translations::t("ui-authorization-failed")));
     }
     if !matches!(
         response.response_mode.as_deref(),
         Some("query" | "fragment")
     ) {
-        return Err(crate::translations::t("ui-unsupported-callback-mode").into());
+        return Err(crate::translations::t("ui-unsupported-callback-mode"));
     }
     go_to_url(
         &response
@@ -128,7 +128,7 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
         }
         if response.policy_violation {
             return auth_card(
-                &crate::translations::t("ui-access-denied"),
+                crate::translations::t("ui-access-denied"),
                 vec![alert(
                     crate::translations::t("ui-this-authorization-request-was-denied-by-policy"),
                     false,
@@ -195,16 +195,13 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
                         if response.status != "fulfilled" {
                             return Err(crate::translations::t_with(
                                 "ui-unexpected-status",
-                                &[("status", &response.status.to_string())],
+                                &[("status", &response.status.clone())],
                             ));
                         }
                         done.revise(|value| {
-                            *value = Some(
-                                crate::translations::t(
-                                    "ui-device-authorized-successfully-you-can-now-use-the-device",
-                                )
-                                .into(),
-                            );
+                            *value = Some(crate::translations::t(
+                                "ui-device-authorized-successfully-you-can-now-use-the-device",
+                            ));
                         });
                         Ok(None)
                     } else {
@@ -217,7 +214,7 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
             let request = grant.clone();
             body.push(ui::action(
                 scope,
-                &crate::translations::t("ui-deny"),
+                crate::translations::t("ui-deny"),
                 "btn btn-secondary btn-block",
                 state,
                 move || {
@@ -231,14 +228,13 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
                         if response.status != "rejected" {
                             return Err(crate::translations::t_with(
                                 "ui-unexpected-status",
-                                &[("status", &response.status.to_string())],
+                                &[("status", &response.status.clone())],
                             ));
                         }
                         done.revise(|value| {
-                            *value = Some(
-                                crate::translations::t("ui-device-authorization-was-rejected")
-                                    .into(),
-                            );
+                            *value = Some(crate::translations::t(
+                                "ui-device-authorization-was-rejected",
+                            ));
                         });
                         Ok(None)
                     }
@@ -248,7 +244,7 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
             let request = grant.clone();
             body.push(ui::action(
                 scope,
-                &crate::translations::t("ui-deny"),
+                crate::translations::t("ui-deny"),
                 "btn btn-secondary btn-block",
                 state,
                 move || {
@@ -268,14 +264,14 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
             ));
         }
         let title = if device {
-            crate::translations::t("ui-authorize-device").into()
+            crate::translations::t("ui-authorize-device")
         } else {
             crate::translations::t_with("ui-authorize-client", &[("name", &name)])
         };
         let pending = std::cell::RefCell::new(Some(auth_card(title, body)));
         ui::reactive(done, move |_, message| match message {
             Some(message) => auth_card(
-                &crate::translations::t("ui-device-authorization"),
+                crate::translations::t("ui-device-authorization"),
                 vec![
                     copy("alert alert-info", message),
                     link(
@@ -295,7 +291,7 @@ pub fn approval(scope: &Scope, id: String, device: bool) -> View {
 pub fn device_link(scope: &Scope) -> View {
     let state = Action::new(scope);
     auth_card(
-        &crate::translations::t("ui-link-a-device"),
+        crate::translations::t("ui-link-a-device"),
         vec![
             copy(
                 "text-secondary",
@@ -323,8 +319,7 @@ pub fn device_link(scope: &Scope) -> View {
                     if response.status != "valid" {
                         return Err(crate::translations::t(
                             "ui-invalid-or-expired-code-please-try-again",
-                        )
-                        .into());
+                        ));
                     }
                     let id = response.grant_id.ok_or(crate::translations::t(
                         "ui-device-response-did-not-provide-a-grant-id",
@@ -345,7 +340,7 @@ pub fn client(scope: &Scope, id: String) -> View {
     ui::resource_body(source, |_, client| {
         let name = client
             .client_name
-            .unwrap_or_else(|| crate::translations::t("ui-unknown-client").into());
+            .unwrap_or_else(|| crate::translations::t("ui-unknown-client"));
         let mut head = vec![];
         if let Some(uri) = client.logo_uri {
             head.push(Box::new(image().class("client-logo").source(uri).alt(name.clone())) as View);
@@ -508,7 +503,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
             let state = Action::new(scope);
             let id = id.clone();
             auth_card(
-                &crate::translations::t("ui-link-account"),
+                crate::translations::t("ui-link-account"),
                 vec![
                     copy(
                         "text-secondary",
@@ -524,8 +519,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
                                 (
                                     "subject",
                                     &upstream_subject
-                                        .map(|subject| format!(" ({subject})"))
-                                        .unwrap_or_default(),
+                                        .map_or_default(|subject| format!(" ({subject})")),
                                 ),
                             ],
                         ),
@@ -533,7 +527,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
                     state.messages(),
                     ui::action(
                         scope,
-                        &crate::translations::t("ui-link-account"),
+                        crate::translations::t("ui-link-account"),
                         "btn btn-primary btn-block",
                         state,
                         move || {
@@ -547,7 +541,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
             )
         }
         UpstreamLinkState::LinkMismatch { existing_handle } => auth_card(
-            &crate::translations::t("ui-account-mismatch"),
+            crate::translations::t("ui-account-mismatch"),
             vec![
                 copy(
                     "text-secondary",
@@ -570,7 +564,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
             ],
         ),
         UpstreamLinkState::AccountLocked { handle } => auth_card(
-            &crate::translations::t("ui-account-locked"),
+            crate::translations::t("ui-account-locked"),
             vec![
                 copy(
                     "text-secondary",
@@ -582,7 +576,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
             ],
         ),
         UpstreamLinkState::AccountDeactivated { handle } => auth_card(
-            &crate::translations::t("ui-account-deactivated"),
+            crate::translations::t("ui-account-deactivated"),
             vec![
                 copy(
                     "text-secondary",
@@ -631,7 +625,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
                 children.push(ui::checkbox(
                     scope,
                     "import-name",
-                    &crate::translations::t("ui-import-display-name"),
+                    crate::translations::t("ui-import-display-name"),
                     import_name,
                     true,
                 ));
@@ -640,7 +634,7 @@ pub fn upstream(scope: &Scope, id: String) -> View {
                 children.push(ui::checkbox(
                     scope,
                     "import-email",
-                    &crate::translations::t("ui-import-email-address"),
+                    crate::translations::t("ui-import-email-address"),
                     import_email,
                     true,
                 ));
@@ -649,16 +643,16 @@ pub fn upstream(scope: &Scope, id: String) -> View {
                 children.push(ui::checkbox(
                     scope,
                     "accept-terms",
-                    &crate::translations::t("ui-i-accept-the-terms-of-service"),
+                    crate::translations::t("ui-i-accept-the-terms-of-service"),
                     terms,
                     true,
                 ));
             }
             let id = id.clone();
             children.push(ui::form(scope,"upstream-register",vec![Field::new(scope,crate::translations::t("ui-username"),initial).required().readonly(handle_forced)],crate::translations::t("ui-register"),"btn btn-primary btn-block",state,move |values|{let id=id.clone();let fixed=fixed_handle.clone();async move{
-                if has_tos&&!terms.get_untracked(){return Err(crate::translations::t("ui-you-must-accept-the-terms-of-service").into())}upstream_action(&id,serde_json::json!({"action":"register","handle":if handle_forced{fixed}else{values[0].clone()},"import_email":email_forced||import_email.get_untracked(),"import_display_name":display_name_forced||import_name.get_untracked(),"accept_terms":terms.get_untracked()})).await
+                if has_tos&&!terms.get_untracked(){return Err(crate::translations::t("ui-you-must-accept-the-terms-of-service"))}upstream_action(&id,serde_json::json!({"action":"register","handle":if handle_forced{fixed}else{values[0].clone()},"import_email":email_forced||import_email.get_untracked(),"import_display_name":display_name_forced||import_name.get_untracked(),"accept_terms":terms.get_untracked()})).await
             }}));
-            auth_card(&crate::translations::t("ui-create-account"), children)
+            auth_card(crate::translations::t("ui-create-account"), children)
         }
     })
 }
@@ -710,5 +704,4 @@ fn scope_description(scope: &str) -> String {
         }
         other => other.to_owned(),
     }
-    .into()
 }

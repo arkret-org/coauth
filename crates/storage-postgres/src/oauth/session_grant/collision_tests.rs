@@ -238,7 +238,7 @@ async fn commit(
     assert_eq!(grant.session_grant, *secret);
     assert_eq!(grant.metadata, metadata);
     assert_eq!(grant.issuance_operation_id, operation.id);
-    grant
+    *grant
 }
 
 #[tokio::test]

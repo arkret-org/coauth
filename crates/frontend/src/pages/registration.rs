@@ -155,8 +155,8 @@ pub fn step(scope: &Scope, id: String, kind: String) -> View {
         "display-name" => display_name(scope, id),
         "finish" => finish(scope, id),
         _ => empty(
-            &crate::translations::t("ui-registration-step-not-found"),
-            &crate::translations::t("ui-return-to-registration-and-try-again"),
+            crate::translations::t("ui-registration-step-not-found"),
+            crate::translations::t("ui-return-to-registration-and-try-again"),
         ),
     }
 }
@@ -179,7 +179,6 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
                 crate::translations::t(
                     "ui-we-sent-a-verification-code-to-your-phone-number-15050432",
                 )
-                .into()
             } else {
                 format!(
                     "Enter the verification code sent to {}.",
@@ -225,7 +224,7 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
         let request = id.clone();
         body.push(ui::action(
             scope,
-            &crate::translations::t("ui-resend-code"),
+            crate::translations::t("ui-resend-code"),
             "btn btn-secondary btn-block",
             state,
             move || {
@@ -240,9 +239,9 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
                     if !matches!(response.status.as_str(), "resent" | "success") {
                         return Err(error_message(&response.status));
                     }
-                    Ok(Some(
-                        crate::translations::t("ui-a-new-verification-code-has-been-sent").into(),
-                    ))
+                    Ok(Some(crate::translations::t(
+                        "ui-a-new-verification-code-has-been-sent",
+                    )))
                 }
             },
         ));
@@ -282,19 +281,16 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
                                 )));
                             }
                             reload.reload();
-                            Ok(Some(
-                                crate::translations::t(
-                                    "ui-your-email-has-been-updated-and-a-new-code-has-been-sent",
-                                )
-                                .into(),
-                            ))
+                            Ok(Some(crate::translations::t(
+                                "ui-your-email-has-been-updated-and-a-new-code-has-been-sent",
+                            )))
                         }
                     },
                 );
             body.push(ui::disclosure(
                 scope,
                 "change-email",
-                &crate::translations::t("ui-change-email-address"),
+                crate::translations::t("ui-change-email-address"),
                 form,
                 false,
             ));
@@ -347,7 +343,7 @@ fn display_name(scope: &Scope, id: String) -> View {
             ),
             ui::action(
                 scope,
-                &t("action-skip"),
+                t("action-skip"),
                 "btn btn-tertiary btn-block",
                 state,
                 move || {
@@ -383,7 +379,7 @@ fn finish(scope: &Scope, id: String) -> View {
         let submit_id = id.clone();
         if status.setup_required {
             auth_card(
-                &crate::translations::t("ui-create-your-account"),
+                crate::translations::t("ui-create-your-account"),
                 vec![
                     copy(
                         "text-secondary",
@@ -425,13 +421,13 @@ fn finish(scope: &Scope, id: String) -> View {
                 async move { complete(&request, None).await },
             );
             auth_card(
-                &crate::translations::t("ui-create-your-account"),
+                crate::translations::t("ui-create-your-account"),
                 vec![
                     plain(crate::translations::t("ui-completing-registration")),
                     state.messages(),
                     ui::action(
                         scope,
-                        &crate::translations::t("ui-try-again"),
+                        crate::translations::t("ui-try-again"),
                         "btn btn-secondary btn-block",
                         state,
                         move || {
@@ -482,20 +478,19 @@ fn error_message(code: &str) -> String {
     match code {
         "handle_invalid" => t("coauth-register-handle-invalid"),
         "email_or_phone_required" => t("coauth-register-contact-required"),
-        "invalid_code" => crate::translations::t("ui-incorrect-code-please-try-again").into(),
+        "invalid_code" => crate::translations::t("ui-incorrect-code-please-try-again"),
         "invalid_display_name" => t("coauth-errors-display-name-invalid"),
-        "rate_limited" => crate::translations::t("ui-please-wait-a-moment-and-try-again").into(),
+        "rate_limited" => crate::translations::t("ui-please-wait-a-moment-and-try-again"),
         "registration_already_completed" => {
-            crate::translations::t("ui-this-registration-has-already-been-completed").into()
+            crate::translations::t("ui-this-registration-has-already-been-completed")
         }
         "email_already_verified" => {
-            crate::translations::t("ui-this-email-has-already-been-verified").into()
+            crate::translations::t("ui-this-email-has-already-been-verified")
         }
-        "email_invalid" => crate::translations::t("ui-please-enter-a-valid-email-address").into(),
-        "email_in_use" => crate::translations::t("ui-this-email-is-already-in-use").into(),
+        "email_invalid" => crate::translations::t("ui-please-enter-a-valid-email-address"),
+        "email_in_use" => crate::translations::t("ui-this-email-is-already-in-use"),
         "bootstrap_admin_token_invalid" => {
             crate::translations::t("ui-that-admin-bootstrap-token-is-not-valid-clear-th-be50dd67")
-                .into()
         }
         other => other.into(),
     }

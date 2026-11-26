@@ -528,8 +528,7 @@ async fn fetch_oidc_userinfo(
         .headers()
         .get(reqwest::header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
-        .map(str::to_owned)
-        .unwrap_or_default();
+        .map_or_default(str::to_owned);
 
     if content_type.starts_with("application/jwt") {
         let expected_alg = expected_signed_alg.ok_or_else(|| {

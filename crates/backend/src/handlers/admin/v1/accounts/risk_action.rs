@@ -1190,12 +1190,11 @@ fn risk_action_detail_vec_string(details: &serde_json::Value, field: &str) -> Ve
     details
         .get(field)
         .and_then(serde_json::Value::as_array)
-        .map(|values| {
+        .map_or_default(|values| {
             values
                 .iter()
                 .filter_map(serde_json::Value::as_str)
                 .map(str::to_owned)
                 .collect()
         })
-        .unwrap_or_default()
 }

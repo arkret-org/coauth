@@ -42,6 +42,7 @@ pub enum Algorithm {
 /// Parameters for the active password hashing algorithm
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[derive(Default)]
 pub struct HashingScheme {
     /// Which hashing algorithm to apply
     pub algorithm: Algorithm,
@@ -60,17 +61,6 @@ pub struct HashingScheme {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<String>")]
     pub secret_file: Option<Utf8PathBuf>,
-}
-
-impl Default for HashingScheme {
-    fn default() -> Self {
-        Self {
-            algorithm: Algorithm::default(),
-            cost: None,
-            secret: None,
-            secret_file: None,
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

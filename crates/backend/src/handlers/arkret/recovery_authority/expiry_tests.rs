@@ -86,7 +86,7 @@ async fn seed_first_attempt(
     completion: &arkret_wire::RecoveryCompletionAttestation,
     clock: &MockClock,
     proof_deadline: DateTime<Utc>,
-) -> Result<Vec<u8>, coauth_data::SessionGrantOperation> {
+) -> Result<Vec<u8>, Box<coauth_data::SessionGrantOperation>> {
     let issuer = &request.terminal_receipt.session_grant_ref.issuer_id;
     let account = &request.terminal_receipt.account_id;
     let mut rng = rand_chacha::ChaChaRng::seed_from_u64(19);
@@ -217,7 +217,9 @@ async fn seed_first_attempt(
         .unwrap();
     match committed {
         SessionGrantCommitOutcome::Committed(_) => {}
-        SessionGrantCommitOutcome::AuthorizationExpired(operation) => return Err(operation),
+        SessionGrantCommitOutcome::AuthorizationExpired(operation) => {
+            return Err(Box::new(operation));
+        }
         other => panic!("unexpected first issuer outcome: {other:?}"),
     }
     assert!(

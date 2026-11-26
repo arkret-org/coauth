@@ -514,7 +514,11 @@ fn validate_grant_projection(grant: &NewSessionGrant<'_>) -> Result<(), Database
         ("audience", metadata.audience_id == *grant.audience_id),
         (
             "device",
-            metadata.device_id.as_ref().map(|id| id.as_str()) == grant.device_id,
+            metadata
+                .device_id
+                .as_ref()
+                .map(arkret_identifiers::DeviceId::as_str)
+                == grant.device_id,
         ),
         (
             "session_key",
@@ -940,8 +944,9 @@ async fn commit_operation_outcome(
         oauth_session_grant_operations::canonical_outcome
             .eq(Some(outcome.canonical_response.to_vec())),
         oauth_session_grant_operations::target_session_grant_id
-            .eq(target_session_grant_id.map(|id| id.uuid())),
-        oauth_session_grant_operations::result_grant_id.eq(result_grant_id.map(|id| id.uuid())),
+            .eq(target_session_grant_id.map(arkret_identifiers::SessionGrantId::uuid)),
+        oauth_session_grant_operations::result_grant_id
+            .eq(result_grant_id.map(arkret_identifiers::SessionGrantId::uuid)),
         oauth_session_grant_operations::affected_grant_ids.eq(affected_grant_ids),
         oauth_session_grant_operations::retained_until.eq(retained_until),
         oauth_session_grant_operations::committed_at.eq(Some(committed_at)),
@@ -1358,12 +1363,12 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 },
             )
             .await?;
-            Ok(SessionGrantCommitOutcome::Committed(owned_grant(
+            Ok(SessionGrantCommitOutcome::Committed(Box::new(owned_grant(
                 id,
                 operation_id,
                 now,
                 grant,
-            )))
+            ))))
         })
         .await
     }
@@ -1600,7 +1605,10 @@ impl<P: horme::GetConnection<Connection = diesel_async::AsyncPgConnection> + Syn
                 .collect::<Vec<_>>();
             active_ids.sort();
             if !active_ids.is_empty() {
-                let active_bytes = active_ids.iter().map(|id| id.uuid()).collect::<Vec<_>>();
+                let active_bytes = active_ids
+                    .iter()
+                    .map(arkret_identifiers::SessionGrantId::uuid)
+                    .collect::<Vec<_>>();
                 let changed = diesel::update(
                     oauth_session_grants::table
                         .filter(oauth_session_grants::issuer_id.eq(&operation.issuer_id))
@@ -1925,7 +1933,10 @@ mod opaque_record_tests {
             issuer_id: &metadata.issuer_id,
             subject_id: &metadata.account_id.principal_id,
             local_account_id: local,
-            device_id: metadata.device_id.as_ref().map(|id| id.as_str()),
+            device_id: metadata
+                .device_id
+                .as_ref()
+                .map(arkret_identifiers::DeviceId::as_str),
             audience_id: &metadata.audience_id,
             scope: metadata
                 .scopes
@@ -2045,7 +2056,7 @@ mod opaque_record_tests {
                         .device_binding
                         .as_mut()
                         .unwrap()
-                        .model_generation_ref += 1
+                        .model_generation_ref += 1;
                 }
                 5 => changed.credential_class = SessionGrantCredentialClass::RecoverySession,
                 _ => {

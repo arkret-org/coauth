@@ -107,8 +107,8 @@ pub fn list(scope: &Scope, browser: bool) -> View {
         };
         if body.is_empty() {
             body.push(empty(
-                &crate::translations::t("ui-no-sessions"),
-                &crate::translations::t("ui-there-are-no-matching-sessions-to-display"),
+                crate::translations::t("ui-no-sessions"),
+                crate::translations::t("ui-there-are-no-matching-sessions-to-display"),
             ));
         }
         if let Some(info) = info
@@ -180,7 +180,7 @@ fn browser_name(session: &BrowserSession) -> String {
                     .join(" - ")
             })
             .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| crate::translations::t("ui-unknown-session").into())
+            .unwrap_or_else(|| crate::translations::t("ui-unknown-session"))
     })
 }
 fn browser_card(session: BrowserSession, current: bool) -> View {
@@ -196,18 +196,18 @@ fn browser_card(session: BrowserSession, current: bool) -> View {
     let mut fields = vec![];
     if current {
         fields.push((
-            crate::translations::t("ui-status").into(),
-            crate::translations::t("ui-current-session").into(),
+            crate::translations::t("ui-status"),
+            crate::translations::t("ui-current-session"),
         ));
     }
     if let Some(active) = session.last_active_at {
         fields.push((
-            crate::translations::t("ui-last-active").into(),
+            crate::translations::t("ui-last-active"),
             format_last_active(&active),
         ));
     }
     if let Some(ip) = session.last_active_ip {
-        fields.push((crate::translations::t("ui-ip-address").into(), ip));
+        fields.push((crate::translations::t("ui-ip-address"), ip));
     }
     block(
         "session-card",
@@ -257,16 +257,16 @@ fn oauth_card(session: OAuthSession) -> View {
                 .as_ref()
                 .and_then(|client| client.client_name.clone())
         })
-        .unwrap_or_else(|| crate::translations::t("ui-unknown-application").into());
+        .unwrap_or_else(|| crate::translations::t("ui-unknown-application"));
     let mut fields = vec![];
     if let Some(active) = session.last_active_at {
         fields.push((
-            crate::translations::t("ui-last-active").into(),
+            crate::translations::t("ui-last-active"),
             format_last_active(&active),
         ));
     }
     if let Some(ip) = session.last_active_ip {
-        fields.push((crate::translations::t("ui-ip-address").into(), ip));
+        fields.push((crate::translations::t("ui-ip-address"), ip));
     }
     let mut title = vec![link(
         name,
@@ -312,31 +312,28 @@ pub fn detail(scope: &Scope, id: String) -> View {
             Session::BrowserSession(session) => {
                 let name = browser_name(&session);
                 if let Some(created) = session.created_at {
-                    fields.push((
-                        crate::translations::t("ui-created").into(),
-                        format_date(&created),
-                    ));
+                    fields.push((crate::translations::t("ui-created"), format_date(&created)));
                 }
                 if let Some(active) = session.last_active_at {
                     fields.push((
-                        crate::translations::t("ui-last-active").into(),
+                        crate::translations::t("ui-last-active"),
                         format_last_active(&active),
                     ));
                 }
                 if let Some(ip) = session.last_active_ip {
-                    fields.push((crate::translations::t("ui-ip-address").into(), ip));
+                    fields.push((crate::translations::t("ui-ip-address"), ip));
                 }
                 if let Some(agent) = session.user_agent {
                     if let Some(os) = agent.os {
                         fields.push(("OS".into(), os));
                     }
                     if let Some(browser) = agent.name {
-                        fields.push((crate::translations::t("ui-browser").into(), browser));
+                        fields.push((crate::translations::t("ui-browser"), browser));
                     }
                 }
                 if let Some(auth) = session.last_authentication {
                     fields.push((
-                        crate::translations::t("ui-last-authenticated").into(),
+                        crate::translations::t("ui-last-authenticated"),
                         format_date(&auth.created_at),
                     ));
                 }
@@ -347,21 +344,18 @@ pub fn detail(scope: &Scope, id: String) -> View {
                     .display_name
                     .clone()
                     .or_else(|| session.client.as_ref().and_then(|v| v.client_name.clone()))
-                    .unwrap_or_else(|| crate::translations::t("ui-unknown-application").into());
+                    .unwrap_or_else(|| crate::translations::t("ui-unknown-application"));
                 if let Some(created) = session.created_at {
-                    fields.push((
-                        crate::translations::t("ui-created").into(),
-                        format_date(&created),
-                    ));
+                    fields.push((crate::translations::t("ui-created"), format_date(&created)));
                 }
                 if let Some(active) = session.last_active_at {
                     fields.push((
-                        crate::translations::t("ui-last-active").into(),
+                        crate::translations::t("ui-last-active"),
                         format_last_active(&active),
                     ));
                 }
                 if let Some(ip) = session.last_active_ip {
-                    fields.push((crate::translations::t("ui-ip-address").into(), ip));
+                    fields.push((crate::translations::t("ui-ip-address"), ip));
                 }
                 if let Some(scope) = session.scope {
                     fields.push(("Scope".into(), scope));
@@ -411,7 +405,7 @@ pub fn detail(scope: &Scope, id: String) -> View {
             body.push(ui::dialog(
                 scope,
                 "rename-session",
-                &crate::translations::t("ui-edit-display-name"),
+                crate::translations::t("ui-edit-display-name"),
                 "btn btn-secondary",
                 form,
                 open,
@@ -419,7 +413,7 @@ pub fn detail(scope: &Scope, id: String) -> View {
         }
         body.push(ui::action(
             scope,
-            &crate::translations::t("ui-end-session"),
+            crate::translations::t("ui-end-session"),
             "btn btn-destructive",
             state,
             move || {
@@ -427,7 +421,7 @@ pub fn detail(scope: &Scope, id: String) -> View {
                 async move {
                     let result = api::api_delete::<EndSessionPayload>(&path).await?;
                     if result.status != EndSessionStatus::Ended {
-                        return Err(crate::translations::t("ui-session-could-not-be-ended").into());
+                        return Err(crate::translations::t("ui-session-could-not-be-ended"));
                     }
                     go("/sessions")?;
                     Ok(None)

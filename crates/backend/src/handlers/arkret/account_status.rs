@@ -11,7 +11,7 @@ use arkret_wire::DidUrl;
 use coauth_data::{Clock as _, LocalAccountId, RepositoryAccess as _};
 use salvo::prelude::*;
 
-use super::ArkretRouteError;
+use super::{ArkretRouteError, required_header};
 use crate::arkret_key_bridge::sdk_verifying_key_from_jose_verifying_key;
 use crate::handlers::common::DepotExt;
 use crate::services::did_binding;
@@ -22,19 +22,10 @@ pub async fn resolve_account_status(
     req: &mut Request,
     depot: &Depot,
 ) -> Result<Json<AccountStatusResolveResponseBody>, ArkretRouteError> {
-    let request: AccountStatusResolveRequestBody =
-        req.parse_json().await.map_err(|_| not_found())?;
-    request.validate().map_err(|_| not_found())?;
-    let canonical_body =
-        arkret_canonical::canonical_json_bytes(&request).map_err(|_| not_found())?;
-
     let config = depot.arkret_config()?;
-    if request.account_authority_id != owning_station_id_for(&config) {
-        return Err(not_found());
-    }
     let source_id = required_header(req, "source-service-id")?;
     let destination_id = required_header(req, "destination-service-id")?;
-    if destination_id != request.account_authority_id.as_str()
+    if destination_id != owning_station_id_for(&config).as_str()
         || !config.stations.iter().any(|server| {
             crate::services::station_trust::effective_audience_shared(server)
                 .is_some_and(|audience| audience.as_str() == source_id)
@@ -63,18 +54,10 @@ pub async fn resolve_account_status(
         return Err(not_found());
     }
 
+    // Read the size-limited wire bytes before acquiring a database connection.
+    // Salvo caches the same buffer for the typed parse after verification.
+    let body = req.payload().await.map_err(|_| not_found())?.clone();
     let mut repo = depot.repo().await?;
-    let binding = repo
-        .principal_did()
-        .get_by_principal_id_and_audience(
-            request.account_id.principal_id.as_str(),
-            request.account_id.station_id.as_str(),
-        )
-        .await?
-        .filter(|binding| binding.account_id == request.account_id)
-        .ok_or_else(not_found)?;
-    let local_account_id =
-        LocalAccountId::new(binding.user_id.to_string()).map_err(|_| not_found())?;
     let authority = did_binding::authority_document(
         &depot.http_client()?,
         &depot.url_builder()?,
@@ -102,7 +85,25 @@ pub async fn resolve_account_status(
             .map_err(|_| not_found())?,
     )
     .map_err(|_| not_found())?;
-    verify_request(req, depot, &canonical_body, &public_key)?;
+    verify_account_status_request(req, depot, &body, &public_key)?;
+
+    let request: AccountStatusResolveRequestBody =
+        req.parse_json().await.map_err(|_| not_found())?;
+    request.validate().map_err(|_| not_found())?;
+    if destination_id != request.account_authority_id.as_str() {
+        return Err(not_found());
+    }
+    let binding = repo
+        .principal_did()
+        .get_by_principal_id_and_audience(
+            request.account_id.principal_id.as_str(),
+            request.account_id.station_id.as_str(),
+        )
+        .await?
+        .filter(|binding| binding.account_id == request.account_id)
+        .ok_or_else(not_found)?;
+    let local_account_id =
+        LocalAccountId::new(binding.user_id.to_string()).map_err(|_| not_found())?;
 
     let current = repo
         .account_status_ledger()
@@ -149,32 +150,26 @@ pub async fn resolve_account_status(
     Ok(Json(outcome))
 }
 
-pub(super) fn verify_request(
+fn verify_account_status_request(
     req: &Request,
     depot: &Depot,
-    canonical_body: &[u8],
+    body: &[u8],
     public_key: &ed25519_dalek::VerifyingKey,
 ) -> Result<(), ArkretRouteError> {
     let public_base_url = depot.url_builder()?.http_base();
-    let authority = public_base_url
-        .host_str()
-        .map(|host| {
-            public_base_url
-                .port()
-                .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"))
-        })
-        .ok_or_else(not_found)?;
+    if !public_base_url.has_host() {
+        return Err(not_found());
+    }
+    let authority = &public_base_url[url::Position::BeforeHost..url::Position::AfterPort];
     // The request URI already includes the deployment prefix. Use the configured
     // origin and the exact request path and query for the signature target.
     let path = req.uri().path();
     let path_and_query = req.uri().path_and_query().map_or(path, |uri| uri.as_str());
     let target_uri = format!("{}://{authority}{path_and_query}", public_base_url.scheme());
-    let headers = req.headers().iter().filter_map(|(name, value)| {
-        value
-            .to_str()
-            .ok()
-            .map(|value| (name.as_str().to_owned(), value.to_owned()))
-    });
+    let headers = req
+        .headers()
+        .iter()
+        .filter_map(|(name, value)| value.to_str().ok().map(|value| (name.as_str(), value)));
     let policy = SignatureVerificationPolicy::for_scenario(
         HttpSignatureScenario::ServiceToServiceV1,
         &[
@@ -189,33 +184,22 @@ pub(super) fn verify_request(
     verify_signed_canonical_json_message(
         req.method().as_str(),
         &target_uri,
-        &authority,
+        authority,
         path,
         headers,
         req.headers().contains_key("content-encoding"),
-        canonical_body,
+        body,
         &sdk_public_key,
         &policy,
         crate::handlers::make_clock().now().timestamp(),
     )
     .map_err(|_| not_found())?;
+    if required_header(req, "arkret-operation")?
+        != arkret_wire::ServiceOperationId::PeerAccountStatusReadResolveV1.as_str()
+    {
+        return Err(not_found());
+    }
     Ok(())
-}
-
-/// Trimmed, non-empty value of a required request header.
-///
-/// Both the account-status surface and the controller gate read their
-/// caller-supplied selectors this way, and both answer a missing or blank
-/// header with `NotFound` rather than a distinguishable validation error so
-/// the header cannot be used to probe which selectors exist.
-pub(super) fn required_header(req: &Request, name: &str) -> Result<String, ArkretRouteError> {
-    req.headers()
-        .get(name)
-        .and_then(|value| value.to_str().ok())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(not_found)
 }
 
 fn not_found() -> ArkretRouteError {
@@ -298,10 +282,11 @@ mod tests {
             req.add_header("signature", signature.signature_header, true)
                 .unwrap();
 
-            verify_request(&req, &depot, body, &public_key)
+            verify_account_status_request(&req, &depot, body, &public_key)
                 .unwrap_or_else(|err| panic!("verification failed for {path}: {err:?}"));
+            assert!(verify_account_status_request(&req, &depot, b"{ }", &public_key).is_err());
             req.set_uri(format!("{path}?changed=1").parse().unwrap());
-            assert!(verify_request(&req, &depot, body, &public_key).is_err());
+            assert!(verify_account_status_request(&req, &depot, body, &public_key).is_err());
         }
     }
 }

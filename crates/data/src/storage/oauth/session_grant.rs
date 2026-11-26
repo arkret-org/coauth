@@ -258,7 +258,7 @@ pub enum SessionGrantReserveOutcome {
 #[derive(Debug)]
 pub enum SessionGrantCommitOutcome {
     /// This call atomically committed the first outcome.
-    Committed(SessionGrant),
+    Committed(Box<SessionGrant>),
     /// A prior commit won; return its byte-exact operation outcome.
     Replay(SessionGrantOperation),
     /// No first outcome was written: authorization expired after the final locks.

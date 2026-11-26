@@ -94,7 +94,7 @@ where
         )
         .await?;
     match committed {
-        coauth_data::SessionGrantCommitOutcome::Committed(grant) => Ok(grant),
+        coauth_data::SessionGrantCommitOutcome::Committed(grant) => Ok(*grant),
         coauth_data::SessionGrantCommitOutcome::AuthorizationExpired(_) => Err(
             coauth_data::RepositoryError::from_error(std::io::Error::new(
                 std::io::ErrorKind::TimedOut,

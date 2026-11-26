@@ -117,12 +117,13 @@ fn prepare_language(
                         *current = Some(LanguageChange {
                             locale,
                             ready: true,
-                        })
+                        });
                     });
                 }
             }
             Err(message) => error.revise(|value| {
-                *value = translations::t_with("coauth-language-save-failed", &[("error", &message)])
+                *value =
+                    translations::t_with("coauth-language-save-failed", &[("error", &message)]);
             }),
         }
     });
@@ -144,10 +145,10 @@ fn request_language(
         .is_some_and(|value| value.locale == locale);
     match crate::drafts::state() {
         crate::drafts::State::Busy => {
-            error.revise(|value| *value = translations::t("coauth-language-operation-pending"))
+            error.revise(|value| *value = translations::t("coauth-language-operation-pending"));
         }
         crate::drafts::State::Unsaved => {
-            pending.revise(|value| *value = Some(LanguageChange { locale, ready }))
+            pending.revise(|value| *value = Some(LanguageChange { locale, ready }));
         }
         crate::drafts::State::Clean if ready => {
             if let Some(value) = prepared.get_untracked() {
@@ -155,7 +156,7 @@ fn request_language(
             }
         }
         crate::drafts::State::Clean => {
-            prepare_language(scope, locale, busy, error, prepared, pending, None)
+            prepare_language(scope, locale, busy, error, prepared, pending, None);
         }
     }
 }
@@ -244,7 +245,7 @@ fn preferences(scope: &Scope) -> View {
             .cancel_label(translations::t("coauth-language-keep-editing"))
             .confirm_label(translations::t("coauth-language-apply-reload"))
             .confirm_variant(sapid::ButtonVariant::Danger)
-            .open(pending.map(|value| value.is_some()))
+            .open(pending.map(std::option::Option::is_some))
             .on_open_change(move |open| {
                 if !open {
                     pending.revise(|value| *value = None);
@@ -256,7 +257,7 @@ fn preferences(scope: &Scope) -> View {
                 };
                 if crate::drafts::state() == crate::drafts::State::Busy {
                     error.revise(|value| {
-                        *value = translations::t("coauth-language-operation-pending")
+                        *value = translations::t("coauth-language-operation-pending");
                     });
                 } else if change.ready {
                     if let Some(value) = prepared.get_untracked() {
@@ -521,8 +522,8 @@ pub fn route(scope: &Scope, path: &str) -> View {
         ["notifications"] => account::notifications(scope),
         ["plan"] => account::plan(scope),
         _ => empty(
-            &crate::translations::t("ui-page-not-found"),
-            &crate::translations::t("ui-the-requested-account-page-does-not-exist"),
+            crate::translations::t("ui-page-not-found"),
+            crate::translations::t("ui-the-requested-account-page-does-not-exist"),
         ),
     }
 }

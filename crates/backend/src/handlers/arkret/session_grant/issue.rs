@@ -268,7 +268,10 @@ pub async fn issue_session_grant_endpoint(
                     return Ok(ArkretCanonicalJson(outcome));
                 }
             };
-            issue_agent_key_proof_session_grant(req, depot, binding, &agent, operation).await
+            Box::pin(issue_agent_key_proof_session_grant(
+                req, depot, binding, &agent, operation,
+            ))
+            .await
         }
         SessionGrantRequestBody::Human(human) => {
             let (handoff_token, dpop) =
@@ -291,7 +294,14 @@ pub async fn issue_session_grant_endpoint(
                 }
             };
             validate_human_issue_proof_before_reservation(&human, &handoff_token, &dpop.jkt)?;
-            issue_account_handoff_session_grant(depot, &human, handoff_token, dpop, operation).await
+            Box::pin(issue_account_handoff_session_grant(
+                depot,
+                &human,
+                handoff_token,
+                dpop,
+                operation,
+            ))
+            .await
         }
         SessionGrantRequestBody::Recovery(recovery) => {
             let (handoff_token, dpop) =
@@ -323,7 +333,14 @@ pub async fn issue_session_grant_endpoint(
                         return Ok(ArkretCanonicalJson(outcome));
                     }
                 };
-            issue_recovery_session_grant(depot, &recovery, handoff_token, dpop, operation).await
+            Box::pin(issue_recovery_session_grant(
+                depot,
+                &recovery,
+                handoff_token,
+                dpop,
+                operation,
+            ))
+            .await
         }
     }
 }

@@ -391,14 +391,13 @@ fn passkey_metadata(
     let transports = credential
         .get("transports")
         .and_then(serde_json::Value::as_array)
-        .map(|values| {
+        .map_or_default(|values| {
             values
                 .iter()
                 .filter_map(serde_json::Value::as_str)
                 .map(ToOwned::to_owned)
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     let backup_eligible = credential
         .get("backup_eligible")
         .and_then(serde_json::Value::as_bool)

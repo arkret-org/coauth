@@ -31,9 +31,7 @@ pub async fn handler(req: &mut Request, depot: &Depot) -> JsonResult<ConnectorHe
             .into_iter()
             .map(|(name, result)| {
                 let provider_ref = registry.get(name);
-                let account_id = provider_ref
-                    .map(|p| p.account_id().to_owned())
-                    .unwrap_or_default();
+                let account_id = provider_ref.map_or_default(|p| p.account_id().to_owned());
                 let (status, error) = match result {
                     Ok(()) => (ConnectorHealthStatus::Healthy, None),
                     Err(e) => (ConnectorHealthStatus::Unhealthy, Some(e)),

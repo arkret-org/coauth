@@ -253,7 +253,7 @@ pub async fn issue_recovery_completion_grant_endpoint(
         let source = context
             .prepare(&mut repo, &keyring, &issuer, &binding, clock.now())
             .await
-            .map_err(|error| failed_precondition(error))?;
+            .map_err(failed_precondition)?;
         Some((context, source))
     } else {
         None
@@ -992,16 +992,15 @@ async fn exact_replay(
     }
     let replay_at = fresh_completion_qualification_at_cut(&mut repo, handoff, dpop, clock).await?;
     validate_replay_deadline(replay_at, qualification_deadline, &grant)?;
-    if let Some(jti) = jti_to_consume {
-        if !repo
+    if let Some(jti) = jti_to_consume
+        && !repo
             .dpop_replay()
             .consume_jti(crate::services::dpop::dpop_replay_record(jti, replay_at))
             .await?
-        {
-            return Err(signature_invalid(
-                "completion replay HTTP DPoP JTI was already consumed",
-            ));
-        }
+    {
+        return Err(signature_invalid(
+            "completion replay HTTP DPoP JTI was already consumed",
+        ));
     }
     let delivered_at =
         match fresh_completion_qualification_at_cut(&mut repo, handoff, dpop, clock).await {
