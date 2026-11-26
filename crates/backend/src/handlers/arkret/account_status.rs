@@ -164,9 +164,11 @@ pub(super) fn verify_request(
                 .map_or_else(|| host.to_owned(), |port| format!("{host}:{port}"))
         })
         .ok_or_else(not_found)?;
-    let target_uri = public_base_url
-        .join(req.uri().path().trim_start_matches('/'))
-        .map_err(|_| not_found())?;
+    // The request URI already includes the deployment prefix. Use the configured
+    // origin and the exact request path and query for the signature target.
+    let path = req.uri().path();
+    let path_and_query = req.uri().path_and_query().map_or(path, |uri| uri.as_str());
+    let target_uri = format!("{}://{authority}{path_and_query}", public_base_url.scheme());
     let headers = req.headers().iter().filter_map(|(name, value)| {
         value
             .to_str()
@@ -186,9 +188,9 @@ pub(super) fn verify_request(
         sdk_verifying_key_from_jose_verifying_key(public_key).map_err(|_| not_found())?;
     verify_signed_canonical_json_message(
         req.method().as_str(),
-        target_uri.as_str(),
+        &target_uri,
         &authority,
-        req.uri().path(),
+        path,
         headers,
         req.headers().contains_key("content-encoding"),
         canonical_body,
@@ -218,4 +220,88 @@ pub(super) fn required_header(req: &Request, name: &str) -> Result<String, Arkre
 
 fn not_found() -> ArkretRouteError {
     ArkretRouteError::NotFound
+}
+
+#[cfg(test)]
+mod tests {
+    use arkret_signatures::http_signature::{
+        ContentDigest, ContentDigestAlgorithm, SignedRequestParts, sign_http_message_for_scenario,
+    };
+    use arkret_wire::ServiceOperationId;
+    use coauth_data::UrlBuilder;
+    use http::header::HeaderName;
+    use salvo::http::Method;
+
+    use super::*;
+    use crate::arkret_key_bridge::sdk_signing_key_from_seed_bytes;
+
+    #[test]
+    fn verifies_signed_target_at_root_and_under_auth_prefix() {
+        let seed = [42; 32];
+        let signing_key = sdk_signing_key_from_seed_bytes(&seed);
+        let public_key = ed25519_dalek::SigningKey::from_bytes(&seed).verifying_key();
+        let authority = "station.example:8443";
+        let origin = format!("https://{authority}");
+        let body = b"{}";
+        let digest = ContentDigest::compute(body, ContentDigestAlgorithm::Sha256).wire_value;
+        let operation = ServiceOperationId::PeerAccountStatusReadResolveV1;
+
+        for prefix in ["", "/auth"] {
+            let mut depot = Depot::new();
+            depot.insert(
+                "url_builder",
+                UrlBuilder::new(format!("{origin}{prefix}/").parse().unwrap(), None, None),
+            );
+            let path = format!("{prefix}/_arkret/peer/account-status/resolve");
+            let parts = SignedRequestParts {
+                method: "POST".to_owned(),
+                target_uri: format!("{origin}{path}"),
+                authority: authority.to_owned(),
+                path: path.clone(),
+                headers: [
+                    ("arkret-operation", operation.as_str()),
+                    ("source-service-id", "ak:did_core:web:station.example"),
+                    ("destination-service-id", "ak:did_core:web:station.example"),
+                    ("source-trust-domain", "ak:trust_domain:station.example"),
+                    ("destination-trust-domain", "ak:trust_domain:auth.example"),
+                    ("content-digest", digest.as_str()),
+                ]
+                .into_iter()
+                .map(|(name, value)| (name.to_owned(), value.to_owned()))
+                .collect(),
+                body_digest: Some(digest.clone()),
+            };
+            let signature = sign_http_message_for_scenario(
+                &parts,
+                HttpSignatureScenario::ServiceToServiceV1,
+                &[
+                    "content-digest",
+                    "source-trust-domain",
+                    "destination-trust-domain",
+                ],
+                "sig1",
+                "did:web:station.example#notary",
+                crate::handlers::make_clock().now().timestamp(),
+                &signing_key,
+            )
+            .unwrap();
+            let mut req = Request::default();
+            *req.method_mut() = Method::POST;
+            req.set_uri(path.parse().unwrap());
+            for (name, value) in parts.headers {
+                req.add_header(name.parse::<HeaderName>().unwrap(), value, true)
+                    .unwrap();
+            }
+            req.add_header("host", "proxy.internal:8090", true).unwrap();
+            req.add_header("signature-input", signature.signature_input_header, true)
+                .unwrap();
+            req.add_header("signature", signature.signature_header, true)
+                .unwrap();
+
+            verify_request(&req, &depot, body, &public_key)
+                .unwrap_or_else(|err| panic!("verification failed for {path}: {err:?}"));
+            req.set_uri(format!("{path}?changed=1").parse().unwrap());
+            assert!(verify_request(&req, &depot, body, &public_key).is_err());
+        }
+    }
 }
