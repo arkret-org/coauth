@@ -364,10 +364,9 @@ realm classes explicit. Every admin route belongs to one of them:
   binding, OAuth client, registration token, upstream-link, password,
   session-grant management. Operators who hold capabilities here can
   alter who the principal *is*.
-- **Collaboration Realm** — Spaces, Strands, Circles, membership, content
+- **Collaboration Realm** — Spaces, Strands, membership, content
   policy. Operators who hold capabilities here govern what the principal
-  *does together with other principals*. The six AKP-0007
-  `ak.circle.*` capability actions live in this class.
+  *does together with other principals*.
 
 | Route prefix                                              | Class                  |
 |-----------------------------------------------------------|------------------------|
@@ -383,7 +382,6 @@ realm classes explicit. Every admin route belongs to one of them:
 | `/_coauth/admin/personal-sessions`                         | Principal Control      |
 | `/_coauth/admin/user-sessions`                             | Principal Control      |
 | `/_coauth/admin/oauth-sessions`                            | Principal Control      |
-| `/_coauth/admin/circles/capabilities*`                     | **Collaboration**      |
 | `/_coauth/admin/notification-*`                            | Cross-cutting (audit)  |
 | `/_coauth/admin/audit-feed`                                | Cross-cutting (audit)  |
 | `/_coauth/admin/invite-reviews*`                        | Cross-cutting (audit)  |
@@ -423,32 +421,3 @@ approval does not grant recipient Consent. Resolution audit operations use
 `admin_invite_review.approve` / `admin_invite_review.reject`, resource type
 `admin_invite_review_queue` and the metadata key `admin_invite_review_id`.
 The retired `/_coauth/admin/invite-quarantine` route has no alias.
-
-## AKP-0007 `ak.circle.*` capability grants
-
-The Collaboration class exposes a typed grant surface for the six
-AKP-0007 capability actions:
-
-| action                        | risk   | required constraint        |
-|-------------------------------|--------|----------------------------|
-| `ak.circle.create`            | medium | (none)                     |
-| `ak.circle.manage`            | medium | `allowed_circle_ids`       |
-| `ak.circle.member.add`        | low    | (none)                     |
-| `ak.circle.member.manage`     | medium | `allowed_circle_ids`       |
-| `ak.circle.member.add.others` | high   | `allowed_circle_ids`       |
-| `ak.circle.audit`             | high   | (paired with audit check)  |
-
-Endpoints:
-
-```text
-GET    /_coauth/admin/circles/capabilities
-POST   /_coauth/admin/circles/capabilities
-DELETE /_coauth/admin/circles/capabilities/{grant_id}
-```
-
-Request / response shapes are defined in
-[`coauth_admin_types::circle_capability_admin`](https://github.com/arkret-org/coauth/blob/main/crates/admin-types/src/circle_capability_admin.rs).
-See `_todos_all.md` (P2B.2) for the persistence backlog.
-
-[authorization code]: ../topics/authorization.md#authorization-code-grant
-[device authorization]: ../topics/authorization.md#device-authorization-grant

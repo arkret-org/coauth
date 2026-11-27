@@ -179,14 +179,13 @@ fn verify(scope: &Scope, id: String, phone: bool) -> View {
                 crate::translations::t(
                     "ui-we-sent-a-verification-code-to-your-phone-number-15050432",
                 )
-            } else {
-                format!(
-                    "Enter the verification code sent to {}.",
-                    status
-                        .pending_email
-                        .as_deref()
-                        .map_or_else(|| "your email address".into(), mask_email)
+            } else if let Some(email) = status.pending_email.as_deref() {
+                crate::translations::t_with(
+                    "ui-verification-sent-to",
+                    &[("email", &mask_email(email))],
                 )
+            } else {
+                crate::translations::t("ui-enter-email-verification-code")
             },
         )];
         body.push(ui::form(

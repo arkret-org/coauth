@@ -86,8 +86,6 @@ pub mod app_session;
 mod arkret_key_bridge;
 /// PostgreSQL audit log repositories.
 pub mod audit;
-/// PostgreSQL Circle capability grant repository.
-pub mod circle_capability;
 /// PostgreSQL accepted-DID-binding repository (DID-P2-A).
 pub mod did_binding;
 /// PostgreSQL DPoP proof replay repository.

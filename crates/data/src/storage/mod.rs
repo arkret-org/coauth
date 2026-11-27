@@ -115,8 +115,6 @@ pub mod agent_key;
 pub mod app_session;
 /// Audit log repositories.
 pub mod audit;
-/// Circle capability grant repositories.
-pub mod circle_capability;
 /// Collaboration capability grant repositories.
 /// Durable accepted DID binding repositories (DID-P2-A).
 pub mod did_binding;

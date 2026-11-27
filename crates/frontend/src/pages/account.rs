@@ -772,7 +772,7 @@ pub fn settings(scope: &Scope) -> View {
             "btn btn-destructive-solid",
             actions,
             move || {
-                let path = format!("/browser-sessions/{}", encode(&session_id));
+                let path = format!("/self/browser-sessions/{}", encode(&session_id));
                 async move {
                     let response = api::api_delete::<EndSessionPayload>(&path).await?;
                     if response.status != EndSessionStatus::Ended {
@@ -891,7 +891,7 @@ fn deactivation(
                     body["password"] = values[0].clone().into();
                 }
                 let response =
-                    api::api_post::<DeactivateUserPayload>("/viewer/deactivate", body).await?;
+                    api::api_post::<DeactivateUserPayload>("/self/viewer/deactivate", body).await?;
                 match response.status {
                     DeactivateUserStatus::Deactivated => {
                         go("/login")?;

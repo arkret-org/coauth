@@ -29,7 +29,6 @@ Arkret protocol commitment.
 | `account_claims_admin` | `AdminAccountClaimRecord`, `AdminAccountClaimsOutcome` | Coauth backend, Codmin | Product account-claim inventory; free-form claim payload stays product-local. |
 | `audit_admin` | `AuditSignatureStatus`, `AuditEntry`, `AuditFeedOutcome` | Coauth backend, Codmin | Operator audit projection; not an Arkret event or audit-envelope replacement. |
 | `bridge_admin` | `AdminBridgeDescribe`, `AdminBridgeRiskActionExamples`, `AdminBridgeRiskActionProposalExample`, `AdminBridgeRiskActionApprovalExample`, `AdminBridgeRiskActionExecuteExample` | Coauth backend, Codmin | Typed `/_coauth/admin/bridge/describe` product discovery and request examples. Rollout versions, TODOs, and storage implementation metadata are forbidden. |
-| `circle_capability_admin` | `CapabilityActionId` (SDK re-export), `CapabilityRiskTier` (SDK re-export), `CircleCapabilityGrant`, `CreateCircleCapabilityGrant`, `ListCircleCapabilityGrantsOutcome` | Coauth backend | Product administration subset for Circle grants. Action identity and risk metadata come directly from the spec-generated SDK registry; Coauth only validates which canonical ids belong to this product surface. |
 | `collaboration_capability_admin` | `CapabilityActionId` (SDK re-export), `CapabilityRiskTier` (SDK re-export), `CollaborationCapabilityTemplate`, `ListCollaborationCapabilityTemplatesOutcome` | Coauth backend | Read-only registry templates. Accepted grants are reviewed through the Station operator query; Coauth has no grant DTO, mirror or fallback. |
 | `connector_health` | `ConnectorHealthStatus`, `ConnectorHealthView`, `ConnectorHealthReport` | Coauth backend, Codmin | Deployment connector health projection; no Arkret protocol equivalent. |
 | `did_binding_admin` | `DidBindingKind`, `DidBindingState`, `DidBindingVerificationStatus`, `DidBindingResolverMode`, `DidBindingResolverDescriptor`, `AdminAccountDidBinding`, `AdminAccountDidBindingsMeta`, `AdminAccountDidBindingsOutcome` | Coauth backend, Codmin | Coauth DID-binding administration projection. DID values use SDK-owned identifier types at protocol boundaries; lifecycle/UI enums remain product-local. |
@@ -51,7 +50,7 @@ database adapter, network client, queue, repository implementation, or service
 crate. The admin contract uses it only for:
 
 - canonical SDK-backed `CapabilityActionId` / `CapabilityRiskTier` identities;
-- pure Circle/collaboration product-subset rules;
+- pure collaboration product-subset rules;
 - organization lifecycle enums and explicit domain-record-to-wire mappings.
 
 The full domain grant and organization records are not publicly re-exported by

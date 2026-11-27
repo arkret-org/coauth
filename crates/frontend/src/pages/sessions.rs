@@ -299,10 +299,10 @@ fn oauth_card(session: OAuthSession) -> View {
         ],
     )
 }
-pub fn detail(scope: &Scope, id: String) -> View {
-    let request = id.clone();
+pub fn detail(scope: &Scope, encoded_id: String) -> View {
     let source = ui::resource(scope, move || {
-        let path = format!("/self/sessions/{}", encode(&request));
+        // The browser route supplies an already percent-encoded path segment.
+        let path = format!("/self/sessions/{encoded_id}");
         async move { api::api_get::<Session>(&path).await }
     });
     ui::resource_body(source, move |scope, session| {
@@ -394,7 +394,7 @@ pub fn detail(scope: &Scope, id: String) -> View {
                 "btn btn-primary",
                 state,
                 move |values| {
-                    let path = format!("/oauth-sessions/{}/name", encode(&request));
+                    let path = format!("/self/oauth-sessions/{}/name", encode(&request));
                     async move {
                         api::api_put::<serde_json::Value>(&path,serde_json::json!({"human_name":(!values[0].trim().is_empty()).then(||values[0].trim().to_owned())})).await?;
                         go("/sessions")?;
@@ -417,7 +417,7 @@ pub fn detail(scope: &Scope, id: String) -> View {
             "btn btn-destructive",
             state,
             move || {
-                let path = format!("/{prefix}/{}", encode(&id));
+                let path = format!("/self/{prefix}/{}", encode(&id));
                 async move {
                     let result = api::api_delete::<EndSessionPayload>(&path).await?;
                     if result.status != EndSessionStatus::Ended {

@@ -267,19 +267,6 @@ CREATE TABLE public.admin_operation_logs (
 
 COMMENT ON COLUMN public.admin_operation_logs.audit_signature IS 'Detached signature (base64url-unpadded) over canonical JSON of the row, signed with the coauth service key. NULL during rollout.';
 
-CREATE TABLE public.circle_capability_grants (
-    id uuid NOT NULL,
-    subject text NOT NULL,
-    realm_id text NOT NULL,
-    action text NOT NULL,
-    allowed_circle_ids text[] DEFAULT '{}'::text[] NOT NULL,
-    granted_by text NOT NULL,
-    granted_at timestamp with time zone NOT NULL,
-    revoked_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
 CREATE TABLE public.organization_principal_controls (
     id uuid NOT NULL,
     organization_id text NOT NULL,
@@ -1409,9 +1396,6 @@ ALTER TABLE ONLY public.recovery_completion_grant_issuances
 ALTER TABLE ONLY public.admin_operation_logs
     ADD CONSTRAINT admin_operation_logs_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.circle_capability_grants
-    ADD CONSTRAINT circle_capability_grants_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.organization_principal_controls
     ADD CONSTRAINT organization_principal_controls_pkey PRIMARY KEY (id);
 
@@ -1712,12 +1696,6 @@ CREATE INDEX admin_operation_logs_created_idx ON public.admin_operation_logs USI
 CREATE INDEX admin_operation_logs_resource_idx ON public.admin_operation_logs USING btree (resource_type, resource_id) WHERE (resource_id IS NOT NULL);
 
 CREATE INDEX admin_operation_logs_user_created_idx ON public.admin_operation_logs USING btree (admin_user_id, created_at);
-
-CREATE UNIQUE INDEX circle_capability_grants_active_fingerprint_idx ON public.circle_capability_grants USING btree (subject, realm_id, action, allowed_circle_ids) WHERE (revoked_at IS NULL);
-
-CREATE INDEX circle_capability_grants_active_realm_subject_idx ON public.circle_capability_grants USING btree (realm_id, subject, granted_at) WHERE (revoked_at IS NULL);
-
-CREATE INDEX circle_capability_grants_revoked_idx ON public.circle_capability_grants USING btree (revoked_at) WHERE (revoked_at IS NOT NULL);
 
 CREATE UNIQUE INDEX organization_principal_controls_org_id_idx ON public.organization_principal_controls USING btree (organization_id);
 

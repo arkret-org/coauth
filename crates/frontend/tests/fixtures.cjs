@@ -1,7 +1,7 @@
 const created='2026-10-20T10:00:00Z';
 const site={id:'site',email_change_allowed:true,password_login_enabled:true,account_deactivation_allowed:true,display_name_change_allowed:true,password_registration_enabled:true,registration_email_delivery_bypass_allowed:false,bootstrap_admin_token_enabled:false,minimum_password_complexity:2,imprint:'Arkret account services',tos_uri:'https://example.test/terms',policy_uri:'https://example.test/privacy',admin_portal_url:'https://admin.example.test',plan_management_iframe_uri:'https://plan.example.test'};
 const browserSession={id:'browser-1',display_name:'Work laptop',user_agent:{name:'Edge',model:'Desktop',os:'Windows',device_type:'PC'},last_active_ip:'192.0.2.1',last_active_at:created,created_at:created,last_authentication:{id:'auth-1',created_at:created}};
-const oauthSession={id:'app-1',display_name:'Inkson desktop',scope:'openid profile email',client:{id:'client-1',client_id:'inkson',client_name:'Inkson',client_uri:'https://inkson.example.test',logo_uri:null},user_agent:{name:'Inkson',model:'Desktop',os:'Windows',device_type:'PC'},last_active_ip:'192.0.2.1',last_active_at:created,created_at:created};
+const oauthSession={id:'oauth_session:app-1',display_name:'Inkson desktop',scope:'openid profile email',client:{id:'client-1',client_id:'inkson',client_name:'Inkson',client_uri:'https://inkson.example.test',logo_uri:null},user_agent:{name:'Inkson',model:'Desktop',os:'Windows',device_type:'PC'},last_active_ip:'192.0.2.1',last_active_at:created,created_at:created};
 const pageInfo={has_previous_page:false,has_next_page:false,start_cursor:null,end_cursor:null};
 const linked=[{id:'link-1',provider_id:'oidc-example',subject:'alice@example.test',human_account_name:'Alice',provider_name:'Example Identity',provider_brand:'oidc',created_at:created}];
 const user={id:'account-1',username:'alice',principal_id:'principal-1',handle:'alice',can_request_admin:true,has_password:true,profile:{display_name:'Alice Chen',avatar_url:null,preferred_locale:'en',updated_at:created},principal:{principal_address:'@alice:example.test',display_name:'Alice Chen'},emails:{total_count:1,edges:[{cursor:'email-1',node:{id:'email-1',email:'alice@example.test',confirmed_at:created,is_primary:true}}]},linked_accounts:linked,browser_sessions:{total_count:2,edges:[{cursor:'b1',node:browserSession},{cursor:'b2',node:{...browserSession,id:'browser-2',display_name:'Personal phone',user_agent:{name:'Chrome',model:'Pixel',os:'Android',device_type:'MOBILE'}}}],page_info:pageInfo},app_sessions:{total_count:1,edges:[{cursor:'a1',node:{__typename:'OAuthSession',...oauthSession}}],page_info:pageInfo}};
@@ -34,15 +34,16 @@ async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='h
       if(p==='/account/auth/recovery')return reply({status:'success',id:'recovery-1'});
       if(p==='/account/password-recovery/resend')return reply({status:'SENT',progress_url:'/recover/progress/recovery-1'});
       if(p.includes('/recovery/')&&p.endsWith('/resend'))return reply({status:'resent'});
-      if(p==='/viewer/password'||p==='/account/password-recovery/set')return reply({status:body?.current_password==='wrong'?'WRONG_PASSWORD':'ALLOWED'});
+      if(p==='/self/viewer/password'||p==='/account/password-recovery/set')return reply({status:body?.current_password==='wrong'?'WRONG_PASSWORD':'ALLOWED'});
       if(p.includes('/email-auth/')&&p.endsWith('/complete'))return reply({status:body.code==='123456'?'COMPLETED':'INVALID_CODE'});
       if(p.endsWith('/resend'))return reply({status:'resent'});
       if(p==='/account/email-auth/start')return reply({status:'ADDED',email:{id:'email-2',email:body.email,confirmed_at:null,is_primary:false},violations:null});
       if(p.startsWith('/user-emails/'))return reply({status:'REMOVED'});
       if(p.startsWith('/linked-accounts/'))return reply({status:'success'});
-      if(p.startsWith('/browser-sessions/')){if(p==='/browser-sessions/browser-1')loggedIn=false;return reply({status:'ENDED'});}
-      if(p.startsWith('/oauth-sessions/'))return reply({status:'ENDED'});
-      if(p==='/viewer/deactivate'){if(body.password==='wrong')return reply({status:'INCORRECT_PASSWORD'});loggedIn=false;return reply({status:'DEACTIVATED'});}
+      if(p.startsWith('/self/browser-sessions/')){if(p==='/self/browser-sessions/browser-1')loggedIn=false;return reply({status:'ENDED'});}
+      if(method==='PUT' && p==='/self/oauth-sessions/oauth_session:app-1/name')return reply({status:'UPDATED'});
+      if(method==='DELETE' && p.startsWith('/self/oauth-sessions/'))return reply({status:'ENDED'});
+      if(p==='/self/viewer/deactivate'){if(body.password==='wrong')return reply({status:'INCORRECT_PASSWORD'});loggedIn=false;return reply({status:'DEACTIVATED'});}
       if(p==='/self/viewer/profile'){currentProfile={...currentProfile,...body,updated_at:created};return reply({profile:currentProfile,principal:{...user.principal,display_name:currentProfile.display_name}});}
       if(p==='/self/viewer/avatar')return reply({avatar_url:'/assets/avatar-fixture.svg'});
       if(p==='/self/viewer/preferences'){notificationPrefs=body.preferences;return reply({preferences:notificationPrefs});}
@@ -61,7 +62,7 @@ async function setup(page,{dark=false,locale='en',overrides={},csp=false,base='h
     if(p==='/self/viewer/preferences')return reply({available_channels:[{channel:'email',enabled:true},{channel:'sms',enabled:false}],preferences:notificationPrefs});
     if(p==='/self/linked-accounts')return reply({accounts:linked});
     if(p==='/self/passkeys')return reply({passkeys});
-    if(p.startsWith('/self/sessions/'))return reply(p.endsWith('/app-1')?{__typename:'OAuthSession',...oauthSession}:{__typename:'BrowserSession',...browserSession,id:p.split('/').at(-1)});
+    if(p.startsWith('/self/sessions/'))return reply(p.endsWith('/oauth_session:app-1')?{__typename:'OauthSession',...oauthSession}:{__typename:'BrowserSession',...browserSession,id:p.split('/').at(-1)});
     if(p.startsWith('/self/oauth-clients/'))return reply({id:'client-1',client_id:'inkson',client_name:'Inkson',client_uri:'https://inkson.example.test',tos_uri:'https://example.test/terms',policy_uri:'https://example.test/privacy',logo_uri:null});
     if(p.startsWith('/self/oauth/authorization-grants/')||p.startsWith('/self/device-grants/'))return reply({grant_id:'grant-1',csrf_token:'fixture-authorized-decision',response_mode:'query',client:{id:'client-1',client_id:'inkson',client_name:'Inkson',client_uri:'https://inkson.example.test',logo_uri:null},scope:'openid profile email',user:{principal_address:'@alice:example.test',display_name:'Alice Chen'},policy_violation:false});
     if(p.startsWith('/account/email-auth/'))return reply({id:'email-1',email:'alice@example.test',completed_at:null});

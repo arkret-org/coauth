@@ -178,28 +178,7 @@ pub async fn get_session(
             let detail = load_oauth_session_detail(repo, &requester, ulid)
                 .await
                 .map_err(map_account_session_error)?;
-            let session = detail.session;
-
-            SessionDetailOutcome::OAuthSession(OAuthSessionDetail {
-                id: NodeType::OAuthSession.serialize(session.id),
-                scope: Some(session.scope.to_string()),
-                display_name: None,
-                client: detail.client.map(|c| OAuthClientBrief {
-                    id: NodeType::OAuthClient.serialize(c.id),
-                    client_id: c.client_id.clone(),
-                    client_name: c.client_name.clone(),
-                    client_uri: c.client_uri.as_ref().map(std::string::ToString::to_string),
-                    logo_uri: c.logo_uri.as_ref().map(std::string::ToString::to_string),
-                }),
-                user_agent: session.user_agent.as_deref().map(parse_user_agent),
-                last_active_ip: session.last_active_ip.map(|ip| ip.to_string()),
-                last_active_at: session
-                    .last_active_at
-                    .map(arkret_canonical::format_timestamp_canonical),
-                created_at: Some(arkret_canonical::format_timestamp_canonical(
-                    session.created_at,
-                )),
-            })
+            SessionDetailOutcome::OAuthSession(oauth_session_detail_response(detail))
         }
         _ => return Err(RouteError::BadRequest("not a session id".into())),
     };

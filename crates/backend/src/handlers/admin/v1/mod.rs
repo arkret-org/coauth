@@ -2,7 +2,6 @@ pub mod account_dids;
 pub mod accounts;
 pub mod admin_invite_review;
 pub mod audit_feed;
-pub mod circle_capabilities;
 pub mod claims;
 pub mod collaboration_capabilities;
 pub mod connector_health;

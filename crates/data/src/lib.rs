@@ -42,8 +42,6 @@ pub mod agent_key;
 pub mod app_session;
 /// Admin operation logs and account security event models.
 pub mod audit;
-/// Durable Circle capability grants.
-pub mod circle_capability;
 /// Clock abstraction for testability (`SystemClock` in production, mock clock
 /// in tests).
 pub mod clock;
@@ -149,11 +147,7 @@ pub use self::accountability::{
     AccountabilitySubjectRevocation,
 };
 pub use self::audit::{AccountSecurityEvent, AdminOperation, AdminOperationLog, SecurityEventType};
-pub use self::circle_capability::{
-    CIRCLE_CAPABILITY_ACTIONS, CapabilityActionId, CapabilityRiskTier, CircleCapabilityGrant,
-    CircleCapabilityGrantRepository, NewCircleCapabilityGrant, capability_action_risk_tier,
-    circle_action_requires_allowed_circle_ids, is_circle_capability_action,
-};
+pub use coauth_data_model::{CapabilityActionId, CapabilityRiskTier, capability_action_risk_tier};
 pub use self::clock::{Clock, SystemClock};
 pub use self::did_binding::{
     VerifiedDidBindingInvalidation, VerifiedDidBindingKeyColumns, VerifiedDidBindingRepository,

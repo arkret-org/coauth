@@ -400,6 +400,7 @@ pub struct OAuthClient {
 #[allow(clippy::large_enum_variant)]
 pub enum Session {
     BrowserSession(BrowserSession),
+    #[serde(alias = "OauthSession")]
     OAuthSession(OAuthSession),
 }
 

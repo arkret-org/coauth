@@ -440,6 +440,7 @@ ui-passkey-created = 创建于 { $created }
 ui-continue-as = 以 { $name } 继续
 ui-recovery-email-address = 恢复邮件已发送至 { $email }，请打开邮箱并按链接继续。
 ui-verification-sent-to = 请输入发送到 { $email } 的验证码。
+ui-enter-email-verification-code = 请输入发送到你邮箱的验证码。
 ui-account-address = 账号：{ $address }
 ui-link-provider = 关联 { $provider }
 ui-delivery-configured = 已配置投递

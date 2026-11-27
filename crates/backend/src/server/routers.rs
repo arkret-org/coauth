@@ -703,7 +703,7 @@ pub(super) fn build_admin_router(router: Router) -> Router {
 
 fn admin_subrouter() -> Router {
     use crate::handlers::admin::v1::{
-        account_dids, accounts, admin_invite_review, audit_feed, circle_capabilities, claims,
+        account_dids, accounts, admin_invite_review, audit_feed, claims,
         collaboration_capabilities, connector_health, devices, notification_channels,
         notification_templates, oauth_clients, oauth_clients_i18n, oauth_clients_register,
         oauth_sessions, organizations, personal_sessions, policy_data, site_config,
@@ -727,14 +727,6 @@ fn admin_subrouter() -> Router {
         )
         // Audit feed
         .push(Router::with_path("audit-feed").get(audit_feed::handler))
-        // AKP-0007 ak.circle.* capability grants (P2B.2). Wire shape is in
-        // coauth-admin-types::circle_capability_admin; persistence is durable.
-        .push(
-            Router::with_path("circles/capabilities")
-                .get(circle_capabilities::list_handler)
-                .post(circle_capabilities::create_handler)
-                .push(Router::with_path("{grant_id}").delete(circle_capabilities::revoke_handler)),
-        )
         // Registry templates only; accepted grant review belongs to the Station.
         .push(
             Router::with_path("collaboration/capabilities/templates")

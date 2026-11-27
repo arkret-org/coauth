@@ -457,6 +457,7 @@ ui-passkey-created = Created { $created }
 ui-continue-as = Continue as { $name }
 ui-recovery-email-address = We sent a recovery email to { $email }. Please check your inbox and follow the link.
 ui-verification-sent-to = Enter the verification code sent to { $email }.
+ui-enter-email-verification-code = Enter the verification code sent to your email address.
 ui-account-address = Account: { $address }
 ui-link-provider = Link { $provider }
 ui-delivery-configured = Delivery configured

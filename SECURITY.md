@@ -22,12 +22,10 @@ Out-of-scope:
 - Self-hosted dev defaults intended to be overridden in production
 - Theoretical issues without practical exploitation
 
-## AKP-0007 Circle Invariants
+## Event scope
 
-Per spec, Circle is an intra-Realm cryptographic sub-boundary:
-- Circle member lists MUST NOT leak to directory services or push gateways in plaintext
-- `effective_scope` MUST match the encryption scope of the payload
-- `discussion_realm_ref` is hard-rejected on the wire (forbidden field)
+The read projection's `effective_scope` must match the signed Event and
+the encryption scope of its payload. The wire rejects `discussion_realm_ref`.
 
 Violations of these invariants are treated as security issues.
 

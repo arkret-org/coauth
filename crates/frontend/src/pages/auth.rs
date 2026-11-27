@@ -323,7 +323,7 @@ pub fn password_change(scope: &Scope) -> View {
                     let id = id.clone();
                     async move {
                         validate_passwords(&values[1], &values[2])?;
-                        let response=api::api_post::<SetPasswordPayload>("/viewer/password",serde_json::json!({"user_id":id,"current_password":values[0],"new_password":values[1]})).await?;
+                        let response=api::api_post::<SetPasswordPayload>("/self/viewer/password",serde_json::json!({"user_id":id,"current_password":values[0],"new_password":values[1]})).await?;
                         match response.status {
                             SetPasswordStatus::Allowed => {
                                 go("/password/change/success")?;
