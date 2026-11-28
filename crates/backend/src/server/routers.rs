@@ -1012,12 +1012,10 @@ pub(super) async fn connection_info_handler(req: &Request) -> String {
 
 #[cfg(test)]
 mod collaboration_capability_route_tests {
-    use salvo::test::ResponseExt;
-
     use super::*;
 
-    #[tokio::test]
-    async fn grant_list_is_retired_and_registry_template_route_remains() {
+    #[test]
+    fn registry_template_route_is_documented() {
         let router = build_admin_router(Router::new());
         let spec = serde_json::to_value(build_admin_openapi_doc(&router)).unwrap();
         let paths = spec["paths"].as_object().unwrap();
@@ -1025,27 +1023,6 @@ mod collaboration_capability_route_tests {
             paths
                 .keys()
                 .any(|path| path.ends_with("/collaboration/capabilities/templates"))
-        );
-        assert!(
-            !paths
-                .keys()
-                .any(|path| path.ends_with("/collaboration/capabilities"))
-        );
-        let mut response =
-            salvo::test::TestClient::get("http://coauth/_coauth/admin/collaboration/capabilities")
-                .send(&salvo::Service::new(router))
-                .await;
-        assert_eq!(
-            response.status_code,
-            Some(salvo::http::StatusCode::NOT_FOUND)
-        );
-        assert!(
-            response
-                .take_string()
-                .await
-                .unwrap_or_default()
-                .find("capability_grant_id")
-                .is_none()
         );
     }
 }

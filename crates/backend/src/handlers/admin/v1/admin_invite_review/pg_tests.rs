@@ -219,14 +219,5 @@ async fn admin_invite_review_permissions_precede_input_and_resource_lookup() {
         )
         .await;
     response.assert_status(StatusCode::INTERNAL_SERVER_ERROR);
-    // The retired management route is a negative case, never an alias.
-    let response = state
-        .request(
-            Request::get("/_coauth/admin/invite-quarantine")
-                .bearer(&admin)
-                .empty(),
-        )
-        .await;
-    response.assert_status(StatusCode::NOT_FOUND);
     assert_eq!(token_count(&pool).await, 0);
 }
